@@ -1,0 +1,25 @@
+{
+  "name": "api",
+  "version": "1.0.50",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@daisuki/shared": "workspace:*",
+    "@elysiajs/cors": "^1.4.2",
+    "@elysiajs/cron": "^1.4.2",
+    "drizzle-orm": "^0.45.4",
+    "elysia": "^1.4.30",
+    "jose": "^6.2.12",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^7.0.2"
+  },
+  "module": "src/index.js"
+}
