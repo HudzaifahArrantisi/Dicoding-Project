@@ -1,0 +1,5 @@
+pandas
+httpx
+psycopg[binary]
+python-dotenv
+python-telegram-bot

@@ -47,24 +47,37 @@ daisuki-inventory/
 │   ├── web/                    # Frontend TanStack Start (Port 3000)
 │   │   ├── .env.example
 │   │   ├── src/
-│   │   │   ├── components/     # UI Shadcn & komponen reusable
-│   │   │   ├── routes/         # Routing TanStack Router berbasis file
-│   │   │   └── styles.css      # Desain sistem & Tailwind CSS v4
 │   │   └── package.json
 │   └── api/                    # Backend API ElysiaJS (Port 3001)
 │       ├── .env.example
 │       ├── src/
-│       │   ├── db/             # Koneksi database Drizzle/Postgres
-│       │   ├── plugins/        # Guard JWT, auth middleware
-│       │   └── index.ts        # Entrypoint server & routes
 │       └── package.json
 ├── packages/
 │   └── shared/                 # Kode/tipe yang dipakai bersama web & api
 │       ├── src/index.ts
 │       └── package.json
+├── data-science/               # Workspace tim Data Science (Python)
+│   ├── notebooks/              # Eksperimen EDA & prototyping model
+│   ├── src/                    # Modul reusable
+│   ├── data/                   # Data mentah/olahan (git-ignored)
+│   ├── models/                 # File model tersimpan (git-ignored)
+│   ├── reports/                # Laporan metodologi & hasil evaluasi
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── README.md
+├── ai/                         # Workspace tim AI Engineer (Python)
+│   ├── jobs/                   # Background job harian restock
+│   ├── assistant/              # Asisten LLM admin
+│   ├── bot/                    # Prototipe bot input stok via chat
+│   ├── evals/                  # Pengujian akurasi & evaluasi asisten
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── README.md
 ├── supabase/
 │   ├── migrations/             # Skrip SQL skema tabel, fungsi, RLS
-│   │   └── 0001_init.sql
+│   │   ├── 0001_init.sql
+│   │   ├── 0002_restock_recommendations.sql
+│   │   └── 0003_ds_ai_roles.sql
 │   └── seed.sql                # Data awal untuk testing/development
 ├── docs/                       # Dokumen spesifikasi teknis proyek
 │   ├── alursistem.md           # Flow bisnis, state machine stok & order
@@ -73,6 +86,19 @@ daisuki-inventory/
 ├── package.json                # Root package.json (Bun workspaces)
 └── README.md                   # Panduan kolaborator (file ini)
 ```
+
+### Struktur Monorepo
+
+| Folder | Pemilik | Isi |
+|---|---|---|
+| `apps/` | Fullstack | Aplikasi web (TanStack Start) dan API backend (ElysiaJS) |
+| `packages/` | Fullstack | Paket pustaka bersama (`shared`) untuk web dan API |
+| `supabase/` | Fullstack | Migrasi skema database PostgreSQL, RLS, dan seeder SQL |
+| `data-science/` | Data Science | Eksplorasi data, eksperimen, dan model prediksi inventaris |
+| `ai/` | AI Engineer | Job harian restock otomatis, asisten admin, dan bot input chat |
+| `docs/` | Bersama | Spesifikasi alur sistem bisnis dan panduan sistem desain UI |
+
+Folder `data-science/` dan `ai/` berbasis Python dan tidak termasuk Bun workspace.
 
 ---
 

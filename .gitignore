@@ -9,3 +9,13 @@ dist
 .wrangler
 *.log
 .DS_Store
+
+data-science/data/*
+!data-science/data/.gitkeep
+data-science/models/*
+!data-science/models/.gitkeep
+.ipynb_checkpoints
+__pycache__/
+.venv/
+data-science/.env
+ai/.env
