@@ -16,9 +16,10 @@ Sistem manajemen inventaris dan pemesanan B2B multi-cabang (Mitra & Admin Daisuk
    - [Langkah 4: Setup Database Supabase](#4-setup-database-supabase)
    - [Langkah 5: Jalankan Server Development](#5-jalankan-server-development)
 5. [Daftar Perintah (NPM/Bun Scripts)](#-daftar-perintah-scripts)
-6. [Alur & Aturan Kolaborasi Tim](#-alur--aturan-kolaborasi-tim)
-7. [Troubleshooting & FAQ](#-troubleshooting--faq)
-8. [Dokumentasi Lanjutan](#-dokumentasi-lanjutan)
+6. [Pembagian Peran & Tanggung Jawab Tim (Roles & Tasks)](#-pembagian-peran--tanggung-jawab-tim)
+7. [Alur & Aturan Kolaborasi Tim](#-alur--aturan-kolaborasi-tim)
+8. [Troubleshooting & FAQ](#-troubleshooting--faq)
+9. [Dokumentasi Lanjutan](#-dokumentasi-lanjutan)
 
 ---
 
@@ -216,6 +217,99 @@ Jika Anda ingin menjalankan layanan secara terpisah:
 | `bun run typecheck` | Root | Memeriksa validasi tipe TypeScript di seluruh proyek |
 | `bun run lint` | `apps/web` | Menjalankan ESLint pada frontend |
 | `bun run build` | `apps/web` | Membangun bundle produksi frontend |
+
+---
+
+## 👥 Pembagian Peran & Tanggung Jawab Tim (Roles & Tasks)
+
+Proyek ini dirancang untuk dikerjakan secara kolaboratif oleh tim yang beranggotakan **6 orang** (2 Fullstack Developer, 2 Data Scientist, dan 2 AI Engineer). Setiap peran memiliki tanggung jawab nyata yang saling melengkapi dalam menyelesaikan masalah bisnis **Daisuki B2B Inventory**:
+
+```mermaid
+graph TD
+    DS[📊 Data Science] -->|Formula ROP, Safety Stock & Data Sintetis| FS[💻 Fullstack Web & API]
+    DS -->|Feature Engineering & Cleaned Data| AI[🤖 AI Engineering]
+    AI -->|Model Forecasting & Smart Restock API| FS
+    FS -->|Log Transaksi & Riwayat Stok Baru| DS
+```
+
+---
+
+### 1. 💻 Fullstack Developers (2 Orang)
+> **Misi Utama:** Membangun arsitektur aplikasi end-to-end (Frontend & Backend), mengamankan data dan transaksi bisnis, serta mengintegrasikan output analitik Data Science & model AI ke antarmuka pengguna.
+
+- **Developer 1 (Frontend & UI/UX Specialist):**
+  - **Portal Mitra:** Membangun antarmuka entri stok fisik harian yang cepat, form pengajuan restock barang, konfirmasi penerimaan order, dan riwayat mutasi stok.
+  - **Dashboard Admin:** Membangun dashboard monitoring live status stok cabang (aman/kritis), filter cabang, kartu alert notifikasi, dan antarmuka persetujuan order restock.
+  - **Realtime UI:** Mengintegrasikan **Supabase Realtime WebSocket** agar dashboard admin langsung beranimasi/update saat ada perubahan stok cabang tanpa perlu reload halaman.
+  - **AI & Analytics Visualization:** Menampilkan grafik tren stok, visualisasi metrik inventaris dari tim Data Science, dan kartu rekomendasi order otomatis dari model AI.
+- **Developer 2 (Backend, Database & Core Services Specialist):**
+  - **ElysiaJS REST API:** Membangun endpoint transaksi (`/stocks`, `/orders`, `/admin`, `/notifications`) dengan performa tinggi di atas runtime Bun.
+  - **Keamanan & Otorisasi Bertingkat:** Mengimplementasikan auth guard JWT, pengecekan role (Admin vs Mitra), dan konfigurasi Row Level Security (RLS) di Supabase agar data antar mitra terisolasi aman.
+  - **Database Integrity & State Machine:** Menjamin keabsahan transaksi stok menggunakan Drizzle ORM (penerapan row-level lock `FOR UPDATE` untuk mencegah *race condition*) dan state machine status pesanan (`diproses` → `disetujui` → `dikirim` → `selesai`).
+  - **Automated Cron Jobs:** Membangun scheduler background (deteksi stok cabang yang tidak di-update > 24 jam dan trigger reminder otomatis via email/notifikasi).
+  - **Model Integration Gateway:** Menyediakan endpoint/adapter untuk menghubungkan microservice model AI ke alur kerja aplikasi utama.
+
+---
+
+### 2. 📊 Data Scientists (2 Orang)
+> **Misi Utama:** Menganalisis pola pergerakan inventaris cabang, memodelkan formula stok probabilistik (Lead Time & Safety Stock), serta merancang metrik analitik bisnis yang dapat ditindaklanjuti.
+
+- **Data Scientist 1 (Inventory Optimization & Mathematical Modeling):**
+  - **Dynamic Reorder Point (ROP) & Safety Stock:**
+    - Merancang formula titik pemesanan ulang dinamis per cabang:
+      $$\text{ROP} = (\text{Rata-rata Konsumsi Harian} \times \text{Lead Time Pabrik}) + \text{Safety Stock}$$
+    - Memperhitungkan *lead time* produksi pabrik (5–7 hari per 1.000 pcs) dan fluktuasi permintaan agar mitra tidak mengalami kehabisan stok (*stockout*).
+  - **Estimasi Hari Tersisa (Days of Inventory / Run-out Date):**
+    - Menghitung sisa hari sebelum stok habis per produk berdasarkan *burn rate* historis dari tabel `stock_logs`.
+  - **Klasifikasi Produk (ABC/XYZ Analysis):**
+    - Mengelompokkan SKU produk berdasarkan nilai transaksi (ABC) dan volatilitas permintaan (XYZ) agar admin dapat memprioritaskan stok bernilai tinggi dan meminimalkan risiko barang rusak/kadaluarsa.
+- **Data Scientist 2 (Data Pipeline, EDA & Business Intelligence):**
+  - **Synthetic Data Generation & Seeding:**
+    - Merancang skrip generator data historis sintetis yang realistis (pola konsumsi harian, lonjakan akhir pekan, efek promo) untuk memperkaya `supabase/seed.sql` sebagai data latih model AI dan pengujian performa aplikasi.
+  - **Exploratory Data Analysis (EDA) & Mitra Behavior:**
+    - Menganalisis kedisiplinan mitra dalam melakukan update stok harian serta mendeteksi pola anomali keterlambatan laporan.
+    - Mengidentifikasi tren musiman konsumsi produk per regional atau kategori cabang.
+  - **Perancangan KPI Dashboard Bisnis:**
+    - Merumuskan formula metrik inventaris untuk admin: *Stockout Risk Index*, *Order Fulfillment Rate*, *Inventory Turnover*, dan rasio akurasi stok fisik vs sistem.
+
+---
+
+### 3. 🤖 AI Engineers (2 Orang)
+> **Misi Utama:** Membangun model machine learning prediktif (Time-Series Demand Forecasting), mesin rekomendasi order cerdas, dan fitur asisten pintar (GenAI/LLM).
+
+- **AI Engineer 1 (Time-Series Demand Forecasting & Reorder Engine):**
+  - **Demand Forecasting Model (Prediksi Kebutuhan 7–30 Hari):**
+    - Melatih model deret waktu (misal: Prophet, ARIMA/SARIMAX, LightGBM, atau LSTM) untuk memprediksi volume kebutuhan produk per cabang untuk minggu berikutnya.
+    - Membantu pabrik pusat Daisuki merencanakan jadwal batch produksi (1.000 pcs butuh 5–7 hari) secara proaktif sebelum stok mitra benar-benar habis.
+  - **Smart Restock Recommendation Engine:**
+    - Membuat sistem cerdas yang secara otomatis mengisi rekomendasi kuantitas restock (`recommended_qty`) saat mitra membuka formulir pesanan baru berdasarkan tren konsumsi cabang tersebut.
+    - **Order Anomaly Detection:** Memberikan peringatan (*warning flag*) jika jumlah pesanan mitra tidak wajar (terlalu sedikit sehingga cepat habis lagi, atau terlalu banyak sehingga berisiko basi).
+- **AI Engineer 2 (GenAI Conversational Assistant & Model Serving):**
+  - **AI Inventory Assistant (LLM / Natural Language Query):**
+    - Membangun asisten AI berbasis LLM (menggunakan Gemini API / OpenAI / Claude) untuk:
+      - **Admin:** Tanya jawab berbasis bahasa alami, misalnya: *"Cabang mana yang paling berisiko kehabisan saus keju sebelum akhir pekan?"* atau *"Berapa estimasi kebutuhan bahan baku untuk 2 minggu ke depan?"*.
+      - **Mitra:** Asisten interaktif untuk cek status order atau panduan cepat penanganan stok.
+  - **Model Serving & API Deployment:**
+    - Membungkus model ML/AI ke dalam REST microservice (FastAPI atau Python/Bun API) dengan endpoint terstandar (`POST /predict/demand`, `POST /recommend/restock`).
+    - Mengoptimalkan latency inferensi model (< 200ms) agar respons di aplikasi web tetap cepat dan lancar.
+
+---
+
+### 🔄 Matriks Sinergi & Alur Kerja Antar Peran (Cross-Functional Workflow)
+
+```text
+1. DATA SCIENCE        ──> Menganalisis data historis, merumuskan formula ROP,
+                           dan menyiapkan dataset sintetis berkualitas di Supabase.
+                               │
+                               ▼
+2. AI ENGINEERING      ──> Melatih model Demand Forecasting & Asisten LLM,
+                           lalu mendeploy API microservice inferensi cerdas.
+                               │
+                               ▼
+3. FULLSTACK DEV       ──> Mengintegrasikan API inferensi ke backend Elysia,
+                           menampilkan kartu rekomendasi dan grafik prediktif di frontend TanStack,
+                           serta mengalirkan data transaksi baru kembali ke database.
+```
 
 ---
 
