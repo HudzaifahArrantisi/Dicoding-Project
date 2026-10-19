@@ -111,9 +111,9 @@ daisuki-inventory/
 ### Core Architecture Rules
 
 1. **Strict Mutation Boundary**:
-   - The frontend **never writes directly** to Supabase tables.
+   - The frontend **never writes directly** to database tables.
    - All mutations (stock adjustments, restock orders, status updates, approvals) **must** go through the Elysia backend API to ensure business validation and database transactions are centralized.
-   - The frontend reads data via Elysia endpoints and subscribes to realtime database events via Supabase Realtime (protected by RLS).
+   - The frontend reads data via Elysia endpoints and client state cache (TanStack Query).
 
 2. **End-to-End Type Safety**:
    - The Elysia app export `type App = typeof app` in [apps/api/src/index.ts](apps/api/src/index.ts) is imported directly by [apps/web/src/lib/api.ts](apps/web/src/lib/api.ts) via `@elysiajs/eden` (`treaty<App>(...)`).
@@ -128,7 +128,7 @@ daisuki-inventory/
    - **Source of Truth**: Raw SQL files in [supabase/migrations/](supabase/migrations/) are the schema source of truth.
    - [apps/api/src/db/schema.ts](apps/api/src/db/schema.ts) mirrors the database schema using Drizzle ORM for query building.
    - **Do not run `drizzle-kit push` or `drizzle-kit generate`**. Schema changes must be written as versioned SQL migrations in [supabase/migrations/](supabase/migrations/).
-   - **Supabase Connection Pooler**: Transaction mode on port `6543` requires `{ prepare: false }` in [apps/api/src/db/client.ts](apps/api/src/db/client.ts) (Postgres prepared statements are disabled on the transaction pooler).
+   - **Neon DB Connection Pooler**: Neon pooled connections work seamlessly with `{ prepare: false }` in [apps/api/src/db/client.ts](apps/api/src/db/client.ts).
    - **Concurrency Safety**: Stock updates in Elysia must wrap operations in transactions and use `SELECT ... FOR UPDATE` row locks to prevent race conditions when writing to `partner_stocks` and `stock_logs`.
 
 5. **Shared Business Logic ([packages/shared/src/index.ts](packages/shared/src/index.ts))**:

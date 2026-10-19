@@ -12,7 +12,7 @@ Alur utama aplikasi:
 4. Sistem menyimpan perubahan stok dan status pesanan.
 5. Data dapat dianalisis oleh tim Data Science dan AI untuk membuat rekomendasi restock.
 
-Frontend tidak menulis langsung ke tabel Supabase. Semua perubahan data harus melalui API agar validasi, hak akses, dan transaksi tetap aman.
+Frontend tidak menulis langsung ke database. Semua perubahan data harus melalui API agar validasi, hak akses, dan transaksi tetap aman.
 
 ## Peran Pengguna dan Tim
 
@@ -29,7 +29,7 @@ Frontend tidak menulis langsung ke tabel Supabase. Semua perubahan data harus me
 - `apps/web/`: frontend TanStack Start, React, Tailwind, dan Vite. Berjalan di port `3000`.
 - `apps/api/`: backend ElysiaJS, Bun, Drizzle ORM, dan autentikasi JWT. Berjalan di port `3001`.
 - `packages/shared/`: tipe dan aturan bisnis yang dipakai web dan API.
-- `supabase/`: migration SQL, RLS, dan data awal.
+- `supabase/`: skrip migration SQL skema database dan data awal (dijalankan di Neon SQL Editor).
 - `data-science/`: notebook, analisis, dan model inventaris berbasis Python.
 - `ai/`: job AI, asisten, bot, dan evaluasi model berbasis Python.
 - `docs/`: alur bisnis dan aturan desain UI.
@@ -38,7 +38,7 @@ Frontend tidak menulis langsung ke tabel Supabase. Semua perubahan data harus me
 
 ### 1. Siapkan kebutuhan
 
-Install [Git](https://git-scm.com/), [Bun](https://bun.sh/), dan siapkan akses ke project Supabase. Gunakan Bun untuk semua perintah JavaScript dan TypeScript. Jangan gunakan npm, yarn, atau pnpm.
+Install [Git](https://git-scm.com/), [Bun](https://bun.sh/), dan siapkan akun/project di [Neon DB](https://neon.tech). Gunakan Bun untuk semua perintah JavaScript dan TypeScript. Jangan gunakan npm, yarn, atau pnpm.
 
 ### 2. Clone dan install dependency
 
@@ -64,25 +64,23 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 ```
 
-Isi file berikut dari Supabase Dashboard:
+Isi file konfigurasi berikut:
 
-- `apps/api/.env`: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, dan `SUPABASE_JWT_SECRET`.
-- `apps/web/.env`: `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY`.
-- Biarkan `WEB_ORIGIN=http://localhost:3000` dan `VITE_API_URL=http://localhost:3001` untuk pengembangan lokal.
+- `apps/api/.env`:
+  - `DATABASE_URL`: Connection string dari Neon DB Console (menu **Connect**).
+  - `WEB_ORIGIN=http://localhost:3000`
+- `apps/web/.env`:
+  - `VITE_API_URL=http://localhost:3001`
 
-Jangan commit file `.env` atau secret ke Git. Service role key hanya boleh berada di backend.
+Jangan commit file `.env` atau credential rahasia ke Git.
 
 ### 4. Siapkan database
 
-Di Supabase Dashboard, buka **SQL Editor**, lalu jalankan file migration secara berurutan:
+Di Neon Console, buka menu **SQL Editor**, lalu jalankan file skrip SQL untuk membuat skema tabel:
 
-```text
-supabase/migrations/0001_init.sql
-supabase/migrations/0002_restock_recommendations.sql
-supabase/migrations/0003_ds_ai_roles.sql
-```
-
-Jalankan `supabase/seed.sql` jika membutuhkan data awal untuk development.
+1. Buat tabel utama dari skrip skema database (`partners`, `users`, `products`, `partner_stocks`, `stock_logs`, `orders`, `order_items`, `notifications`).
+2. Jalankan `supabase/migrations/0002_restock_recommendations.sql` untuk tabel rekomendasi restock.
+3. Jalankan `supabase/seed.sql` jika membutuhkan data awal untuk development.
 
 ### 5. Jalankan aplikasi
 
