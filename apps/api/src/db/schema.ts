@@ -11,7 +11,6 @@ import {
   primaryKey,
 } from "drizzle-orm/pg-core";
 
-// Enums
 export const userRoleEnum = pgEnum("user_role", ["admin", "mitra"]);
 export const partnerTypeEnum = pgEnum("partner_type", [
   "hotel",
@@ -33,7 +32,6 @@ export const stockSourceEnum = pgEnum("stock_source", [
   "adjustment",
 ]);
 
-// Tables
 export const partners = pgTable("partners", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -47,8 +45,10 @@ export const partners = pgTable("partners", {
     .defaultNow(),
 });
 
-export const profiles = pgTable("profiles", {
-  id: uuid("id").primaryKey(), // references auth.users(id)
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  password_hash: text("password_hash").notNull(),
   role: userRoleEnum("role").notNull(),
   partner_id: uuid("partner_id").references(() => partners.id),
   full_name: text("full_name").notNull(),
@@ -63,6 +63,7 @@ export const products = pgTable("products", {
   name: text("name").notNull(),
   unit: text("unit").notNull().default("pcs"),
   b2b_price: numeric("b2b_price", { precision: 12, scale: 2 }).notNull(),
+  central_stock: integer("central_stock").notNull().default(1000),
   is_active: boolean("is_active").notNull().default(true),
   created_at: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -83,11 +84,9 @@ export const partnerStocks = pgTable(
     updated_at: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    updated_by: uuid("updated_by").references(() => profiles.id),
+    updated_by: uuid("updated_by").references(() => users.id),
   },
-  (table) => [
-    primaryKey({ columns: [table.partner_id, table.product_id] }),
-  ]
+  (table) => [primaryKey({ columns: [table.partner_id, table.product_id] })],
 );
 
 export const stockLogs = pgTable("stock_logs", {
@@ -101,7 +100,7 @@ export const stockLogs = pgTable("stock_logs", {
   qty_before: integer("qty_before").notNull(),
   qty_after: integer("qty_after").notNull(),
   source: stockSourceEnum("source").notNull(),
-  created_by: uuid("created_by").references(() => profiles.id),
+  created_by: uuid("created_by").references(() => users.id),
   created_at: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -115,9 +114,10 @@ export const orders = pgTable("orders", {
     .references(() => partners.id),
   status: orderStatusEnum("status").notNull().default("diproses"),
   note: text("note"),
+  admin_note: text("admin_note"),
   rejected_reason: text("rejected_reason"),
-  created_by: uuid("created_by").references(() => profiles.id),
-  approved_by: uuid("approved_by").references(() => profiles.id),
+  created_by: uuid("created_by").references(() => users.id),
+  approved_by: uuid("approved_by").references(() => users.id),
   created_at: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -143,12 +143,29 @@ export const notifications = pgTable("notifications", {
   audience: text("audience").notNull(),
   type: text("type").notNull(),
   partner_id: uuid("partner_id").references(() => partners.id),
-  user_id: uuid("user_id").references(() => profiles.id),
+  user_id: uuid("user_id").references(() => users.id),
   title: text("title").notNull(),
   body: text("body"),
   read_at: timestamp("read_at", { withTimezone: true }),
   resolved_at: timestamp("resolved_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const restockRecommendations = pgTable("restock_recommendations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partner_id: uuid("partner_id")
+    .notNull()
+    .references(() => partners.id),
+  product_id: uuid("product_id")
+    .notNull()
+    .references(() => products.id),
+  forecast_qty: integer("forecast_qty").notNull(),
+  suggested_qty: integer("suggested_qty").notNull(),
+  days_of_cover: numeric("days_of_cover", { precision: 5, scale: 1 }),
+  model_version: text("model_version").notNull(),
+  generated_at: timestamp("generated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

@@ -10,6 +10,8 @@ import { QueryClientProvider } from '@tanstack/react-query'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { NotFound } from '../components/not-found'
+import { AuthProvider } from '../lib/auth'
+import { Toaster } from '../components/ui/sonner'
 
 import appCss from '../styles.css?url'
 
@@ -30,7 +32,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'Daisuki Inventory',
+        title: 'Daisuki Inventory - B2B Inventory Management',
       },
     ],
     links: [
@@ -50,31 +52,36 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <AuthProvider>
+        <Outlet />
+        <Toaster position="top-right" richColors />
+      </AuthProvider>
     </QueryClientProvider>
   )
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="id">
       <head>
         <HeadContent />
       </head>
       <body>
         {children}
-        <TanStackDevtools
-          config={{
-            position: 'bottom-right',
-          }}
-          plugins={[
-            {
-              name: 'Tanstack Router',
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            TanStackQueryDevtools,
-          ]}
-        />
+        <div className="hidden md:block">
+          <TanStackDevtools
+            config={{
+              position: 'bottom-right',
+            }}
+            plugins={[
+              {
+                name: 'Tanstack Router',
+                render: <TanStackRouterDevtoolsPanel />,
+              },
+              TanStackQueryDevtools,
+            ]}
+          />
+        </div>
         <Scripts />
       </body>
     </html>

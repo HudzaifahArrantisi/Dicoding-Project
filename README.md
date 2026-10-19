@@ -76,11 +76,54 @@ Jangan commit file `.env` atau credential rahasia ke Git.
 
 ### 4. Siapkan database
 
-Di Neon Console, buka menu **SQL Editor**, lalu jalankan file skrip SQL untuk membuat skema tabel:
+Skema TypeScript di `apps/api/src/db/schema.ts` adalah mirror untuk Drizzle ORM. Mengubah file tersebut tidak langsung mengubah Neon DB. Setiap perubahan database harus mempunyai file SQL bernomor di `supabase/migrations/`.
 
-1. Buat tabel utama dari skrip skema database (`partners`, `users`, `products`, `partner_stocks`, `stock_logs`, `orders`, `order_items`, `notifications`).
-2. Jalankan `supabase/migrations/0002_restock_recommendations.sql` untuk tabel rekomendasi restock.
-3. Jalankan `supabase/seed.sql` jika membutuhkan data awal untuk development.
+Untuk database baru, buka **SQL Editor** di Neon Console dan jalankan migration yang diperlukan sesuai urutan nomor. Periksa isi migration sebelum menjalankannya. Migration role seperti `0003_ds_ai_roles.sql` membutuhkan password role yang sudah diganti dari nilai contoh.
+
+Setelah skema tersedia, isi data development dengan seeder:
+
+```bash
+bun --cwd apps/api run seed
+```
+
+### Membuat dan menjalankan migration Neon
+
+Gunakan alur berikut setiap kali struktur tabel berubah:
+
+1. Ubah mirror Drizzle di `apps/api/src/db/schema.ts`.
+2. Buat file SQL dengan nomor berikutnya, misalnya `supabase/migrations/0007_product_description.sql`.
+3. Tulis perubahan schema secara eksplisit di file tersebut.
+
+Contoh migration:
+
+```sql
+ALTER TABLE products
+ADD COLUMN IF NOT EXISTS description TEXT;
+```
+
+Jalankan satu file migration dari root repository menggunakan PowerShell:
+
+```powershell
+bun --cwd apps/api -e 'import { sql } from "./src/db/client"; const migration = await Bun.file("../../supabase/migrations/0007_product_description.sql").text(); await sql.begin(async (tx) => { await tx.unsafe(migration); }); await sql.end(); console.log("Migrasi berhasil.");'
+```
+
+Bun membaca `DATABASE_URL` dari `apps/api/.env`. Perintah tersebut menjalankan migration di dalam transaksi. Jika salah satu pernyataan SQL gagal, transaksi dibatalkan.
+
+Ganti nama file pada perintah sesuai migration yang ingin dijalankan. Jalankan hanya migration baru dan tetap ikuti urutan nomor file.
+
+Verifikasi kolom yang sudah masuk ke Neon:
+
+```powershell
+bun --cwd apps/api -e 'import { sql } from "./src/db/client"; const rows = await sql`select column_name, data_type from information_schema.columns where table_name = ${"products"} order by ordinal_position`; console.table(rows); await sql.end();'
+```
+
+Setelah migration selesai, periksa TypeScript:
+
+```bash
+bun run typecheck
+```
+
+Jangan memakai `drizzle-kit push` atau `drizzle-kit generate`. Riwayat SQL di `supabase/migrations/` adalah sumber utama perubahan schema proyek.
 
 ### 5. Jalankan aplikasi
 

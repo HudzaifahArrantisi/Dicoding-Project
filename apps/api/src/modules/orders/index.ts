@@ -1,0 +1,529 @@
+import { Elysia, t } from "elysia";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { db } from "../../db/client";
+import {
+  orders,
+  orderItems,
+  partners,
+  products,
+  partnerStocks,
+  stockLogs,
+  notifications,
+} from "../../db/schema";
+import { getAuthUser } from "../../plugins/auth";
+import {
+  canTransition,
+  isOrderStatus,
+  type OrderStatus,
+  ORDER_STATUS_LABEL,
+} from "@daisuki/shared";
+
+class CentralStockConflictError extends Error {}
+
+export const ordersModule = new Elysia({ prefix: "/orders" })
+  .get(
+    "/",
+    async ({ headers, query, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+
+      let targetPartnerId: string | null = null;
+      if (user.role === "mitra") {
+        if (!user.partnerId) {
+          set.status = 400;
+          return { error: "User mitra belum terhubung ke cabang mitra" };
+        }
+        targetPartnerId = user.partnerId;
+      } else if (user.role === "admin") {
+        targetPartnerId = query.partner_id || null;
+      }
+
+      const orderList = await db
+        .select({
+          id: orders.id,
+          order_no: orders.order_no,
+          partner_id: orders.partner_id,
+          partner_name: partners.name,
+          partner_type: partners.type,
+          status: orders.status,
+          note: orders.note,
+          admin_note: orders.admin_note,
+          rejected_reason: orders.rejected_reason,
+          created_at: orders.created_at,
+          approved_at: orders.approved_at,
+          shipped_at: orders.shipped_at,
+          completed_at: orders.completed_at,
+        })
+        .from(orders)
+        .innerJoin(partners, eq(orders.partner_id, partners.id))
+        .where(
+          targetPartnerId ? eq(orders.partner_id, targetPartnerId) : undefined,
+        )
+        .orderBy(desc(orders.created_at));
+
+      if (orderList.length === 0) {
+        return { data: [] };
+      }
+
+      const orderIds = orderList.map((o) => o.id);
+      const items = await db
+        .select({
+          id: orderItems.id,
+          order_id: orderItems.order_id,
+          product_id: orderItems.product_id,
+          product_name: products.name,
+          product_sku: products.sku,
+          product_unit: products.unit,
+          qty_requested: orderItems.qty_requested,
+          qty_approved: orderItems.qty_approved,
+        })
+        .from(orderItems)
+        .innerJoin(products, eq(orderItems.product_id, products.id))
+        .where(inArray(orderItems.order_id, orderIds));
+
+      const itemsByOrderId = new Map<string, typeof items>();
+      for (const item of items) {
+        const list = itemsByOrderId.get(item.order_id) || [];
+        list.push(item);
+        itemsByOrderId.set(item.order_id, list);
+      }
+
+      const formatted = orderList.map((ord) => ({
+        ...ord,
+        status_label:
+          ORDER_STATUS_LABEL[ord.status as OrderStatus] || ord.status,
+        items: itemsByOrderId.get(ord.id) || [],
+      }));
+
+      return { data: formatted };
+    },
+    {
+      query: t.Object({
+        partner_id: t.Optional(t.String()),
+      }),
+    },
+  )
+  .post(
+    "/",
+    async ({ headers, body, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+
+      if (user.role !== "mitra") {
+        set.status = 403;
+        return { error: "Hanya mitra yang dapat mengajukan restock" };
+      }
+
+      const partnerId = user.partnerId;
+      if (!partnerId) {
+        set.status = 400;
+        return { error: "Partner ID wajib disertakan" };
+      }
+
+      if (!body.items || body.items.length === 0) {
+        set.status = 400;
+        return { error: "Pesanan harus memiliki minimal 1 item" };
+      }
+
+      if (
+        new Set(body.items.map((item) => item.product_id)).size !==
+        body.items.length
+      ) {
+        set.status = 422;
+        return { error: "Satu produk hanya boleh muncul sekali dalam pesanan" };
+      }
+
+      const [partner] = await db
+        .select({ name: partners.name })
+        .from(partners)
+        .where(eq(partners.id, partnerId))
+        .limit(1);
+
+      if (!partner) {
+        set.status = 404;
+        return { error: "Cabang mitra tidak ditemukan" };
+      }
+
+      const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+      const uniqueSuffix = crypto.randomUUID().slice(0, 8).toUpperCase();
+      const orderNo = `PO-${dateStr}-${uniqueSuffix}`;
+
+      const createdOrder = await db.transaction(async (tx) => {
+        const [ord] = await tx
+          .insert(orders)
+          .values({
+            order_no: orderNo,
+            partner_id: partnerId,
+            status: "diproses",
+            note: body.note || null,
+            created_by: user.userId,
+          })
+          .returning();
+
+        const itemValues = body.items.map((item) => ({
+          order_id: ord.id,
+          product_id: item.product_id,
+          qty_requested: item.qty_requested,
+          qty_approved: null,
+        }));
+
+        const insertedItems = await tx
+          .insert(orderItems)
+          .values(itemValues)
+          .returning();
+
+        await tx.insert(notifications).values({
+          audience: "admin",
+          type: "new_order",
+          partner_id: partnerId,
+          title: `Pesanan Restock Baru: ${orderNo}`,
+          body: `${partner.name} mengajukan restock untuk ${body.items.length} jenis produk. Pesanan menunggu persetujuan.`,
+        });
+
+        return {
+          ...ord,
+          status_label: ORDER_STATUS_LABEL["diproses"],
+          items: insertedItems,
+        };
+      });
+
+      return {
+        success: true,
+        message: "Pesanan restock berhasil dibuat",
+        data: createdOrder,
+      };
+    },
+    {
+      body: t.Object({
+        note: t.Optional(t.String()),
+        items: t.Array(
+          t.Object({
+            product_id: t.String(),
+            qty_requested: t.Integer({ minimum: 1 }),
+          }),
+        ),
+      }),
+    },
+  )
+  .patch(
+    "/:id/status",
+    async ({ headers, params, body, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+
+      const orderId = params.id;
+      if (!isOrderStatus(body.status)) {
+        set.status = 422;
+        return { error: "Status pesanan tidak dikenal" };
+      }
+      const targetStatus = body.status;
+
+      const [ord] = await db
+        .select()
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1);
+
+      if (!ord) {
+        set.status = 404;
+        return { error: "Pesanan tidak ditemukan" };
+      }
+
+      if (user.role === "mitra") {
+        if (ord.partner_id !== user.partnerId) {
+          set.status = 403;
+          return { error: "Tidak memiliki akses ke pesanan cabang lain" };
+        }
+        if (!(
+          (ord.status === "dalam_pengiriman" && targetStatus === "selesai") ||
+          (ord.status === "diproses" && targetStatus === "dibatalkan")
+        )) {
+          set.status = 403;
+          return {
+            error: `Mitra tidak diizinkan mengubah status dari '${ord.status}' menjadi '${targetStatus}'`,
+          };
+        }
+      } else {
+        const adminTransitionAllowed =
+          (ord.status === "diproses" &&
+            (targetStatus === "disetujui" || targetStatus === "ditolak")) ||
+          (ord.status === "disetujui" && targetStatus === "dalam_pengiriman");
+
+        if (!adminTransitionAllowed) {
+          set.status = 403;
+          return {
+            error: "Admin tidak diizinkan melakukan transisi status ini",
+          };
+        }
+      }
+
+      if (!canTransition(ord.status as OrderStatus, targetStatus)) {
+        set.status = 400;
+        return {
+          error: `Transisi status tidak valid dari '${ord.status}' ke '${targetStatus}'`,
+        };
+      }
+
+      if (
+        targetStatus === "disetujui" &&
+        (!body.items || body.items.length === 0)
+      ) {
+        set.status = 422;
+        return { error: "Kuantitas yang disetujui wajib diisi" };
+      }
+
+      if (targetStatus === "disetujui") {
+        const requestedItems = await db
+          .select({
+            product_id: orderItems.product_id,
+            product_name: products.name,
+            qty_requested: orderItems.qty_requested,
+            central_stock: products.central_stock,
+          })
+          .from(orderItems)
+          .innerJoin(products, eq(orderItems.product_id, products.id))
+          .where(eq(orderItems.order_id, orderId));
+
+        const approvalItems = body.items ?? [];
+        const approvalByProduct = new Map(
+          approvalItems.map((item) => [item.product_id, item.qty_approved]),
+        );
+
+        if (
+          approvalByProduct.size !== approvalItems.length ||
+          approvalItems.length !== requestedItems.length
+        ) {
+          set.status = 422;
+          return {
+            error: "Kuantitas persetujuan wajib diisi satu kali untuk setiap item pesanan",
+          };
+        }
+
+        let hasAdjustment = false;
+        for (const item of requestedItems) {
+          const approvedQty = approvalByProduct.get(item.product_id);
+          if (approvedQty === undefined) {
+            set.status = 422;
+            return { error: `Persetujuan ${item.product_name} belum diisi` };
+          }
+          if (approvedQty > item.qty_requested) {
+            set.status = 422;
+            return {
+              error: `Jumlah disetujui untuk ${item.product_name} tidak boleh melebihi jumlah yang diminta`,
+            };
+          }
+          if (approvedQty > item.central_stock) {
+            set.status = 409;
+            return {
+              error: `Stok pusat ${item.product_name} hanya tersedia ${item.central_stock} pcs`,
+            };
+          }
+          hasAdjustment ||= approvedQty !== item.qty_requested;
+        }
+
+        if (hasAdjustment && !body.admin_note?.trim()) {
+          set.status = 422;
+          return {
+            error: "Catatan admin wajib diisi jika jumlah persetujuan disesuaikan",
+          };
+        }
+      }
+
+      let result: typeof orders.$inferSelect;
+      try {
+        result = await db.transaction(async (tx) => {
+        const updateData: Partial<typeof orders.$inferInsert> = {
+          status: targetStatus,
+        };
+
+        if (targetStatus === "disetujui") {
+          updateData.approved_at = new Date();
+          updateData.approved_by = user.userId;
+          updateData.admin_note = body.admin_note?.trim() || null;
+        } else if (targetStatus === "dalam_pengiriman") {
+          updateData.shipped_at = new Date();
+        } else if (targetStatus === "selesai") {
+          updateData.completed_at = new Date();
+        } else if (targetStatus === "ditolak") {
+          updateData.rejected_reason =
+            body.rejected_reason || "Ditolak oleh admin";
+        }
+
+        if (targetStatus === "disetujui") {
+          for (const item of body.items ?? []) {
+            await tx
+              .update(orderItems)
+              .set({ qty_approved: item.qty_approved })
+              .where(
+                and(
+                  eq(orderItems.order_id, orderId),
+                  eq(orderItems.product_id, item.product_id),
+                ),
+              );
+          }
+        }
+
+        const [updatedOrder] = await tx
+          .update(orders)
+          .set(updateData)
+          .where(eq(orders.id, orderId))
+          .returning();
+
+        if (targetStatus === "selesai") {
+          const ordItems = await tx
+            .select()
+            .from(orderItems)
+            .where(eq(orderItems.order_id, orderId));
+
+          for (const item of ordItems) {
+            const addQty = item.qty_approved ?? 0;
+
+            const [centralProduct] = await tx
+              .select({
+                name: products.name,
+                central_stock: products.central_stock,
+              })
+              .from(products)
+              .where(eq(products.id, item.product_id))
+              .for("update");
+
+            if (!centralProduct || centralProduct.central_stock < addQty) {
+              throw new CentralStockConflictError(
+                `Stok pusat ${centralProduct?.name ?? item.product_id} tidak mencukupi`,
+              );
+            }
+
+            const [currentStock] = await tx
+              .select({
+                current_qty: partnerStocks.current_qty,
+                par_level: partnerStocks.par_level,
+              })
+              .from(partnerStocks)
+              .where(
+                and(
+                  eq(partnerStocks.partner_id, ord.partner_id),
+                  eq(partnerStocks.product_id, item.product_id),
+                ),
+              )
+              .for("update");
+
+            if (currentStock) {
+              const qtyBefore = currentStock.current_qty;
+              const qtyAfter = qtyBefore + addQty;
+
+              await tx
+                .update(partnerStocks)
+                .set({
+                  current_qty: qtyAfter,
+                  updated_at: new Date(),
+                  updated_by: user.userId,
+                })
+                .where(
+                  and(
+                    eq(partnerStocks.partner_id, ord.partner_id),
+                    eq(partnerStocks.product_id, item.product_id),
+                  ),
+                );
+
+              await tx.insert(stockLogs).values({
+                partner_id: ord.partner_id,
+                product_id: item.product_id,
+                qty_before: qtyBefore,
+                qty_after: qtyAfter,
+                source: "order_received",
+                created_by: user.userId,
+              });
+            }
+
+            await tx
+              .update(products)
+              .set({
+                central_stock: sql`${products.central_stock} - ${addQty}`,
+              })
+              .where(eq(products.id, item.product_id));
+          }
+
+          await tx.insert(notifications).values({
+            audience: "admin",
+            type: "order_update",
+            partner_id: ord.partner_id,
+            title: `Barang Diterima: ${ord.order_no}`,
+            body: `Mitra telah mengonfirmasi penerimaan barang untuk ${ord.order_no}. Stok cabang otomatis bertambah.`,
+          });
+        }
+
+        if (user.role === "admin") {
+          let notifTitle = `Status Pesanan ${ord.order_no}`;
+          let notifBody = `Status pesanan Anda telah diubah menjadi '${ORDER_STATUS_LABEL[targetStatus]}'`;
+
+          if (targetStatus === "dalam_pengiriman") {
+            notifTitle = `Pesanan Dikirim: ${ord.order_no}`;
+            notifBody = `Barang pesanan Anda sedang dalam pengiriman. Mohon klik "Barang Diterima" saat paket tiba.`;
+          } else if (targetStatus === "disetujui") {
+            const note = body.admin_note?.trim();
+            notifTitle = `Pesanan Disetujui: ${ord.order_no}`;
+            notifBody = note
+              ? `Admin menyetujui rincian pesanan Anda. Catatan admin: ${note}`
+              : "Admin menyetujui rincian pesanan Anda.";
+          }
+
+          await tx.insert(notifications).values({
+            audience: "mitra",
+            type: "order_update",
+            partner_id: ord.partner_id,
+            title: notifTitle,
+            body: notifBody,
+          });
+        }
+
+          return updatedOrder;
+        });
+      } catch (error) {
+        if (error instanceof CentralStockConflictError) {
+          set.status = 409;
+          return { error: error.message };
+        }
+        throw error;
+      }
+
+      return {
+        success: true,
+        message: `Status pesanan berhasil diubah menjadi '${ORDER_STATUS_LABEL[targetStatus]}'`,
+        data: result,
+      };
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      body: t.Object({
+        status: t.Union([
+          t.Literal("diproses"),
+          t.Literal("disetujui"),
+          t.Literal("dalam_pengiriman"),
+          t.Literal("selesai"),
+          t.Literal("ditolak"),
+          t.Literal("dibatalkan"),
+        ]),
+        rejected_reason: t.Optional(t.String()),
+        admin_note: t.Optional(t.String({ maxLength: 1000 })),
+        items: t.Optional(
+          t.Array(
+            t.Object({
+              product_id: t.String(),
+              qty_approved: t.Integer({ minimum: 0 }),
+            }),
+          ),
+        ),
+      }),
+    },
+  );
