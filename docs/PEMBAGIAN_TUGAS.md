@@ -1,141 +1,96 @@
-# Pembagian Tugas Tim — Daisuki Inventory
+# Pembagian Tugas Tim — Daisuki Inventory (Versi Praktis & Terarah)
 
-## 1. Ringkasan
+## 1. Ringkasan Proyek
 
-Proyek capstone ini membangun sistem inventaris B2B terintegrasi untuk Daisuki Snack & Food (PT Yan Group Gfs). Masalah klien: stok di tempat mitra tidak terlihat realtime (cek manual lewat WhatsApp dan Excel), restock sering terlambat atau salah jumlah (stok habis Rabu atau Kamis padahal restock hari Minggu), dan pabrik tidak pasti (1000 pcs bisa selesai 5 sampai 7 hari).
+Daisuki Inventory adalah sistem inventaris dan pemesanan barang B2B yang praktis antara **Admin Daisuki Pusat** dan **Mitra Cabang** (hotel, kafe, resto, minimarket).
 
-Tim **Fullstack** membangun inti sistem (inventory dan order). Tim **Data Science** dan **AI Engineer** membangun lapisan kecerdasan di atasnya: prediksi dan rekomendasi restock, asisten, dan otomasi.
+**Masalah utama yang diselesaikan:**
+- Stok di cabang sering habis mendadak karena pencatatan manual via WhatsApp/Excel.
+- Admin kesulitan memantau cabang mana yang stoknya sudah menipis (kritis).
+- Mitra sering telat lapor stok harian atau telat pesan barang restock.
 
-Dokumen acuan: `docs/alursistem.md`, `docs/design_system.md`, dan `SETUP.md`.
+---
 
-## 2. Anggota dan role
+## 2. Anggota & Peran
 
-| Role | Nama | Pembagian A/B |
+| Peran | Anggota | Fokus Utama |
 |---|---|---|
-| Fullstack developer | Frisca Nabilla, Hudzaifah Ar-Rantisi | (isi: siapa FS-A backend, siapa FS-B frontend) |
-| Data science | Adelia Juliani, Keyla Farrelia | (isi: DS-A, DS-B) |
-| AI engineer | Annura Rizkya Chantika, Reyhan Fawwaz Habibi | (isi: AI-A, AI-B) |
+| **Fullstack Developer** | Frisca Nabilla, Hudzaifah Ar-Rantisi | Membangun aplikasi web, API backend, database, dan antarmuka pengguna |
+| **Data Science** | Adelia Juliani, Keyla Farrelia | Analisis data stok/penjualan mitra, hitung batas aman stok, dan buat data dummy |
+| **AI Engineer** | Annura Rizkya Chantika, Reyhan Fawwaz Habibi | Otomasi alert/reminder stok, serta asisten/bot praktis untuk admin & mitra |
 
-> Catatan: pembagian role per nama disimpulkan dari kode ID di notulensi (FS/DS/AE). **Cek ulang kebenaran role per nama.**
+---
 
-## 3. Alur kerja antar-role
+## 3. Alur Kerja Sederhana
 
 ```mermaid
 flowchart LR
-  H[Data historis<br/>stok dan penjualan] --> DS[Data Science<br/>model forecast]
-  DS --> AI[AI Engineer<br/>job harian]
-  AI --> T[(restock_recommendations)]
-  T --> API[API Elysia<br/>FS-A]
-  API --> D[Dashboard admin<br/>FS-B]
+  Mitra[Mitra Cabang] -->|1. Update Stok Harian & Order| Web[Portal Web / HP]
+  Web --> API[Backend API & Neon DB]
+  DS[Data Science] -->|2. Rumus Batas Aman & Rekomendasi Qty| API
+  AI[AI Engineer] -->|3. Otomasi Reminder & Alert Kritis| Admin[Dashboard Admin]
 ```
 
-## 4. Tugas per role
+---
 
-### Fullstack
+## 4. Pembagian Tugas Praktis per Peran
 
-**FS-A (backend dan data)**
-- [ ] Skema database, RLS, dan seed data di Supabase
-- [ ] API Elysia: auth guard, update stok, order dan approval, alert kritis, cron reminder stok basi
-- [ ] Tabel `restock_recommendations` dan endpoint `GET /admin/reports/forecast`
-- [ ] Keamanan: CORS, env, isolasi data per mitra
-- [ ] Deploy API
+### 1. 💻 Fullstack Developer (Inti Sistem & Aplikasi)
+> **Tujuan:** Membuat web yang gampang dipakai mitra di HP dan dashboard admin di desktop.
 
-**FS-B (frontend dan UX)**
-- [ ] Portal Mitra: update stok, ajukan restock, riwayat
-- [ ] Dashboard Admin: ringkasan realtime, panel alert, approval order, laporan
-- [ ] Design system, komponen Rak Bar, Supabase Realtime
-- [ ] Menampilkan rekomendasi restock dari DS di dashboard admin
+- **Frontend (Web):**
+  - **Portal Mitra (Mobile Friendly):**
+    - Halaman input stok fisik harian (cepat & mudah via HP).
+    - Halaman pengajuan order restock barang baru.
+    - Tombol konfirmasi "Barang Diterima" saat restock tiba (stok otomatis bertambah).
+  - **Dashboard Admin (Desktop):**
+    - Tabel monitoring stok cabang realtime dengan indikator warna:
+      - 🟢 **Aman** (Stok > 50%)
+      - 🟡 **Waspada** (Stok 20% - 50%)
+      - 🔴 **Kritis** (Stok < 20%)
+      - ⚪ **Belum Update** (> 24 jam belum lapor)
+    - Halaman approval order mitra (Setujui / Tolak / Kirim).
+- **Backend & Database:**
+  - REST API (ElysiaJS + Neon DB) untuk mencatat:
+    - Input & output stok (`stock_logs`).
+    - Alur status order: `diproses` ➔ `disetujui` ➔ `dalam_pengiriman` ➔ `selesai`.
+  - Autentikasi login aman (Admin vs Mitra).
 
-**Bersama**
-- [ ] Integrasi, testing, deploy web
+---
 
-### Data Science
-- [ ] Minta dan audit data riwayat stok dan penjualan dari klien, bersihkan, lalu EDA (pola mingguan, produk fast dan slow moving, perbedaan antar mitra)
-- [ ] Buat dataset sintetis sebagai cadangan jika data asli sedikit
-- [ ] Forecast permintaan per mitra per produk: mulai dari baseline (moving average, seasonal naive), model lanjutan hanya jika data cukup; ukur dengan WAPE atau MAPE
-- [ ] Rekomendasi par level dan safety stock memakai variasi permintaan dan lead time pabrik 5 sampai 7 hari (menjawab par level yang belum ditentukan klien)
-- [ ] Prediksi risiko stok habis (days of cover)
-- [ ] Deteksi anomali (stok naik tanpa order, update tidak wajar, mitra lama tidak update)
-- [ ] Definisi metrik dan query laporan: penjualan per mitra, frekuensi restock, KPI sebelum vs sesudah sistem
-- [ ] Output: notebook, model, dokumen metodologi, hasil prediksi sesuai kontrak data
+### 2. 📊 Data Science (Analisis Data & Batas Stok)
+> **Tujuan:** Membantu admin menentukan angka batas aman stok dan menganalisis produk yang paling laku.
 
-### AI Engineer
-- [ ] Serving model DS sebagai job harian (batch) yang menulis ke tabel `restock_recommendations`
-- [ ] Asisten admin (LLM + tool calling) yang hanya memanggil endpoint API read-only, tidak menjalankan SQL bebas
-- [ ] Input stok lewat chat (prototype Telegram dulu): parsing pesan seperti "sisa basreng 12, keripik 20", minta konfirmasi sebelum menyimpan
-- [ ] Ringkasan mingguan otomatis untuk direktur (stok kritis, rekomendasi restock, performa mitra)
-- [ ] Evaluasi dan guardrail: tes akurasi parsing, batasi akses data per mitra, API key hanya di server
-- [ ] Monitoring ringan: log prediksi, cek akurasi, jadwal retraining
-- [ ] Stretch (opsional): hitung stok dari foto rak
+- **Data Dummy / Sintetis:**
+  - Membuat data simulasi transaksi dan pergerakan stok 5 produk Daisuki untuk bahan pengujian sistem.
+- **Analisis Pola Konsumsi Cabang:**
+  - Menghitung rata-rata penjualan per produk per cabang (misal: Kafe A rata-rata habis 5 pcs keripik/hari).
+- **Penentuan Batas Stok (Par Level & Safety Stock):**
+  - Merumuskan batas minimal stok per cabang dengan memperhitungkan waktu produksi pabrik (lead time 5–7 hari), agar mitra tidak kehabisan barang sebelum restock tiba.
+- **Laporan Ringkas:**
+  - Menyediakan insight produk *Fast-Moving* (cepat habis) vs *Slow-Moving* (jarang laku).
 
-## 5. Kontrak data antar-role
+---
 
-Struktur tabel ini disepakati bersama dan sudah ada di `supabase/migrations/0002_restock_recommendations.sql`:
+### 3. 🤖 AI Engineer (Otomasi, Alert & Asisten)
+> **Tujuan:** Membuat sistem bekerja otomatis tanpa admin harus mengecek layar terus-menerus.
 
-```sql
-create table restock_recommendations (
-  id uuid primary key default gen_random_uuid(),
-  partner_id uuid not null references partners(id),
-  product_id uuid not null references products(id),
-  forecast_qty integer not null,
-  suggested_qty integer not null,
-  days_of_cover numeric(5,1),
-  model_version text not null,
-  generated_at timestamptz not null default now()
-);
-```
+- **Sistem Alert Otomatis (Notifikasi):**
+  - Trigger alert instan ke admin saat ada cabang yang stoknya menyentuh status **Kritis (< 20%)**.
+  - Notifikasi saat ada order baru yang masuk dari mitra.
+- **Scheduler Reminder Stok:**
+  - Script otomatis untuk mendeteksi cabang yang belum lapor stok lebih dari 24 jam dan membuat reminder otomatis.
+- **Rekomendasi Jumlah Restock (Smart Restock):**
+  - Mengisi rekomendasi jumlah restock otomatis saat mitra membuka formulir order (berdasarkan rata-rata konsumsi dari tim Data Science).
+- **Asisten AI Admin (Opsional / Nilai Tambah):**
+  - Chat asisten sederhana di dashboard (misal: *"Cabang mana yang stoknya kritis hari ini?"* atau *"Berapa keripik yang terjual minggu ini?"*).
 
-> Perubahan struktur tabel ini harus disepakati FS-A, Data Science, dan AI Engineer terlebih dahulu.
+---
 
-## 6. Fase kerja
+## 5. Ringkasan Fitur Utama (Fokus Selesai)
 
-- **Fase 1:** Fullstack membangun inti (MVP). DS audit data dan membuat data sintetis. AI Engineer menyiapkan kerangka bot dan asisten dengan data dummy.
-- **Fase 2:** DS menyelesaikan baseline forecast. AI Engineer mengintegrasikan hasilnya. Fullstack menampilkannya di dashboard.
-- **Fase 3:** Uji bersama, evaluasi KPI, dokumentasi, demo.
-
-## 7. Fallback
-
-Inti sistem tidak boleh bergantung pada AI. Jika model belum siap, rekomendasi restock memakai rumus sederhana: par level dikurangi stok sekarang.
-
-## 8. Definisi selesai per role
-
-**Fullstack**
-- [ ] Mitra bisa update stok dari HP dan admin melihat perubahan tanpa refresh
-- [ ] Stok kritis memunculkan alert di admin
-- [ ] Satu siklus order berjalan sampai selesai dan stok mitra bertambah
-- [ ] Data mitra A terbukti tidak bisa diakses mitra B
-
-**Data Science**
-- [ ] EDA dan dokumen metodologi selesai
-- [ ] Baseline forecast punya metrik WAPE atau MAPE yang terdokumentasi
-- [ ] Rekomendasi par level dan safety stock siap dikonfirmasi ke klien
-- [ ] Hasil prediksi sesuai kontrak `restock_recommendations`
-
-**AI Engineer**
-- [ ] Job harian berjalan dan menulis ke `restock_recommendations`
-- [ ] Asisten admin menjawab pertanyaan stok lewat endpoint read-only
-- [ ] Bot input stok meminta konfirmasi sebelum menyimpan
-- [ ] Hasil evaluasi tersimpan di `ai/evals/`
-
-## 9. Risiko dan antisipasi
-
-| Risiko | Antisipasi |
-|---|---|
-| Data riwayat sedikit atau berantakan | Pakai data sintetis dan model sederhana dulu |
-| Lapisan DS dan AI adalah nilai tambah di atas PRD | Konfirmasi ke dosen dan klien bagaimana bagian ini dinilai |
-
-## 10. Aturan kolaborasi
-
-| Folder | Pemilik |
-|---|---|
-| `apps/web` | FS-B |
-| `apps/api`, `supabase/` | FS-A |
-| `packages/shared` | Fullstack bersama |
-| `data-science/` | Data Science |
-| `ai/` | AI Engineer |
-| `docs/` | Semua |
-
-- Branch per fitur: `feat/nama-fitur`.
-- Pull request wajib direview minimal satu orang.
-- Tiap role hanya mengubah foldernya sendiri. Butuh perubahan di folder role lain: buat issue atau minta lewat pull request.
-- Jangan commit `.env`, data mentah klien, atau file model besar.
+1. **Update Stok Fisik:** Mitra lapor stok harian dengan cepat dari HP.
+2. **Monitoring Stok:** Admin melihat status stok semua cabang dalam satu tabel warna.
+3. **Alert Kritis:** Notifikasi langsung berbunyi/muncul saat stok cabang hampir habis.
+4. **Order Restock Sederhana:** Mitra minta barang ➔ Admin setujui & kirim ➔ Mitra konfirmasi terima (stok otomatis nambah).
+5. **Reminder 24 Jam:** Peringatan otomatis bagi mitra yang lupa update stok.

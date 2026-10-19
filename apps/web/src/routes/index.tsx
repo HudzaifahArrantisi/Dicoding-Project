@@ -38,7 +38,7 @@ function Home() {
           <div className="flex items-center justify-between p-3.5 rounded-xl border border-line bg-ink-50">
             <div>
               <p className="text-xs font-semibold text-muted uppercase tracking-wider">
-                Backend API (Elysia)
+                API
               </p>
               <p className="text-sm font-medium text-ink-900">Port 3001</p>
             </div>
@@ -63,7 +63,7 @@ function Home() {
           <div className="flex items-center justify-between p-3.5 rounded-xl border border-line bg-ink-50">
             <div>
               <p className="text-xs font-semibold text-muted uppercase tracking-wider">
-                Database (Neon PostgreSQL)
+                Database
               </p>
               <p className="text-sm font-medium text-ink-900">
                 {healthDb.data?.now
