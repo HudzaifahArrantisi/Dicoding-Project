@@ -24,6 +24,7 @@ export interface OrderItem {
   product_name: string
   product_sku: string
   product_unit: string
+  central_stock: number
   qty_requested: number
   qty_approved: number | null
 }

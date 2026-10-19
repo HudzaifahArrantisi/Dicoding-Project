@@ -43,7 +43,7 @@ async function upsertPartner(data: PartnerSeed) {
 export async function runSeed() {
   console.log("Menyiapkan data demo Daisuki...");
 
-  const [kafeSejuk, hotelAruna] = await Promise.all([
+  const [kafeSejuk, hotelAruna, restoBento] = await Promise.all([
     upsertPartner({
       name: "Kafe Sejuk BSD",
       type: "kafe",
@@ -161,6 +161,23 @@ export async function runSeed() {
   const productBySku = new Map(
     productRows.map((product) => [product.sku, product]),
   );
+
+  await db
+    .insert(partnerStocks)
+    .values(
+      [kafeSejuk, hotelAruna, restoBento].flatMap((partner) =>
+        productRows.map((product) => ({
+          partner_id: partner.id,
+          product_id: product.id,
+          current_qty: 0,
+          par_level: 40,
+        })),
+      ),
+    )
+    .onConflictDoNothing({
+      target: [partnerStocks.partner_id, partnerStocks.product_id],
+    });
+
   const stockScenario = [
     { sku: "DSK-SB-001", currentQty: 10 },
     { sku: "DSK-BR-002", currentQty: 10 },

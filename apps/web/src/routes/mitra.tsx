@@ -60,6 +60,9 @@ function MitraPortal() {
   const [activeTab, setActiveTab] = useState<MitraTab>('stocks')
   const [editedStocks, setEditedStocks] = useState<Record<string, number>>({})
   const [orderItems, setOrderItems] = useState<DraftOrderItem[]>([])
+  const [skippedProductIds, setSkippedProductIds] = useState<Set<string>>(
+    () => new Set(),
+  )
   const [orderNote, setOrderNote] = useState('')
 
   useEffect(() => {
@@ -84,6 +87,8 @@ function MitraPortal() {
       return unwrapData<Order[]>(response, 'Pesanan belum dapat dimuat')
     },
     enabled: user?.role === 'mitra',
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
   })
 
   const centralProductsQuery = useQuery<Product[]>({
@@ -151,6 +156,7 @@ function MitraPortal() {
     onSuccess: async () => {
       toast.success('Restock diajukan')
       setOrderItems([])
+      setSkippedProductIds(new Set())
       setOrderNote('')
       setActiveTab('history')
       await queryClient.invalidateQueries({ queryKey: ['mitra-orders'] })
@@ -209,6 +215,20 @@ function MitraPortal() {
           : item,
       ),
     )
+  }
+
+  function setOrderSkipped(productId: string, skipped: boolean) {
+    setSkippedProductIds((current) => {
+      const next = new Set(current)
+      if (skipped) next.add(productId)
+      else next.delete(productId)
+      return next
+    })
+    if (skipped) {
+      setOrderItems((current) =>
+        current.filter((item) => item.product_id !== productId),
+      )
+    }
   }
 
   function handleLogout() {
@@ -272,7 +292,7 @@ function MitraPortal() {
         {activeTab === 'stocks' ? (
           <StocksPanel
             query={stocksQuery}
-            centralProducts={centralProductsQuery.data ?? []}
+            centralProductsQuery={centralProductsQuery}
             editedStocks={editedStocks}
             changedIds={new Set(changedStocks.map((stock) => stock.product_id))}
             onQtyChange={setStockQty}
@@ -286,28 +306,17 @@ function MitraPortal() {
             stocksQuery={stocksQuery}
             centralProducts={centralProductsQuery.data ?? []}
             orderItems={orderItems}
+            skippedProductIds={skippedProductIds}
             note={orderNote}
             onNoteChange={setOrderNote}
             onAdd={addOrderItem}
-            onAddAll={(stocks) => {
-              setOrderItems(
-                stocks.map((stock) => ({
-                  product_id: stock.product_id,
-                  qty: Math.max(
-                    10,
-                    stock.par_level - stock.current_qty > 0
-                      ? stock.par_level - stock.current_qty
-                      : 40,
-                  ),
-                })),
-              )
-            }}
             onRemove={(productId) =>
               setOrderItems((current) =>
                 current.filter((item) => item.product_id !== productId),
               )
             }
             onQtyChange={setOrderQty}
+            onSkipChange={setOrderSkipped}
             onSubmit={() => createOrder.mutate()}
             isSubmitting={createOrder.isPending}
           />
@@ -348,7 +357,7 @@ function MitraPortal() {
 
 interface StocksPanelProps {
   query: ReturnType<typeof useQuery<StockItem[]>>
-  centralProducts: Product[]
+  centralProductsQuery: ReturnType<typeof useQuery<Product[]>>
   editedStocks: Record<string, number>
   changedIds: Set<string>
   onQtyChange: (stock: StockItem, qty: number) => void
@@ -358,7 +367,7 @@ interface StocksPanelProps {
 
 function StocksPanel({
   query,
-  centralProducts,
+  centralProductsQuery,
   editedStocks,
   changedIds,
   onQtyChange,
@@ -397,7 +406,6 @@ function StocksPanel({
         </button>
       </div>
 
-      {/* Kartu Informasi Stok Gudang Daisuki Pusat (Realtime) */}
       <div className="mt-6 overflow-hidden rounded-md border border-line bg-white shadow-xs">
         <div className="flex flex-col gap-2 border-b border-line bg-ink-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -409,53 +417,38 @@ function StocksPanel({
                 Stok Gudang Daisuki Pusat (Realtime)
               </h2>
               <p className="text-xs text-muted">
-                Ketersediaan stok siap kirim dari kantor pusat untuk seluruh cabang mitra
+                Ketersediaan stok siap kirim yang dikelola admin pusat
               </p>
             </div>
           </div>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-ok/10 px-3 py-1 text-xs font-semibold text-ok-fg">
-            <span
-              className="size-2 rounded-full bg-ok animate-pulse"
-              aria-hidden="true"
-            />
-            Live Gudang Pusat
+          <span className="inline-flex w-fit items-center rounded bg-ok/10 px-3 py-1 text-xs font-semibold text-ok-fg">
+            Diperbarui otomatis
           </span>
         </div>
 
+        {centralProductsQuery.isLoading ? (
+          <div className="p-4 sm:p-5">
+            <LoadingState label="Memuat stok gudang pusat..." />
+          </div>
+        ) : null}
+        {centralProductsQuery.isError ? (
+          <div className="p-4 sm:p-5">
+            <ErrorState
+              message={errorMessage(centralProductsQuery.error)}
+              onRetry={() => void centralProductsQuery.refetch()}
+            />
+          </div>
+        ) : null}
+        {centralProductsQuery.data?.length === 0 ? (
+          <div className="p-4 sm:p-5">
+            <EmptyState
+              title="Stok pusat belum tersedia"
+              description="Admin belum mengaktifkan produk untuk gudang pusat."
+            />
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 sm:p-5">
-          {(centralProducts.length > 0
-            ? centralProducts
-            : [
-                {
-                  id: '1',
-                  sku: 'DSK-SB-001',
-                  name: 'Seblak Jadul Instan',
-                  unit: 'pcs',
-                  central_stock: 1000,
-                },
-                {
-                  id: '2',
-                  sku: 'DSK-BR-002',
-                  name: 'Basreng Daun Jeruk',
-                  unit: 'pcs',
-                  central_stock: 1000,
-                },
-                {
-                  id: '3',
-                  sku: 'DSK-MK-003',
-                  name: 'Makaroni Daun Jeruk',
-                  unit: 'pcs',
-                  central_stock: 1000,
-                },
-                {
-                  id: '4',
-                  sku: 'DSK-KP-004',
-                  name: 'Keripik Pisang Rasa Coklat',
-                  unit: 'pcs',
-                  central_stock: 1000,
-                },
-              ]
-          ).map((product) => (
+          {centralProductsQuery.data?.map((product) => (
             <div
               key={product.id}
               className="rounded-md border border-line bg-paper/50 p-3.5 transition-colors hover:border-ink-400"
@@ -467,13 +460,19 @@ function StocksPanel({
                 {product.name}
               </p>
               <p className="mt-1 font-display text-xl font-bold tabular-nums text-ink-900">
-                {(product.central_stock ?? 1000).toLocaleString('id-ID')}{' '}
+                {product.central_stock.toLocaleString('id-ID')}{' '}
                 <span className="text-xs font-normal text-muted">
                   {product.unit}
                 </span>
               </p>
-              <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-ok-fg">
-                <span>✓</span> Stok pusat siap
+              <p
+                className={`mt-1 text-[11px] font-semibold ${
+                  product.central_stock > 0 ? 'text-ok-fg' : 'text-crit-fg'
+                }`}
+              >
+                {product.central_stock > 0
+                  ? 'Stok pusat siap'
+                  : 'Stok pusat habis'}
               </p>
             </div>
           ))}
@@ -523,8 +522,7 @@ function StocksPanel({
                     ) : null}
                   </div>
                   <p className="mt-0.5 text-xs text-muted">
-                    {stock.product_sku} · Kapasitas {stock.par_level}{' '}
-                    {stock.product_unit}
+                    Kapasitas {stock.par_level} {stock.product_unit}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
@@ -598,12 +596,13 @@ interface OrderFormProps {
   stocksQuery: ReturnType<typeof useQuery<StockItem[]>>
   centralProducts: Product[]
   orderItems: DraftOrderItem[]
+  skippedProductIds: Set<string>
   note: string
   onNoteChange: (value: string) => void
   onAdd: (stock: StockItem) => void
-  onAddAll: (stocks: StockItem[]) => void
   onRemove: (productId: string) => void
   onQtyChange: (productId: string, qty: number) => void
+  onSkipChange: (productId: string, skipped: boolean) => void
   onSubmit: () => void
   isSubmitting: boolean
 }
@@ -612,41 +611,39 @@ function OrderForm({
   stocksQuery,
   centralProducts,
   orderItems,
+  skippedProductIds,
   note,
   onNoteChange,
   onAdd,
-  onAddAll,
   onRemove,
   onQtyChange,
+  onSkipChange,
   onSubmit,
   isSubmitting,
 }: OrderFormProps) {
+  const products = [...(stocksQuery.data ?? [])].sort(
+    (a, b) =>
+      stockPercent(a.current_qty, a.par_level) -
+      stockPercent(b.current_qty, b.par_level),
+  )
+  const skippedCount = products.filter((stock) =>
+    skippedProductIds.has(stock.product_id),
+  ).length
+
   return (
     <section aria-labelledby="order-heading">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-ume">Restock cabang</p>
-          <h1
-            id="order-heading"
-            className="mt-1 text-2xl font-semibold text-ink-900"
-          >
-            Ajukan kebutuhan barang
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted">
-            Pilih produk dan tentukan jumlah yang dibutuhkan cabang. Ketersediaan
-            stok gudang pusat dapat dipantau langsung di bawah ini.
-          </p>
-        </div>
-        {stocksQuery.data && stocksQuery.data.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => onAddAll(stocksQuery.data ?? [])}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700"
-          >
-            <PackagePlus className="size-4 text-ume" aria-hidden="true" />
-            Pilih Semua ({stocksQuery.data.length} Produk)
-          </button>
-        ) : null}
+      <div>
+        <p className="text-sm font-semibold text-ume">Restock cabang</p>
+        <h1
+          id="order-heading"
+          className="mt-1 text-2xl font-semibold text-ink-900"
+        >
+          Ajukan restock barang
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted">
+          Pilih barang yang diperlukan dan atur jumlahnya. Centang “Tidak perlu
+          restock” untuk barang yang ingin dilewati.
+        </p>
       </div>
 
       {stocksQuery.isLoading ? (
@@ -669,61 +666,149 @@ function OrderForm({
         </div>
       ) : null}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        {stocksQuery.data?.map((stock) => {
-          const selected = orderItems.some(
+      {products.length > 0 ? (
+        <div className="mt-6 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-semibold text-ink-900">Pilih barang</h2>
+          <p className="text-xs text-muted">
+            Persentase stok terendah ditampilkan lebih dulu
+          </p>
+        </div>
+      ) : null}
+      <div className="mt-3 space-y-3">
+        {products.map((stock) => {
+          const selected = orderItems.find(
             (item) => item.product_id === stock.product_id,
           )
           const centralItem = centralProducts.find(
             (p) => p.id === stock.product_id,
           )
-          const centralQty =
-            centralItem?.central_stock ?? stock.central_stock ?? 1000
+          const centralQty = centralItem?.central_stock ?? stock.central_stock
+          const status = getStockStatus(stock.current_qty, stock.par_level)
+          const suggestedQty = Math.max(1, stock.par_level - stock.current_qty)
+          const skipped = skippedProductIds.has(stock.product_id)
 
           return (
             <article
               key={stock.product_id}
-              className={`flex items-center justify-between gap-3 rounded-md border p-4 transition-all ${selected ? 'border-ink-500 bg-ink-50' : 'border-line bg-white'}`}
+              className={`rounded-md border p-4 sm:p-5 ${selected ? 'border-ink-700 bg-ink-50/70' : skipped ? 'border-line bg-ink-50/50' : 'border-line bg-white'}`}
             >
-              <div className="min-w-0">
-                <h2 className="truncate font-semibold text-ink-900">
-                  {stock.product_name}
-                </h2>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
-                  <span>
-                    Sisa Toko:{' '}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-ink-900">
+                    {stock.product_name}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted">
+                    Sisa yang Tersedia di toko saya{' '}
                     <strong className="tabular-nums text-ink-900">
-                      {stock.current_qty}/{stock.par_level}
-                    </strong>{' '}
-                    {stock.product_unit}
-                  </span>
-                  <span>•</span>
-                  <span>
-                    Gudang Pusat:{' '}
-                    <strong className="tabular-nums text-ok-fg">
-                      {centralQty.toLocaleString('id-ID')}
-                    </strong>{' '}
-                    {stock.product_unit}
-                  </span>
+                      {stock.current_qty} {stock.product_unit}
+                    </strong>
+                    <span className="mx-1.5" aria-hidden="true">
+                      /
+                    </span>
+                    target {stock.par_level} {stock.product_unit}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <StockStatusBadge status={status} />
+                  {selected ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(stock.product_id)}
+                      className="min-h-11 rounded-md px-3 text-sm font-semibold text-crit-fg hover:bg-crit-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                      aria-label={`Hapus ${stock.product_name} dari pengajuan`}
+                    >
+                      Hapus
+                    </button>
+                  ) : null}
                 </div>
               </div>
-              {selected ? (
-                <button
-                  type="button"
-                  onClick={() => onRemove(stock.product_id)}
-                  className="min-h-11 shrink-0 rounded-md px-3 text-sm font-semibold text-crit-fg hover:bg-crit-bg"
-                >
-                  Hapus
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onAdd(stock)}
-                  className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-100"
-                >
-                  <Plus className="size-4" aria-hidden="true" /> Pilih
-                </button>
-              )}
+              <div className="mt-3 border-t border-line pt-2">
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-ink-900">
+                  <input
+                    type="checkbox"
+                    checked={skipped}
+                    onChange={(event) =>
+                      onSkipChange(stock.product_id, event.target.checked)
+                    }
+                    className="size-5 shrink-0 accent-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                  />
+                  Tidak perlu restock barang ini
+                </label>
+                {skipped ? (
+                  <p className="pb-1 text-xs text-muted">
+                    Barang ini dilewati dan tidak masuk pengajuan.
+                  </p>
+                ) : (
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-muted">
+                      Stok pusat:{' '}
+                      {centralQty === undefined
+                        ? 'data belum tersedia'
+                        : `${centralQty.toLocaleString('id-ID')} ${stock.product_unit}`}
+                    </p>
+                    {selected ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label
+                          htmlFor={`order-${stock.product_id}`}
+                          className="text-sm font-medium text-ink-900"
+                        >
+                          Jumlah diajukan
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onQtyChange(stock.product_id, selected.qty - 1)
+                          }
+                          disabled={selected.qty <= 1}
+                          className="grid size-11 place-items-center rounded-md border border-line bg-white text-ink-900 hover:bg-ink-100 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                          aria-label={`Kurangi jumlah ${stock.product_name}`}
+                        >
+                          <Minus className="size-4" aria-hidden="true" />
+                        </button>
+                        <input
+                          id={`order-${stock.product_id}`}
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={selected.qty}
+                          onChange={(event) =>
+                            onQtyChange(
+                              stock.product_id,
+                              Number.parseInt(event.target.value, 10) || 1,
+                            )
+                          }
+                          className="h-11 w-16 rounded-sm border border-line bg-white text-center text-base font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onQtyChange(stock.product_id, selected.qty + 1)
+                          }
+                          className="grid size-11 place-items-center rounded-md border border-line bg-white text-ink-900 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                          aria-label={`Tambah jumlah ${stock.product_name}`}
+                        >
+                          <Plus className="size-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onAdd(stock)}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                      >
+                        <Plus className="size-4" aria-hidden="true" /> Tambah ke
+                        pengajuan
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {!selected && !skipped && stock.par_level > stock.current_qty ? (
+                <p className="mt-2 text-xs text-muted">
+                  Saran jumlah: {suggestedQty} {stock.product_unit} untuk
+                  mencapai target cabang.
+                </p>
+              ) : null}
             </article>
           )
         })}
@@ -731,78 +816,42 @@ function OrderForm({
 
       <div className="mt-6 rounded-md border border-line bg-white p-4 sm:p-5">
         <h2 className="text-lg font-semibold text-ink-900">
-          Rincian pengajuan
+          Periksa pengajuan
         </h2>
         {orderItems.length === 0 ? (
-          <div className="mt-4">
-            <EmptyState
-              title="Belum ada produk dipilih"
-              description="Pilih produk di atas untuk menyiapkan pengajuan restock."
-            />
-          </div>
+          <p className="mt-2 text-sm text-muted">
+            {skippedCount === products.length && products.length > 0
+              ? 'Semua barang dilewati. Tidak ada restock yang perlu diajukan.'
+              : 'Belum ada barang dipilih. Tambahkan barang dari daftar di atas untuk mulai mengajukan restock.'}
+          </p>
         ) : (
-          <div className="mt-4 space-y-3">
+          <ul className="mt-4 divide-y divide-line border-y border-line">
             {orderItems.map((item) => {
               const stock = stocksQuery.data?.find(
                 (entry) => entry.product_id === item.product_id,
               )
               return (
-                <div
+                <li
                   key={item.product_id}
-                  className="flex flex-col gap-3 border-b border-line pb-3 last:border-0 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex items-center justify-between gap-4 py-3 text-sm"
                 >
-                  <div>
-                    <p className="font-medium text-ink-900">
-                      {stock?.product_name ?? 'Produk'}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {stock?.product_sku} · Sisa toko {stock?.current_qty ?? 0}{' '}
-                      {stock?.product_unit}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onQtyChange(item.product_id, item.qty - 1)}
-                      className="grid size-11 place-items-center rounded-md border border-line bg-ink-50 text-ink-900 hover:bg-ink-100"
-                      aria-label={`Kurangi jumlah ${stock?.product_name ?? 'produk'}`}
-                    >
-                      <Minus className="size-4" aria-hidden="true" />
-                    </button>
-                    <label
-                      className="sr-only"
-                      htmlFor={`order-${item.product_id}`}
-                    >
-                      Jumlah {stock?.product_name ?? 'produk'}
-                    </label>
-                    <input
-                      id={`order-${item.product_id}`}
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      value={item.qty}
-                      onChange={(event) =>
-                        onQtyChange(
-                          item.product_id,
-                          Number.parseInt(event.target.value, 10) || 1,
-                        )
-                      }
-                      className="h-11 w-20 rounded-sm border border-line text-center text-base font-semibold tabular-nums"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => onQtyChange(item.product_id, item.qty + 1)}
-                      className="grid size-11 place-items-center rounded-md border border-line bg-ink-50 text-ink-900 hover:bg-ink-100"
-                      aria-label={`Tambah jumlah ${stock?.product_name ?? 'produk'}`}
-                    >
-                      <Plus className="size-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
+                  <span className="min-w-0 font-medium text-ink-900">
+                    {stock?.product_name ?? 'Produk'}
+                  </span>
+                  <span className="shrink-0 font-semibold tabular-nums text-ink-900">
+                    {item.qty} {stock?.product_unit}
+                  </span>
+                </li>
               )
             })}
-          </div>
+          </ul>
         )}
+        {skippedCount > 0 ? (
+          <p className="mt-3 text-sm text-muted">
+            {skippedCount} barang dilewati dan tidak dikirim dalam pengajuan
+            ini.
+          </p>
+        ) : null}
 
         <label
           htmlFor="order-note"
@@ -816,22 +865,26 @@ function OrderForm({
           value={note}
           onChange={(event) => onNoteChange(event.target.value)}
           placeholder="Contoh: barang dibutuhkan sebelum hari Jumat untuk event"
-          className="mt-1.5 min-h-24 w-full resize-y rounded-sm border border-line p-3 text-base"
+          className="mt-1.5 min-h-24 w-full resize-y rounded-sm border border-line p-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
           maxLength={500}
         />
         <button
           type="button"
           onClick={onSubmit}
           disabled={orderItems.length === 0 || isSubmitting}
-          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ink-700 px-5 text-sm font-semibold text-white hover:bg-ink-900 disabled:opacity-50 sm:w-auto"
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ink-700 px-5 text-sm font-semibold text-white hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:w-auto"
         >
           {isSubmitting ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           ) : (
             <PackagePlus className="size-4" aria-hidden="true" />
           )}
-          Ajukan restock ({orderItems.length} produk)
+          Kirim pengajuan ({orderItems.length} barang)
         </button>
+        <p className="mt-2 text-xs text-muted">
+          Admin pusat akan meninjau jumlah yang diajukan. Statusnya dapat
+          dilihat di Riwayat pesanan.
+        </p>
       </div>
     </section>
   )
@@ -921,13 +974,9 @@ function OrderHistory({
                     <span className="font-medium text-ink-900">
                       {item.product_name}
                     </span>
-                    <span className="ml-2 text-xs text-muted">
-                      ({item.product_sku})
-                    </span>
                   </div>
                   <div className="text-right">
-                    {item.qty_approved !== null &&
-                    item.qty_approved !== undefined ? (
+                    {item.qty_approved !== null ? (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted line-through">
                           Diminta {item.qty_requested} {item.product_unit}
@@ -959,6 +1008,15 @@ function OrderHistory({
               </div>
             ) : null}
 
+            {order.status === 'ditolak' && order.rejected_reason ? (
+              <div className="mt-3 rounded-md border border-crit/30 bg-crit-bg/30 p-3.5 text-sm">
+                <p className="font-semibold text-crit">
+                  Alasan penolakan admin
+                </p>
+                <p className="mt-1 text-ink-800">{order.rejected_reason}</p>
+              </div>
+            ) : null}
+
             {order.note ? (
               <p className="mt-2 text-xs text-muted">
                 Catatan cabang: {order.note}
@@ -967,8 +1025,8 @@ function OrderHistory({
 
             {order.status === 'disetujui' ? (
               <div className="mt-3 rounded-md bg-ok/10 p-3 text-xs text-ok-fg">
-                ✓ Pesanan telah disetujui pusat dengan rincian kuantitas di atas.
-                Menunggu pengiriman kurir.
+                ✓ Pesanan telah disetujui pusat dengan rincian kuantitas di
+                atas. Menunggu pengiriman kurir.
               </div>
             ) : null}
 
