@@ -13,6 +13,7 @@ import {
   Plus,
   Save,
   Store,
+  UserRound,
 } from 'lucide-react'
 import { getStockStatus, stockPercent } from '@daisuki/shared'
 import { toast } from 'sonner'
@@ -29,12 +30,12 @@ import {
 } from '@/components/inventory/status-badge'
 import { api } from '@/lib/api'
 import { apiError, unwrapData } from '@/lib/api-response'
-import { useAuth } from '@/lib/auth'
+import { useAuth, type User } from '@/lib/auth'
 import type { Order, Product, StockItem } from '@/lib/inventory-types'
 
 export const Route = createFileRoute('/mitra')({ component: MitraPortal })
 
-type MitraTab = 'stocks' | 'order' | 'history'
+type MitraTab = 'stocks' | 'order' | 'history' | 'profile'
 type DraftOrderItem = { product_id: string; qty: number }
 
 const tabItems: Array<{
@@ -44,7 +45,8 @@ const tabItems: Array<{
 }> = [
   { id: 'stocks', label: 'Stok', Icon: Store },
   { id: 'order', label: 'Pesan', Icon: PackagePlus },
-  { id: 'history', label: 'Riwayat pesanan', Icon: ClipboardList },
+  { id: 'history', label: 'Riwayat', Icon: ClipboardList },
+  { id: 'profile', label: 'Profil', Icon: UserRound },
 ]
 
 function errorMessage(error: unknown) {
@@ -251,10 +253,27 @@ function MitraPortal() {
       <header className="sticky top-0 z-20 border-b border-line bg-white">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="min-w-0">
-            <p className="truncate font-display text-lg font-semibold text-ink-900">
-              {user.partner_name ?? 'Portal mitra'}
-            </p>
-            <p className="truncate text-sm text-muted">PIC {user.full_name}</p>
+            <div className="flex items-center gap-3">
+              {user.partner_photo ? (
+                <img
+                  src={user.partner_photo}
+                  alt=""
+                  className="size-10 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-700">
+                  <Store className="size-5" aria-hidden="true" />
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="truncate font-display text-lg font-semibold text-ink-900">
+                  {user.partner_name ?? 'Portal mitra'}
+                </p>
+                <p className="truncate text-sm text-muted">
+                  PIC {user.partner_pic_name || user.full_name}
+                </p>
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -328,12 +347,15 @@ function MitraPortal() {
             onOpenOrder={() => setActiveTab('order')}
             onConfirm={(orderId) => confirmReceived.mutate(orderId)}
             confirming={confirmReceived.isPending}
+            confirmingOrderId={confirmReceived.variables}
           />
         ) : null}
+
+        {activeTab === 'profile' ? <ProfilePanel user={user} /> : null}
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-line bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 md:hidden"
         aria-label="Menu mitra"
       >
         {tabItems.map(({ id, label, Icon }) => (
@@ -895,11 +917,13 @@ function OrderHistory({
   onOpenOrder,
   onConfirm,
   confirming,
+  confirmingOrderId,
 }: {
   query: ReturnType<typeof useQuery<Order[]>>
   onOpenOrder: () => void
   onConfirm: (orderId: string) => void
   confirming: boolean
+  confirmingOrderId?: string
 }) {
   return (
     <section aria-labelledby="history-heading">
@@ -977,12 +1001,14 @@ function OrderHistory({
                   </div>
                   <div className="text-right">
                     {item.qty_approved !== null ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted line-through">
-                          Diminta {item.qty_requested} {item.product_unit}
-                        </span>
+                      <div className="flex flex-wrap justify-end gap-x-2 gap-y-1">
+                        {item.qty_approved !== item.qty_requested ? (
+                          <span className="text-xs text-muted line-through">
+                            Diminta {item.qty_requested} {item.product_unit}
+                          </span>
+                        ) : null}
                         <span className="font-bold tabular-nums text-ok-fg">
-                          Disetujui: {item.qty_approved} {item.product_unit}
+                          Disetujui {item.qty_approved} {item.product_unit}
                         </span>
                       </div>
                     ) : (
@@ -1024,30 +1050,316 @@ function OrderHistory({
             ) : null}
 
             {order.status === 'disetujui' ? (
-              <div className="mt-3 rounded-md bg-ok/10 p-3 text-xs text-ok-fg">
-                ✓ Pesanan telah disetujui pusat dengan rincian kuantitas di
-                atas. Menunggu pengiriman kurir.
+              <div className="mt-3 rounded-md bg-ok/10 p-3 text-sm text-ok-fg">
+                Jumlah barang disetujui admin pusat. Pesanan menunggu
+                pengiriman.
               </div>
             ) : null}
 
             {order.status === 'dalam_pengiriman' ? (
-              <button
-                type="button"
-                onClick={() => onConfirm(order.id)}
-                disabled={confirming}
-                className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ok px-4 text-sm font-semibold text-white hover:bg-ok-fg disabled:opacity-50 sm:w-auto"
-              >
-                {confirming ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <CheckCircle2 className="size-4" aria-hidden="true" />
-                )}
-                Konfirmasi barang diterima
-              </button>
+              <div className="mt-4 rounded-md border border-line bg-ink-50 p-4">
+                <p className="text-sm font-semibold text-ink-900">
+                  Pesanan dalam pengiriman
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  Setelah barang tiba dan jumlahnya sesuai, tandai pesanan sudah
+                  diterima.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onConfirm(order.id)}
+                  disabled={confirming}
+                  className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ok px-4 text-sm font-semibold text-white hover:bg-ok-fg disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:w-auto"
+                >
+                  {confirming && confirmingOrderId === order.id ? (
+                    <Loader2
+                      className="size-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                  )}
+                  Pesanan sudah diterima
+                </button>
+              </div>
+            ) : null}
+
+            {order.status === 'selesai' ? (
+              <p className="mt-4 rounded-md bg-ok/10 p-3 text-sm font-medium text-ok-fg">
+                Pesanan selesai. Barang diterima mitra dan stok cabang sudah
+                bertambah.
+              </p>
             ) : null}
           </article>
         ))}
       </div>
+    </section>
+  )
+}
+
+async function prepareProfilePhoto(file: File): Promise<string> {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    throw new Error('Pilih foto JPG, PNG, atau WebP.')
+  }
+  if (file.size > 5_000_000) {
+    throw new Error('Ukuran foto asli maksimal 5 MB.')
+  }
+
+  let image: ImageBitmap
+  try {
+    image = await createImageBitmap(file)
+  } catch {
+    throw new Error('Foto tidak dapat dibuka. Pilih file gambar lain.')
+  }
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = 320
+    canvas.height = 320
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Foto belum dapat diproses di perangkat ini.')
+
+    const square = Math.min(image.width, image.height)
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, 320, 320)
+    context.drawImage(
+      image,
+      (image.width - square) / 2,
+      (image.height - square) / 2,
+      square,
+      square,
+      0,
+      0,
+      320,
+      320,
+    )
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+    if (dataUrl.length > 350_000) {
+      throw new Error('Foto masih terlalu besar. Pilih foto lain.')
+    }
+    return dataUrl
+  } finally {
+    image.close()
+  }
+}
+
+function ProfilePanel({ user }: { user: User }) {
+  const { refreshUser } = useAuth()
+  const [name, setName] = useState(user.partner_name ?? '')
+  const [picName, setPicName] = useState(
+    user.partner_pic_name ?? user.full_name,
+  )
+  const [phone, setPhone] = useState(user.partner_phone ?? '')
+  const [address, setAddress] = useState(user.partner_address ?? '')
+  const [photo, setPhoto] = useState<string | null>(user.partner_photo ?? null)
+  const [photoError, setPhotoError] = useState('')
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false)
+
+  useEffect(() => {
+    setName(user.partner_name ?? '')
+    setPicName(user.partner_pic_name ?? user.full_name)
+    setPhone(user.partner_phone ?? '')
+    setAddress(user.partner_address ?? '')
+    setPhoto(user.partner_photo ?? null)
+  }, [user])
+
+  const saveProfile = useMutation({
+    mutationFn: async () => {
+      const response = await api.me.profile.patch({
+        name: name.trim(),
+        pic_name: picName.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        photo_data_url: photo,
+      })
+      if (response.error) {
+        throw apiError(response.error, 'Profil belum tersimpan')
+      }
+      await refreshUser()
+    },
+    onSuccess: () => toast.success('Profil mitra tersimpan'),
+    onError: (error: unknown) => toast.error(errorMessage(error)),
+  })
+
+  async function handlePhotoChange(file: File | undefined) {
+    if (!file) return
+    setIsProcessingPhoto(true)
+    setPhotoError('')
+    try {
+      setPhoto(await prepareProfilePhoto(file))
+    } catch (error) {
+      setPhotoError(errorMessage(error))
+    } finally {
+      setIsProcessingPhoto(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="profile-heading">
+      <p className="text-sm font-semibold text-ume">Data mitra</p>
+      <h1
+        id="profile-heading"
+        className="mt-1 text-2xl font-semibold text-ink-900"
+      >
+        Profil mitra
+      </h1>
+      <p className="mt-2 text-sm text-muted">
+        Perbarui data cabang yang digunakan untuk pengiriman barang.
+      </p>
+
+      <form
+        className="mt-6 space-y-5 rounded-md border border-line bg-white p-4 sm:p-6"
+        onSubmit={(event) => {
+          event.preventDefault()
+          saveProfile.mutate()
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-4 border-b border-line pb-5">
+          {photo ? (
+            <img
+              src={photo}
+              alt="Foto profil mitra"
+              className="size-24 shrink-0 rounded-full border border-line object-cover"
+            />
+          ) : (
+            <span className="grid size-24 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-700">
+              <Store className="size-9" aria-hidden="true" />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <label
+              htmlFor="profile-photo"
+              className="block text-sm font-semibold text-ink-900"
+            >
+              Foto profil
+            </label>
+            <input
+              id="profile-photo"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              aria-describedby={
+                photoError ? 'profile-photo-error' : 'profile-photo-help'
+              }
+              onChange={(event) => {
+                void handlePhotoChange(event.target.files?.[0])
+                event.target.value = ''
+              }}
+              className="mt-2 block max-w-full text-sm text-muted file:mr-3 file:min-h-11 file:rounded-md file:border file:border-ink-700 file:bg-white file:px-3 file:text-sm file:font-semibold file:text-ink-700 hover:file:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+            />
+            <p id="profile-photo-help" className="mt-2 text-xs text-muted">
+              JPG, PNG, atau WebP. Foto akan dipotong persegi dan diperkecil
+              otomatis.
+            </p>
+            {photoError ? (
+              <p
+                id="profile-photo-error"
+                className="mt-2 text-sm text-crit-fg"
+                role="alert"
+              >
+                {photoError}
+              </p>
+            ) : null}
+            {photo ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setPhoto(null)
+                  setPhotoError('')
+                }}
+                className="mt-2 min-h-11 text-sm font-semibold text-crit-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+              >
+                Hapus foto
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div>
+            <label
+              htmlFor="profile-name"
+              className="block text-sm font-semibold text-ink-900"
+            >
+              Nama mitra
+            </label>
+            <input
+              id="profile-name"
+              required
+              minLength={2}
+              maxLength={120}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="mt-2 h-12 w-full rounded-sm border border-line px-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="profile-pic"
+              className="block text-sm font-semibold text-ink-900"
+            >
+              Nama PIC
+            </label>
+            <input
+              id="profile-pic"
+              required
+              minLength={2}
+              maxLength={120}
+              value={picName}
+              onChange={(event) => setPicName(event.target.value)}
+              className="mt-2 h-12 w-full rounded-sm border border-line px-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="profile-phone"
+              className="block text-sm font-semibold text-ink-900"
+            >
+              Nomor telepon
+            </label>
+            <input
+              id="profile-phone"
+              type="tel"
+              inputMode="tel"
+              required
+              minLength={8}
+              maxLength={24}
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="Contoh: 081234567890"
+              className="mt-2 h-12 w-full rounded-sm border border-line px-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label
+              htmlFor="profile-address"
+              className="block text-sm font-semibold text-ink-900"
+            >
+              Alamat
+            </label>
+            <textarea
+              id="profile-address"
+              required
+              minLength={5}
+              maxLength={500}
+              rows={4}
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              className="mt-2 w-full resize-y rounded-sm border border-line p-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+            />
+          </div>
+        </div>
+        <button
+          type="submit"
+          disabled={saveProfile.isPending || isProcessingPhoto}
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ink-700 px-5 text-sm font-semibold text-white hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:w-auto"
+        >
+          {saveProfile.isPending || isProcessingPhoto ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Save className="size-4" aria-hidden="true" />
+          )}
+          Simpan profil
+        </button>
+      </form>
     </section>
   )
 }

@@ -39,6 +39,7 @@ export const partners = pgTable("partners", {
   address: text("address"),
   pic_name: text("pic_name"),
   pic_phone: text("pic_phone"),
+  profile_photo: text("profile_photo"),
   is_active: boolean("is_active").notNull().default(true),
   created_at: timestamp("created_at", { withTimezone: true })
     .notNull()

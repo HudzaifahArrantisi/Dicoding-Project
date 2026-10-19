@@ -8,6 +8,10 @@ export interface User {
   role: 'admin' | 'mitra'
   partner_id: string | null
   partner_name?: string | null
+  partner_pic_name?: string | null
+  partner_phone?: string | null
+  partner_address?: string | null
+  partner_photo?: string | null
   full_name: string
 }
 
@@ -22,6 +26,7 @@ interface AuthContextType {
   token: string | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<AuthResult>
+  refreshUser: () => Promise<User>
   logout: () => void
   quickLogin: (type: 'admin' | 'mitra') => Promise<AuthResult>
 }
@@ -116,6 +121,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearStoredSession()
   }
 
+  const refreshUser = async () => {
+    const response = await api.me.get()
+    if (response.error || !('user' in response.data)) {
+      throw apiError(response.error, 'Profil belum dapat dimuat')
+    }
+    const nextUser = response.data.user as User
+    const currentToken = localStorage.getItem('daisuki_token')
+    if (!currentToken) throw new Error('Sesi tidak tersedia')
+    setUser(nextUser)
+    storeSession(currentToken, nextUser)
+    return nextUser
+  }
+
   const quickLogin = (type: 'admin' | 'mitra') => {
     const credentials = {
       admin: { email: 'admin@daisuki.test', password: 'password123' },
@@ -127,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, isLoading, login, logout, quickLogin }}
+      value={{ user, token, isLoading, login, refreshUser, logout, quickLogin }}
     >
       {children}
     </AuthContext.Provider>

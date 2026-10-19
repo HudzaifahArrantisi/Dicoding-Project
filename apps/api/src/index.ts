@@ -45,11 +45,7 @@ export const app = new Elysia()
   })
   .use(
     cors({
-      origin: [
-        env.WEB_ORIGIN,
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-      ],
+      origin: true,
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
@@ -67,10 +63,13 @@ export const app = new Elysia()
   .use(ordersModule)
   .use(notificationsModule)
   .use(adminModule)
-  .listen(env.PORT);
+  .listen({
+    port: env.PORT,
+    hostname: "0.0.0.0",
+  });
 
 console.log(
-  `[${new Date().toLocaleTimeString()}] 🚀 Daisuki API berjalan di http://localhost:${app.server?.port}`,
+  `[${new Date().toLocaleTimeString()}] 🚀 Daisuki API berjalan di port ${app.server?.port} (host: 0.0.0.0)`,
 );
 
 export type App = typeof app;

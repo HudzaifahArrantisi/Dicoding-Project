@@ -1,44 +1,134 @@
-# Repository Guidelines
+# Daisuki B2B Inventory & Order Management System — AI Agent & Developer Guidelines
 
-## Project Structure & Module Organization
+## 1. Tentang Proyek & Masalah yang Diselesaikan
 
-- `apps/web/` contains the TanStack Start frontend, routes, UI components, and styles.
-- `apps/api/` contains the Elysia backend, database client, Drizzle schema mirror, and routes.
-- `packages/shared/` contains shared TypeScript types, enums, and business state-machine helpers.
-- `supabase/migrations/` is the authoritative versioned SQL schema and RLS policy history; `supabase/seed.sql` holds development seed data.
-- `data-science/` and `ai/` are separate Python workspaces; project documentation lives in `docs/`.
+**Daisuki Inventory** adalah platform manajemen inventaris dan pemesanan barang B2B (*Business-to-Business*) multi-tenant yang menghubungkan **Admin Daisuki Pusat** dengan **Mitra Cabang** (hotel, kafe, restoran, dan minimarket).
 
-## Build, Test, and Development Commands
+### Masalah Utama yang Diselesaikan:
+1. **Blind Stock & Catatan Manual**: Stok di cabang mitra sering habis mendadak karena pencatatan manual via chat/spreadsheet yang tidak sinkron secara realtime.
+2. **Koordinasi Lead Time Pabrik**: Produksi dan pengiriman dari pabrik Daisuki membutuhkan waktu (lead time 5–7 hari). Sistem ini memastikan cabang melakukan restock sebelum stok menyentuh batas kritis (*Safety Stock & Reorder Point*).
+3. **Visibilitas Stok Gudang Pusat**: Mitra dapat memantau ketersediaan stok gudang pusat secara transparan saat mengajukan restock.
+4. **Approval Restock Parsial & Transparan**: Admin pusat dapat menyetujui kuantitas per item sesuai alokasi gudang pusat serta menyertakan catatan penjelasan tertulis jika kuantitas disesuaikan.
 
-Use Bun for all JavaScript and TypeScript work. Run commands from the repository root:
+### 4 Produk Resmi Daisuki:
+1. **Seblak Jadul Instan**
+2. **Basreng Daun Jeruk**
+3. **Makaroni Daun Jeruk**
+4. **Keripik Pisang Rasa Coklat**
 
-```bash
-bun install                 # Install all workspace dependencies
-bun run dev                 # Start web on 3000 and API on 3001
-bun run dev:web             # Start only the frontend
-bun run dev:api             # Start only the API
-bun run typecheck           # Typecheck web and API
-bun --cwd apps/web run lint # Lint the frontend
-bun --cwd apps/web run build # Build the frontend bundle
+---
+
+## 2. Peran Pengguna Sistem (User Roles)
+
+### A. Admin Daisuki Pusat (`role: "admin"`)
+- **Monitoring Stok Cabang**: Memantau kesehatan stok seluruh cabang mitra dalam tampilan 1 kartu per cabang dengan accordion detail produk dan progress bar kapasitas rak (`RakBar`).
+- **Monitoring Stok Gudang Pusat**: Memantau ketersediaan ready stock 4 produk di gudang pusat (kapasitas default 1.000 pcs per produk).
+- **Approval & Pengiriman Restock**:
+  - Tab **Menunggu Persetujuan**: Menyetujui kuantitas restock per produk (bisa disetujui penuh, parsial, atau 0) dan memberikan catatan penjelasan jika kuantitas disesuaikan.
+  - Tab **Selesai / Disetujui**: Mengubah status menjadi `dalam_pengiriman` saat barang dikirim oleh ekspedisi/kurir logistik.
+  - Tab **Ditolak**: Menolak pesanan dengan menyertakan alasan penolakan.
+- **Alert & Notifikasi**: Menerima peringatan otomatis saat ada cabang yang stoknya kritis (< 20%) atau pesanan restock baru masuk.
+
+### B. Mitra Cabang (`role: "mitra"`)
+- **Laporan Stok Fisik Harian (Mobile Friendly)**: Mitra menginput sisa stok fisik di rak toko dengan cepat melalui perangkat mobile.
+- **Monitoring Stok Gudang Pusat (Realtime)**: Melihat ketersediaan stok gudang pusat Daisuki secara langsung sebelum memesan.
+- **Pengajuan Restock Multi-Item**: Mengajukan restock untuk beberapa atau ke-4 produk sekaligus dalam 1 nomor pesanan (`PO-...`).
+- **Konfirmasi Penerimaan Barang**: Mengonfirmasi saat barang kiriman tiba di cabang (`dalam_pengiriman` ➔ `selesai`). Begitu dikonfirmasi, stok cabang bertambah sebesar jumlah yang disetujui (`qty_approved`) dan stok gudang pusat berkurang otomatis.
+
+---
+
+## 3. Pembagian Peran Tim Pengembang
+
+Berdasarkan [docs/PEMBAGIAN_TUGAS.md](docs/PEMBAGIAN_TUGAS.md):
+
+| Peran Tim | Fokus & Tanggung Jawab | Lokasi Kode |
+|---|---|---|
+| **Fullstack Developer** | Arsitektur web, API backend, database schema, state management, dan antarmuka UI/UX (Admin & Mitra) | `apps/web/`, `apps/api/`, `packages/shared/` |
+| **Data Science** | Analisis pola konsumsi cabang, pemodelan Safety Stock & Reorder Point (ROP), analisis fast-moving vs slow-moving, dan data sintetis | `data-science/` (Python, Pandas, Jupyter) |
+| **AI Engineer** | Otomasi alert stok kritis (< 20%), scheduler reminder 24 jam untuk cabang yang belum lapor stok, rekomendasi kuantitas restock otomatis, dan asisten cerdas | `ai/` (Python scripts, cron jobs, LLM integration) |
+
+---
+
+## 4. Struktur Proyek & Workspace
+
+Proyek ini menggunakan arsitektur **Bun Monorepo**:
+
+```text
+daisuki-inventory/
+├── apps/
+│   ├── web/           # Frontend: TanStack Start (React 19, Tailwind CSS v4, Vite, Cloudflare)
+│   └── api/           # Backend: ElysiaJS, Bun runtime, Drizzle ORM, Neon DB, Jose JWT
+├── packages/
+│   └── shared/        # Shared package (@daisuki/shared): status enums, state machine, helper stok
+├── data-science/      # Python workspace: EDA, notebook modeling, data sintetis
+├── ai/                # Python workspace: alert jobs, reminder scheduler, bot
+├── supabase/
+│   ├── migrations/    # Sumber kebenaran skema SQL Neon DB PostgreSQL
+│   └── seed.sql       # Data inisialisasi pengembangan
+└── docs/              # Dokumentasi arsitektur, panduan alur, dan pembagian tugas
 ```
 
-Run `bun --cwd apps/web run format` for Prettier and ESLint fixes, and `bun --cwd apps/web run check` to verify formatting.
+---
 
-## Coding Style & Naming Conventions
+## 5. Aturan Bisnis & State Machine
 
-Follow the TypeScript formatting enforced by Prettier and ESLint. Use `PascalCase` for React components and classes, `camelCase` for functions and variables, and `kebab-case` for route or feature names where the surrounding directory uses it. Keep handlers thin, place shared rules in `packages/shared/` or the API layer, and never write frontend mutations directly to Supabase tables.
+1. **Kalkulasi Status Stok Cabang**:
+   - `aman`: Stok > 50% dari kapasitas rak (`par_level`).
+   - `waspada`: Stok antara 20% s.d. 50%.
+   - `kritis`: Stok < 20% (atau sisa ≤ 10 pcs).
+   - `is_stale`: Cabang belum memperbarui laporan stok fisik dalam waktu > 24 jam.
 
-## Testing Guidelines
+2. **Siklus Status Pesanan Restock**:
+   ```text
+   diproses ➔ disetujui (atau ditolak / dibatalkan) ➔ dalam_pengiriman ➔ selesai
+   ```
+   - Stok cabang **hanya bertambah** saat pesanan berpindah dari `dalam_pengiriman` ke `selesai` melalui konfirmasi penerimaan oleh Mitra.
+   - Penambahan stok di cabang menggunakan nilai `qty_approved` (bukan `qty_requested`).
 
-There is no committed automated test suite yet. Before opening a PR, run `bun run typecheck`, frontend linting, and the relevant build. The API `test` script is a placeholder, not a passing test. Add tests beside the feature or in a clearly named `tests/` directory when introducing a framework.
+3. **Batasan Mutasi Database (Strict Mutation Boundary)**:
+   - Frontend **tidak boleh** melakukan mutasi atau query langsung ke database.
+   - Semua mutasi stok, status pesanan, dan approval **wajib** melalui endpoint Elysia API di `apps/api/`.
+   - `partner_id` **selalu ditentukan di sisi server** dari profil JWT pengguna terotentikasi, tidak boleh dipercaya mentah-mentah dari body request client.
 
-## Architecture, Database, and Configuration
+---
 
-Keep secrets in local `.env` files based on checked-in `.env.example` files. Never commit credentials. Add schema or RLS changes as numbered SQL migrations under `supabase/migrations/`; do not use `drizzle-kit push` or `drizzle-kit generate`. Determine `partner_id` server-side and preserve API authorization plus Supabase RLS.
+## 6. Perintah Pengembangan & Eksekusi
 
-## Commits and Pull Requests
+Gunakan **strictly [Bun](https://bun.sh/)** untuk semua operasi JS/TS (jangan gunakan npm/yarn/pnpm):
 
-Use Conventional Commits, such as `feat: add partner stock input`, `fix: validate JWT middleware`, or `docs: update setup guide`. Branches use `feat/<name>`, `fix/<name>`, or `chore/<name>`. Do not push directly to `main`. PRs should explain the change, link an issue when relevant, include UI screenshots, report validation commands, and request a teammate review.
+```bash
+bun install                 # Pasang seluruh dependensi workspace
+bun run dev                 # Jalankan Web (port 3000) dan API (port 3001) bersamaan
+bun run dev:web             # Jalankan hanya frontend web
+bun run dev:api             # Jalankan hanya backend API
+bun run typecheck           # Pemeriksaan tipe TypeScript di seluruh workspace
+bun --cwd apps/web run lint # Linting frontend web
+bun --cwd apps/web run build# Build production bundle frontend
+```
+
+### Setup Python Virtual Environment (`data-science/` & `ai/`):
+```bash
+cd data-science  # atau cd ai
+python -m venv .venv
+# Windows PowerShell:
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+---
+
+## 7. Standar Kode & Konvensi UI
+
+1. **Tipografi & Desain**:
+   - Judul & angka numerik besar: Font `Bricolage Grotesque` (`--font-display`).
+   - Body & elemen formulir: Font `Figtree` (`--font-sans`).
+   - Angka stok, harga, dan persentase: Wajib menggunakan `tabular-nums` (`.num`) agar angka sejajar secara vertikal.
+   - Token status warna: Menggunakan semantic token (`--color-ok`, `--color-warn`, `--color-crit`, `--color-stale`).
+   - Aksesibilitas Touch Mobile: Target sentuh di portal mitra minimal 44px.
+2. **Kategori & Nama Produk**:
+   - Di antarmuka pengguna frontend, tampilkan nama makanan resmi secara bersih tanpa menampilkan kode SKU internal.
+
+---
 
 <!-- antislop:start -->
 

@@ -555,6 +555,7 @@ function StockPanel({
     Record<string, string>
   >({})
   const dirtyCentralStockIds = useRef(new Set<string>())
+  const [isBatchSaving, setIsBatchSaving] = useState(false)
 
   useEffect(() => {
     if (!centralProductsQuery.data) return
@@ -616,6 +617,108 @@ function StockPanel({
     })
   }
 
+  const changedProducts = useMemo(() => {
+    if (!centralProductsQuery.data) return []
+    return centralProductsQuery.data.filter((prod) => {
+      const draft =
+        centralStockDrafts[prod.id] ?? String(prod.central_stock)
+      const parsedDraft = Number(draft)
+      return (
+        Number.isInteger(parsedDraft) &&
+        parsedDraft >= 0 &&
+        parsedDraft !== prod.central_stock
+      )
+    })
+  }, [centralProductsQuery.data, centralStockDrafts])
+
+  const hasInvalidDraft = useMemo(() => {
+    if (!centralProductsQuery.data) return false
+    return centralProductsQuery.data.some((prod) => {
+      const draft =
+        centralStockDrafts[prod.id] ?? String(prod.central_stock)
+      const parsedDraft = Number(draft)
+      return !Number.isInteger(parsedDraft) || parsedDraft < 0
+    })
+  }, [centralProductsQuery.data, centralStockDrafts])
+
+  const saveAllCentralStock = async () => {
+    if (changedProducts.length === 0) {
+      toast.info('Tidak ada perubahan stok pusat yang perlu disimpan')
+      return
+    }
+
+    if (hasInvalidDraft) {
+      toast.error('Pastikan semua jumlah stok berupa bilangan bulat, minimal 0')
+      return
+    }
+
+    setIsBatchSaving(true)
+    try {
+      const itemsToSave = changedProducts.map((prod) => {
+        const value = Number(centralStockDrafts[prod.id])
+        return {
+          productId: prod.id,
+          name: prod.name,
+          centralStock: value,
+        }
+      })
+
+      const results = await Promise.all(
+        itemsToSave.map(async (item) => {
+          const response = await api
+            .products({ id: item.productId })
+            ['central-stock'].put({ central_stock: item.centralStock })
+
+          if (response.error || 'error' in response.data) {
+            throw apiError(
+              response.error ?? response.data,
+              `Gagal memperbarui stok ${item.name}`,
+            )
+          }
+          return item
+        }),
+      )
+
+      for (const item of results) {
+        dirtyCentralStockIds.current.delete(item.productId)
+      }
+
+      setCentralStockDrafts((current) => {
+        const next = { ...current }
+        for (const item of results) {
+          next[item.productId] = String(item.centralStock)
+        }
+        return next
+      })
+
+      await queryClient.invalidateQueries({
+        queryKey: ['admin-central-products'],
+      })
+
+      toast.success(
+        `Semua perubahan selesai! ${results.length} stok kategori produk berhasil diperbarui`,
+      )
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsBatchSaving(false)
+    }
+  }
+
+  const resetAllDrafts = () => {
+    if (!centralProductsQuery.data) return
+    dirtyCentralStockIds.current.clear()
+    setCentralStockDrafts(
+      Object.fromEntries(
+        centralProductsQuery.data.map((prod) => [
+          prod.id,
+          String(prod.central_stock),
+        ]),
+      ),
+    )
+    toast.info('Perubahan dibatalkan')
+  }
+
   const toggleExpand = (partnerId: string) => {
     setExpandedPartners((prev) => ({
       ...prev,
@@ -663,7 +766,7 @@ function StockPanel({
         className="rounded-md border border-line bg-white p-5"
         aria-labelledby="central-stock-admin-title"
       >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
               <span className="grid size-8 place-items-center rounded bg-ink-900 text-ume">
@@ -680,6 +783,63 @@ function StockPanel({
               Ubah jumlah ready stock. Nilai terbaru dibaca otomatis oleh
               dashboard mitra.
             </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {changedProducts.length > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={resetAllDrafts}
+                  disabled={isBatchSaving || updateCentralStock.isPending}
+                  className="inline-flex min-h-10 items-center justify-center rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted hover:bg-paper hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:opacity-40"
+                >
+                  Batal
+                </button>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-warn-bg px-2.5 py-1 text-xs font-semibold text-warn">
+                  <span className="size-1.5 rounded-full bg-warn animate-pulse" />
+                  {changedProducts.length} kategori diubah
+                </span>
+              </>
+            ) : null}
+
+            <button
+              type="button"
+              id="btn-selesai-stok-pusat"
+              onClick={saveAllCentralStock}
+              disabled={
+                changedProducts.length === 0 ||
+                isBatchSaving ||
+                updateCentralStock.isPending ||
+                hasInvalidDraft
+              }
+              aria-label="Selesai dan simpan semua perubahan stok pusat"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-sm bg-ink-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
+            >
+              {isBatchSaving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  <span>Menyimpan Semua...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2
+                    className={`size-4 ${
+                      changedProducts.length > 0
+                        ? 'text-emerald-400'
+                        : 'text-white/60'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span>
+                    Selesai
+                    {changedProducts.length > 0
+                      ? ` (${changedProducts.length} Kategori)`
+                      : ''}
+                  </span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -718,7 +878,11 @@ function StockPanel({
             return (
               <div
                 key={prod.id}
-                className="rounded border border-line bg-paper/60 p-3"
+                className={`rounded border p-3 transition-colors ${
+                  hasChanged
+                    ? 'border-ink-900/40 bg-white ring-1 ring-ink-900/10'
+                    : 'border-line bg-paper/60'
+                }`}
               >
                 <div className="flex items-start justify-between">
                   <div>
@@ -726,15 +890,22 @@ function StockPanel({
                       {prod.name}
                     </p>
                   </div>
-                  <span
-                    className={`rounded px-2 py-0.5 text-[11px] font-bold ${
-                      prod.central_stock > 0
-                        ? 'bg-ok-bg text-ok'
-                        : 'bg-crit-bg text-crit-fg'
-                    }`}
-                  >
-                    {prod.central_stock > 0 ? 'Siap Kirim' : 'Stok Habis'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {hasChanged ? (
+                      <span className="rounded bg-warn-bg px-1.5 py-0.5 text-[10px] font-semibold text-warn">
+                        Diedit
+                      </span>
+                    ) : null}
+                    <span
+                      className={`rounded px-2 py-0.5 text-[11px] font-bold ${
+                        prod.central_stock > 0
+                          ? 'bg-ok-bg text-ok'
+                          : 'bg-crit-bg text-crit-fg'
+                      }`}
+                    >
+                      {prod.central_stock > 0 ? 'Siap Kirim' : 'Stok Habis'}
+                    </span>
+                  </div>
                 </div>
                 <div className="mt-3 border-t border-line/60 pt-3">
                   <label
@@ -751,6 +922,11 @@ function StockPanel({
                       step={1}
                       inputMode="numeric"
                       value={draft}
+                      disabled={
+                        isBatchSaving ||
+                        (updateCentralStock.isPending &&
+                          updateCentralStock.variables.productId === prod.id)
+                      }
                       onChange={(event) => {
                         dirtyCentralStockIds.current.add(prod.id)
                         setCentralStockDrafts((current) => ({
@@ -758,13 +934,27 @@ function StockPanel({
                           [prod.id]: event.target.value,
                         }))
                       }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          if (changedProducts.length > 1) {
+                            void saveAllCentralStock()
+                          } else if (hasChanged) {
+                            saveCentralStock(prod)
+                          }
+                        }
+                      }}
                       aria-invalid={!isValid}
-                      className="min-h-11 min-w-0 flex-1 rounded-sm border border-line bg-white px-3 text-base font-semibold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                      className="min-h-11 min-w-0 flex-1 rounded-sm border border-line bg-white px-3 text-base font-semibold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:opacity-50"
                     />
                     <button
                       type="button"
                       onClick={() => saveCentralStock(prod)}
-                      disabled={!hasChanged || updateCentralStock.isPending}
+                      disabled={
+                        !hasChanged ||
+                        updateCentralStock.isPending ||
+                        isBatchSaving
+                      }
                       aria-label={`Simpan stok pusat ${prod.name}`}
                       className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm bg-ink-700 px-3 text-white hover:bg-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -788,6 +978,52 @@ function StockPanel({
             )
           })}
         </div>
+
+        {changedProducts.length > 0 ? (
+          <div className="mt-4 flex flex-col gap-2 rounded border border-warn/30 bg-warn-bg/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-xs text-ink-900">
+              <span className="size-2 rounded-full bg-warn animate-pulse" />
+              <span>
+                Ada <strong>{changedProducts.length} kategori produk</strong> dengan
+                perubahan stok pusat yang belum disimpan.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={resetAllDrafts}
+                disabled={isBatchSaving || updateCentralStock.isPending}
+                className="rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted hover:bg-paper hover:text-ink-900"
+              >
+                Batalkan
+              </button>
+              <button
+                type="button"
+                onClick={saveAllCentralStock}
+                disabled={
+                  isBatchSaving ||
+                  updateCentralStock.isPending ||
+                  hasInvalidDraft
+                }
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-ink-700 disabled:opacity-40"
+              >
+                {isBatchSaving ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="size-3.5 text-emerald-400" />
+                    <span>
+                      Selesai & Simpan Semua ({changedProducts.length})
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section
@@ -1090,7 +1326,7 @@ function OrderPanel({
           }`}
         >
           <CheckCircle2 className="size-4" aria-hidden="true" />
-          <span>Selesai / Disetujui</span>
+          <span>Setelah persetujuan</span>
           {completedCount > 0 ? (
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-bold ${
@@ -1181,7 +1417,25 @@ function OrderPanel({
             onClick={() => setSelectedOrderId(order.id)}
             className="min-h-24 rounded-md border border-line bg-white p-4 text-left text-sm font-semibold text-ink-900 transition-colors hover:border-ink-500 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
           >
-            {order.partner_name} meminta restock barang
+            <span className="block">
+              {order.partner_name} meminta restock barang
+            </span>
+            <span className="mt-1 block text-xs font-normal text-muted">
+              {order.order_no}
+            </span>
+            <span className="mt-3 flex flex-wrap items-center gap-2">
+              <OrderStatusBadge status={order.status} />
+              {order.status === 'dalam_pengiriman' ? (
+                <span className="text-xs font-medium text-muted">
+                  Belum diterima mitra
+                </span>
+              ) : null}
+              {order.status === 'selesai' ? (
+                <span className="text-xs font-medium text-ok-fg">
+                  Sudah diterima mitra
+                </span>
+              ) : null}
+            </span>
           </button>
         ))}
       </div>
@@ -1314,6 +1568,17 @@ function ApprovalDialog({
 
           <div className="space-y-4 p-4 sm:p-5">
             <OrderStatusBadge status={order.status} />
+            {order.status === 'dalam_pengiriman' ? (
+              <p className="rounded-md bg-ink-50 p-3 text-sm text-ink-900">
+                Barang sedang dikirim dan belum dikonfirmasi diterima oleh
+                mitra.
+              </p>
+            ) : null}
+            {order.status === 'selesai' ? (
+              <p className="rounded-md bg-ok/10 p-3 text-sm text-ok-fg">
+                Pesanan selesai. Mitra sudah mengonfirmasi penerimaan barang.
+              </p>
+            ) : null}
 
             {order.note ? (
               <div className="rounded-md bg-ink-50 p-3 text-sm text-ink-800">

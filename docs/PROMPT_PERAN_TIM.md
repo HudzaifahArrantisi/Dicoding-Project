@@ -52,7 +52,7 @@ Menghubungkan Portal Mitra dan Dashboard Admin dengan tabel `restock_recommendat
 
 KONEKSI DATABASE:
 Gunakan connection string Neon DB yang sudah ada di `apps/api/.env`:
-DATABASE_URL=postgresql://neondb_owner:npg_eFA5UBDpYs6j@ep-small-union-a1vsrfts-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL=postgresql://<db_user>:<db_password>@<ep-endpoint>-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
 
 TUGAS LANGSUNG:
 1. Endpoint API Rekomendasi (apps/api):
@@ -84,8 +84,8 @@ TUJUAN UTAMA:
 Menghubungkan script Python langsung ke Neon DB PostgreSQL (tanpa file mock lokal), menganalisis stok riil mitra, menghitung batas aman (Safety Stock & Reorder Point dengan lead time pabrik 6 hari), dan langsung menyimpan hasil rekomendasi ke tabel `restock_recommendations` di Neon DB.
 
 KONEKSI DATABASE:
-Gunakan psycopg untuk koneksi langsung ke Neon DB:
-DATABASE_URL="postgresql://neondb_owner:npg_eFA5UBDpYs6j@ep-small-union-a1vsrfts-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+Gunakan psycopg untuk koneksi langsung ke Neon DB (ambil kredensial dari .env):
+DATABASE_URL="postgresql://<db_user>:<db_password>@<ep-endpoint>-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
 
 TUGAS LANGSUNG YANG HARUS DIIMPLEMENTASIKAN:
 1. Setup Script Koneksi Live (data-science/src/db_connect.py):
@@ -126,8 +126,8 @@ TUJUAN UTAMA:
 Membangun background job otomasi yang langsung beroperasi di atas database Neon DB: mendeteksi cabang yang telat lapor stok (> 24 jam) dan langsung mengirim notifikasi reminder ke tabel `notifications`, serta menghasilkan ringkasan inventaris pintar (AI Digest) untuk Admin.
 
 KONEKSI DATABASE:
-Gunakan connection string Neon DB yang sama:
-DATABASE_URL="postgresql://neondb_owner:npg_eFA5UBDpYs6j@ep-small-union-a1vsrfts-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+Gunakan connection string Neon DB yang sama (ambil kredensial dari .env):
+DATABASE_URL="postgresql://<db_user>:<db_password>@<ep-endpoint>-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
 
 TUGAS LANGSUNG YANG HARUS DIIMPLEMENTASIKAN:
 1. Scheduler Otomasi Reminder 24 Jam (ai/jobs/stale_stock_reminder.py):
