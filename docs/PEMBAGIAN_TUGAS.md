@@ -35,7 +35,7 @@ flowchart LR
 
 ## 4. Pembagian Tugas Praktis per Peran
 
-### 1. 💻 Fullstack Developer (Inti Sistem & Aplikasi)
+### 1. Fullstack Developer (Inti Sistem & Aplikasi)
 > **Tujuan:** Membuat web yang gampang dipakai mitra di HP dan dashboard admin di desktop.
 
 - **Frontend (Web):**
@@ -58,7 +58,7 @@ flowchart LR
 
 ---
 
-### 2. 📊 Data Science (Analisis Data & Batas Stok)
+### 2. Data Science (Analisis Data & Batas Stok)
 > **Tujuan:** Membantu admin menentukan angka batas aman stok dan menganalisis produk yang paling laku.
 
 - **Data Dummy / Sintetis:**
@@ -72,7 +72,7 @@ flowchart LR
 
 ---
 
-### 3. 🤖 AI Engineer (Otomasi, Alert & Asisten)
+### 3. AI Engineer (Otomasi, Alert & Asisten)
 > **Tujuan:** Membuat sistem bekerja otomatis tanpa admin harus mengecek layar terus-menerus.
 
 - **Sistem Alert Otomatis (Notifikasi):**
