@@ -4,7 +4,7 @@ Platform manajemen inventaris dan pemesanan restock multi-tenant B2B antara **Ad
 
 ---
 
-## ⚡ Panduan Setup Cepat (Mulai dari Nol)
+## Panduan Setup Cepat (Mulai dari Nol)
 
 Pastikan sudah menginstal **[Git](https://git-scm.com/)** dan **[Bun](https://bun.sh/)** di komputer Anda.  
 *(Wajib menggunakan runtime **Bun**. Jangan gunakan npm, yarn, atau pnpm).*
@@ -58,7 +58,7 @@ Buka dan sesuaikan file berikut:
 
 1. **Buat Tabel Database**:  
    Buka menu **SQL Editor** di console database Anda ([Neon DB](https://neon.tech)), lalu salin dan jalankan seluruh isi file skema database terbaru:  
-   👉 **`neon/migrations/0001_init.sql`**
+    **`neon/migrations/0001_init.sql`**
 
 2. **Isi Data Awal (Seeding)**:  
    Setelah tabel berhasil dibuat, isi data awal demo (cabang, 4 produk resmi, dan akun demo) dengan perintah:
@@ -82,7 +82,7 @@ Aplikasi siap diakses di browser:
 
 ---
 
-## 🔑 Akun Login Demo
+##  Akun Login Demo
 
 Setelah proses *seed* selesai, Anda bisa langsung masuk ke sistem menggunakan akun bawaan:
 
@@ -94,7 +94,7 @@ Setelah proses *seed* selesai, Anda bisa langsung masuk ke sistem menggunakan ak
 
 ---
 
-## 🛠️ Perintah Pengembangan Harian
+##  Perintah Pengembangan Harian
 
 | Perintah | Keterangan |
 |---|---|
@@ -108,7 +108,7 @@ Setelah proses *seed* selesai, Anda bisa langsung masuk ke sistem menggunakan ak
 
 ---
 
-## 🐍 Setup Modul Python (Data Science & AI) — *Opsional*
+##  Setup Modul Python (Data Science & AI) — *Opsional*
 
 Khusus anggota tim yang mengerjakan modul analisis atau model cerdas di `data-science/` atau `ai/`:
 
