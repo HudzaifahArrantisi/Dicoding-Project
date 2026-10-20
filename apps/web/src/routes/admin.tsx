@@ -13,8 +13,10 @@ import {
   Bell,
   Boxes,
   Building2,
+  Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   ClipboardCheck,
@@ -22,8 +24,12 @@ import {
   Download,
   BrainCircuit,
   Database,
+  Filter,
   Loader2,
   LogOut,
+  Minus,
+  Plus,
+  RotateCcw,
   Search,
   Store,
   Truck,
@@ -37,6 +43,10 @@ import {
   LoadingState,
 } from '@/components/inventory/query-state'
 import { RakBar } from '@/components/inventory/rak-bar'
+import {
+  BatchDetailModal,
+  type StockLogBatch,
+} from '@/components/inventory/batch-detail-modal'
 import {
   OrderStatusBadge,
   StaleBadge,
@@ -62,6 +72,7 @@ interface Metrics {
 }
 
 type AdminTab = 'stocks' | 'orders' | 'alerts' | 'data-science' | 'ai-insights'
+type OrderCategoryTab = 'menunggu' | 'selesai' | 'ditolak'
 
 interface WeeklySummary {
   total_logs_this_week: number
@@ -269,6 +280,125 @@ function InsightMetric({ label, value, detail }: { label: string; value: string 
   )
 }
 
+function toLocalDateStr(dateInput: string | Date): string {
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getWeekDays(weekOffset: number): Date[] {
+  const now = new Date()
+  const dayOfWeek = (now.getDay() + 6) % 7 // Monday is 0, Sunday is 6
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - dayOfWeek + weekOffset * 7)
+  monday.setHours(0, 0, 0, 0)
+
+  const days: Date[] = []
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(monday)
+    day.setDate(monday.getDate() + i)
+    days.push(day)
+  }
+  return days
+}
+
+function formatWeekRange(weekDays: Date[], weekOffset: number): string {
+  if (weekDays.length < 7) return 'Rentang Minggu'
+  const first = weekDays[0]
+  const last = weekDays[6]
+  const firstDay = first.getDate()
+  const lastDay = last.getDate()
+  const firstMonth = first.toLocaleDateString('id-ID', { month: 'short' })
+  const lastMonth = last.toLocaleDateString('id-ID', { month: 'short' })
+  const year = last.getFullYear()
+
+  const rangeStr =
+    firstMonth === lastMonth
+      ? `${firstDay} – ${lastDay} ${lastMonth} ${year}`
+      : `${firstDay} ${firstMonth} – ${lastDay} ${lastMonth} ${year}`
+
+  if (weekOffset === 0) return `Minggu Ini (${rangeStr})`
+  if (weekOffset === -1) return `Minggu Kemarin (${rangeStr})`
+  return `${Math.abs(weekOffset)} Minggu Lalu (${rangeStr})`
+}
+
+function formatDayDate(dateInput: Date | string): string {
+  const date = typeof dateInput === 'string' ? new Date(dateInput + 'T12:00:00') : dateInput
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+}
+
+
+function groupLogsByBatch(logs: StockLog[]): StockLogBatch[] {
+  const map = new Map<string, StockLog[]>()
+
+  for (const log of logs) {
+    const d = new Date(log.created_at)
+    const dateStr = toLocalDateStr(d)
+    const hour = String(d.getHours()).padStart(2, '0')
+    const minute = String(d.getMinutes()).padStart(2, '0')
+    const key = `${dateStr}_${hour}:${minute}_${log.source}`
+    const existing = map.get(key)
+    if (existing) {
+      existing.push(log)
+    } else {
+      map.set(key, [log])
+    }
+  }
+
+  const batches: StockLogBatch[] = []
+  for (const [key, batchLogs] of map.entries()) {
+    const firstLog = batchLogs[0]
+    const d = new Date(firstLog.created_at)
+    const hour = String(d.getHours()).padStart(2, '0')
+    const minute = String(d.getMinutes()).padStart(2, '0')
+    const timeFormatted = `Jam ${hour}.${minute} WIB`
+    const dateStr = toLocalDateStr(d)
+    const sourceLabel =
+      firstLog.source === 'manual_update'
+        ? 'Laporan stok fisik mitra'
+        : firstLog.source === 'order_received'
+          ? 'Pesanan diterima (Restock)'
+          : 'Penyesuaian stok'
+
+    const totalConsumed = batchLogs.reduce(
+      (sum, item) => (item.delta > 0 ? sum + item.delta : sum),
+      0,
+    )
+    const totalRestocked = batchLogs.reduce(
+      (sum, item) => (item.delta < 0 ? sum + Math.abs(item.delta) : sum),
+      0,
+    )
+
+    batches.push({
+      key,
+      timeFormatted,
+      timeRaw: `${hour}:${minute}`,
+      dateStr,
+      source: firstLog.source,
+      sourceLabel,
+      totalItems: batchLogs.length,
+      totalConsumed,
+      totalRestocked,
+      logs: batchLogs,
+    })
+  }
+
+  batches.sort(
+    (a, b) =>
+      new Date(b.logs[0].created_at).getTime() -
+      new Date(a.logs[0].created_at).getTime(),
+  )
+
+  return batches
+}
+
 function PartnerStockLogDialog({
   partner,
   open,
@@ -286,7 +416,7 @@ function PartnerStockLogDialog({
       try {
         const response = await api.health.db.get()
         if (response.error) return false
-        return Boolean(response.data && 'ok' in response.data && response.data.ok)
+        return Boolean(response.data.ok)
       } catch {
         return false
       }
@@ -298,13 +428,87 @@ function PartnerStockLogDialog({
 
   const isDbConnected = Boolean(dbHealthQuery.data)
 
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null)
+  const [selectedBatch, setSelectedBatch] = useState<StockLogBatch | null>(null)
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
+
+  // Reset to current week and reset selections when opening for a new partner
+  useEffect(() => {
+    if (open) {
+      setWeekOffset(0)
+      setSelectedDateStr(null)
+      setSelectedBatch(null)
+    }
+  }, [open, partner?.partner_id])
+
+  const allLogs = useMemo(() => query.data?.data ?? [], [query.data])
+
+  const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
+
+  const logsByDate = useMemo(() => {
+    const map = new Map<string, StockLog[]>()
+    for (const log of allLogs) {
+      const key = toLocalDateStr(log.created_at)
+      const list = map.get(key)
+      if (list) list.push(log)
+      else map.set(key, [log])
+    }
+    return map
+  }, [allLogs])
+
+  const todayStr = useMemo(() => toLocalDateStr(new Date()), [])
+
+  // Auto-determine active date if not chosen or not in the visible week
+  const activeDateStr = useMemo(() => {
+    const currentWeekDates = weekDays.map((d) => toLocalDateStr(d))
+    if (selectedDateStr && currentWeekDates.includes(selectedDateStr)) {
+      return selectedDateStr
+    }
+    // If today is in current week, prefer today
+    if (currentWeekDates.includes(todayStr)) {
+      return todayStr
+    }
+    // Prefer the latest day with logs in this week
+    for (let i = currentWeekDates.length - 1; i >= 0; i--) {
+      const dStr = currentWeekDates[i]
+      if ((logsByDate.get(dStr)?.length ?? 0) > 0) {
+        return dStr
+      }
+    }
+    // Default to Monday
+    return currentWeekDates[0]
+  }, [selectedDateStr, weekDays, todayStr, logsByDate])
+
+  const activeDateLogs = useMemo(() => {
+    return logsByDate.get(activeDateStr) ?? []
+  }, [logsByDate, activeDateStr])
+
+  const dayBatches = useMemo(() => {
+    return groupLogsByBatch(activeDateLogs)
+  }, [activeDateLogs])
+
+  const activeDateObj = useMemo(() => {
+    return new Date(activeDateStr + 'T12:00:00')
+  }, [activeDateStr])
+
+
   if (!partner) return null
+
+  const totalDayConsumed = activeDateLogs.reduce(
+    (sum, l) => (l.delta > 0 ? sum + l.delta : sum),
+    0,
+  )
+  const totalDayRestocked = activeDateLogs.reduce(
+    (sum, l) => (l.delta < 0 ? sum + Math.abs(l.delta) : sum),
+    0,
+  )
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45 animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-md border border-line bg-white shadow-xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-md border border-line bg-white shadow-xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
           <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-white p-4 sm:p-5">
             <div>
               <div className="flex items-center gap-2">
@@ -369,23 +573,53 @@ function PartnerStockLogDialog({
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-ink-50 px-3.5 py-2.5 text-xs text-muted">
-              <span>
-                Laporan Terakhir:{' '}
-                <strong className="font-semibold text-ink-900">
-                  {formatDetailedDateTime(partner.latest_update)}
-                </strong>
-              </span>
-              <span>
-                Total Catatan:{' '}
-                <strong className="font-semibold text-ink-900 tabular-nums">
-                  {partner.log_count} data
-                </strong>
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-ink-50/70 p-3 text-xs text-muted">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span>
+                  Laporan Terakhir:{' '}
+                  <strong className="font-semibold text-ink-900">
+                    {formatDetailedDateTime(partner.latest_update)}
+                  </strong>
+                </span>
+                <span>
+                  Total Catatan:{' '}
+                  <strong className="font-semibold tabular-nums text-ink-900">
+                    {partner.log_count} data
+                  </strong>
+                </span>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center rounded-md border border-line bg-white p-0.5 font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('calendar')}
+                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors ${
+                    viewMode === 'calendar'
+                      ? 'bg-ink-900 text-white shadow-2xs'
+                      : 'text-muted hover:text-ink-900'
+                  }`}
+                >
+                  <Calendar className="size-3.5" aria-hidden="true" />
+                  <span>Kalender & Jam</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-ink-900 text-white shadow-2xs'
+                      : 'text-muted hover:text-ink-900'
+                  }`}
+                >
+                  <Clock className="size-3.5" aria-hidden="true" />
+                  <span>Semua Log</span>
+                </button>
+              </div>
             </div>
 
             {query.isLoading ? (
-              <div className="flex items-center justify-center py-10">
+              <div className="flex items-center justify-center py-12">
                 <LoadingState label="Memuat riwayat log perubahan..." />
               </div>
             ) : query.isError ? (
@@ -393,15 +627,16 @@ function PartnerStockLogDialog({
                 message={getErrorMessage(query.error)}
                 onRetry={() => void query.refetch()}
               />
-            ) : !query.data?.data.length ? (
+            ) : !allLogs.length ? (
               <EmptyState
                 title="Belum ada riwayat perubahan"
                 description="Cabang ini belum mencatat perubahan stok fisik."
               />
-            ) : (
+            ) : viewMode === 'list' ? (
+              /* Flat list of all logs */
               <div className="overflow-hidden rounded-md border border-line">
                 <div className="divide-y divide-line">
-                  {query.data.data.map((log) => {
+                  {allLogs.map((log) => {
                     const isConsumption = log.delta > 0
                     const isRestock = log.delta < 0
                     const sourceLabel =
@@ -462,6 +697,259 @@ function PartnerStockLogDialog({
                   })}
                 </div>
               </div>
+            ) : (
+              /* ALUR UTAMA: Navigasi Minggu + 7 Hari (Senin - Minggu) + Jam Perubahan */
+              <div className="space-y-4">
+                {/* 1. Bar Navigasi Minggu (< dan >) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-white p-3 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWeekOffset((w) => w - 1)
+                        setSelectedBatch(null)
+                      }}
+                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                      title="Lihat minggu kemarin (<)"
+                      aria-label="Minggu kemarin"
+                    >
+                      <ChevronLeft className="size-4" aria-hidden="true" />
+                    </button>
+
+                    <div className="flex items-center gap-2 px-1">
+                      <Calendar className="size-4 text-ink-700" aria-hidden="true" />
+                      <span className="font-display text-sm font-semibold text-ink-900">
+                        {formatWeekRange(weekDays, weekOffset)}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWeekOffset((w) => Math.min(0, w + 1))
+                        setSelectedBatch(null)
+                      }}
+                      disabled={weekOffset >= 0}
+                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"
+                      title="Lihat minggu berikutnya (>)"
+                      aria-label="Minggu berikutnya"
+                    >
+                      <ChevronRight className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  {weekOffset !== 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWeekOffset(0)
+                        setSelectedBatch(null)
+                      }}
+                      className="inline-flex items-center rounded-md border border-line bg-ink-50 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900"
+                    >
+                      Kembali ke Minggu Ini
+                    </button>
+                  ) : null}
+                </div>
+
+                {/* 2. Grid 7 Hari (Senin sampai Minggu) */}
+                <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                  {weekDays.map((d, index) => {
+                    const dStr = toLocalDateStr(d)
+                    const isSelected = dStr === activeDateStr
+                    const isToday = dStr === todayStr
+                    const count = logsByDate.get(dStr)?.length ?? 0
+                    const dayNameShort = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'][index]
+                    const dayNameFull = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'][index]
+                    const dayNumber = d.getDate()
+
+                    return (
+                      <button
+                        key={dStr}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDateStr(dStr)
+                          setSelectedBatch(null)
+                        }}
+                        className={`group relative flex flex-col items-center justify-between rounded-md border p-2 text-center transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:p-2.5 ${
+                          isSelected
+                            ? 'border-ink-900 bg-ink-900 text-white shadow-sm ring-2 ring-ink-900/20'
+                            : count > 0
+                              ? 'border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50/80'
+                              : 'border-line/70 bg-ink-50/40 text-muted hover:border-line hover:bg-ink-50'
+                        }`}
+                      >
+                        <span
+                          className={`text-[11px] font-semibold sm:text-xs ${
+                            isSelected ? 'text-white/90' : 'text-muted'
+                          }`}
+                        >
+                          <span className="sm:hidden">{dayNameShort}</span>
+                          <span className="hidden sm:inline">{dayNameFull}</span>
+                        </span>
+
+                        <span
+                          className={`my-1 font-display text-base font-bold tabular-nums sm:text-lg ${
+                            isSelected ? 'text-white' : 'text-ink-900'
+                          }`}
+                        >
+                          {dayNumber}
+                        </span>
+
+                        <div className="flex items-center gap-1">
+                          {count > 0 ? (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                                isSelected
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-ok-bg text-ok-fg'
+                              }`}
+                            >
+                              <span
+                                className={`size-1.5 rounded-full ${
+                                  isSelected ? 'bg-white' : 'bg-ok'
+                                }`}
+                              />
+                              {count} log
+                            </span>
+                          ) : (
+                            <span
+                              className={`text-[10px] ${
+                                isSelected ? 'text-white/60' : 'text-muted/60'
+                              }`}
+                            >
+                              —
+                            </span>
+                          )}
+                        </div>
+
+                        {isToday ? (
+                          <span
+                            className={`absolute -top-1.5 right-1 rounded-sm px-1 text-[8px] font-bold uppercase tracking-wider ${
+                              isSelected
+                                ? 'bg-white text-ink-900'
+                                : 'bg-ink-900 text-white'
+                            }`}
+                          >
+                            Hari Ini
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* 3. Panel Detail Hari Terpilih & Jam-Jam Perubahan */}
+                <div className="rounded-md border border-line bg-white p-4 sm:p-5 shadow-xs">
+                  <div className="flex flex-col gap-2 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="size-4 text-ink-700" aria-hidden="true" />
+                        <h4 className="font-display text-base font-bold text-ink-900">
+                          {formatDayDate(activeDateObj)}
+                        </h4>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {dayBatches.length > 0
+                          ? `${dayBatches.length} sesi waktu perubahan · ${activeDateLogs.length} total produk terpengaruh`
+                          : 'Tidak ada laporan stok tercatat pada tanggal ini'}
+                      </p>
+                    </div>
+
+                    {activeDateLogs.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {totalDayConsumed > 0 ? (
+                          <span className="rounded-md bg-crit-bg px-2.5 py-1 font-semibold text-crit-fg tabular-nums">
+                            −{totalDayConsumed} pcs terjual / keluar
+                          </span>
+                        ) : null}
+                        {totalDayRestocked > 0 ? (
+                          <span className="rounded-md bg-ok-bg px-2.5 py-1 font-semibold text-ok-fg tabular-nums">
+                            +{totalDayRestocked} pcs restock diterima
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="pt-4">
+                    {dayBatches.length === 0 ? (
+                      <EmptyState
+                        title="Tidak ada aktivitas stok"
+                        description={`Cabang ${partner.partner_name} tidak mencatat perubahan stok fisik pada ${formatDayDate(activeDateObj)}.`}
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-muted">
+                            Pilih sesi jam di bawah untuk melihat rincian item (popup):
+                          </p>
+                          <span className="text-xs text-muted">
+                            {dayBatches.length} sesi tercatat
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                          {dayBatches.map((batch) => (
+                            <button
+                              key={batch.key}
+                              type="button"
+                              onClick={() => setSelectedBatch(batch)}
+                              className="group flex flex-col justify-between rounded-lg border border-line bg-white p-3.5 text-left shadow-2xs transition-all hover:border-ink-500 hover:bg-ink-50/40 hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-ink-100 text-ink-700 transition-colors group-hover:bg-ink-700 group-hover:text-white">
+                                    <Clock className="size-3.5" aria-hidden="true" />
+                                  </span>
+                                  <div>
+                                    <span className="font-display text-sm font-bold text-ink-900">
+                                      {batch.timeFormatted}
+                                    </span>
+                                    <p className="text-[11px] text-muted">
+                                      {batch.totalItems} item berubah
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <span
+                                  className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-semibold ${
+                                    batch.source === 'order_received'
+                                      ? 'bg-ok-bg text-ok-fg'
+                                      : 'bg-ink-100 text-ink-700'
+                                  }`}
+                                >
+                                  {batch.sourceLabel}
+                                </span>
+                              </div>
+
+                              <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2 text-xs">
+                                <div className="flex items-center gap-1.5 font-bold tabular-nums">
+                                  {batch.totalConsumed > 0 ? (
+                                    <span className="rounded bg-crit-bg px-1.5 py-0.5 text-crit-fg">
+                                      −{batch.totalConsumed} pcs
+                                    </span>
+                                  ) : null}
+                                  {batch.totalRestocked > 0 ? (
+                                    <span className="rounded bg-ok-bg px-1.5 py-0.5 text-ok-fg">
+                                      +{batch.totalRestocked} pcs
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                <span className="inline-flex items-center gap-1 font-semibold text-ink-700 transition-transform group-hover:translate-x-0.5">
+                                  <span>Lihat detail</span>
+                                  <span aria-hidden="true">→</span>
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
@@ -476,10 +964,21 @@ function PartnerStockLogDialog({
             </Dialog.Close>
           </div>
         </Dialog.Content>
+
+        <BatchDetailModal
+          batch={selectedBatch}
+          partnerName={partner.partner_name}
+          dateLabel={formatDayDate(activeDateObj)}
+          open={Boolean(selectedBatch)}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setSelectedBatch(null)
+          }}
+        />
       </Dialog.Portal>
     </Dialog.Root>
   )
 }
+
 
 function AIInsightsPanel({
   data,
@@ -552,7 +1051,26 @@ function AdminDashboard() {
   const [adminNotes, setAdminNotes] = useState<Partial<Record<string, string>>>(
     {},
   )
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [activeOrderCategory, setActiveOrderCategory] =
+    useState<OrderCategoryTab>('menunggu')
   const dirtyApprovalOrderIds = useRef(new Set<string>())
+
+  const handleViewOrderDetail = (
+    orderId: string,
+    category: OrderCategoryTab = 'menunggu',
+  ) => {
+    setActiveOrderCategory(category)
+    setSelectedOrderId(orderId)
+    setTab('orders')
+  }
+
+  const handleNavigateToStock = (partnerName?: string) => {
+    if (partnerName) {
+      setPartner(partnerName)
+    }
+    setTab('stocks')
+  }
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'admin')) {
@@ -945,13 +1463,20 @@ function AdminDashboard() {
             onShip={(id) =>
               updateOrder.mutateAsync({ id, status: 'dalam_pengiriman' })
             }
+            selectedOrderId={selectedOrderId}
+            onSelectOrder={setSelectedOrderId}
+            activeCategory={activeOrderCategory}
+            onActiveCategoryChange={setActiveOrderCategory}
           />
         ) : null}
         {tab === 'alerts' ? (
           <AlertPanel
             query={notifications}
+            orders={orders.data ?? []}
             marking={markRead.isPending}
             onRead={(id) => markRead.mutate(id)}
+            onViewOrderDetail={handleViewOrderDetail}
+            onNavigateToStock={handleNavigateToStock}
           />
         ) : null}
         {tab === 'data-science' ? (
@@ -1120,20 +1645,28 @@ function StockPanel({
     })
   }, [centralProductsQuery.data, centralStockDrafts])
 
-  const saveAllCentralStock = async () => {
-    if (changedProducts.length === 0) {
+  const saveCentralStock = async (productId?: string) => {
+    const productsToSave = productId
+      ? changedProducts.filter((product) => product.id === productId)
+      : changedProducts
+
+    if (productsToSave.length === 0) {
       toast.info('Tidak ada perubahan stok pusat yang perlu disimpan')
       return
     }
 
-    if (hasInvalidDraft) {
+    const hasInvalidSelectedDraft = productsToSave.some((product) => {
+      const value = Number(centralStockDrafts[product.id])
+      return !Number.isInteger(value) || value < 0
+    })
+    if (hasInvalidSelectedDraft) {
       toast.error('Pastikan semua jumlah stok berupa bilangan bulat, minimal 0')
       return
     }
 
     setIsBatchSaving(true)
     try {
-      const itemsToSave = changedProducts.map((prod) => {
+      const itemsToSave = productsToSave.map((prod) => {
         const value = Number(centralStockDrafts[prod.id])
         return {
           productId: prod.id,
@@ -1175,7 +1708,9 @@ function StockPanel({
       })
 
       toast.success(
-        `Semua perubahan selesai! ${results.length} stok kategori produk berhasil diperbarui`,
+        results.length === 1
+          ? `Stok ${results[0].name} berhasil diperbarui`
+          : `${results.length} stok produk berhasil diperbarui`,
       )
     } catch (error: unknown) {
       toast.error(getErrorMessage(error))
@@ -1196,6 +1731,27 @@ function StockPanel({
       ),
     )
     toast.info('Perubahan dibatalkan')
+  }
+
+  const adjustStock = (productId: string, delta: number, originalStock: number) => {
+    dirtyCentralStockIds.current.add(productId)
+    setCentralStockDrafts((current) => {
+      const currentVal = Number(current[productId] ?? originalStock)
+      const base = Number.isNaN(currentVal) ? originalStock : currentVal
+      const nextVal = Math.max(0, base + delta)
+      return {
+        ...current,
+        [productId]: String(nextVal),
+      }
+    })
+  }
+
+  const resetSingleDraft = (productId: string, originalStock: number) => {
+    dirtyCentralStockIds.current.delete(productId)
+    setCentralStockDrafts((current) => ({
+      ...current,
+      [productId]: String(originalStock),
+    }))
   }
 
   const toggleExpand = (partnerId: string) => {
@@ -1286,7 +1842,7 @@ function StockPanel({
               <button
               type="button"
               id="btn-selesai-stok-pusat"
-              onClick={saveAllCentralStock}
+              onClick={() => void saveCentralStock()}
               disabled={
                 changedProducts.length === 0 ||
                 isBatchSaving ||
@@ -1339,53 +1895,110 @@ function StockPanel({
             />
           </div>
         ) : null}
-        <div className="mt-4 divide-y divide-line overflow-hidden rounded-md border border-line bg-white">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {centralProductsQuery.data?.map((prod) => {
             const draft =
               centralStockDrafts[prod.id] ?? String(prod.central_stock)
             const parsedDraft = Number(draft)
             const isValid = Number.isInteger(parsedDraft) && parsedDraft >= 0
             const hasChanged = isValid && parsedDraft !== prod.central_stock
+            const delta = isValid ? parsedDraft - prod.central_stock : 0
+
             return (
               <div
                 key={prod.id}
-                className={`px-3 py-3 transition-colors duration-200 ${
+                className={`flex flex-col justify-between rounded-lg border p-4 transition-all duration-200 shadow-xs ${
                   hasChanged
-                    ? 'bg-warn-bg/40'
-                    : 'bg-white'
+                    ? 'border-warn/60 bg-amber-50/30 ring-1 ring-warn/30'
+                    : 'border-line bg-white hover:border-ink-200'
                 }`}
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-ink-900 text-sm">
+                {/* Header Card: Nama Produk & Status */}
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-bold text-ink-900 leading-snug" title={prod.name}>
                       {prod.name}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {hasChanged ? (
-                      <span className="rounded bg-warn-bg px-1.5 py-0.5 text-[10px] font-semibold text-warn">
-                        Diedit
-                      </span>
-                    ) : null}
+                    </h3>
                     <span
-                      className={`rounded px-2 py-0.5 text-[11px] font-bold ${
+                      className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                         prod.central_stock > 0
                           ? 'bg-ok-bg text-ok'
                           : 'bg-crit-bg text-crit-fg'
                       }`}
                     >
-                      {prod.central_stock > 0 ? 'Siap Kirim' : 'Stok Habis'}
+                      {prod.central_stock > 0 ? 'Siap Kirim' : 'Habis'}
                     </span>
                   </div>
+
+                  {/* Real-time Stock Display */}
+                  <div className="mt-3.5 rounded-md bg-paper p-3 border border-line/70">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[11px] font-medium text-muted">
+                        Stok Sekarang:
+                      </span>
+                      {hasChanged ? (
+                        <button
+                          type="button"
+                          onClick={() => resetSingleDraft(prod.id, prod.central_stock)}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-warn hover:underline"
+                          title="Kembalikan ke stok awal"
+                        >
+                          <RotateCcw className="size-3" />
+                          <span>Reset</span>
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <span className="text-2xl font-bold tabular-nums font-display text-ink-900">
+                        {isValid ? parsedDraft.toLocaleString('id-ID') : '—'}
+                      </span>
+                      <span className="text-xs font-semibold text-muted">
+                        {prod.unit}
+                      </span>
+
+                      {hasChanged ? (
+                        <span
+                          className={`ml-auto inline-flex items-center text-xs font-bold px-1.5 py-0.5 rounded ${
+                            delta > 0
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {delta > 0 ? `+${delta}` : delta} {prod.unit}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {hasChanged ? (
+                      <p className="mt-1.5 text-[11px] text-muted border-t border-line/60 pt-1.5">
+                        Awal: <span className="font-semibold text-ink-800">{prod.central_stock.toLocaleString('id-ID')}</span> {prod.unit}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="mt-3 border-t border-line/60 pt-3">
+
+                {/* Input & Adjuster Section */}
+                <div className="mt-4 pt-3 border-t border-line/60">
                   <label
                     htmlFor={`central-stock-${prod.id}`}
-                    className="text-xs font-medium text-muted"
+                    className="block text-[11px] font-semibold text-ink-700"
                   >
-                    Stok pusat ({prod.unit})
+                    Atur Jumlah Stok:
                   </label>
-                  <div className="mt-1.5 flex gap-2">
+
+                  {/* Stepper Input Row */}
+                  <div className="mt-1.5 flex items-stretch gap-1">
+                    <button
+                      type="button"
+                      disabled={isBatchSaving || parsedDraft <= 0}
+                      onClick={() => adjustStock(prod.id, -1, prod.central_stock)}
+                      aria-label={`Kurangi 1 ${prod.name}`}
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-sm border border-line bg-paper text-ink-700 hover:bg-ink-100 active:bg-ink-200 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"
+                    >
+                      <Minus className="size-3.5" />
+                    </button>
+
                     <input
                       id={`central-stock-${prod.id}`}
                       type="number"
@@ -1404,16 +2017,27 @@ function StockPanel({
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
                           event.preventDefault()
-                          void saveAllCentralStock()
+                          void saveCentralStock(prod.id)
                         }
                       }}
                       aria-invalid={!isValid}
-                      className="min-h-11 min-w-0 flex-1 rounded-sm border border-line bg-white px-3 text-base font-semibold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:opacity-50"
+                      className="min-h-9 w-full min-w-0 rounded-sm border border-line bg-white px-2 text-center text-sm font-bold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:opacity-50"
                     />
+
+                    <button
+                      type="button"
+                      disabled={isBatchSaving}
+                      onClick={() => adjustStock(prod.id, 1, prod.central_stock)}
+                      aria-label={`Tambah 1 ${prod.name}`}
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-sm border border-line bg-paper text-ink-700 hover:bg-ink-100 active:bg-ink-200 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
                   </div>
+
                   {!isValid ? (
-                    <p className="mt-1 text-xs text-crit-fg" role="alert">
-                      Masukkan bilangan bulat minimal 0.
+                    <p className="mt-1 text-[11px] text-crit-fg" role="alert">
+                      Masukkan angka bulat ≥ 0.
                     </p>
                   ) : null}
                 </div>
@@ -1603,8 +2227,6 @@ function StockPanel({
   )
 }
 
-type OrderCategoryTab = 'menunggu' | 'selesai' | 'ditolak'
-
 function OrderPanel({
   query,
   approved,
@@ -1615,6 +2237,10 @@ function OrderPanel({
   onApprove,
   onReject,
   onShip,
+  selectedOrderId: controlledSelectedOrderId,
+  onSelectOrder,
+  activeCategory: controlledCategory,
+  onActiveCategoryChange,
 }: {
   query: UseQueryResult<Order[]>
   approved: Partial<Record<string, Partial<Record<string, number>>>>
@@ -1625,10 +2251,24 @@ function OrderPanel({
   onApprove: (order: Order) => Promise<unknown>
   onReject: (id: string, reason: string) => Promise<unknown>
   onShip: (id: string) => Promise<unknown>
+  selectedOrderId?: string | null
+  onSelectOrder?: (orderId: string | null) => void
+  activeCategory?: OrderCategoryTab
+  onActiveCategoryChange?: (category: OrderCategoryTab) => void
 }) {
-  const [activeCategory, setActiveCategory] =
+  const [internalCategory, setInternalCategory] =
     useState<OrderCategoryTab>('menunggu')
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [internalSelectedOrderId, setInternalSelectedOrderId] =
+    useState<string | null>(null)
+
+  const activeCategory = controlledCategory ?? internalCategory
+  const setActiveCategory = onActiveCategoryChange ?? setInternalCategory
+  const selectedOrderId =
+    controlledSelectedOrderId !== undefined
+      ? controlledSelectedOrderId
+      : internalSelectedOrderId
+  const setSelectedOrderId = onSelectOrder ?? setInternalSelectedOrderId
+
   const orderTriggerRefs = useRef<
     Partial<Record<string, HTMLButtonElement | null>>
   >({})
@@ -1663,12 +2303,9 @@ function OrderPanel({
         ['disetujui', 'dalam_pengiriman', 'selesai'].includes(order.status),
       )
     }
-    if (activeCategory === 'ditolak') {
-      return allOrders.filter((order) =>
-        ['ditolak', 'dibatalkan'].includes(order.status),
-      )
-    }
-    return allOrders
+    return allOrders.filter((order) =>
+      ['ditolak', 'dibatalkan'].includes(order.status),
+    )
   }, [activeCategory, allOrders])
   const selectedOrder = allOrders.find((order) => order.id === selectedOrderId)
 
@@ -1781,9 +2418,7 @@ function OrderPanel({
                 ? 'Tidak ada pesanan menunggu persetujuan'
                 : activeCategory === 'selesai'
                   ? 'Belum ada pesanan disetujui atau selesai'
-                  : activeCategory === 'ditolak'
-                    ? 'Tidak ada pesanan yang ditolak'
-                    : 'Belum ada pesanan masuk'
+                  : 'Tidak ada pesanan yang ditolak'
             }
             description={
               activeCategory === 'menunggu'
@@ -2209,23 +2844,360 @@ function ApprovalDialog({
   )
 }
 
+interface ParsedAlertInfo {
+  title: string
+  body: string
+  partnerName: string
+  type: 'new_order' | 'order_received' | 'low_stock' | 'other'
+  relatedOrderId: string | null
+  matchedOrder: Order | null
+}
+
+function parseAndFormatAlert(
+  item: NotificationItem,
+  allOrders: Order[],
+): ParsedAlertInfo {
+  const rawTitle = item.title || ''
+  const rawBody = item.body || ''
+  const partnerName = item.partner_name || 'Mitra'
+
+  // Extract any PO code from title or body (e.g. PO-261019-1521E500)
+  const poMatch = `${rawTitle} ${rawBody}`.match(/PO-[A-Za-z0-9-]+/i)
+  const poCode = poMatch ? poMatch[0].toUpperCase() : null
+
+  let matchedOrder: Order | null = null
+  if (poCode) {
+    matchedOrder =
+      allOrders.find((o) => o.order_no.toUpperCase() === poCode) ?? null
+  }
+  if (!matchedOrder && item.partner_id) {
+    matchedOrder =
+      allOrders.find((o) => o.partner_id === item.partner_id) ?? null
+  }
+
+  const isNewOrder =
+    item.type === 'new_order' ||
+    rawTitle.toLowerCase().includes('pesanan restock') ||
+    rawBody.toLowerCase().includes('mengajukan restock')
+
+  const isOrderReceived =
+    rawTitle.toLowerCase().includes('barang diterima') ||
+    rawBody.toLowerCase().includes('penerimaan barang') ||
+    rawBody.toLowerCase().includes('mengonfirmasi penerimaan')
+
+  const isLowStock =
+    item.type === 'low_stock' ||
+    rawTitle.toLowerCase().includes('stok kritis') ||
+    rawBody.toLowerCase().includes('stok kritis')
+
+  if (isNewOrder) {
+    let cleanBody = rawBody
+      .replace(/:\s*PO-[A-Za-z0-9-]+/gi, '')
+      .replace(/PO-[A-Za-z0-9-]+/gi, '')
+      .trim()
+
+    if (matchedOrder && matchedOrder.items.length > 0) {
+      const itemSummaries = matchedOrder.items
+        .map(
+          (i) =>
+            `${i.product_name} (${i.qty_requested} ${i.product_unit || 'pcs'})`,
+        )
+        .join(', ')
+      cleanBody = `Mitra mengajukan restock untuk ${matchedOrder.items.length} jenis item: ${itemSummaries}. Pesanan sedang menunggu persetujuan admin pusat.`
+    } else if (!cleanBody) {
+      cleanBody = `Mitra ${partnerName} mengajukan permohonan restock barang untuk cabang. Pesanan menunggu persetujuan pusat.`
+    }
+
+    return {
+      title: `Mitra ${partnerName} mau restok barang nih`,
+      body: cleanBody,
+      partnerName,
+      type: 'new_order',
+      relatedOrderId: matchedOrder?.id ?? null,
+      matchedOrder,
+    }
+  }
+
+  if (isOrderReceived) {
+    return {
+      title: `Mitra ${partnerName} sudah menerima kiriman barang`,
+      body: `Mitra telah mengonfirmasi bahwa kiriman paket barang restok telah tiba di cabang. Stok cabang telah otomatis bertambah.`,
+      partnerName,
+      type: 'order_received',
+      relatedOrderId: matchedOrder?.id ?? null,
+      matchedOrder,
+    }
+  }
+
+  if (isLowStock) {
+    const cleanBody = rawBody.replace(/PO-[A-Za-z0-9-]+/gi, '').trim()
+    return {
+      title: `Stok barang di Mitra ${partnerName} kritis / menipis`,
+      body:
+        cleanBody ||
+        `Sisa stok di cabang ${partnerName} berada di bawah batas aman (20% par level). Segera siapkan restok.`,
+      partnerName,
+      type: 'low_stock',
+      relatedOrderId: null,
+      matchedOrder: null,
+    }
+  }
+
+  const cleanTitle = rawTitle
+    .replace(/:\s*PO-[A-Za-z0-9-]+/gi, '')
+    .replace(/PO-[A-Za-z0-9-]+/gi, '')
+    .trim()
+  const cleanBody = rawBody
+    .replace(/untuk\s*PO-[A-Za-z0-9-]+/gi, 'cabang')
+    .replace(/PO-[A-Za-z0-9-]+/gi, '')
+    .trim()
+
+  return {
+    title: cleanTitle || `Alert dari Mitra ${partnerName}`,
+    body: cleanBody,
+    partnerName,
+    type: 'other',
+    relatedOrderId: matchedOrder?.id ?? null,
+    matchedOrder,
+  }
+}
+
 function AlertPanel({
   query,
+  orders,
   marking,
   onRead,
+  onViewOrderDetail,
+  onNavigateToStock,
 }: {
   query: UseQueryResult<NotificationItem[]>
+  orders: Order[]
   marking: boolean
   onRead: (id: string) => void
+  onViewOrderDetail: (orderId: string, category?: OrderCategoryTab) => void
+  onNavigateToStock: (partnerName?: string) => void
 }) {
+  const [search, setSearch] = useState('')
+  const [timePreset, setTimePreset] = useState<
+    'semua' | 'hari_ini' | 'kemarin' | '7_hari' | '30_hari'
+  >('semua')
+  const [selectedDate, setSelectedDate] = useState<string>('')
+  const [typeFilter, setTypeFilter] = useState<
+    'semua' | 'new_order' | 'order_received' | 'low_stock'
+  >('semua')
+  const [readFilter, setReadFilter] = useState<'semua' | 'unread' | 'read'>(
+    'semua',
+  )
+
+  const allAlerts = query.data ?? []
+
+  const filteredNotifications = useMemo(() => {
+    const now = new Date()
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+    const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`
+
+    return allAlerts.filter((item) => {
+      const parsed = parseAndFormatAlert(item, orders)
+
+      if (search.trim()) {
+        const q = search.toLowerCase()
+        const matchTitle = parsed.title.toLowerCase().includes(q)
+        const matchBody = parsed.body.toLowerCase().includes(q)
+        const matchPartner = (item.partner_name ?? '').toLowerCase().includes(q)
+        if (!matchTitle && !matchBody && !matchPartner) return false
+      }
+
+      if (readFilter === 'unread' && item.read_at) return false
+      if (readFilter === 'read' && !item.read_at) return false
+
+      if (typeFilter !== 'semua' && parsed.type !== typeFilter) return false
+
+      const itemDate = new Date(item.created_at)
+      if (Number.isNaN(itemDate.getTime())) return true
+      const itemDateStr = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}-${String(itemDate.getDate()).padStart(2, '0')}`
+
+      if (selectedDate) {
+        if (itemDateStr !== selectedDate) return false
+      } else if (timePreset === 'hari_ini') {
+        if (itemDateStr !== todayStr) return false
+      } else if (timePreset === 'kemarin') {
+        if (itemDateStr !== yesterdayStr) return false
+      } else if (timePreset === '7_hari') {
+        const diffMs = now.getTime() - itemDate.getTime()
+        if (diffMs > 7 * 86_400_000) return false
+      } else if (timePreset === '30_hari') {
+        const diffMs = now.getTime() - itemDate.getTime()
+        if (diffMs > 30 * 86_400_000) return false
+      }
+
+      return true
+    })
+  }, [allAlerts, orders, search, timePreset, selectedDate, typeFilter, readFilter])
+
+  const hasActiveFilters =
+    Boolean(search) ||
+    timePreset !== 'semua' ||
+    Boolean(selectedDate) ||
+    typeFilter !== 'semua' ||
+    readFilter !== 'semua'
+
+  const resetFilters = () => {
+    setSearch('')
+    setTimePreset('semua')
+    setSelectedDate('')
+    setTypeFilter('semua')
+    setReadFilter('semua')
+  }
+
   return (
-    <section aria-labelledby="alerts-title" className="animate-in fade-in slide-in-from-bottom-1 duration-300">
-      <h2 id="alerts-title" className="text-xl font-semibold text-ink-900">
-        Alert dan notifikasi
-      </h2>
-      <p className="mt-1 text-sm text-muted">
-        Stok kritis dan pesanan baru tercatat di sini.
-      </p>
+    <section
+      aria-labelledby="alerts-title"
+      className="space-y-4 animate-in fade-in slide-in-from-bottom-1 duration-300"
+    >
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 id="alerts-title" className="text-xl font-semibold text-ink-900">
+            Alert dan Notifikasi
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Permohonan restock cabang, barang diterima, dan peringatan stok
+            kritis tercatat di sini.
+          </p>
+        </div>
+        {allAlerts.length > 0 ? (
+          <span className="text-xs text-muted font-medium self-start sm:self-auto">
+            {filteredNotifications.length} dari {allAlerts.length} alert
+          </span>
+        ) : null}
+      </div>
+
+      {/* Filter Toolbar: Pencarian, Waktu/Hari/Tanggal/Tahun, Kategori */}
+      <div className="rounded-lg border border-line bg-white p-3.5 shadow-2xs space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Pencarian Nama Mitra / Kata Kunci */}
+          <div className="relative">
+            <Search
+              className="size-4 text-muted absolute left-3 top-1/2 -translate-y-1/2"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari nama mitra atau alert..."
+              className="w-full min-h-10 rounded-md border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-ink-700"
+            />
+          </div>
+
+          {/* Filter Preset Waktu / Hari */}
+          <div>
+            <select
+              value={timePreset}
+              onChange={(e) => {
+                setTimePreset(e.target.value as typeof timePreset)
+                if (e.target.value !== 'semua') setSelectedDate('')
+              }}
+              className="w-full min-h-10 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
+              aria-label="Filter rentang waktu"
+            >
+              <option value="semua">Semua Waktu</option>
+              <option value="hari_ini">Hari Ini</option>
+              <option value="kemarin">Kemarin</option>
+              <option value="7_hari">7 Hari Terakhir</option>
+              <option value="30_hari">30 Hari Terakhir</option>
+            </select>
+          </div>
+
+          {/* Filter Tanggal & Tahun Spesifik (Date Picker) */}
+          <div className="relative flex items-center">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value)
+                if (e.target.value) setTimePreset('semua')
+              }}
+              className="w-full min-h-10 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
+              title="Filter spesifik berdasarkan hari, tanggal, bulan, tahun"
+              aria-label="Filter tanggal spesifik"
+            />
+          </div>
+
+          {/* Filter Tipe Notifikasi */}
+          <div>
+            <select
+              value={typeFilter}
+              onChange={(e) =>
+                setTypeFilter(e.target.value as typeof typeFilter)
+              }
+              className="w-full min-h-10 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
+              aria-label="Filter jenis alert"
+            >
+              <option value="semua">Semua Jenis Alert</option>
+              <option value="new_order">Permohonan Restok</option>
+              <option value="order_received">Barang Diterima</option>
+              <option value="low_stock">Stok Kritis</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Baris Status Baca & Reset Filter */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-line/60">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-semibold text-muted text-[11px] uppercase tracking-wider mr-1">
+              Status:
+            </span>
+            <button
+              type="button"
+              onClick={() => setReadFilter('semua')}
+              className={`rounded-full px-2.5 py-1 font-semibold text-[11px] transition-colors ${
+                readFilter === 'semua'
+                  ? 'bg-ink-900 text-white'
+                  : 'bg-paper text-muted hover:text-ink-900'
+              }`}
+            >
+              Semua
+            </button>
+            <button
+              type="button"
+              onClick={() => setReadFilter('unread')}
+              className={`rounded-full px-2.5 py-1 font-semibold text-[11px] transition-colors ${
+                readFilter === 'unread'
+                  ? 'bg-ume text-white'
+                  : 'bg-paper text-muted hover:text-ink-900'
+              }`}
+            >
+              Belum Dibaca
+            </button>
+            <button
+              type="button"
+              onClick={() => setReadFilter('read')}
+              className={`rounded-full px-2.5 py-1 font-semibold text-[11px] transition-colors ${
+                readFilter === 'read'
+                  ? 'bg-ink-700 text-white'
+                  : 'bg-paper text-muted hover:text-ink-900'
+              }`}
+            >
+              Sudah Dibaca
+            </button>
+          </div>
+
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-warn hover:underline"
+            >
+              <RotateCcw className="size-3" />
+              <span>Reset Semua Filter</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       {query.isLoading ? <LoadingState label="Memuat notifikasi..." /> : null}
       {query.isError ? (
         <div className="mt-4">
@@ -2235,51 +3207,176 @@ function AlertPanel({
           />
         </div>
       ) : null}
-      {query.data?.length === 0 ? (
+      {!query.isLoading && allAlerts.length === 0 ? (
         <div className="mt-4">
           <EmptyState
             title="Belum ada alert"
-            description="Alert baru akan muncul di bagian ini."
+            description="Alert dan permohonan baru dari mitra akan muncul di sini."
           />
         </div>
       ) : null}
-      <div className="mt-4 divide-y divide-line overflow-hidden rounded-md border border-line bg-white">
-        {query.data?.map((item) => (
-          <article
-            key={item.id}
-            className={`p-4 ${item.type === 'low_stock' ? 'bg-crit-bg/50' : ''}`}
+      {!query.isLoading && allAlerts.length > 0 && filteredNotifications.length === 0 ? (
+        <div className="rounded-lg border border-line bg-white p-8 text-center">
+          <Filter className="size-8 mx-auto text-muted/60" />
+          <h3 className="mt-2 text-sm font-semibold text-ink-900">
+            Tidak ada alert yang cocok
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            Tidak ditemukan alert yang sesuai dengan filter waktu atau kata kunci yang dipilih.
+          </p>
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="mt-3 inline-flex min-h-9 items-center rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-paper"
           >
-            <div className="flex gap-3">
-              <AlertOctagon
-                className={`size-5 shrink-0 ${item.type === 'low_stock' ? 'text-crit' : 'text-ink-500'}`}
-                aria-hidden="true"
-              />
-              <div>
-                <h3 className="font-semibold text-ink-900">{item.title}</h3>
-                {item.body ? (
-                  <p className="mt-1 text-sm text-muted">{item.body}</p>
-                ) : null}
-                {item.partner_name ? (
-                  <p className="mt-2 text-xs font-semibold text-ink-700">
-                    Cabang: {item.partner_name}
-                  </p>
-                ) : null}
-                {item.read_at ? (
-                  <p className="mt-3 text-xs text-muted">Sudah dibaca</p>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={marking}
-                    onClick={() => onRead(item.id)}
-                    className="mt-3 min-h-11 rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700"
-                  >
-                    Tandai dibaca
-                  </button>
-                )}
+            Bersihkan Filter
+          </button>
+        </div>
+      ) : null}
+
+      {/* Daftar Kartu Alert */}
+      <div className="space-y-3">
+        {filteredNotifications.map((item) => {
+          const parsed = parseAndFormatAlert(item, orders)
+          const isUnread = !item.read_at
+
+          return (
+            <article
+              key={item.id}
+              className={`rounded-lg border p-4 transition-all duration-200 ${
+                isUnread
+                  ? 'border-line bg-white shadow-2xs border-l-4 border-l-ume'
+                  : 'border-line/70 bg-ink-50/40 text-muted'
+              }`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  {/* Icon Tipe */}
+                  <div className="shrink-0 mt-0.5">
+                    {parsed.type === 'new_order' ? (
+                      <span className="grid size-9 place-items-center rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                        <Clock className="size-4" aria-hidden="true" />
+                      </span>
+                    ) : parsed.type === 'order_received' ? (
+                      <span className="grid size-9 place-items-center rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <CheckCircle2 className="size-4" aria-hidden="true" />
+                      </span>
+                    ) : parsed.type === 'low_stock' ? (
+                      <span className="grid size-9 place-items-center rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                        <AlertOctagon className="size-4" aria-hidden="true" />
+                      </span>
+                    ) : (
+                      <span className="grid size-9 place-items-center rounded-md bg-ink-100 text-ink-700 border border-line">
+                        <Bell className="size-4" aria-hidden="true" />
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Isi Pesan Alert */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-bold text-ink-900 text-sm sm:text-base leading-snug">
+                        {parsed.title}
+                      </h3>
+                      {isUnread ? (
+                        <span className="rounded bg-ume/10 px-1.5 py-0.5 text-[10px] font-bold text-ume">
+                          Baru
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <p className="mt-1 text-xs sm:text-sm text-ink-700 leading-relaxed">
+                      {parsed.body}
+                    </p>
+
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
+                      {parsed.partnerName ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-paper border border-line px-2 py-0.5 text-xs font-semibold text-ink-800">
+                          <Store className="size-3 text-muted" aria-hidden="true" />
+                          <span>Cabang: {parsed.partnerName}</span>
+                        </span>
+                      ) : null}
+
+                      {/* Detail Waktu, Hari, Tanggal, Jam */}
+                      <span className="inline-flex items-center gap-1 text-xs text-muted font-medium">
+                        <Calendar className="size-3.5" aria-hidden="true" />
+                        <span>{formatDetailedDateTime(item.created_at)}</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tombol Aksi */}
+                <div className="flex flex-wrap items-center gap-2 self-start shrink-0 sm:flex-col sm:items-end">
+                  {/* Tombol Detail Pesan jika permohonan restok */}
+                  {parsed.type === 'new_order' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (parsed.relatedOrderId) {
+                          onViewOrderDetail(parsed.relatedOrderId, 'menunggu')
+                        } else {
+                          onViewOrderDetail('', 'menunggu')
+                        }
+                      }}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-ink-700 transition-colors focus-visible:outline-2 focus-visible:outline-ink-700"
+                    >
+                      <ClipboardCheck className="size-3.5 text-emerald-400" aria-hidden="true" />
+                      <span>Detail Pesan</span>
+                      <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
+                    </button>
+                  ) : null}
+
+                  {/* Tombol Lihat Detail Pesanan Selesai jika barang diterima */}
+                  {parsed.type === 'order_received' && parsed.relatedOrderId ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onViewOrderDetail(parsed.relatedOrderId || '', 'selesai')
+                      }
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-paper transition-colors"
+                    >
+                      <ClipboardCheck className="size-3.5 text-muted" aria-hidden="true" />
+                      <span>Detail Pesan</span>
+                      <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
+                    </button>
+                  ) : null}
+
+                  {/* Tombol Periksa Stok jika stok kritis */}
+                  {parsed.type === 'low_stock' ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onNavigateToStock(parsed.partnerName || undefined)
+                      }
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-paper transition-colors"
+                    >
+                      <Boxes className="size-3.5 text-muted" aria-hidden="true" />
+                      <span>Lihat Stok</span>
+                      <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
+                    </button>
+                  ) : null}
+
+                  {/* Tombol Tandai Dibaca */}
+                  {isUnread ? (
+                    <button
+                      type="button"
+                      disabled={marking}
+                      onClick={() => onRead(item.id)}
+                      className="min-h-9 rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-paper hover:text-ink-900 disabled:opacity-40"
+                    >
+                      Tandai dibaca
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-muted font-medium py-1">
+                      Sudah dibaca
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          )
+        })}
       </div>
     </section>
   )

@@ -3,7 +3,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Boxes,
+  Calendar,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Clock,
   Download,
@@ -27,6 +30,10 @@ import {
   LoadingState,
 } from '@/components/inventory/query-state'
 import { RakBar } from '@/components/inventory/rak-bar'
+import {
+  BatchDetailModal,
+  type StockLogBatch,
+} from '@/components/inventory/batch-detail-modal'
 import {
   OrderStatusBadge,
   StaleBadge,
@@ -480,7 +487,7 @@ function StocksPanel({
             </span>
             <div>
               <h2 className="text-sm font-semibold text-ink-900 sm:text-base">
-                Stok Gudang Daisuki Pusat (Realtime)
+                Stok barang Pusat Daisuki
               </h2>
               <p className="text-xs text-muted">
                 Ketersediaan stok siap kirim yang dikelola admin pusat
@@ -1431,6 +1438,125 @@ function formatDetailedDateTime(dateInput: string | Date | null | undefined): st
   return `${datePart} jam ${hours}.${minutes}`
 }
 
+function toLocalDateStr(dateInput: string | Date): string {
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getWeekDays(weekOffset: number): Date[] {
+  const now = new Date()
+  const dayOfWeek = (now.getDay() + 6) % 7 // Monday is 0, Sunday is 6
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - dayOfWeek + weekOffset * 7)
+  monday.setHours(0, 0, 0, 0)
+
+  const days: Date[] = []
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(monday)
+    day.setDate(monday.getDate() + i)
+    days.push(day)
+  }
+  return days
+}
+
+function formatWeekRange(weekDays: Date[], weekOffset: number): string {
+  if (weekDays.length < 7) return 'Rentang Minggu'
+  const first = weekDays[0]
+  const last = weekDays[6]
+  const firstDay = first.getDate()
+  const lastDay = last.getDate()
+  const firstMonth = first.toLocaleDateString('id-ID', { month: 'short' })
+  const lastMonth = last.toLocaleDateString('id-ID', { month: 'short' })
+  const year = last.getFullYear()
+
+  const rangeStr =
+    firstMonth === lastMonth
+      ? `${firstDay} – ${lastDay} ${lastMonth} ${year}`
+      : `${firstDay} ${firstMonth} – ${lastDay} ${lastMonth} ${year}`
+
+  if (weekOffset === 0) return `Minggu Ini (${rangeStr})`
+  if (weekOffset === -1) return `Minggu Kemarin (${rangeStr})`
+  return `${Math.abs(weekOffset)} Minggu Lalu (${rangeStr})`
+}
+
+function formatDayDate(dateInput: Date | string): string {
+  const date = typeof dateInput === 'string' ? new Date(dateInput + 'T12:00:00') : dateInput
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+}
+
+
+function groupLogsByBatch(logs: StockLog[]): StockLogBatch[] {
+  const map = new Map<string, StockLog[]>()
+
+  for (const log of logs) {
+    const d = new Date(log.created_at)
+    const dateStr = toLocalDateStr(d)
+    const hour = String(d.getHours()).padStart(2, '0')
+    const minute = String(d.getMinutes()).padStart(2, '0')
+    const key = `${dateStr}_${hour}:${minute}_${log.source}`
+    const existing = map.get(key)
+    if (existing) {
+      existing.push(log)
+    } else {
+      map.set(key, [log])
+    }
+  }
+
+  const batches: StockLogBatch[] = []
+  for (const [key, batchLogs] of map.entries()) {
+    const firstLog = batchLogs[0]
+    const d = new Date(firstLog.created_at)
+    const hour = String(d.getHours()).padStart(2, '0')
+    const minute = String(d.getMinutes()).padStart(2, '0')
+    const timeFormatted = `Jam ${hour}.${minute} WIB`
+    const dateStr = toLocalDateStr(d)
+    const sourceLabel =
+      firstLog.source === 'manual_update'
+        ? 'Laporan stok fisik'
+        : firstLog.source === 'order_received'
+          ? 'Pesanan diterima (Restock)'
+          : 'Penyesuaian stok'
+
+    const totalConsumed = batchLogs.reduce(
+      (sum, item) => (item.delta > 0 ? sum + item.delta : sum),
+      0,
+    )
+    const totalRestocked = batchLogs.reduce(
+      (sum, item) => (item.delta < 0 ? sum + Math.abs(item.delta) : sum),
+      0,
+    )
+
+    batches.push({
+      key,
+      timeFormatted,
+      timeRaw: `${hour}:${minute}`,
+      dateStr,
+      source: firstLog.source,
+      sourceLabel,
+      totalItems: batchLogs.length,
+      totalConsumed,
+      totalRestocked,
+      logs: batchLogs,
+    })
+  }
+
+  batches.sort(
+    (a, b) =>
+      new Date(b.logs[0].created_at).getTime() -
+      new Date(a.logs[0].created_at).getTime(),
+  )
+
+  return batches
+}
+
 function MitraInsightMetric({
   label,
   value,
@@ -1457,6 +1583,10 @@ interface MitraLogsPanelProps {
 }
 
 function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null)
+  const [selectedBatch, setSelectedBatch] = useState<StockLogBatch | null>(null)
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
   const [search, setSearch] = useState('')
   const [selectedProduct, setSelectedProduct] = useState('all')
   const [selectedSource, setSelectedSource] = useState('all')
@@ -1478,6 +1608,51 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
   )
 
   const latestUpdate = logs[0]?.created_at
+
+  const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
+
+  const logsByDate = useMemo(() => {
+    const map = new Map<string, StockLog[]>()
+    for (const log of logs) {
+      const key = toLocalDateStr(log.created_at)
+      const list = map.get(key)
+      if (list) list.push(log)
+      else map.set(key, [log])
+    }
+    return map
+  }, [logs])
+
+  const todayStr = useMemo(() => toLocalDateStr(new Date()), [])
+
+  const activeDateStr = useMemo(() => {
+    const currentWeekDates = weekDays.map((d) => toLocalDateStr(d))
+    if (selectedDateStr && currentWeekDates.includes(selectedDateStr)) {
+      return selectedDateStr
+    }
+    if (currentWeekDates.includes(todayStr)) {
+      return todayStr
+    }
+    for (let i = currentWeekDates.length - 1; i >= 0; i--) {
+      const dStr = currentWeekDates[i]
+      if ((logsByDate.get(dStr)?.length ?? 0) > 0) {
+        return dStr
+      }
+    }
+    return currentWeekDates[0]
+  }, [selectedDateStr, weekDays, todayStr, logsByDate])
+
+  const activeDateLogs = useMemo(() => {
+    return logsByDate.get(activeDateStr) ?? []
+  }, [logsByDate, activeDateStr])
+
+  const dayBatches = useMemo(() => {
+    return groupLogsByBatch(activeDateLogs)
+  }, [activeDateLogs])
+
+  const activeDateObj = useMemo(() => {
+    return new Date(activeDateStr + 'T12:00:00')
+  }, [activeDateStr])
+
 
   const productOptions = useMemo(() => {
     const names = new Set(logs.map((log) => log.product_name))
@@ -1559,6 +1734,15 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
     toast.success('File CSV berhasil diunduh')
   }
 
+  const totalDayConsumed = activeDateLogs.reduce(
+    (sum, l) => (l.delta > 0 ? sum + l.delta : sum),
+    0,
+  )
+  const totalDayRestocked = activeDateLogs.reduce(
+    (sum, l) => (l.delta < 0 ? sum + Math.abs(l.delta) : sum),
+    0,
+  )
+
   return (
     <section aria-labelledby="mitra-logs-title" className="space-y-6 animate-in fade-in slide-in-from-bottom-1 duration-300">
       <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1585,10 +1769,40 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         </button>
       </div>
 
-      <p className="-mt-3 inline-flex items-center gap-1.5 text-xs text-muted">
-        <Clock className="size-3.5" aria-hidden="true" />
-        Riwayat mutasi stok cabang · otomatis tersinkronisasi khusus cabang Anda
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 -mt-3">
+        <p className="inline-flex items-center gap-1.5 text-xs text-muted">
+          <Clock className="size-3.5" aria-hidden="true" />
+          Riwayat mutasi stok cabang · otomatis tersinkronisasi khusus cabang Anda
+        </p>
+
+        {/* View Mode Toggle */}
+        <div className="flex items-center rounded-md border border-line bg-white p-0.5 text-xs font-semibold shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setViewMode('calendar')}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors ${
+              viewMode === 'calendar'
+                ? 'bg-ink-900 text-white shadow-2xs'
+                : 'text-muted hover:text-ink-900'
+            }`}
+          >
+            <Calendar className="size-3.5" aria-hidden="true" />
+            <span>Kalender & Jam</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors ${
+              viewMode === 'list'
+                ? 'bg-ink-900 text-white shadow-2xs'
+                : 'text-muted hover:text-ink-900'
+            }`}
+          >
+            <Clock className="size-3.5" aria-hidden="true" />
+            <span>Semua Log</span>
+          </button>
+        </div>
+      </div>
 
       {query.isError ? (
         <ErrorState
@@ -1631,156 +1845,423 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         />
       </div>
 
-      <div className="overflow-hidden rounded-md border border-line bg-white shadow-xs">
-        <div className="flex flex-col gap-3 border-b border-line bg-ink-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-ink-900">
-                Riwayat Perubahan Stok
-              </h2>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-bg px-2 py-0.5 text-[11px] font-medium text-ok-fg">
-                <span className="size-1.5 animate-pulse rounded-full bg-ok" />
-                Live Sync
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-muted">
-              Menampilkan {filteredLogs.length} dari {logs.length} catatan log
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-44 flex-1 sm:w-52 sm:flex-none">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
-                aria-hidden="true"
-              />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari produk..."
-                className="h-10 w-full rounded-md border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
-              />
-            </div>
-
-            {productOptions.length > 1 ? (
-              <select
-                value={selectedProduct}
-                onChange={(e) => setSelectedProduct(e.target.value)}
-                className="h-10 rounded-md border border-line bg-white px-3 text-xs text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
-                aria-label="Filter berdasarkan produk"
-              >
-                <option value="all">Semua Produk</option>
-                {productOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-
-            <select
-              value={selectedSource}
-              onChange={(e) => setSelectedSource(e.target.value)}
-              className="h-10 rounded-md border border-line bg-white px-3 text-xs text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
-              aria-label="Filter berdasarkan tipe aktivitas"
-            >
-              <option value="all">Semua Tipe</option>
-              <option value="manual_update">Laporan Stok Fisik</option>
-              <option value="order_received">Pesanan Diterima (Restock)</option>
-            </select>
-          </div>
+      {query.isLoading ? (
+        <div className="rounded-md border border-line bg-white p-12 shadow-xs">
+          <LoadingState label="Memuat riwayat log perubahan..." />
         </div>
+      ) : logs.length === 0 ? (
+        <div className="rounded-md border border-line bg-white p-8 shadow-xs">
+          <EmptyState
+            title="Belum ada riwayat perubahan"
+            description="Catatan perubahan stok fisik harian dan konfirmasi penerimaan pesanan restock akan otomatis tercatat di sini."
+          />
+        </div>
+      ) : viewMode === 'calendar' ? (
+        /* ALUR KALENDER MINGGUAN + 7 HARI + JAM-JAM PERUBAHAN */
+        <div className="space-y-4">
+          {/* Navigasi Minggu (< dan >) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-white p-3 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setWeekOffset((w) => w - 1)
+                  setSelectedBatch(null)
+                }}
+                className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                title="Lihat minggu kemarin (<)"
+                aria-label="Minggu kemarin"
+              >
+                <ChevronLeft className="size-4" aria-hidden="true" />
+              </button>
 
-        {query.isLoading ? (
-          <div className="p-8">
-            <LoadingState label="Memuat riwayat log perubahan..." />
+              <div className="flex items-center gap-2 px-1">
+                <Calendar className="size-4 text-ink-700" aria-hidden="true" />
+                <span className="font-display text-sm font-semibold text-ink-900">
+                  {formatWeekRange(weekDays, weekOffset)}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setWeekOffset((w) => Math.min(0, w + 1))
+                  setSelectedBatch(null)
+                }}
+                disabled={weekOffset >= 0}
+                className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"
+                title="Lihat minggu berikutnya (>)"
+                aria-label="Minggu berikutnya"
+              >
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            {weekOffset !== 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setWeekOffset(0)
+                  setSelectedBatch(null)
+                }}
+                className="inline-flex items-center rounded-md border border-line bg-ink-50 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900"
+              >
+                Kembali ke Minggu Ini
+              </button>
+            ) : null}
           </div>
-        ) : logs.length === 0 ? (
-          <div className="p-8">
-            <EmptyState
-              title="Belum ada riwayat perubahan"
-              description="Catatan perubahan stok fisik harian dan konfirmasi penerimaan pesanan restock akan otomatis tercatat di sini."
-            />
-          </div>
-        ) : filteredLogs.length === 0 ? (
-          <div className="p-8">
-            <EmptyState
-              title="Tidak ada log yang cocok"
-              description="Coba ubah kata kunci pencarian atau reset filter untuk melihat catatan log lainnya."
-            />
-          </div>
-        ) : (
-          <div className="divide-y divide-line">
-            {filteredLogs.map((log) => {
-              const isConsumption = log.delta > 0
-              const isRestock = log.delta < 0
-              const sourceLabel =
-                log.source === 'manual_update'
-                  ? 'Laporan stok mitra'
-                  : log.source === 'order_received'
-                    ? 'Pesanan diterima'
-                    : 'Penyesuaian stok'
+
+          {/* Grid 7 Hari (Senin sampai Minggu) */}
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+            {weekDays.map((d, index) => {
+              const dStr = toLocalDateStr(d)
+              const isSelected = dStr === activeDateStr
+              const isToday = dStr === todayStr
+              const count = logsByDate.get(dStr)?.length ?? 0
+              const dayNameShort = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'][index]
+              const dayNameFull = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'][index]
+              const dayNumber = d.getDate()
 
               return (
-                <article
-                  key={log.id}
-                  className="flex flex-col gap-2 p-3.5 transition-colors hover:bg-ink-50/50 sm:flex-row sm:items-center sm:justify-between"
+                <button
+                  key={dStr}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDateStr(dStr)
+                    setSelectedBatch(null)
+                  }}
+                  className={`group relative flex flex-col items-center justify-between rounded-md border p-2 text-center transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:p-2.5 ${
+                    isSelected
+                      ? 'border-ink-900 bg-ink-900 text-white shadow-sm ring-2 ring-ink-900/20'
+                      : count > 0
+                        ? 'border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50/80'
+                        : 'border-line/70 bg-ink-50/40 text-muted hover:border-line hover:bg-ink-50'
+                  }`}
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink-900">
-                      {log.product_name}
-                    </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-                      <span className="font-medium text-ink-700">
-                        {formatDetailedDateTime(log.created_at)}
-                      </span>
-                      <span aria-hidden="true">·</span>
+                  <span
+                    className={`text-[11px] font-semibold sm:text-xs ${
+                      isSelected ? 'text-white/90' : 'text-muted'
+                    }`}
+                  >
+                    <span className="sm:hidden">{dayNameShort}</span>
+                    <span className="hidden sm:inline">{dayNameFull}</span>
+                  </span>
+
+                  <span
+                    className={`my-1 font-display text-base font-bold tabular-nums sm:text-lg ${
+                      isSelected ? 'text-white' : 'text-ink-900'
+                    }`}
+                  >
+                    {dayNumber}
+                  </span>
+
+                  <div className="flex items-center gap-1">
+                    {count > 0 ? (
                       <span
-                        className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                          log.source === 'order_received'
-                            ? 'bg-ok-bg text-ok-fg'
-                            : 'bg-ink-100 text-ink-700'
+                        className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                          isSelected
+                            ? 'bg-white/20 text-white'
+                            : 'bg-ok-bg text-ok-fg'
                         }`}
                       >
-                        {sourceLabel}
+                        <span
+                          className={`size-1.5 rounded-full ${
+                            isSelected ? 'bg-white' : 'bg-ok'
+                          }`}
+                        />
+                        {count} log
                       </span>
-                    </div>
+                    ) : (
+                      <span
+                        className={`text-[10px] ${
+                          isSelected ? 'text-white/60' : 'text-muted/60'
+                        }`}
+                      >
+                        —
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-3 self-end sm:self-center">
-                    <div className="flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-sm tabular-nums">
-                      <span className="text-muted">{log.qty_before}</span>
-                      <span className="text-xs text-muted" aria-hidden="true">
-                        →
-                      </span>
-                      <span className="font-semibold text-ink-900">
-                        {log.qty_after}
-                      </span>
-                    </div>
+                  {isToday ? (
                     <span
-                      className={`min-w-16 rounded px-2 py-1 text-center text-xs font-bold tabular-nums ${
-                        isConsumption
-                          ? 'bg-crit-bg text-crit-fg'
-                          : isRestock
-                            ? 'bg-ok-bg text-ok-fg'
-                            : 'bg-ink-100 text-muted'
+                      className={`absolute -top-1.5 right-1 rounded-sm px-1 text-[8px] font-bold uppercase tracking-wider ${
+                        isSelected
+                          ? 'bg-white text-ink-900'
+                          : 'bg-ink-900 text-white'
                       }`}
                     >
-                      {isConsumption
-                        ? `−${log.delta}`
-                        : isRestock
-                          ? `+${Math.abs(log.delta)}`
-                          : '0'}
+                      Hari Ini
                     </span>
-                  </div>
-                </article>
+                  ) : null}
+                </button>
               )
             })}
           </div>
-        )}
-      </div>
+
+          {/* Panel Detail Hari Terpilih & Jam-Jam Perubahan */}
+          <div className="rounded-md border border-line bg-white p-4 sm:p-5 shadow-xs">
+            <div className="flex flex-col gap-2 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="size-4 text-ink-700" aria-hidden="true" />
+                  <h2 className="font-display text-base font-bold text-ink-900">
+                    {formatDayDate(activeDateObj)}
+                  </h2>
+                </div>
+                <p className="mt-0.5 text-xs text-muted">
+                  {dayBatches.length > 0
+                    ? `${dayBatches.length} sesi waktu perubahan · ${activeDateLogs.length} total produk terpengaruh`
+                    : 'Tidak ada laporan stok tercatat pada tanggal ini'}
+                </p>
+              </div>
+
+              {activeDateLogs.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {totalDayConsumed > 0 ? (
+                    <span className="rounded-md bg-crit-bg px-2.5 py-1 font-semibold text-crit-fg tabular-nums">
+                      −{totalDayConsumed} pcs terjual / keluar
+                    </span>
+                  ) : null}
+                  {totalDayRestocked > 0 ? (
+                    <span className="rounded-md bg-ok-bg px-2.5 py-1 font-semibold text-ok-fg tabular-nums">
+                      +{totalDayRestocked} pcs restock diterima
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="pt-4">
+              {dayBatches.length === 0 ? (
+                <EmptyState
+                  title="Tidak ada aktivitas stok"
+                  description={`Tidak ada perubahan stok fisik atau penerimaan barang pada ${formatDayDate(activeDateObj)}.`}
+                />
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted">
+                      Pilih sesi jam di bawah untuk melihat rincian item (popup):
+                    </p>
+                    <span className="text-xs text-muted">
+                      {dayBatches.length} sesi tercatat
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {dayBatches.map((batch) => (
+                      <button
+                        key={batch.key}
+                        type="button"
+                        onClick={() => setSelectedBatch(batch)}
+                        className="group flex flex-col justify-between rounded-lg border border-line bg-white p-3.5 text-left shadow-2xs transition-all hover:border-ink-500 hover:bg-ink-50/40 hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-ink-100 text-ink-700 transition-colors group-hover:bg-ink-700 group-hover:text-white">
+                              <Clock className="size-3.5" aria-hidden="true" />
+                            </span>
+                            <div>
+                              <span className="font-display text-sm font-bold text-ink-900">
+                                {batch.timeFormatted}
+                              </span>
+                              <p className="text-[11px] text-muted">
+                                {batch.totalItems} item berubah
+                              </p>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-semibold ${
+                              batch.source === 'order_received'
+                                ? 'bg-ok-bg text-ok-fg'
+                                : 'bg-ink-100 text-ink-700'
+                            }`}
+                          >
+                            {batch.sourceLabel}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2 text-xs">
+                          <div className="flex items-center gap-1.5 font-bold tabular-nums">
+                            {batch.totalConsumed > 0 ? (
+                              <span className="rounded bg-crit-bg px-1.5 py-0.5 text-crit-fg">
+                                −{batch.totalConsumed} pcs
+                              </span>
+                            ) : null}
+                            {batch.totalRestocked > 0 ? (
+                              <span className="rounded bg-ok-bg px-1.5 py-0.5 text-ok-fg">
+                                +{batch.totalRestocked} pcs
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <span className="inline-flex items-center gap-1 font-semibold text-ink-700 transition-transform group-hover:translate-x-0.5">
+                            <span>Lihat detail</span>
+                            <span aria-hidden="true">→</span>
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <BatchDetailModal
+            batch={selectedBatch}
+            partnerName={partnerName}
+            dateLabel={formatDayDate(activeDateObj)}
+            open={Boolean(selectedBatch)}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) setSelectedBatch(null)
+            }}
+          />
+        </div>
+      ) : (
+        /* SEMUA LOG: Flat list dengan filter dan pencarian */
+        <div className="overflow-hidden rounded-md border border-line bg-white shadow-xs">
+          <div className="flex flex-col gap-3 border-b border-line bg-ink-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-ink-900">
+                  Daftar Semua Catatan Log
+                </h2>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-bg px-2 py-0.5 text-[11px] font-medium text-ok-fg">
+                  <span className="size-1.5 animate-pulse rounded-full bg-ok" />
+                  Live Sync
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted">
+                Menampilkan {filteredLogs.length} dari {logs.length} catatan log
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-44 flex-1 sm:w-52 sm:flex-none">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                  aria-hidden="true"
+                />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cari produk..."
+                  className="h-10 w-full rounded-md border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+                />
+              </div>
+
+              {productOptions.length > 1 ? (
+                <select
+                  value={selectedProduct}
+                  onChange={(e) => setSelectedProduct(e.target.value)}
+                  className="h-10 rounded-md border border-line bg-white px-3 text-xs text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+                  aria-label="Filter berdasarkan produk"
+                >
+                  <option value="all">Semua Produk</option>
+                  {productOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+
+              <select
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                className="h-10 rounded-md border border-line bg-white px-3 text-xs text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+                aria-label="Filter berdasarkan tipe aktivitas"
+              >
+                <option value="all">Semua Tipe</option>
+                <option value="manual_update">Laporan Stok Fisik</option>
+                <option value="order_received">Pesanan Diterima (Restock)</option>
+              </select>
+            </div>
+          </div>
+
+          {filteredLogs.length === 0 ? (
+            <div className="p-8">
+              <EmptyState
+                title="Tidak ada log yang cocok"
+                description="Coba ubah kata kunci pencarian atau reset filter untuk melihat catatan log lainnya."
+              />
+            </div>
+          ) : (
+            <div className="divide-y divide-line">
+              {filteredLogs.map((log) => {
+                const isConsumption = log.delta > 0
+                const isRestock = log.delta < 0
+                const sourceLabel =
+                  log.source === 'manual_update'
+                    ? 'Laporan stok mitra'
+                    : log.source === 'order_received'
+                      ? 'Pesanan diterima'
+                      : 'Penyesuaian stok'
+
+                return (
+                  <article
+                    key={log.id}
+                    className="flex flex-col gap-2 p-3.5 transition-colors hover:bg-ink-50/50 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink-900">
+                        {log.product_name}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                        <span className="font-medium text-ink-700">
+                          {formatDetailedDateTime(log.created_at)}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span
+                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                            log.source === 'order_received'
+                              ? 'bg-ok-bg text-ok-fg'
+                              : 'bg-ink-100 text-ink-700'
+                          }`}
+                        >
+                          {sourceLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 self-end sm:self-center">
+                      <div className="flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-sm tabular-nums">
+                        <span className="text-muted">{log.qty_before}</span>
+                        <span className="text-xs text-muted" aria-hidden="true">
+                          →
+                        </span>
+                        <span className="font-semibold text-ink-900">
+                          {log.qty_after}
+                        </span>
+                      </div>
+                      <span
+                        className={`min-w-16 rounded px-2 py-1 text-center text-xs font-bold tabular-nums ${
+                          isConsumption
+                            ? 'bg-crit-bg text-crit-fg'
+                            : isRestock
+                              ? 'bg-ok-bg text-ok-fg'
+                              : 'bg-ink-100 text-muted'
+                        }`}
+                      >
+                        {isConsumption
+                          ? `−${log.delta}`
+                          : isRestock
+                            ? `+${Math.abs(log.delta)}`
+                            : '0'}
+                      </span>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }
+
 

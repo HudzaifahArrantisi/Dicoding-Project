@@ -191,8 +191,8 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           audience: "admin",
           type: "new_order",
           partner_id: partnerId,
-          title: `Pesanan Restock Baru: ${orderNo}`,
-          body: `${partner.name} mengajukan restock untuk ${body.items.length} jenis produk. Pesanan menunggu persetujuan.`,
+          title: `Mitra ${partner.name} mau restok barang nih`,
+          body: `${partner.name} mengajukan restock untuk ${body.items.length} jenis produk. Pesanan menunggu persetujuan pusat.`,
         });
 
         return {
@@ -583,12 +583,18 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               }
             }
 
+            const [receivingPartner] = await tx
+              .select({ name: partners.name })
+              .from(partners)
+              .where(eq(partners.id, ord.partner_id))
+              .limit(1);
+
             await tx.insert(notifications).values({
               audience: "admin",
               type: "order_update",
               partner_id: ord.partner_id,
-              title: `Barang Diterima: ${ord.order_no}`,
-              body: `Mitra telah mengonfirmasi penerimaan barang untuk ${ord.order_no}. Stok cabang otomatis bertambah.`,
+              title: `Mitra ${receivingPartner?.name ?? 'mitra'} sudah menerima kiriman barang`,
+              body: `Mitra telah mengonfirmasi penerimaan barang untuk cabang. Stok cabang otomatis bertambah.`,
             });
           }
 

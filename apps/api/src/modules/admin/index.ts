@@ -213,7 +213,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       .innerJoin(products, eq(stockLogs.product_id, products.id))
       .where(eq(stockLogs.partner_id, params.partnerId))
       .orderBy(desc(stockLogs.created_at))
-      .limit(100);
+      .limit(500);
 
     return { data: rows };
   })
