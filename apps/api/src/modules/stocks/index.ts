@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
   partnerStocks,
@@ -127,6 +127,59 @@ export const stocksModule = new Elysia({ prefix: "/stocks" })
             : undefined,
         )
         .orderBy(desc(restockRecommendations.generated_at));
+
+      return { data: rows };
+    },
+    {
+      query: t.Object({
+        partner_id: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/logs",
+    async ({ headers, query, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+
+      let targetPartnerId: string | null = null;
+      if (user.role === "mitra") {
+        if (!user.partnerId) {
+          set.status = 400;
+          return { error: "User mitra belum terhubung ke cabang mitra" };
+        }
+        targetPartnerId = user.partnerId;
+      } else if (user.role === "admin") {
+        targetPartnerId = query.partner_id || null;
+      }
+
+      if (!targetPartnerId) {
+        set.status = 400;
+        return { error: "Cabang mitra belum ditentukan" };
+      }
+
+      const rows = await db
+        .select({
+          id: stockLogs.id,
+          partner_id: stockLogs.partner_id,
+          partner_name: partners.name,
+          product_id: stockLogs.product_id,
+          product_name: products.name,
+          qty_before: stockLogs.qty_before,
+          qty_after: stockLogs.qty_after,
+          delta: sql<number>`${stockLogs.qty_before} - ${stockLogs.qty_after}`,
+          source: stockLogs.source,
+          created_at: stockLogs.created_at,
+        })
+        .from(stockLogs)
+        .innerJoin(partners, eq(stockLogs.partner_id, partners.id))
+        .innerJoin(products, eq(stockLogs.product_id, products.id))
+        .where(eq(stockLogs.partner_id, targetPartnerId))
+        .orderBy(desc(stockLogs.created_at))
+        .limit(200);
 
       return { data: rows };
     },

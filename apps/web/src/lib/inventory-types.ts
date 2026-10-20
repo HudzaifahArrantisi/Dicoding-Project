@@ -68,3 +68,16 @@ export interface NotificationItem {
   read_at: string | null
   created_at: string
 }
+
+export interface StockLog {
+  id: number
+  partner_id: string
+  partner_name: string
+  product_id?: string
+  product_name: string
+  qty_before: number
+  qty_after: number
+  delta: number
+  source: string
+  created_at: string
+}

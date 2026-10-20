@@ -49,5 +49,16 @@ Copy-Item .env.example .env
 - Modul pembuatan ringkasan performa dan kebutuhan inventaris mingguan.
 - Dokumentasi hasil pengujian dan akurasi di folder `evals/`.
 
+## Pipeline Rekomendasi Stok
+
+Setelah Data Science membuat `data-science/data/cleaned_inventory_summary.csv`, jalankan dari root repo:
+
+```powershell
+python ai/jobs/analyze_stockouts.py
+python ai/jobs/smart_allocation.py
+```
+
+Job pertama menulis klasifikasi risiko ke `ai/data/stockout_risks.csv`. Job kedua memakai koneksi `ai_job` untuk memperbarui rekomendasi dan membuat alert admin. Terapkan migrasi `supabase/migrations/0009_inventory_ai_pipeline.sql` setelah migrasi awal; migrasi ini menyiapkan kunci UPSERT rekomendasi.
+
 ## 7. Aturan
 - Jangan pernah meng-commit file `.env`, API key, atau token ke repositori git.

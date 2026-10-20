@@ -15,12 +15,15 @@ import {
   Building2,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   ClipboardCheck,
   Clock,
+  Download,
+  BrainCircuit,
+  Database,
   Loader2,
   LogOut,
-  Save,
   Search,
   Store,
   Truck,
@@ -58,10 +61,480 @@ interface Metrics {
   criticalItemsCount: number
 }
 
-type AdminTab = 'stocks' | 'orders' | 'alerts'
+type AdminTab = 'stocks' | 'orders' | 'alerts' | 'data-science' | 'ai-insights'
+
+interface WeeklySummary {
+  total_logs_this_week: number
+  active_partners_count: number
+  total_units_consumed: number
+  daily_update_breakdown: Array<{ day: string; active_partners: number; log_count: number }>
+}
+
+interface StockLog {
+  id: number
+  partner_id: string
+  partner_name: string
+  product_name: string
+  qty_before: number
+  qty_after: number
+  delta: number
+  source: string
+  created_at: string
+}
+
+interface StockLogPartner {
+  partner_id: string
+  partner_name: string
+  log_count: number
+  latest_update: string
+}
+
+interface AIInsights {
+  frequent_stockouts: Array<{
+    partner_id: string; partner_name: string; product_id: string; product_name: string
+    current_qty: number; par_level: number; critical_log_count: number
+  }>
+  recommendations: Array<{
+    partner_id: string; partner_name: string; product_id: string; product_name: string
+    forecast_qty: number; suggested_qty: number; days_of_cover: string | null
+    model_version: string; generated_at: string
+  }>
+}
+
+async function adminFetch<T>(path: string): Promise<T> {
+  const host = window.location.hostname
+  const apiUrl =
+    host !== 'localhost' && host !== '127.0.0.1'
+      ? `${window.location.protocol}//${host}:3001`
+      : import.meta.env.VITE_API_URL || 'http://localhost:3001'
+  const token = localStorage.getItem('daisuki_token')
+  const response = await fetch(`${apiUrl}/admin/${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!response.ok) throw new Error('Data admin belum dapat dimuat.')
+  return response.json() as Promise<T>
+}
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Periksa koneksi, lalu coba lagi.'
+
+function formatDetailedDateTime(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '—'
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  if (Number.isNaN(date.getTime())) return String(dateInput)
+
+  const rawDate = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+
+  const datePart = rawDate
+    .split(' ')
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ''))
+    .join(' ')
+
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+
+  return `${datePart} jam ${hours}.${minutes}`
+}
+
+function DataSciencePanel({
+  summary,
+  summaryLoading,
+  summaryError,
+  logPartners,
+  logPartnersLoading,
+  logPartnersError,
+  totalPartners,
+  onRetry,
+  onExport,
+}: {
+  summary?: WeeklySummary
+  summaryLoading: boolean
+  summaryError: Error | null
+  logPartners: StockLogPartner[]
+  logPartnersLoading: boolean
+  logPartnersError: Error | null
+  totalPartners: number
+  onRetry: () => void
+  onExport: () => void
+}) {
+  const [selectedPartner, setSelectedPartner] = useState<StockLogPartner | null>(null)
+  const partnerLogs = useQuery<{ data: StockLog[] }>({
+    queryKey: ['admin-stock-logs-partner', selectedPartner?.partner_id],
+    queryFn: () => adminFetch(`stock-logs/partners/${selectedPartner?.partner_id}`),
+    enabled: selectedPartner !== null,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+  })
+
+  return (
+    <section className="space-y-5 animate-in fade-in slide-in-from-bottom-1 duration-300" aria-labelledby="data-science-title">
+      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 id="data-science-title" className="font-display text-2xl font-semibold text-ink-900">Data Science</h2>
+          <p className="mt-1 text-sm text-muted">Perkembangan laporan dan konsumsi stok · 7 hari terakhir</p>
+        </div>
+        <button
+          type="button"
+          onClick={onExport}
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-ink-900 px-3.5 text-sm font-semibold text-white transition-colors hover:bg-ink-700"
+        >
+          <Download className="size-4" aria-hidden="true" />
+          Export CSV
+        </button>
+      </div>
+      
+      {summaryError ? <ErrorState message={getErrorMessage(summaryError)} onRetry={onRetry} /> : null}
+      <div className="flex flex-wrap divide-y divide-line rounded-md border border-line bg-white sm:divide-x sm:divide-y-0">
+        <InsightMetric label="Total Log Minggu Ini" value={summaryLoading ? '…' : summary?.total_logs_this_week ?? 0} />
+        <InsightMetric label="Mitra Aktif Melapor" value={summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`} detail="Mitra aktif yang mengirim log dalam 7 hari" />
+        <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
+      </div>
+
+      {summary?.daily_update_breakdown.length ? (
+        <div className="rounded-md border border-line bg-white px-4 py-3">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-ink-900">Laporan harian</h3>
+            <span className="text-xs text-muted">Mitra unik</span>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-1">
+            {summary.daily_update_breakdown.map((day) => (
+              <div key={day.day} className="min-w-14 flex-1">
+                <p className="text-xs text-muted">{new Date(`${day.day}T12:00:00`).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' })}</p>
+                <p className="mt-1 font-display text-lg font-semibold tabular-nums text-ink-900">{day.active_partners}<span className="ml-1 text-[10px] font-normal text-muted">/ {totalPartners}</span></p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="overflow-hidden rounded-md border border-line bg-white">
+        <div className="border-b border-line px-4 py-3">
+          <h3 className="font-semibold text-ink-900">Log perkembangan per mitra</h3>
+          <p className="mt-1 text-sm text-muted">Klik nama mitra untuk melihat detail log perubahan stok.</p>
+        </div>
+        {logPartnersError ? <div className="p-4"><ErrorState message={getErrorMessage(logPartnersError)} onRetry={onRetry} /></div> : null}
+        {logPartnersLoading ? <LoadingState label="Memuat daftar mitra..." /> : null}
+        {!logPartnersLoading && !logPartnersError && logPartners.length === 0 ? <EmptyState title="Belum ada log stok" description="Mitra akan muncul setelah mengirim laporan perubahan stok." /> : null}
+        <div className="divide-y divide-line">
+          {logPartners.map((partner) => (
+            <button
+              key={partner.partner_id}
+              type="button"
+              onClick={() => setSelectedPartner(partner)}
+              className="group flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-700"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-ink-900 group-hover:text-ink-700">
+                  {partner.partner_name}
+                </span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  {partner.log_count} log tercatat · Terakhir: {formatDetailedDateTime(partner.latest_update)}
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="hidden text-xs font-medium text-muted group-hover:text-ink-900 sm:inline">
+                  Lihat detail
+                </span>
+                <ChevronRight className="size-4 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ink-900" aria-hidden="true" />
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <PartnerStockLogDialog
+        partner={selectedPartner}
+        open={selectedPartner !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedPartner(null)
+        }}
+        query={partnerLogs}
+      />
+    </section>
+  )
+}
+
+function InsightMetric({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
+  return (
+    <article className="min-w-[33.33%] flex-1 px-4 py-3 sm:px-5">
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">{value}</p>
+      {detail ? <p className="mt-1 text-xs text-muted">{detail}</p> : null}
+    </article>
+  )
+}
+
+function PartnerStockLogDialog({
+  partner,
+  open,
+  onOpenChange,
+  query,
+}: {
+  partner: StockLogPartner | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  query: UseQueryResult<{ data: StockLog[] }>
+}) {
+  const dbHealthQuery = useQuery({
+    queryKey: ['health-db'],
+    queryFn: async () => {
+      try {
+        const response = await api.health.db.get()
+        if (response.error) return false
+        return Boolean(response.data && 'ok' in response.data && response.data.ok)
+      } catch {
+        return false
+      }
+    },
+    enabled: open,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+  })
+
+  const isDbConnected = Boolean(dbHealthQuery.data)
+
+  if (!partner) return null
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45 animate-in fade-in duration-200" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-md border border-line bg-white shadow-xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+          <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-white p-4 sm:p-5">
+            <div>
+              <div className="flex items-center gap-2">
+                <Dialog.Title className="text-lg font-semibold text-ink-900">
+                  {partner.partner_name}
+                </Dialog.Title>
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                    dbHealthQuery.isLoading
+                      ? 'bg-ink-100 text-muted'
+                      : isDbConnected
+                        ? 'bg-ok-bg text-ok-fg'
+                        : 'bg-crit-bg text-crit-fg'
+                  }`}
+                  title={
+                    isDbConnected
+                      ? 'Koneksi database Neon aktif (/health/db)'
+                      : 'Koneksi database Neon terputus (/health/db)'
+                  }
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${
+                      dbHealthQuery.isLoading
+                        ? 'animate-pulse bg-ink-400'
+                        : isDbConnected
+                          ? 'animate-pulse bg-ok'
+                          : 'bg-crit'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {dbHealthQuery.isLoading
+                      ? 'Memeriksa DB...'
+                      : isDbConnected
+                        ? 'Live Sync'
+                        : 'DB Terputus'}
+                  </span>
+                </span>
+              </div>
+              <Dialog.Description className="mt-1 text-sm text-muted">
+                Riwayat perubahan stok cabang · {partner.log_count} log tercatat
+              </Dialog.Description>
+            </div>
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                aria-label="Tutup log perubahan"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line text-muted hover:bg-ink-50 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </Dialog.Close>
+          </div>
+
+          <div className="space-y-4 p-4 sm:p-5">
+            {!isDbConnected && !dbHealthQuery.isLoading ? (
+              <div className="flex items-center gap-2 rounded-md border border-crit-fg/20 bg-crit-bg p-3 text-xs text-crit-fg animate-in fade-in duration-200">
+                <AlertOctagon className="size-4 shrink-0" aria-hidden="true" />
+                <span>
+                  Koneksi database terputus (/health/db). Log perubahan stok mungkin tidak sinkron secara real-time.
+                </span>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-ink-50 px-3.5 py-2.5 text-xs text-muted">
+              <span>
+                Laporan Terakhir:{' '}
+                <strong className="font-semibold text-ink-900">
+                  {formatDetailedDateTime(partner.latest_update)}
+                </strong>
+              </span>
+              <span>
+                Total Catatan:{' '}
+                <strong className="font-semibold text-ink-900 tabular-nums">
+                  {partner.log_count} data
+                </strong>
+              </span>
+            </div>
+
+            {query.isLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <LoadingState label="Memuat riwayat log perubahan..." />
+              </div>
+            ) : query.isError ? (
+              <ErrorState
+                message={getErrorMessage(query.error)}
+                onRetry={() => void query.refetch()}
+              />
+            ) : !query.data?.data.length ? (
+              <EmptyState
+                title="Belum ada riwayat perubahan"
+                description="Cabang ini belum mencatat perubahan stok fisik."
+              />
+            ) : (
+              <div className="overflow-hidden rounded-md border border-line">
+                <div className="divide-y divide-line">
+                  {query.data.data.map((log) => {
+                    const isConsumption = log.delta > 0
+                    const isRestock = log.delta < 0
+                    const sourceLabel =
+                      log.source === 'manual_update'
+                        ? 'Laporan stok mitra'
+                        : log.source === 'order_received'
+                          ? 'Pesanan diterima'
+                          : 'Penyesuaian stok'
+
+                    return (
+                      <article
+                        key={log.id}
+                        className="flex flex-col gap-2 p-3.5 transition-colors hover:bg-ink-50/50 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink-900">
+                            {log.product_name}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                            <span className="font-medium text-ink-700">
+                              {formatDetailedDateTime(log.created_at)}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="inline-flex items-center rounded bg-ink-100 px-1.5 py-0.5 text-[11px] font-medium text-ink-700">
+                              {sourceLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 self-end sm:self-center">
+                          <div className="flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-sm tabular-nums">
+                            <span className="text-muted">{log.qty_before}</span>
+                            <span className="text-xs text-muted" aria-hidden="true">
+                              →
+                            </span>
+                            <span className="font-semibold text-ink-900">
+                              {log.qty_after}
+                            </span>
+                          </div>
+                          <span
+                            className={`min-w-16 rounded px-2 py-1 text-center text-xs font-bold tabular-nums ${
+                              isConsumption
+                                ? 'bg-crit-bg text-crit-fg'
+                                : isRestock
+                                  ? 'bg-ok-bg text-ok-fg'
+                                  : 'bg-ink-100 text-muted'
+                            }`}
+                          >
+                            {isConsumption
+                              ? `−${log.delta}`
+                              : isRestock
+                                ? `+${Math.abs(log.delta)}`
+                                : '0'}
+                          </span>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end border-t border-line bg-paper/60 px-4 py-3 sm:px-5">
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                className="min-h-10 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+              >
+                Tutup
+              </button>
+            </Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
+function AIInsightsPanel({
+  data,
+  loading,
+  error,
+  onRetry,
+}: {
+  data?: AIInsights
+  loading: boolean
+  error: Error | null
+  onRetry: () => void
+}) {
+  const stockouts = data?.frequent_stockouts ?? []
+  const recommendations = data?.recommendations ?? []
+  return (
+    <section className="space-y-5 animate-in fade-in slide-in-from-bottom-1 duration-300" aria-labelledby="ai-insights-title">
+      <div className="flex flex-wrap items-end justify-between gap-2 border-b border-line pb-4">
+        <div>
+          <h2 id="ai-insights-title" className="font-display text-2xl font-semibold text-ink-900">AI Insights</h2>
+          <p className="mt-1 text-sm text-muted">Cabang berisiko dan alokasi yang disarankan</p>
+        </div>
+        <span className="text-xs text-muted">Diperbarui otomatis · 15 detik</span>
+      </div>
+      {error ? <ErrorState message={getErrorMessage(error)} onRetry={onRetry} /> : null}
+      {loading ? <LoadingState label="Memuat analisis stok..." /> : (
+        <>
+          <div className="overflow-hidden rounded-md border border-line bg-white">
+            <div className="border-b border-line px-4 py-3">
+              <h3 className="font-semibold text-ink-900">Mitra sering kehabisan barang</h3>
+              <p className="mt-1 text-sm text-muted">Stok saat ini di bawah 20% par atau pernah mencapai kondisi kritis dalam 30 hari.</p>
+            </div>
+            {stockouts.length ? <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm">
+              <thead className="bg-ink-50 text-xs text-muted"><tr><th className="px-4 py-3 font-semibold">Cabang</th><th className="px-4 py-3 font-semibold">Produk</th><th className="px-4 py-3 text-right font-semibold">Stok / Par</th><th className="px-4 py-3 text-right font-semibold">Log kritis (30 hari)</th><th className="px-4 py-3 font-semibold">Kondisi</th></tr></thead>
+              <tbody className="divide-y divide-line">{stockouts.map((row) => <tr key={`${row.partner_id}-${row.product_id}`}><td className="px-4 py-3 font-medium text-ink-900">{row.partner_name}</td><td className="px-4 py-3">{row.product_name}</td><td className="num px-4 py-3 text-right tabular-nums">{row.current_qty} / {row.par_level}</td><td className="num px-4 py-3 text-right tabular-nums">{row.critical_log_count}</td><td className="px-4 py-3"><span className="rounded-sm bg-crit-bg px-2 py-1 text-xs font-semibold text-crit-fg">Kritis</span></td></tr>)}</tbody>
+            </table></div> : <EmptyState title="Tidak ada cabang kritis" description="Belum ada mitra yang memenuhi ambang stok kritis." />}
+          </div>
+
+          <div className="overflow-hidden rounded-md border border-line bg-white">
+            <div className="border-b border-line px-4 py-3">
+              <h3 className="font-semibold text-ink-900">Rekomendasi alokasi pengiriman</h3>
+              <p className="mt-1 text-sm text-muted">Saran terbaru berdasarkan stok cabang dan ketersediaan gudang pusat.</p>
+            </div>
+            {recommendations.length ? <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm">
+              <thead className="bg-ink-50 text-xs text-muted"><tr><th className="px-4 py-3 font-semibold">Cabang</th><th className="px-4 py-3 font-semibold">Produk</th><th className="px-4 py-3 text-right font-semibold">Disarankan</th><th className="px-4 py-3 text-right font-semibold">Cakupan</th><th className="px-4 py-3 font-semibold">Prioritas</th><th className="px-4 py-3 font-semibold">Dibuat</th></tr></thead>
+              <tbody className="divide-y divide-line">{recommendations.map((row, index) => {
+                const emergency = Number(row.days_of_cover ?? 0) < 2
+                return <tr key={`${row.partner_id}-${row.product_id}-${row.generated_at}-${index}`}><td className="px-4 py-3 font-medium text-ink-900">{row.partner_name}</td><td className="px-4 py-3">{row.product_name}</td><td className="num px-4 py-3 text-right font-semibold tabular-nums">{row.suggested_qty} pcs</td><td className="num px-4 py-3 text-right tabular-nums">{row.days_of_cover ?? '—'} hari</td><td className="px-4 py-3"><span className={`rounded-sm px-2 py-1 text-xs font-semibold ${emergency ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'}`}>{emergency ? 'Darurat' : 'Terjadwal'}</span></td><td className="px-4 py-3 text-muted">{new Date(row.generated_at).toLocaleString('id-ID')}</td></tr>
+              })}</tbody>
+            </table></div> : <EmptyState title="Belum ada rekomendasi" description="Jalankan pipeline AI untuk mengisi saran alokasi cabang." />}
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
 
 function AdminDashboard() {
   const { user, logout, isLoading: authLoading } = useAuth()
@@ -135,6 +608,48 @@ function AdminDashboard() {
     enabled: user?.role === 'admin',
     refetchInterval: 15_000,
   })
+  const weeklySummary = useQuery<{ data: WeeklySummary }>({
+    queryKey: ['admin-weekly-summary'],
+    queryFn: () => adminFetch('weekly-summary'),
+    enabled: user?.role === 'admin' && tab === 'data-science',
+    refetchInterval: 30_000,
+  })
+  const logPartners = useQuery<{ data: StockLogPartner[] }>({
+    queryKey: ['admin-stock-log-partners'],
+    queryFn: () => adminFetch('stock-logs/partners'),
+    enabled: user?.role === 'admin' && tab === 'data-science',
+    refetchInterval: 15_000,
+  })
+  const aiInsights = useQuery<{ data: AIInsights }>({
+    queryKey: ['admin-ai-insights'],
+    queryFn: () => adminFetch('ai-insights'),
+    enabled: user?.role === 'admin' && tab === 'ai-insights',
+    refetchInterval: 15_000,
+  })
+
+  const exportRawLogs = async () => {
+    try {
+      const host = window.location.hostname
+      const apiUrl =
+        host !== 'localhost' && host !== '127.0.0.1'
+          ? `${window.location.protocol}//${host}:3001`
+          : import.meta.env.VITE_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('daisuki_token')
+      const response = await fetch(`${apiUrl}/admin/stock-logs/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!response.ok) throw new Error('Ekspor log belum berhasil.')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'raw_stock_logs.csv'
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
 
   useEffect(() => {
     if (!orders.data) return
@@ -308,8 +823,9 @@ function AdminDashboard() {
           </div>
         </div>
         <nav
-          className="mx-auto grid max-w-7xl grid-cols-3 px-2 sm:flex sm:px-6 lg:px-8"
+          className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-3 sm:px-6 lg:px-8"
           aria-label="Menu admin"
+          style={{ scrollbarWidth: 'none' }}
         >
           <TabButton
             label="Stok"
@@ -332,47 +848,42 @@ function AdminDashboard() {
             critical
             onClick={() => setTab('alerts')}
           />
+          <TabButton
+            label="Data Science"
+            Icon={Database}
+            active={tab === 'data-science'}
+            onClick={() => setTab('data-science')}
+          />
+          <TabButton
+            label="AI Insights"
+            Icon={BrainCircuit}
+            active={tab === 'ai-insights'}
+            onClick={() => setTab('ai-insights')}
+          />
         </nav>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-        <section aria-labelledby="summary-title">
-          <p className="text-sm font-semibold text-ume">Ringkasan hari ini</p>
-          <h1
-            id="summary-title"
-            className="mt-1 text-2xl font-semibold text-ink-900"
-          >
-            Prioritas operasional
-          </h1>
-          {metrics.isError ? (
-            <div className="mt-4">
-              <ErrorState
-                message={getErrorMessage(metrics.error)}
-                onRetry={() => void metrics.refetch()}
-              />
+      <main className="mx-auto max-w-7xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+        {tab === 'stocks' ? (
+          <section aria-labelledby="summary-title" className="animate-in fade-in duration-300">
+            <div className="mb-3 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Ringkasan hari ini</p>
+                <h1 id="summary-title" className="mt-0.5 font-display text-xl font-semibold text-ink-900">Kondisi operasional</h1>
+              </div>
+              <span className="hidden text-xs text-muted sm:block">Diperbarui otomatis</span>
             </div>
-          ) : null}
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <Metric
-              label="Jumlah mitra"
-              value={metrics.data?.totalBranches}
-              Icon={Building2}
-            />
-            <Metric
-              label="Mitra yang Kurang barang"
-              value={metrics.data?.criticalBranches}
-              detail={`${metrics.data?.criticalItemsCount ?? 0} produk di bawah 20%`}
-              Icon={AlertOctagon}
-              critical
-            />
-            <Metric
-              label="Perlu approval"
-              value={metrics.data?.pendingOrders}
-              detail="Pesanan menunggu keputusan"
-              Icon={ClipboardCheck}
-            />
-          </div>
-        </section>
+            {metrics.isError ? (
+              <ErrorState message={getErrorMessage(metrics.error)} onRetry={() => void metrics.refetch()} />
+            ) : (
+              <div className="flex flex-wrap divide-y divide-line rounded-md border border-line bg-white sm:divide-x sm:divide-y-0">
+                <Metric label="Jumlah mitra" value={metrics.data?.totalBranches} />
+                <Metric label="Stok kritis" value={metrics.data?.criticalBranches} detail={`${metrics.data?.criticalItemsCount ?? 0} produk di bawah 20%`} critical />
+                <Metric label="Menunggu approval" value={metrics.data?.pendingOrders} detail="Pesanan mitra" />
+              </div>
+            )}
+          </section>
+        ) : null}
 
         {tab === 'stocks' ? (
           <StockPanel
@@ -443,6 +954,30 @@ function AdminDashboard() {
             onRead={(id) => markRead.mutate(id)}
           />
         ) : null}
+        {tab === 'data-science' ? (
+          <DataSciencePanel
+            summary={weeklySummary.data?.data}
+            summaryLoading={weeklySummary.isLoading}
+            summaryError={weeklySummary.error}
+            logPartners={logPartners.data?.data ?? []}
+            logPartnersLoading={logPartners.isLoading}
+            logPartnersError={logPartners.error}
+            totalPartners={metrics.data?.totalBranches ?? 0}
+            onRetry={() => {
+              void weeklySummary.refetch()
+              void logPartners.refetch()
+            }}
+            onExport={() => void exportRawLogs()}
+          />
+        ) : null}
+        {tab === 'ai-insights' ? (
+          <AIInsightsPanel
+            data={aiInsights.data?.data}
+            loading={aiInsights.isLoading}
+            error={aiInsights.error}
+            onRetry={() => void aiInsights.refetch()}
+          />
+        ) : null}
       </main>
     </div>
   )
@@ -468,7 +1003,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`flex min-h-12 items-center justify-center gap-2 border-b-2 px-3 text-sm font-semibold ${active ? 'border-ink-700 text-ink-700' : 'border-transparent text-muted'}`}
+      className={`flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-t-md border-b-2 px-3 text-sm font-semibold transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-700 ${active ? 'border-ink-700 bg-ink-50 text-ink-700' : 'border-transparent text-muted hover:bg-ink-50/70 hover:text-ink-900'}`}
     >
       <Icon className="size-4" aria-hidden="true" />
       {label}
@@ -487,30 +1022,20 @@ function Metric({
   label,
   value,
   detail,
-  Icon,
   critical = false,
 }: {
   label: string
   value?: number
   detail?: string
-  Icon: typeof Boxes
   critical?: boolean
 }) {
   return (
-    <article
-      className={`rounded-md border p-4 ${critical && value ? 'border-crit/30 bg-crit-bg' : 'border-line bg-white'}`}
-    >
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-muted">{label}</p>
-        <Icon
-          className={critical ? 'size-5 text-crit' : 'size-5 text-ink-500'}
-          aria-hidden="true"
-        />
-      </div>
-      <p className="mt-2 font-display text-4xl font-semibold tabular-nums text-ink-900">
+    <article className="min-w-[33.33%] flex-1 px-4 py-3 sm:px-5">
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className={`mt-1 font-display text-2xl font-semibold tabular-nums ${critical && value ? 'text-crit' : 'text-ink-900'}`}>
         {value ?? '–'}
       </p>
-      {detail ? <p className="mt-1 text-xs text-muted">{detail}</p> : null}
+      {detail ? <p className="mt-0.5 text-xs text-muted">{detail}</p> : null}
     </article>
   )
 }
@@ -570,52 +1095,6 @@ function StockPanel({
       ),
     )
   }, [centralProductsQuery.data])
-
-  const updateCentralStock = useMutation({
-    mutationFn: async ({
-      productId,
-      centralStock,
-    }: {
-      productId: string
-      centralStock: number
-    }) => {
-      const response = await api
-        .products({ id: productId })
-        ['central-stock'].put({ central_stock: centralStock })
-
-      if (response.error || 'error' in response.data) {
-        throw apiError(
-          response.error ?? response.data,
-          'Stok pusat belum diperbarui',
-        )
-      }
-    },
-    onSuccess: async (_data, variables) => {
-      toast.success('Stok pusat diperbarui')
-      dirtyCentralStockIds.current.delete(variables.productId)
-      setCentralStockDrafts((current) => ({
-        ...current,
-        [variables.productId]: String(variables.centralStock),
-      }))
-      await queryClient.invalidateQueries({
-        queryKey: ['admin-central-products'],
-      })
-    },
-    onError: (error: unknown) => toast.error(getErrorMessage(error)),
-  })
-
-  const saveCentralStock = (product: Product) => {
-    const value = Number(centralStockDrafts[product.id])
-    if (!Number.isInteger(value) || value < 0) {
-      toast.error('Stok harus berupa bilangan bulat, minimal 0')
-      return
-    }
-
-    updateCentralStock.mutate({
-      productId: product.id,
-      centralStock: value,
-    })
-  }
 
   const changedProducts = useMemo(() => {
     if (!centralProductsQuery.data) return []
@@ -761,7 +1240,7 @@ function StockPanel({
   }, [rows])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-1 duration-300">
       <section
         className="rounded-md border border-line bg-white p-5"
         aria-labelledby="central-stock-admin-title"
@@ -791,7 +1270,7 @@ function StockPanel({
                 <button
                   type="button"
                   onClick={resetAllDrafts}
-                  disabled={isBatchSaving || updateCentralStock.isPending}
+                  disabled={isBatchSaving}
                   className="inline-flex min-h-10 items-center justify-center rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted hover:bg-paper hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:opacity-40"
                 >
                   Batal
@@ -803,14 +1282,14 @@ function StockPanel({
               </>
             ) : null}
 
-            <button
+            {changedProducts.length > 0 ? (
+              <button
               type="button"
               id="btn-selesai-stok-pusat"
               onClick={saveAllCentralStock}
               disabled={
                 changedProducts.length === 0 ||
                 isBatchSaving ||
-                updateCentralStock.isPending ||
                 hasInvalidDraft
               }
               aria-label="Selesai dan simpan semua perubahan stok pusat"
@@ -831,15 +1310,11 @@ function StockPanel({
                     }`}
                     aria-hidden="true"
                   />
-                  <span>
-                    Selesai
-                    {changedProducts.length > 0
-                      ? ` (${changedProducts.length} Kategori)`
-                      : ''}
-                  </span>
+                  <span>Simpan perubahan ({changedProducts.length})</span>
                 </>
               )}
-            </button>
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -864,24 +1339,20 @@ function StockPanel({
             />
           </div>
         ) : null}
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 divide-y divide-line overflow-hidden rounded-md border border-line bg-white">
           {centralProductsQuery.data?.map((prod) => {
             const draft =
               centralStockDrafts[prod.id] ?? String(prod.central_stock)
             const parsedDraft = Number(draft)
             const isValid = Number.isInteger(parsedDraft) && parsedDraft >= 0
             const hasChanged = isValid && parsedDraft !== prod.central_stock
-            const isSaving =
-              updateCentralStock.isPending &&
-              updateCentralStock.variables.productId === prod.id
-
             return (
               <div
                 key={prod.id}
-                className={`rounded border p-3 transition-colors ${
+                className={`px-3 py-3 transition-colors duration-200 ${
                   hasChanged
-                    ? 'border-ink-900/40 bg-white ring-1 ring-ink-900/10'
-                    : 'border-line bg-paper/60'
+                    ? 'bg-warn-bg/40'
+                    : 'bg-white'
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -922,11 +1393,7 @@ function StockPanel({
                       step={1}
                       inputMode="numeric"
                       value={draft}
-                      disabled={
-                        isBatchSaving ||
-                        (updateCentralStock.isPending &&
-                          updateCentralStock.variables.productId === prod.id)
-                      }
+                      disabled={isBatchSaving}
                       onChange={(event) => {
                         dirtyCentralStockIds.current.add(prod.id)
                         setCentralStockDrafts((current) => ({
@@ -937,36 +1404,12 @@ function StockPanel({
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
                           event.preventDefault()
-                          if (changedProducts.length > 1) {
-                            void saveAllCentralStock()
-                          } else if (hasChanged) {
-                            saveCentralStock(prod)
-                          }
+                          void saveAllCentralStock()
                         }
                       }}
                       aria-invalid={!isValid}
                       className="min-h-11 min-w-0 flex-1 rounded-sm border border-line bg-white px-3 text-base font-semibold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:opacity-50"
                     />
-                    <button
-                      type="button"
-                      onClick={() => saveCentralStock(prod)}
-                      disabled={
-                        !hasChanged ||
-                        updateCentralStock.isPending ||
-                        isBatchSaving
-                      }
-                      aria-label={`Simpan stok pusat ${prod.name}`}
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm bg-ink-700 px-3 text-white hover:bg-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {isSaving ? (
-                        <Loader2
-                          className="size-4 animate-spin"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <Save className="size-4" aria-hidden="true" />
-                      )}
-                    </button>
                   </div>
                   {!isValid ? (
                     <p className="mt-1 text-xs text-crit-fg" role="alert">
@@ -979,51 +1422,6 @@ function StockPanel({
           })}
         </div>
 
-        {changedProducts.length > 0 ? (
-          <div className="mt-4 flex flex-col gap-2 rounded border border-warn/30 bg-warn-bg/50 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 text-xs text-ink-900">
-              <span className="size-2 rounded-full bg-warn animate-pulse" />
-              <span>
-                Ada <strong>{changedProducts.length} kategori produk</strong> dengan
-                perubahan stok pusat yang belum disimpan.
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={resetAllDrafts}
-                disabled={isBatchSaving || updateCentralStock.isPending}
-                className="rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted hover:bg-paper hover:text-ink-900"
-              >
-                Batalkan
-              </button>
-              <button
-                type="button"
-                onClick={saveAllCentralStock}
-                disabled={
-                  isBatchSaving ||
-                  updateCentralStock.isPending ||
-                  hasInvalidDraft
-                }
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-ink-700 disabled:opacity-40"
-              >
-                {isBatchSaving ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin" />
-                    <span>Menyimpan...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="size-3.5 text-emerald-400" />
-                    <span>
-                      Selesai & Simpan Semua ({changedProducts.length})
-                    </span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        ) : null}
       </section>
 
       <section
@@ -1205,7 +1603,7 @@ function StockPanel({
   )
 }
 
-type OrderCategoryTab = 'menunggu' | 'selesai' | 'ditolak' | 'semua'
+type OrderCategoryTab = 'menunggu' | 'selesai' | 'ditolak'
 
 function OrderPanel({
   query,
@@ -1275,7 +1673,7 @@ function OrderPanel({
   const selectedOrder = allOrders.find((order) => order.id === selectedOrderId)
 
   return (
-    <section aria-labelledby="orders-title" className="space-y-4">
+    <section aria-labelledby="orders-title" className="space-y-4 animate-in fade-in slide-in-from-bottom-1 duration-300">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="orders-title" className="text-xl font-semibold text-ink-900">
@@ -1289,16 +1687,16 @@ function OrderPanel({
       </div>
 
       <nav
-        className="flex flex-wrap items-center gap-2 border-b border-line pb-3"
+        className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-md border border-line bg-white p-1"
         aria-label="Kategori status pesanan"
       >
         <button
           type="button"
           onClick={() => setActiveCategory('menunggu')}
-          className={`inline-flex min-h-10 items-center gap-2 rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${
+          className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded px-3 py-1 text-sm font-semibold transition-colors ${
             activeCategory === 'menunggu'
-              ? 'bg-ink-900 text-white shadow-sm'
-              : 'border border-line bg-white text-muted hover:bg-ink-50 hover:text-ink-900'
+              ? 'bg-ink-900 text-white'
+              : 'text-muted hover:bg-ink-50 hover:text-ink-900'
           }`}
         >
           <Clock className="size-4" aria-hidden="true" />
@@ -1319,10 +1717,10 @@ function OrderPanel({
         <button
           type="button"
           onClick={() => setActiveCategory('selesai')}
-          className={`inline-flex min-h-10 items-center gap-2 rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${
+          className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded px-3 py-1 text-sm font-semibold transition-colors ${
             activeCategory === 'selesai'
-              ? 'bg-ink-900 text-white shadow-sm'
-              : 'border border-line bg-white text-muted hover:bg-ink-50 hover:text-ink-900'
+              ? 'bg-ink-900 text-white'
+              : 'text-muted hover:bg-ink-50 hover:text-ink-900'
           }`}
         >
           <CheckCircle2 className="size-4" aria-hidden="true" />
@@ -1343,10 +1741,10 @@ function OrderPanel({
         <button
           type="button"
           onClick={() => setActiveCategory('ditolak')}
-          className={`inline-flex min-h-10 items-center gap-2 rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${
+          className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded px-3 py-1 text-sm font-semibold transition-colors ${
             activeCategory === 'ditolak'
-              ? 'bg-ink-900 text-white shadow-sm'
-              : 'border border-line bg-white text-muted hover:bg-ink-50 hover:text-ink-900'
+              ? 'bg-ink-900 text-white'
+              : 'text-muted hover:bg-ink-50 hover:text-ink-900'
           }`}
         >
           <XCircle className="size-4" aria-hidden="true" />
@@ -1364,17 +1762,6 @@ function OrderPanel({
           ) : null}
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveCategory('semua')}
-          className={`inline-flex min-h-10 items-center gap-2 rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${
-            activeCategory === 'semua'
-              ? 'bg-ink-900 text-white shadow-sm'
-              : 'border border-line bg-white text-muted hover:bg-ink-50 hover:text-ink-900'
-          }`}
-        >
-          <span>Semua ({allOrders.length})</span>
-        </button>
       </nav>
 
       {query.isLoading ? <LoadingState label="Memuat pesanan..." /> : null}
@@ -1406,7 +1793,7 @@ function OrderPanel({
           />
         </div>
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="divide-y divide-line overflow-hidden rounded-md border border-line bg-white">
         {filteredOrders.map((order) => (
           <button
             key={order.id}
@@ -1415,7 +1802,7 @@ function OrderPanel({
             }}
             type="button"
             onClick={() => setSelectedOrderId(order.id)}
-            className="min-h-24 rounded-md border border-line bg-white p-4 text-left text-sm font-semibold text-ink-900 transition-colors hover:border-ink-500 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+            className="min-h-20 w-full bg-white px-4 py-3 text-left text-sm font-semibold text-ink-900 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-700"
           >
             <span className="block">
               {order.partner_name} meminta restock barang
@@ -1832,7 +2219,7 @@ function AlertPanel({
   onRead: (id: string) => void
 }) {
   return (
-    <section aria-labelledby="alerts-title">
+    <section aria-labelledby="alerts-title" className="animate-in fade-in slide-in-from-bottom-1 duration-300">
       <h2 id="alerts-title" className="text-xl font-semibold text-ink-900">
         Alert dan notifikasi
       </h2>
@@ -1856,11 +2243,11 @@ function AlertPanel({
           />
         </div>
       ) : null}
-      <div className="mt-4 space-y-3">
+      <div className="mt-4 divide-y divide-line overflow-hidden rounded-md border border-line bg-white">
         {query.data?.map((item) => (
           <article
             key={item.id}
-            className={`rounded-md border p-4 ${item.type === 'low_stock' ? 'border-crit/30 bg-crit-bg' : 'border-line bg-white'}`}
+            className={`p-4 ${item.type === 'low_stock' ? 'bg-crit-bg/50' : ''}`}
           >
             <div className="flex gap-3">
               <AlertOctagon

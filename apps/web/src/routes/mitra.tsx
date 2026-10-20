@@ -5,6 +5,9 @@ import {
   Boxes,
   CheckCircle2,
   ClipboardList,
+  Clock,
+  Download,
+  History,
   Loader2,
   LogOut,
   MessageSquare,
@@ -12,6 +15,7 @@ import {
   PackagePlus,
   Plus,
   Save,
+  Search,
   Store,
   UserRound,
 } from 'lucide-react'
@@ -31,11 +35,11 @@ import {
 import { api } from '@/lib/api'
 import { apiError, unwrapData } from '@/lib/api-response'
 import { useAuth, type User } from '@/lib/auth'
-import type { Order, Product, StockItem } from '@/lib/inventory-types'
+import type { Order, Product, StockItem, StockLog } from '@/lib/inventory-types'
 
 export const Route = createFileRoute('/mitra')({ component: MitraPortal })
 
-type MitraTab = 'stocks' | 'order' | 'history' | 'profile'
+type MitraTab = 'stocks' | 'order' | 'history' | 'logs' | 'profile'
 type DraftOrderItem = { product_id: string; qty: number }
 
 const tabItems: Array<{
@@ -46,8 +50,11 @@ const tabItems: Array<{
   { id: 'stocks', label: 'Stok', Icon: Store },
   { id: 'order', label: 'Pesan', Icon: PackagePlus },
   { id: 'history', label: 'Riwayat', Icon: ClipboardList },
+  { id: 'logs', label: 'Log', Icon: History },
   { id: 'profile', label: 'Profil', Icon: UserRound },
 ]
+
+const desktopTabItems = tabItems.filter((tab) => tab.id !== 'profile')
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -106,6 +113,17 @@ function MitraPortal() {
     refetchInterval: 10_000,
   })
 
+  const logsQuery = useQuery<StockLog[]>({
+    queryKey: ['mitra-stock-logs'],
+    queryFn: async () => {
+      const response = await api.stocks.logs.get({ query: {} })
+      return unwrapData<StockLog[]>(response, 'Log stok belum dapat dimuat')
+    },
+    enabled: user?.role === 'mitra',
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+  })
+
   useEffect(() => {
     if (!stocksQuery.data) return
     setEditedStocks(
@@ -135,7 +153,10 @@ function MitraPortal() {
       return response.data
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['mitra-stocks'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['mitra-stocks'] }),
+        queryClient.invalidateQueries({ queryKey: ['mitra-stock-logs'] }),
+      ])
       toast.success('Stok tersimpan')
     },
     onError: (error: unknown) => toast.error(errorMessage(error)),
@@ -181,6 +202,7 @@ function MitraPortal() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mitra-orders'] }),
         queryClient.invalidateQueries({ queryKey: ['mitra-stocks'] }),
+        queryClient.invalidateQueries({ queryKey: ['mitra-stock-logs'] }),
       ])
     },
     onError: (error: unknown) => toast.error(errorMessage(error)),
@@ -275,20 +297,35 @@ function MitraPortal() {
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted hover:bg-ink-50 hover:text-crit-fg"
-          >
-            <LogOut className="size-4" aria-hidden="true" />
-            Keluar
-          </button>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('profile')}
+              aria-current={activeTab === 'profile' ? 'page' : undefined}
+              className={`hidden min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition md:inline-flex ${
+                activeTab === 'profile'
+                  ? 'bg-ink-100 text-ink-900 ring-1 ring-ink-200'
+                  : 'text-muted hover:bg-ink-50 hover:text-ink-900'
+              }`}
+            >
+              <UserRound className="size-4" aria-hidden="true" />
+              <span>Profil</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted hover:bg-ink-50 hover:text-crit-fg"
+            >
+              <LogOut className="size-4" aria-hidden="true" />
+              <span>Keluar</span>
+            </button>
+          </div>
         </div>
         <nav
           className="mx-auto hidden max-w-4xl gap-1 px-6 md:flex"
           aria-label="Menu mitra"
         >
-          {tabItems.map(({ id, label, Icon }) => (
+          {desktopTabItems.map(({ id, label, Icon }) => (
             <button
               key={id}
               type="button"
@@ -351,11 +388,18 @@ function MitraPortal() {
           />
         ) : null}
 
+        {activeTab === 'logs' ? (
+          <MitraLogsPanel
+            query={logsQuery}
+            partnerName={user.partner_name ?? 'Mitra Cabang'}
+          />
+        ) : null}
+
         {activeTab === 'profile' ? <ProfilePanel user={user} /> : null}
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 md:hidden"
         aria-label="Menu mitra"
       >
         {tabItems.map(({ id, label, Icon }) => (
@@ -1363,3 +1407,380 @@ function ProfilePanel({ user }: { user: User }) {
     </section>
   )
 }
+
+function formatDetailedDateTime(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '—'
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  if (Number.isNaN(date.getTime())) return String(dateInput)
+
+  const rawDate = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+
+  const datePart = rawDate
+    .split(' ')
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ''))
+    .join(' ')
+
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+
+  return `${datePart} jam ${hours}.${minutes}`
+}
+
+function MitraInsightMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string | number
+  detail?: string
+}) {
+  return (
+    <article className="min-w-[50%] flex-1 px-4 py-3 sm:min-w-[25%] sm:px-5">
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">
+        {value}
+      </p>
+      {detail ? <p className="mt-1 text-xs text-muted">{detail}</p> : null}
+    </article>
+  )
+}
+
+interface MitraLogsPanelProps {
+  query: ReturnType<typeof useQuery<StockLog[]>>
+  partnerName: string
+}
+
+function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
+  const [search, setSearch] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState('all')
+  const [selectedSource, setSelectedSource] = useState('all')
+
+  const logs = useMemo(() => query.data ?? [], [query.data])
+
+  const totalConsumed = useMemo(
+    () => logs.reduce((sum, log) => (log.delta > 0 ? sum + log.delta : sum), 0),
+    [logs],
+  )
+
+  const totalReceived = useMemo(
+    () =>
+      logs.reduce(
+        (sum, log) => (log.delta < 0 ? sum + Math.abs(log.delta) : sum),
+        0,
+      ),
+    [logs],
+  )
+
+  const latestUpdate = logs[0]?.created_at
+
+  const productOptions = useMemo(() => {
+    const names = new Set(logs.map((log) => log.product_name))
+    return Array.from(names).sort()
+  }, [logs])
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      const matchesSearch =
+        search.trim() === '' ||
+        log.product_name.toLowerCase().includes(search.toLowerCase())
+
+      const matchesProduct =
+        selectedProduct === 'all' || log.product_name === selectedProduct
+
+      const matchesSource =
+        selectedSource === 'all' || log.source === selectedSource
+
+      return matchesSearch && matchesProduct && matchesSource
+    })
+  }, [logs, search, selectedProduct, selectedSource])
+
+  function handleExportCsv() {
+    if (!filteredLogs.length) {
+      toast.error('Tidak ada catatan log untuk diekspor')
+      return
+    }
+
+    const headers = [
+      'ID',
+      'Waktu',
+      'Produk',
+      'Tipe Aktivitas',
+      'Stok Sebelum',
+      'Stok Sesudah',
+      'Perubahan (Delta)',
+    ]
+
+    const rows = filteredLogs.map((log) => {
+      const sourceLabel =
+        log.source === 'manual_update'
+          ? 'Laporan stok mitra'
+          : log.source === 'order_received'
+            ? 'Pesanan diterima'
+            : 'Penyesuaian'
+      const deltaText =
+        log.delta > 0
+          ? `-${log.delta}`
+          : log.delta < 0
+            ? `+${Math.abs(log.delta)}`
+            : '0'
+
+      return [
+        log.id,
+        `"${formatDetailedDateTime(log.created_at)}"`,
+        `"${log.product_name.replace(/"/g, '""')}"`,
+        `"${sourceLabel}"`,
+        log.qty_before,
+        log.qty_after,
+        deltaText,
+      ]
+    })
+
+    const csvContent =
+      '\uFEFF' +
+      [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const fileName = `log_stok_${partnerName.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`
+
+    link.setAttribute('href', url)
+    link.setAttribute('download', fileName)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    toast.success('File CSV berhasil diunduh')
+  }
+
+  return (
+    <section aria-labelledby="mitra-logs-title" className="space-y-6 animate-in fade-in slide-in-from-bottom-1 duration-300">
+      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-ume">Data Science & Log Stok</p>
+          <h1
+            id="mitra-logs-title"
+            className="mt-1 font-display text-2xl font-semibold text-ink-900"
+          >
+            Riwayat Log Stok Cabang
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            Perkembangan laporan stok fisik dan riwayat konsumsi cabang Anda.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          disabled={filteredLogs.length === 0}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Download className="size-4" aria-hidden="true" />
+          Export CSV
+        </button>
+      </div>
+
+      <p className="-mt-3 inline-flex items-center gap-1.5 text-xs text-muted">
+        <Clock className="size-3.5" aria-hidden="true" />
+        Riwayat mutasi stok cabang · otomatis tersinkronisasi khusus cabang Anda
+      </p>
+
+      {query.isError ? (
+        <ErrorState
+          message={errorMessage(query.error)}
+          onRetry={() => void query.refetch()}
+        />
+      ) : null}
+
+      <div className="flex flex-wrap divide-y divide-line rounded-md border border-line bg-white shadow-xs sm:divide-x sm:divide-y-0">
+        <MitraInsightMetric
+          label="Total Log Tercatat"
+          value={query.isLoading ? '…' : logs.length}
+          detail="Seluruh riwayat perubahan stok"
+        />
+        <MitraInsightMetric
+          label="Total Unit Terjual/Keluar"
+          value={query.isLoading ? '…' : `${totalConsumed} pcs`}
+          detail="Konsumsi dari laporan stok fisik"
+        />
+        <MitraInsightMetric
+          label="Total Restock Masuk"
+          value={query.isLoading ? '…' : `${totalReceived} pcs`}
+          detail="Barang diterima dari pesanan selesai"
+        />
+        <MitraInsightMetric
+          label="Laporan Terakhir"
+          value={
+            query.isLoading
+              ? '…'
+              : latestUpdate
+                ? new Date(latestUpdate).toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : '—'
+          }
+          detail={latestUpdate ? formatDetailedDateTime(latestUpdate) : 'Belum ada data'}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-md border border-line bg-white shadow-xs">
+        <div className="flex flex-col gap-3 border-b border-line bg-ink-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-ink-900">
+                Riwayat Perubahan Stok
+              </h2>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-bg px-2 py-0.5 text-[11px] font-medium text-ok-fg">
+                <span className="size-1.5 animate-pulse rounded-full bg-ok" />
+                Live Sync
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted">
+              Menampilkan {filteredLogs.length} dari {logs.length} catatan log
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-44 flex-1 sm:w-52 sm:flex-none">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari produk..."
+                className="h-10 w-full rounded-md border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+              />
+            </div>
+
+            {productOptions.length > 1 ? (
+              <select
+                value={selectedProduct}
+                onChange={(e) => setSelectedProduct(e.target.value)}
+                className="h-10 rounded-md border border-line bg-white px-3 text-xs text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+                aria-label="Filter berdasarkan produk"
+              >
+                <option value="all">Semua Produk</option>
+                {productOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+
+            <select
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+              className="h-10 rounded-md border border-line bg-white px-3 text-xs text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+              aria-label="Filter berdasarkan tipe aktivitas"
+            >
+              <option value="all">Semua Tipe</option>
+              <option value="manual_update">Laporan Stok Fisik</option>
+              <option value="order_received">Pesanan Diterima (Restock)</option>
+            </select>
+          </div>
+        </div>
+
+        {query.isLoading ? (
+          <div className="p-8">
+            <LoadingState label="Memuat riwayat log perubahan..." />
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="p-8">
+            <EmptyState
+              title="Belum ada riwayat perubahan"
+              description="Catatan perubahan stok fisik harian dan konfirmasi penerimaan pesanan restock akan otomatis tercatat di sini."
+            />
+          </div>
+        ) : filteredLogs.length === 0 ? (
+          <div className="p-8">
+            <EmptyState
+              title="Tidak ada log yang cocok"
+              description="Coba ubah kata kunci pencarian atau reset filter untuk melihat catatan log lainnya."
+            />
+          </div>
+        ) : (
+          <div className="divide-y divide-line">
+            {filteredLogs.map((log) => {
+              const isConsumption = log.delta > 0
+              const isRestock = log.delta < 0
+              const sourceLabel =
+                log.source === 'manual_update'
+                  ? 'Laporan stok mitra'
+                  : log.source === 'order_received'
+                    ? 'Pesanan diterima'
+                    : 'Penyesuaian stok'
+
+              return (
+                <article
+                  key={log.id}
+                  className="flex flex-col gap-2 p-3.5 transition-colors hover:bg-ink-50/50 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-ink-900">
+                      {log.product_name}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                      <span className="font-medium text-ink-700">
+                        {formatDetailedDateTime(log.created_at)}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span
+                        className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                          log.source === 'order_received'
+                            ? 'bg-ok-bg text-ok-fg'
+                            : 'bg-ink-100 text-ink-700'
+                        }`}
+                      >
+                        {sourceLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 self-end sm:self-center">
+                    <div className="flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-sm tabular-nums">
+                      <span className="text-muted">{log.qty_before}</span>
+                      <span className="text-xs text-muted" aria-hidden="true">
+                        →
+                      </span>
+                      <span className="font-semibold text-ink-900">
+                        {log.qty_after}
+                      </span>
+                    </div>
+                    <span
+                      className={`min-w-16 rounded px-2 py-1 text-center text-xs font-bold tabular-nums ${
+                        isConsumption
+                          ? 'bg-crit-bg text-crit-fg'
+                          : isRestock
+                            ? 'bg-ok-bg text-ok-fg'
+                            : 'bg-ink-100 text-muted'
+                      }`}
+                    >
+                      {isConsumption
+                        ? `−${log.delta}`
+                        : isRestock
+                          ? `+${Math.abs(log.delta)}`
+                          : '0'}
+                    </span>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+

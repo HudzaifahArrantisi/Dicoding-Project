@@ -49,6 +49,16 @@ Copy-Item .env.example .env
 - Hasil prediksi yang sesuai dengan kontrak skema tabel `restock_recommendations`.
 - Dokumen metodologi dan laporan hasil evaluasi di folder `reports/`.
 
+## Pipeline Log Stok
+
+Simpan ekspor admin sebagai `data/raw_stock_logs.csv`, lalu jalankan dari root repo:
+
+```powershell
+python data-science/src/clean_logs.py
+```
+
+Script menulis `data/cleaned_inventory_summary.csv`. Untuk mendapatkan `current_qty` dan `par_level` aktual, isi `DATABASE_URL` pada `data-science/.env` dengan akun `ds_readonly`; tanpa koneksi, script membuat ringkasan berdasarkan log CSV dan memakai stok tertinggi yang tercatat sebagai perkiraan par level.
+
 ## 7. Aturan
 - Jangan pernah meng-commit data mentah klien ke repositori git.
 - Jangan meng-commit file model berukuran besar (`.pkl`, `.joblib`, `.pt`, dsb.).
