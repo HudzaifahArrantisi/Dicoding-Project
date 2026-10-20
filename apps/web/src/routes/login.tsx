@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { Building2, Loader2, Package, Store } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { InstallApp } from '@/components/install-app'
 
 export const Route = createFileRoute('/login')({ component: LoginPage })
 
@@ -155,6 +156,8 @@ function LoginPage() {
               Masuk ke portal
             </button>
           </form>
+
+          <InstallApp />
 
           <div className="mt-8 border-t border-line pt-6">
             <p className="text-sm font-semibold text-ink-900">Akses demo</p>

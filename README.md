@@ -43,15 +43,13 @@ Buka dan sesuaikan file berikut:
   PORT=3001
   DATABASE_URL=postgresql://<user>:<password>@<host-neon>/neondb?sslmode=require
   WEB_ORIGIN=http://localhost:3000
-  SUPABASE_URL=https://placeholder.supabase.co
+  JWT_SECRET=daisuki-super-secret-key-min-32-characters-change-in-production
   ```
   *(Ambil connection string `DATABASE_URL` dari dashboard [Neon DB](https://neon.tech) pada menu **Connect**).*
 
 - **`apps/web/.env`**:
   ```env
   VITE_API_URL=http://localhost:3001
-  VITE_SUPABASE_URL=https://placeholder.supabase.co
-  VITE_SUPABASE_ANON_KEY=placeholder-anon-key
   ```
 
 ---
@@ -60,7 +58,7 @@ Buka dan sesuaikan file berikut:
 
 1. **Buat Tabel Database**:  
    Buka menu **SQL Editor** di console database Anda ([Neon DB](https://neon.tech)), lalu salin dan jalankan seluruh isi file skema database terbaru:  
-   👉 **`supabase/migrations/0001_init.sql`**
+   👉 **`neon/migrations/0001_init.sql`**
 
 2. **Isi Data Awal (Seeding)**:  
    Setelah tabel berhasil dibuat, isi data awal demo (cabang, 4 produk resmi, dan akun demo) dengan perintah:

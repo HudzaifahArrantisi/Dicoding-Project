@@ -1,7 +1,7 @@
 -- ============================================================================
 -- DAISUKI B2B INVENTORY & ORDER MANAGEMENT SYSTEM
 -- Unified Database Schema (Single Source of Truth)
--- Kompatibel: PostgreSQL / Neon DB / Supabase
+-- Kompatibel: PostgreSQL / Neon DB
 -- ============================================================================
 
 -- 1. EKSTENSI
@@ -218,11 +218,3 @@ create policy ai_manage_restock_recommendations on restock_recommendations for a
 
 drop policy if exists ai_manage_stocks on partner_stocks;
 create policy ai_manage_stocks on partner_stocks for all to ai_job using (true) with check (true);
-
--- 6. REALTIME PUBLICATION (Opsional jika memakai Supabase Realtime)
-do $$
-begin
-  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table partner_stocks, notifications, orders;
-  end if;
-end $$;

@@ -14,6 +14,8 @@ import {
   Boxes,
   Building2,
   Calendar,
+  Check,
+  CheckCheck,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -1253,8 +1255,24 @@ function AdminDashboard() {
       if (response.error)
         throw apiError(response.error, 'Notifikasi belum ditandai')
     },
-    onSuccess: async () =>
-      queryClient.invalidateQueries({ queryKey: ['admin-notifications'] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-notifications'] })
+      await queryClient.invalidateQueries({ queryKey: ['admin-metrics'] })
+    },
+  })
+
+  const markAllRead = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(
+        ids.map((id) => api.notifications({ id }).read.patch()),
+      )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-notifications'] })
+      await queryClient.invalidateQueries({ queryKey: ['admin-metrics'] })
+      toast.success('Semua alert berhasil ditandai sudah dibaca')
+    },
+    onError: (error: unknown) => toast.error(getErrorMessage(error)),
   })
 
   const partnerNames = useMemo(
@@ -1474,7 +1492,9 @@ function AdminDashboard() {
             query={notifications}
             orders={orders.data ?? []}
             marking={markRead.isPending}
+            isMarkingAll={markAllRead.isPending}
             onRead={(id) => markRead.mutate(id)}
+            onReadAll={(ids) => markAllRead.mutate(ids)}
             onViewOrderDetail={handleViewOrderDetail}
             onNavigateToStock={handleNavigateToStock}
           />
@@ -2848,9 +2868,27 @@ interface ParsedAlertInfo {
   title: string
   body: string
   partnerName: string
+  productName?: string
   type: 'new_order' | 'order_received' | 'low_stock' | 'other'
+  typeLabel: string
+  typeBadgeColor: string
   relatedOrderId: string | null
   matchedOrder: Order | null
+}
+
+function formatSelectedDate(dateStr: string): string {
+  if (!dateStr) return ''
+  try {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const d = new Date(year, month - 1, day)
+    return new Intl.DateTimeFormat('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(d)
+  } catch {
+    return dateStr
+  }
 }
 
 function parseAndFormatAlert(
@@ -2913,6 +2951,8 @@ function parseAndFormatAlert(
       body: cleanBody,
       partnerName,
       type: 'new_order',
+      typeLabel: 'Permohonan Restok',
+      typeBadgeColor: 'bg-amber-50 text-amber-700 border-amber-200/80',
       relatedOrderId: matchedOrder?.id ?? null,
       matchedOrder,
     }
@@ -2924,6 +2964,8 @@ function parseAndFormatAlert(
       body: `Mitra telah mengonfirmasi bahwa kiriman paket barang restok telah tiba di cabang. Stok cabang telah otomatis bertambah.`,
       partnerName,
       type: 'order_received',
+      typeLabel: 'Barang Diterima',
+      typeBadgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
       relatedOrderId: matchedOrder?.id ?? null,
       matchedOrder,
     }
@@ -2931,13 +2973,31 @@ function parseAndFormatAlert(
 
   if (isLowStock) {
     const cleanBody = rawBody.replace(/PO-[A-Za-z0-9-]+/gi, '').trim()
+    let productName = ''
+    const titleMatch = rawTitle.match(/Stok Kritis:\s*(.+)/i)
+    if (titleMatch) {
+      productName = titleMatch[1].trim()
+    } else {
+      const bodyMatch = rawBody.match(/Stok\s+(.+?)\s+di\s+/i)
+      if (bodyMatch) {
+        productName = bodyMatch[1].trim()
+      }
+    }
+
+    const title = productName
+      ? `Stok ${productName} di ${partnerName} menipis`
+      : `Stok barang di Mitra ${partnerName} menipis`
+
     return {
-      title: `Stok barang di Mitra ${partnerName} kritis / menipis`,
+      title,
       body:
         cleanBody ||
-        `Sisa stok di cabang ${partnerName} berada di bawah batas aman (20% par level). Segera siapkan restok.`,
+        `Sisa stok ${productName || 'barang'} di cabang ${partnerName} berada di bawah batas aman (20% par level). Segera siapkan restok.`,
       partnerName,
+      productName,
       type: 'low_stock',
+      typeLabel: 'Stok Kritis',
+      typeBadgeColor: 'bg-rose-50 text-rose-700 border-rose-200/80',
       relatedOrderId: null,
       matchedOrder: null,
     }
@@ -2957,6 +3017,8 @@ function parseAndFormatAlert(
     body: cleanBody,
     partnerName,
     type: 'other',
+    typeLabel: 'Informasi',
+    typeBadgeColor: 'bg-ink-50 text-ink-700 border-line',
     relatedOrderId: matchedOrder?.id ?? null,
     matchedOrder,
   }
@@ -2966,14 +3028,18 @@ function AlertPanel({
   query,
   orders,
   marking,
+  isMarkingAll,
   onRead,
+  onReadAll,
   onViewOrderDetail,
   onNavigateToStock,
 }: {
   query: UseQueryResult<NotificationItem[]>
   orders: Order[]
   marking: boolean
+  isMarkingAll?: boolean
   onRead: (id: string) => void
+  onReadAll?: (ids: string[]) => void
   onViewOrderDetail: (orderId: string, category?: OrderCategoryTab) => void
   onNavigateToStock: (partnerName?: string) => void
 }) {
@@ -2990,6 +3056,10 @@ function AlertPanel({
   )
 
   const allAlerts = query.data ?? []
+  const unreadCount = useMemo(
+    () => allAlerts.filter((item) => !item.read_at).length,
+    [allAlerts],
+  )
 
   const filteredNotifications = useMemo(() => {
     const now = new Date()
@@ -3007,7 +3077,9 @@ function AlertPanel({
         const matchTitle = parsed.title.toLowerCase().includes(q)
         const matchBody = parsed.body.toLowerCase().includes(q)
         const matchPartner = (item.partner_name ?? '').toLowerCase().includes(q)
-        if (!matchTitle && !matchBody && !matchPartner) return false
+        const matchProduct = (parsed.productName ?? '').toLowerCase().includes(q)
+        if (!matchTitle && !matchBody && !matchPartner && !matchProduct)
+          return false
       }
 
       if (readFilter === 'unread' && item.read_at) return false
@@ -3057,144 +3129,242 @@ function AlertPanel({
       aria-labelledby="alerts-title"
       className="space-y-4 animate-in fade-in slide-in-from-bottom-1 duration-300"
     >
+      {/* Header Halaman */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 id="alerts-title" className="text-xl font-semibold text-ink-900">
-            Alert dan Notifikasi
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 id="alerts-title" className="text-xl font-bold font-display text-ink-900">
+              Alert dan Notifikasi
+            </h2>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Live Sync
+            </span>
+          </div>
           <p className="mt-1 text-sm text-muted">
             Permohonan restock cabang, barang diterima, dan peringatan stok
             kritis tercatat di sini.
           </p>
         </div>
+
         {allAlerts.length > 0 ? (
-          <span className="text-xs text-muted font-medium self-start sm:self-auto">
-            {filteredNotifications.length} dari {allAlerts.length} alert
-          </span>
+          <div className="flex items-center gap-2 self-start sm:self-auto text-xs">
+            <span className="font-medium text-muted">
+              Menampilkan <span className="font-bold text-ink-900">{filteredNotifications.length}</span> dari {allAlerts.length} alert
+            </span>
+          </div>
         ) : null}
       </div>
 
-      {/* Filter Toolbar: Pencarian, Waktu/Hari/Tanggal/Tahun, Kategori */}
-      <div className="rounded-lg border border-line bg-white p-3.5 shadow-2xs space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Pencarian Nama Mitra / Kata Kunci */}
-          <div className="relative">
+      {/* Filter Toolbar: Smooth, Clean, & Compact */}
+      <div className="rounded-xl border border-line bg-white p-4 shadow-2xs space-y-3.5">
+        {/* Baris 1: Pencarian & Segmented Status Pills */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Input Pencarian dengan Smooth Clear Button */}
+          <div className="relative flex-1 min-w-[240px]">
             <Search
-              className="size-4 text-muted absolute left-3 top-1/2 -translate-y-1/2"
+              className="size-4 text-muted absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
               aria-hidden="true"
             />
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari nama mitra atau alert..."
-              className="w-full min-h-10 rounded-md border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-ink-700"
+              placeholder="Cari nama mitra, produk, atau alert..."
+              className="w-full h-10 rounded-lg border border-line/80 bg-ink-50/40 hover:bg-ink-50/70 focus:bg-white pl-9.5 pr-8 text-xs font-medium text-ink-900 placeholder:text-muted transition-all focus:border-ink-400 focus:outline-none focus:ring-2 focus:ring-ink-900/5"
             />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink-900 p-0.5 rounded transition-colors"
+                title="Hapus pencarian"
+              >
+                <X className="size-3.5" />
+              </button>
+            ) : null}
           </div>
 
-          {/* Filter Preset Waktu / Hari */}
-          <div>
-            <select
-              value={timePreset}
-              onChange={(e) => {
-                setTimePreset(e.target.value as typeof timePreset)
-                if (e.target.value !== 'semua') setSelectedDate('')
-              }}
-              className="w-full min-h-10 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
-              aria-label="Filter rentang waktu"
-            >
-              <option value="semua">Semua Waktu</option>
-              <option value="hari_ini">Hari Ini</option>
-              <option value="kemarin">Kemarin</option>
-              <option value="7_hari">7 Hari Terakhir</option>
-              <option value="30_hari">30 Hari Terakhir</option>
-            </select>
-          </div>
-
-          {/* Filter Tanggal & Tahun Spesifik (Date Picker) */}
-          <div className="relative flex items-center">
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value)
-                if (e.target.value) setTimePreset('semua')
-              }}
-              className="w-full min-h-10 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
-              title="Filter spesifik berdasarkan hari, tanggal, bulan, tahun"
-              aria-label="Filter tanggal spesifik"
-            />
-          </div>
-
-          {/* Filter Tipe Notifikasi */}
-          <div>
-            <select
-              value={typeFilter}
-              onChange={(e) =>
-                setTypeFilter(e.target.value as typeof typeFilter)
-              }
-              className="w-full min-h-10 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
-              aria-label="Filter jenis alert"
-            >
-              <option value="semua">Semua Jenis Alert</option>
-              <option value="new_order">Permohonan Restok</option>
-              <option value="order_received">Barang Diterima</option>
-              <option value="low_stock">Stok Kritis</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Baris Status Baca & Reset Filter */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-line/60">
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="font-semibold text-muted text-[11px] uppercase tracking-wider mr-1">
-              Status:
-            </span>
+          {/* Segmented Control Status Baca */}
+          <div className="inline-flex p-1 rounded-lg bg-ink-50/70 border border-line/60 gap-1 shrink-0 self-start sm:self-auto">
             <button
               type="button"
               onClick={() => setReadFilter('semua')}
-              className={`rounded-full px-2.5 py-1 font-semibold text-[11px] transition-colors ${
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                 readFilter === 'semua'
-                  ? 'bg-ink-900 text-white'
-                  : 'bg-paper text-muted hover:text-ink-900'
+                  ? 'bg-white text-ink-900 shadow-2xs'
+                  : 'text-muted hover:text-ink-900'
               }`}
             >
-              Semua
+              Semua ({allAlerts.length})
             </button>
             <button
               type="button"
               onClick={() => setReadFilter('unread')}
-              className={`rounded-full px-2.5 py-1 font-semibold text-[11px] transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                 readFilter === 'unread'
-                  ? 'bg-ume text-white'
-                  : 'bg-paper text-muted hover:text-ink-900'
+                  ? 'bg-white text-ink-900 shadow-2xs'
+                  : 'text-muted hover:text-ink-900'
               }`}
             >
-              Belum Dibaca
+              <span>Belum Dibaca</span>
+              {unreadCount > 0 ? (
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                    readFilter === 'unread'
+                      ? 'bg-ume text-white'
+                      : 'bg-ume/15 text-ume'
+                  }`}
+                >
+                  {unreadCount}
+                </span>
+              ) : null}
             </button>
             <button
               type="button"
               onClick={() => setReadFilter('read')}
-              className={`rounded-full px-2.5 py-1 font-semibold text-[11px] transition-colors ${
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
                 readFilter === 'read'
-                  ? 'bg-ink-700 text-white'
-                  : 'bg-paper text-muted hover:text-ink-900'
+                  ? 'bg-white text-ink-900 shadow-2xs'
+                  : 'text-muted hover:text-ink-900'
               }`}
             >
               Sudah Dibaca
             </button>
           </div>
+        </div>
 
-          {hasActiveFilters ? (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-warn hover:underline"
-            >
-              <RotateCcw className="size-3" />
-              <span>Reset Semua Filter</span>
-            </button>
-          ) : null}
+        {/* Baris 2: Filter Waktu (Pill Presets + Elegant Date Picker) & Jenis Alert */}
+        <div className="flex flex-col gap-3 pt-3 border-t border-line/60 lg:flex-row lg:items-center lg:justify-between">
+          {/* Quick Time Pills + Smooth Date Selector */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted mr-1 flex items-center gap-1">
+              <Clock className="size-3 text-muted" aria-hidden="true" />
+              <span>Waktu:</span>
+            </span>
+
+            {(
+              [
+                { id: 'semua', label: 'Semua' },
+                { id: 'hari_ini', label: 'Hari Ini' },
+                { id: 'kemarin', label: 'Kemarin' },
+                { id: '7_hari', label: '7 Hari' },
+                { id: '30_hari', label: '30 Hari' },
+              ] as const
+            ).map((preset) => {
+              const isActive = timePreset === preset.id && !selectedDate
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => {
+                    setTimePreset(preset.id)
+                    setSelectedDate('')
+                  }}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-ink-900 text-white shadow-2xs'
+                      : 'bg-paper text-muted hover:bg-ink-100 hover:text-ink-900 border border-line/60'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              )
+            })}
+
+            {/* Smooth Custom Date Trigger (Disguised Native Picker) */}
+            <div className="relative inline-flex items-center">
+              {selectedDate ? (
+                <div className="inline-flex items-center gap-1.5 rounded-md border border-ume/30 bg-ume/10 px-2.5 py-1 text-xs font-bold text-ume shadow-2xs animate-in fade-in">
+                  <Calendar className="size-3 text-ume" aria-hidden="true" />
+                  <span>{formatSelectedDate(selectedDate)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate('')}
+                    className="rounded p-0.5 hover:bg-ume/20 text-ume transition-colors"
+                    title="Hapus filter tanggal spesifik"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ) : (
+                <label className="relative inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-line/80 bg-paper px-2.5 py-1 text-xs font-semibold text-muted hover:text-ink-900 hover:bg-ink-100 transition-colors">
+                  <Calendar className="size-3 text-muted" aria-hidden="true" />
+                  <span>Pilih Tanggal</span>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => {
+                      setSelectedDate(e.target.value)
+                      if (e.target.value) setTimePreset('semua')
+                    }}
+                    className="absolute inset-0 size-full cursor-pointer opacity-0"
+                    title="Pilih tanggal spesifik (hari, bulan, tahun)"
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+
+          {/* Jenis Alert Dropdown & Tombol Aksi Tambahan */}
+          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+            {/* Filter Jenis Alert Dropdown */}
+            <div className="relative">
+              <select
+                value={typeFilter}
+                onChange={(e) =>
+                  setTypeFilter(e.target.value as typeof typeFilter)
+                }
+                className="h-8 rounded-md border border-line/80 bg-paper hover:bg-ink-100 px-2.5 pr-7 text-xs font-semibold text-ink-800 transition-colors cursor-pointer appearance-none focus:outline-none"
+                aria-label="Filter kategori jenis alert"
+              >
+                <option value="semua">Semua Kategori</option>
+                <option value="low_stock">Stok Kritis</option>
+                <option value="new_order">Permohonan Restok</option>
+                <option value="order_received">Barang Diterima</option>
+              </select>
+              <ChevronDown
+                className="size-3 text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
+                aria-hidden="true"
+              />
+            </div>
+
+            {/* Tombol Reset Filter */}
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-warn hover:bg-warn-bg/50 transition-colors"
+                title="Reset semua filter ke kondisi awal"
+              >
+                <RotateCcw className="size-3" aria-hidden="true" />
+                <span>Reset</span>
+              </button>
+            ) : null}
+
+            {/* Tombol Batch "Tandai Semua Dibaca" */}
+            {unreadCount > 0 && onReadAll ? (
+              <button
+                type="button"
+                disabled={isMarkingAll || marking}
+                onClick={() => {
+                  const unreadIds = allAlerts
+                    .filter((a) => !a.read_at)
+                    .map((a) => a.id)
+                  if (unreadIds.length > 0) onReadAll(unreadIds)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md bg-paper border border-line/80 hover:bg-ink-100 px-2.5 py-1 text-xs font-semibold text-ink-800 transition-colors disabled:opacity-50"
+                title="Tandai semua alert yang belum dibaca menjadi sudah dibaca"
+              >
+                {isMarkingAll ? (
+                  <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                ) : (
+                  <CheckCheck className="size-3.5 text-ok" aria-hidden="true" />
+                )}
+                <span>Tandai Semua Dibaca</span>
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -3216,8 +3386,8 @@ function AlertPanel({
         </div>
       ) : null}
       {!query.isLoading && allAlerts.length > 0 && filteredNotifications.length === 0 ? (
-        <div className="rounded-lg border border-line bg-white p-8 text-center">
-          <Filter className="size-8 mx-auto text-muted/60" />
+        <div className="rounded-xl border border-line bg-white p-8 text-center shadow-2xs">
+          <Filter className="size-8 mx-auto text-muted/60" aria-hidden="true" />
           <h3 className="mt-2 text-sm font-semibold text-ink-900">
             Tidak ada alert yang cocok
           </h3>
@@ -3227,14 +3397,14 @@ function AlertPanel({
           <button
             type="button"
             onClick={resetFilters}
-            className="mt-3 inline-flex min-h-9 items-center rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-paper"
+            className="mt-3 inline-flex min-h-9 items-center rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-paper transition-colors"
           >
             Bersihkan Filter
           </button>
         </div>
       ) : null}
 
-      {/* Daftar Kartu Alert */}
+      {/* Daftar Kartu Alert yang Bersih, Rapi, & Selaras */}
       <div className="space-y-3">
         {filteredNotifications.map((item) => {
           const parsed = parseAndFormatAlert(item, orders)
@@ -3243,72 +3413,100 @@ function AlertPanel({
           return (
             <article
               key={item.id}
-              className={`rounded-lg border p-4 transition-all duration-200 ${
+              className={`group relative rounded-xl border p-4 sm:p-4.5 transition-all duration-200 ${
                 isUnread
-                  ? 'border-line bg-white shadow-2xs border-l-4 border-l-ume'
-                  : 'border-line/70 bg-ink-50/40 text-muted'
+                  ? 'border-line/90 bg-white shadow-2xs hover:border-ink-300 hover:shadow-xs'
+                  : 'border-line/60 bg-white/60 hover:bg-white hover:border-line hover:shadow-2xs text-muted'
               }`}
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3 flex-1 min-w-0">
-                  {/* Icon Tipe */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                {/* Bagian Kiri: Ikon Visual + Teks Notifikasi */}
+                <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                  {/* Ikon Kategori Alert dengan Background Halus */}
                   <div className="shrink-0 mt-0.5">
                     {parsed.type === 'new_order' ? (
-                      <span className="grid size-9 place-items-center rounded-md bg-amber-50 text-amber-700 border border-amber-200">
-                        <Clock className="size-4" aria-hidden="true" />
+                      <span className="grid size-10 place-items-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200/80 shadow-2xs">
+                        <Clock className="size-4.5" aria-hidden="true" />
                       </span>
                     ) : parsed.type === 'order_received' ? (
-                      <span className="grid size-9 place-items-center rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <CheckCircle2 className="size-4" aria-hidden="true" />
+                      <span className="grid size-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/80 shadow-2xs">
+                        <CheckCircle2 className="size-4.5" aria-hidden="true" />
                       </span>
                     ) : parsed.type === 'low_stock' ? (
-                      <span className="grid size-9 place-items-center rounded-md bg-rose-50 text-rose-700 border border-rose-200">
-                        <AlertOctagon className="size-4" aria-hidden="true" />
+                      <span className="grid size-10 place-items-center rounded-xl bg-rose-50 text-rose-600 border border-rose-200/80 shadow-2xs">
+                        <AlertOctagon className="size-4.5" aria-hidden="true" />
                       </span>
                     ) : (
-                      <span className="grid size-9 place-items-center rounded-md bg-ink-100 text-ink-700 border border-line">
-                        <Bell className="size-4" aria-hidden="true" />
+                      <span className="grid size-10 place-items-center rounded-xl bg-ink-50 text-ink-600 border border-line shadow-2xs">
+                        <Bell className="size-4.5" aria-hidden="true" />
                       </span>
                     )}
                   </div>
 
-                  {/* Isi Pesan Alert */}
+                  {/* Konten Judul, Body, & Metadata */}
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-bold text-ink-900 text-sm sm:text-base leading-snug">
+                      <h3 className="font-bold text-ink-900 text-sm sm:text-base leading-snug group-hover:text-ink-950 transition-colors">
                         {parsed.title}
                       </h3>
+
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${parsed.typeBadgeColor}`}
+                      >
+                        {parsed.typeLabel}
+                      </span>
+
                       {isUnread ? (
-                        <span className="rounded bg-ume/10 px-1.5 py-0.5 text-[10px] font-bold text-ume">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-ume/10 px-2 py-0.5 text-[10px] font-bold text-ume">
+                          <span className="size-1.5 rounded-full bg-ume animate-pulse" />
                           Baru
                         </span>
                       ) : null}
                     </div>
 
-                    <p className="mt-1 text-xs sm:text-sm text-ink-700 leading-relaxed">
+                    <p className="mt-1 text-xs sm:text-sm text-ink-700 leading-relaxed font-normal">
                       {parsed.body}
                     </p>
 
                     <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
                       {parsed.partnerName ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-paper border border-line px-2 py-0.5 text-xs font-semibold text-ink-800">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-paper border border-line/70 px-2.5 py-0.5 text-[11px] font-semibold text-ink-800">
                           <Store className="size-3 text-muted" aria-hidden="true" />
                           <span>Cabang: {parsed.partnerName}</span>
                         </span>
                       ) : null}
 
                       {/* Detail Waktu, Hari, Tanggal, Jam */}
-                      <span className="inline-flex items-center gap-1 text-xs text-muted font-medium">
-                        <Calendar className="size-3.5" aria-hidden="true" />
+                      <span className="inline-flex items-center gap-1 text-[11px] text-muted font-medium">
+                        <Clock className="size-3 text-muted" aria-hidden="true" />
                         <span>{formatDetailedDateTime(item.created_at)}</span>
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Tombol Aksi */}
-                <div className="flex flex-wrap items-center gap-2 self-start shrink-0 sm:flex-col sm:items-end">
-                  {/* Tombol Detail Pesan jika permohonan restok */}
+                {/* Bagian Kanan: Tombol Aksi yang Selaras dan Berjajar Rapi */}
+                <div className="flex items-center gap-2 self-start sm:self-center shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-line/60">
+                  {/* Status Sudah Dibaca / Tombol Tandai Dibaca */}
+                  {isUnread ? (
+                    <button
+                      type="button"
+                      disabled={marking}
+                      onClick={() => onRead(item.id)}
+                      className="inline-flex min-h-9 items-center gap-1 rounded-md border border-line/80 bg-white px-2.5 py-1.5 text-xs font-semibold text-muted hover:bg-paper hover:text-ink-900 transition-colors disabled:opacity-40"
+                      title="Tandai sudah dibaca"
+                    >
+                      <Check className="size-3.5 text-ok" aria-hidden="true" />
+                      <span>Tandai dibaca</span>
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-muted font-medium px-2 py-1">
+                      <Check className="size-3 text-ok/70" aria-hidden="true" />
+                      <span>Sudah dibaca</span>
+                    </span>
+                  )}
+
+                  {/* Tombol Aksi Utama Berdasarkan Tipe Alert */}
                   {parsed.type === 'new_order' ? (
                     <button
                       type="button"
@@ -3319,56 +3517,37 @@ function AlertPanel({
                           onViewOrderDetail('', 'menunggu')
                         }
                       }}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-ink-700 transition-colors focus-visible:outline-2 focus-visible:outline-ink-700"
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-ink-700 transition-colors focus-visible:outline-2 focus-visible:outline-ink-700"
                     >
+                      <ClipboardCheck className="size-3.5 text-emerald-400" aria-hidden="true" />
                       <span>Detail Pesan</span>
                       <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
                     </button>
-                  ) : null}
-
-                  {/* Tombol Lihat Detail Pesanan Selesai jika barang diterima */}
-                  {parsed.type === 'order_received' && parsed.relatedOrderId ? (
+                  ) : parsed.type === 'order_received' ? (
                     <button
                       type="button"
                       onClick={() =>
                         onViewOrderDetail(parsed.relatedOrderId || '', 'selesai')
                       }
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-paper transition-colors"
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-100 transition-colors"
                     >
+                      <ClipboardCheck className="size-3.5 text-muted" aria-hidden="true" />
                       <span>Detail Pesan</span>
                       <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
                     </button>
-                  ) : null}
-
-                  {/* Tombol Periksa Stok jika stok kritis */}
-                  {parsed.type === 'low_stock' ? (
+                  ) : parsed.type === 'low_stock' ? (
                     <button
                       type="button"
                       onClick={() =>
                         onNavigateToStock(parsed.partnerName || undefined)
                       }
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-paper transition-colors"
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-100 transition-colors"
                     >
-                      <span>Lihat Stok</span>
+                      <Boxes className="size-3.5 text-muted" aria-hidden="true" />
+                      <span>Periksa Stok</span>
                       <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
                     </button>
                   ) : null}
-
-                  {/* Tombol Tandai Dibaca */}
-                  {isUnread ? (
-                    <button
-                      type="button"
-                      disabled={marking}
-                      onClick={() => onRead(item.id)}
-                      className="min-h-9 rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-paper hover:text-ink-900 disabled:opacity-40"
-                    >
-                      Tandai dibaca
-                    </button>
-                  ) : (
-                    <span className="text-[11px] text-muted font-medium py-1">
-                      Sudah dibaca
-                    </span>
-                  )}
                 </div>
               </div>
             </article>

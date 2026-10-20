@@ -39,7 +39,7 @@
 
 ## 3. Pembagian Peran Tim Pengembang
 
-Berdasarkan [docs/PEMBAGIAN_TUGAS.md](docs/PEMBAGIAN_TUGAS.md):
+Berdasarkan [docs/ALUR_SISTEM_DAN_ROLE.md](docs/ALUR_SISTEM_DAN_ROLE.md):
 
 | Peran Tim | Fokus & Tanggung Jawab | Lokasi Kode |
 |---|---|---|
@@ -62,7 +62,7 @@ daisuki-inventory/
 │   └── shared/        # Shared package (@daisuki/shared): status enums, state machine, helper stok
 ├── data-science/      # Python workspace: EDA, notebook modeling, data sintetis
 ├── ai/                # Python workspace: alert jobs, reminder scheduler, bot
-├── supabase/
+├── neon/
 │   ├── migrations/    # Sumber kebenaran skema SQL Neon DB PostgreSQL
 │   └── seed.sql       # Data inisialisasi pengembangan
 └── docs/              # Dokumentasi arsitektur, panduan alur, dan pembagian tugas

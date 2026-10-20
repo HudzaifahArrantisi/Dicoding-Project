@@ -34,8 +34,20 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       {
         title: 'Daisuki Inventory - B2B Inventory Management',
       },
+      {
+        name: 'theme-color',
+        content: '#141b3d',
+      },
     ],
     links: [
+      {
+        rel: 'manifest',
+        href: '/manifest.webmanifest',
+      },
+      {
+        rel: 'apple-touch-icon',
+        href: '/icons/icon-192.png',
+      },
       {
         rel: 'stylesheet',
         href: appCss,
@@ -64,6 +76,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
       <head>
+        <script src="/pwa.js" />
         <HeadContent />
       </head>
       <body>

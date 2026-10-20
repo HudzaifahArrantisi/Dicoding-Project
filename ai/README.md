@@ -58,7 +58,7 @@ python ai/jobs/analyze_stockouts.py
 python ai/jobs/smart_allocation.py
 ```
 
-Job pertama menulis klasifikasi risiko ke `ai/data/stockout_risks.csv`. Job kedua memakai koneksi `ai_job` untuk memperbarui rekomendasi dan membuat alert admin. Terapkan migrasi `supabase/migrations/0009_inventory_ai_pipeline.sql` setelah migrasi awal; migrasi ini menyiapkan kunci UPSERT rekomendasi.
+Job pertama menulis klasifikasi risiko ke `ai/data/stockout_risks.csv`. Job kedua memakai koneksi database untuk memperbarui rekomendasi dan membuat alert admin (skema database terpadu tersedia di `neon/migrations/0001_init.sql`).
 
 ## 7. Aturan
 - Jangan pernah meng-commit file `.env`, API key, atau token ke repositori git.

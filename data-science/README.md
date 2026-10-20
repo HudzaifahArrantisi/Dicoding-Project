@@ -39,7 +39,7 @@ Copy-Item .env.example .env
 
 ## 5. Akses Database
 - Koneksi hanya menggunakan role PostgreSQL `ds_readonly` (read-only).
-- **Dilarang keras** menggunakan *service role key* atau akun utama (*postgres admin*) Supabase.
+- **Dilarang keras** menggunakan akun utama (*postgres admin / owner*) langsung di lingkungan analisis tanpa pembatasan hak akses.
 - Kredensial password `ds_readonly` didapatkan langsung dari tim Fullstack backend melalui jalur aman.
 
 ## 6. Output yang Diharapkan
