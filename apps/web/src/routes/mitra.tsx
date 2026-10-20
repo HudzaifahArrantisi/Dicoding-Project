@@ -1,7 +1,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Dialog } from 'radix-ui'
 import {
+  AlertTriangle,
   Boxes,
   Calendar,
   CheckCircle2,
@@ -20,7 +22,9 @@ import {
   Save,
   Search,
   Store,
+  Truck,
   UserRound,
+  X,
 } from 'lucide-react'
 import { getStockStatus, stockPercent } from '@daisuki/shared'
 import { toast } from 'sonner'
@@ -703,6 +707,13 @@ function OrderForm({
     skippedProductIds.has(stock.product_id),
   ).length
 
+  const hasAnyExceeded = orderItems.some((item) => {
+    const centralItem = centralProducts.find((p) => p.id === item.product_id)
+    const stock = stocksQuery.data?.find((s) => s.product_id === item.product_id)
+    const centralQty = centralItem?.central_stock ?? stock?.central_stock
+    return centralQty !== undefined && item.qty > centralQty
+  })
+
   return (
     <section aria-labelledby="order-heading">
       <div>
@@ -759,11 +770,24 @@ function OrderForm({
           const status = getStockStatus(stock.current_qty, stock.par_level)
           const suggestedQty = Math.max(1, stock.par_level - stock.current_qty)
           const skipped = skippedProductIds.has(stock.product_id)
+          const isExceeded = Boolean(
+            selected &&
+              centralQty !== undefined &&
+              selected.qty > centralQty,
+          )
 
           return (
             <article
               key={stock.product_id}
-              className={`rounded-md border p-4 sm:p-5 ${selected ? 'border-ink-700 bg-ink-50/70' : skipped ? 'border-line bg-ink-50/50' : 'border-line bg-white'}`}
+              className={`rounded-md border p-4 sm:p-5 transition-colors ${
+                isExceeded
+                  ? 'border-amber-300 bg-amber-50/25 shadow-2xs'
+                  : selected
+                    ? 'border-ink-700 bg-ink-50/70'
+                    : skipped
+                      ? 'border-line bg-ink-50/50'
+                      : 'border-line bg-white'
+              }`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -812,67 +836,116 @@ function OrderForm({
                     Barang ini dilewati dan tidak masuk pengajuan.
                   </p>
                 ) : (
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-muted">
-                      Stok pusat:{' '}
-                      {centralQty === undefined
-                        ? 'data belum tersedia'
-                        : `${centralQty.toLocaleString('id-ID')} ${stock.product_unit}`}
-                    </p>
-                    {selected ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label
-                          htmlFor={`order-${stock.product_id}`}
-                          className="text-sm font-medium text-ink-900"
-                        >
-                          Jumlah diajukan
-                        </label>
+                  <div>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs text-muted">
+                        Stok pusat:{' '}
+                        {centralQty === undefined ? (
+                          'data belum tersedia'
+                        ) : (
+                          <span
+                            className={`tabular-nums ${
+                              isExceeded
+                                ? 'font-bold text-amber-700'
+                                : 'font-semibold text-ink-900'
+                            }`}
+                          >
+                            {centralQty.toLocaleString('id-ID')} {stock.product_unit}
+                          </span>
+                        )}
+                      </p>
+                      {selected ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label
+                            htmlFor={`order-${stock.product_id}`}
+                            className="text-sm font-medium text-ink-900"
+                          >
+                            Jumlah diajukan
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onQtyChange(stock.product_id, selected.qty - 1)
+                            }
+                            disabled={selected.qty <= 1}
+                            className="grid size-11 place-items-center rounded-md border border-line bg-white text-ink-900 hover:bg-ink-100 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                            aria-label={`Kurangi jumlah ${stock.product_name}`}
+                          >
+                            <Minus className="size-4" aria-hidden="true" />
+                          </button>
+                          <input
+                            id={`order-${stock.product_id}`}
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            value={selected.qty}
+                            onChange={(event) =>
+                              onQtyChange(
+                                stock.product_id,
+                                Number.parseInt(event.target.value, 10) || 1,
+                              )
+                            }
+                            className={`h-11 w-16 rounded-sm border text-center text-base font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                              isExceeded
+                                ? 'border-amber-400 bg-amber-50/70 text-amber-950 ring-1 ring-amber-300 focus-visible:outline-amber-600'
+                                : 'border-line bg-white text-ink-900 focus-visible:outline-ink-700'
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onQtyChange(stock.product_id, selected.qty + 1)
+                            }
+                            className="grid size-11 place-items-center rounded-md border border-line bg-white text-ink-900 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                            aria-label={`Tambah jumlah ${stock.product_name}`}
+                          >
+                            <Plus className="size-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      ) : (
                         <button
                           type="button"
-                          onClick={() =>
-                            onQtyChange(stock.product_id, selected.qty - 1)
-                          }
-                          disabled={selected.qty <= 1}
-                          className="grid size-11 place-items-center rounded-md border border-line bg-white text-ink-900 hover:bg-ink-100 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                          aria-label={`Kurangi jumlah ${stock.product_name}`}
+                          onClick={() => onAdd(stock)}
+                          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
                         >
-                          <Minus className="size-4" aria-hidden="true" />
+                          <Plus className="size-4" aria-hidden="true" /> Tambah ke
+                          pengajuan
                         </button>
-                        <input
-                          id={`order-${stock.product_id}`}
-                          type="number"
-                          inputMode="numeric"
-                          min={1}
-                          value={selected.qty}
-                          onChange={(event) =>
-                            onQtyChange(
-                              stock.product_id,
-                              Number.parseInt(event.target.value, 10) || 1,
-                            )
-                          }
-                          className="h-11 w-16 rounded-sm border border-line bg-white text-center text-base font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onQtyChange(stock.product_id, selected.qty + 1)
-                          }
-                          className="grid size-11 place-items-center rounded-md border border-line bg-white text-ink-900 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                          aria-label={`Tambah jumlah ${stock.product_name}`}
-                        >
-                          <Plus className="size-4" aria-hidden="true" />
-                        </button>
+                      )}
+                    </div>
+
+                    {selected && isExceeded && centralQty !== undefined ? (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 animate-in fade-in duration-200">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <AlertTriangle
+                            className="size-4 shrink-0 text-amber-600"
+                            aria-hidden="true"
+                          />
+                          <span>
+                            <strong>Jumlah melebihi stok pusat</strong> (tersedia{' '}
+                            <strong>
+                              {centralQty} {stock.product_unit}
+                            </strong>
+                            , diminta{' '}
+                            <strong>
+                              {selected.qty} {stock.product_unit}
+                            </strong>
+                            ). Admin dapat menyetujui sebagian.
+                          </span>
+                        </div>
+                        {centralQty > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onQtyChange(stock.product_id, centralQty)
+                            }
+                            className="shrink-0 rounded bg-amber-200/90 px-2.5 py-1 text-xs font-bold text-amber-900 hover:bg-amber-300 transition-colors"
+                          >
+                            Sesuaikan ke {centralQty} {stock.product_unit}
+                          </button>
+                        ) : null}
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onAdd(stock)}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                      >
-                        <Plus className="size-4" aria-hidden="true" /> Tambah ke
-                        pengajuan
-                      </button>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -903,15 +976,35 @@ function OrderForm({
               const stock = stocksQuery.data?.find(
                 (entry) => entry.product_id === item.product_id,
               )
+              const centralItem = centralProducts.find(
+                (p) => p.id === item.product_id,
+              )
+              const centralQty =
+                centralItem?.central_stock ?? stock?.central_stock
+              const itemExceeded =
+                centralQty !== undefined && item.qty > centralQty
+
               return (
                 <li
                   key={item.product_id}
                   className="flex items-center justify-between gap-4 py-3 text-sm"
                 >
-                  <span className="min-w-0 font-medium text-ink-900">
-                    {stock?.product_name ?? 'Produk'}
-                  </span>
-                  <span className="shrink-0 font-semibold tabular-nums text-ink-900">
+                  <div className="min-w-0">
+                    <span className="font-medium text-ink-900">
+                      {stock?.product_name ?? 'Produk'}
+                    </span>
+                    {itemExceeded ? (
+                      <p className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
+                        <AlertTriangle className="size-3 shrink-0" aria-hidden="true" />
+                        Melebihi stok pusat (sisa {centralQty} {stock?.product_unit})
+                      </p>
+                    ) : null}
+                  </div>
+                  <span
+                    className={`shrink-0 font-semibold tabular-nums ${
+                      itemExceeded ? 'text-amber-800 font-bold' : 'text-ink-900'
+                    }`}
+                  >
                     {item.qty} {stock?.product_unit}
                   </span>
                 </li>
@@ -919,6 +1012,24 @@ function OrderForm({
             })}
           </ul>
         )}
+        {hasAnyExceeded ? (
+          <div className="mt-4 flex items-start gap-2.5 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 animate-in fade-in duration-200">
+            <AlertTriangle
+              className="size-4 shrink-0 text-amber-600 mt-0.5"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="font-bold text-amber-900">
+                Peringatan: Kuantitas melebihi stok gudang pusat
+              </p>
+              <p className="mt-0.5 text-amber-800 leading-relaxed">
+                Pengajuan tetap dapat dikirim, namun Admin Daisuki Pusat dapat
+                menyetujui kuantitas sebagian sesuai ready stock yang tersedia di
+                gudang pusat.
+              </p>
+            </div>
+          </div>
+        ) : null}
         {skippedCount > 0 ? (
           <p className="mt-3 text-sm text-muted">
             {skippedCount} barang dilewati dan tidak dikirim dalam pengajuan
@@ -976,22 +1087,53 @@ function OrderHistory({
   confirming: boolean
   confirmingOrderId?: string
 }) {
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [statusFilter, setStatusFilter] = useState<
+    'semua' | 'diproses' | 'disetujui' | 'dalam_pengiriman' | 'selesai' | 'ditolak'
+  >('semua')
+
+  const allOrders = query.data ?? []
+
+  const filteredOrders = useMemo(() => {
+    if (statusFilter === 'semua') return allOrders
+    return allOrders.filter((o) => o.status === statusFilter)
+  }, [allOrders, statusFilter])
+
   return (
-    <section aria-labelledby="history-heading">
-      <p className="text-sm font-semibold text-ume">Riwayat restock</p>
-      <h1
-        id="history-heading"
-        className="mt-1 text-2xl font-semibold text-ink-900"
-      >
-        Status pesanan
-      </h1>
-      <p className="mt-2 max-w-2xl text-sm text-muted">
-        Pantau status persetujuan kuantitas dari admin pusat dan konfirmasikan
-        penerimaan saat barang tiba.
-      </p>
+    <section aria-labelledby="history-heading" className="animate-in fade-in slide-in-from-bottom-1 duration-300">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-ume">Riwayat restock</p>
+          <h1
+            id="history-heading"
+            className="mt-1 text-2xl font-semibold text-ink-900 font-display"
+          >
+            Status pesanan
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            Pantau status persetujuan kuantitas dari admin pusat dan konfirmasikan
+            penerimaan saat barang tiba.
+          </p>
+        </div>
+
+        {allOrders.length > 0 ? (
+          <button
+            type="button"
+            onClick={onOpenOrder}
+            className="mt-2 sm:mt-0 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md bg-ink-900 px-4 text-xs font-semibold text-white shadow-xs hover:bg-ink-700 transition-colors self-start sm:self-auto"
+          >
+            <PackagePlus className="size-4 text-ume" />
+            <span>Ajukan Restock Baru</span>
+          </button>
+        ) : null}
+      </div>
+
       {query.isLoading ? (
-        <LoadingState label="Memuat pesanan cabang..." />
+        <div className="mt-6">
+          <LoadingState label="Memuat pesanan cabang..." />
+        </div>
       ) : null}
+
       {query.isError ? (
         <div className="mt-6">
           <ErrorState
@@ -1000,7 +1142,8 @@ function OrderHistory({
           />
         </div>
       ) : null}
-      {query.data?.length === 0 ? (
+
+      {!query.isLoading && allOrders.length === 0 ? (
         <div className="mt-6">
           <EmptyState
             title="Belum ada pesanan"
@@ -1017,133 +1160,351 @@ function OrderHistory({
           />
         </div>
       ) : null}
-      <div className="mt-6 space-y-4">
-        {query.data?.map((order) => (
-          <article
-            key={order.id}
-            className="rounded-md border border-line bg-white p-4 sm:p-5"
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="font-display text-lg font-semibold tabular-nums text-ink-900">
-                  {order.order_no}
-                </p>
-                <p className="mt-1 text-sm text-muted">
-                  Diajukan{' '}
-                  {new Date(order.created_at).toLocaleString('id-ID', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
-                </p>
-              </div>
-              <OrderStatusBadge status={order.status} />
-            </div>
 
-            <ul className="mt-4 divide-y divide-line border-y border-line">
-              {order.items.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center justify-between gap-4 py-2.5 text-sm"
-                >
+      {/* Filter Tabs Status Pesanan */}
+      {allOrders.length > 0 ? (
+        <div className="mt-5 flex flex-wrap items-center gap-1.5 border-b border-line pb-3">
+          <button
+            type="button"
+            onClick={() => setStatusFilter('semua')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              statusFilter === 'semua'
+                ? 'bg-ink-900 text-white'
+                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+            }`}
+          >
+            Semua ({allOrders.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('diproses')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              statusFilter === 'diproses'
+                ? 'bg-ink-900 text-white'
+                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+            }`}
+          >
+            Menunggu Persetujuan (
+            {allOrders.filter((o) => o.status === 'diproses').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('disetujui')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              statusFilter === 'disetujui'
+                ? 'bg-ink-900 text-white'
+                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+            }`}
+          >
+            Disetujui ({allOrders.filter((o) => o.status === 'disetujui').length}
+            )
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('dalam_pengiriman')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              statusFilter === 'dalam_pengiriman'
+                ? 'bg-ink-900 text-white'
+                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+            }`}
+          >
+            Dalam Pengiriman (
+            {allOrders.filter((o) => o.status === 'dalam_pengiriman').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('selesai')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              statusFilter === 'selesai'
+                ? 'bg-ink-900 text-white'
+                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+            }`}
+          >
+            Selesai ({allOrders.filter((o) => o.status === 'selesai').length})
+          </button>
+        </div>
+      ) : null}
+
+      {/* List Riwayat Pesanan */}
+      {filteredOrders.length > 0 ? (
+        <div className="mt-4 space-y-3">
+          {filteredOrders.map((order) => {
+            const totalRequested = order.items.reduce(
+              (acc, item) => acc + item.qty_requested,
+              0,
+            )
+            const totalApproved = order.items.reduce(
+              (acc, item) => acc + (item.qty_approved ?? 0),
+              0,
+            )
+            const isApproved = [
+              'disetujui',
+              'dalam_pengiriman',
+              'selesai',
+            ].includes(order.status)
+
+            return (
+              <article
+                key={order.id}
+                onClick={() => setSelectedOrder(order)}
+                className="group relative flex flex-col justify-between gap-3 rounded-lg border border-line bg-white p-4 transition-all duration-200 hover:border-ink-400 hover:shadow-2xs cursor-pointer sm:p-5"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <span className="font-medium text-ink-900">
-                      {item.product_name}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-display text-base font-bold tabular-nums text-ink-900 group-hover:text-ume transition-colors sm:text-lg">
+                        {order.order_no}
+                      </span>
+                      <OrderStatusBadge status={order.status} />
+                      {order.admin_note ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-ume/10 px-2 py-0.5 text-[11px] font-semibold text-ume">
+                          <MessageSquare className="size-3" />
+                          <span>Ada Catatan Admin</span>
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <p className="mt-1 text-xs text-muted">
+                      Diajukan {formatDetailedDateTime(order.created_at)}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-line/60 bg-paper px-3 py-1.5 text-xs font-semibold text-ink-800 transition-colors group-hover:bg-ink-100 group-hover:text-ume">
+                      <span>Detail Pesanan</span>
+                      <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
                     </span>
                   </div>
-                  <div className="text-right">
-                    {item.qty_approved !== null ? (
-                      <div className="flex flex-wrap justify-end gap-x-2 gap-y-1">
-                        {item.qty_approved !== item.qty_requested ? (
-                          <span className="text-xs text-muted line-through">
-                            Diminta {item.qty_requested} {item.product_unit}
-                          </span>
-                        ) : null}
-                        <span className="font-bold tabular-nums text-ok-fg">
-                          Disetujui {item.qty_approved} {item.product_unit}
-                        </span>
-                      </div>
+                </div>
+
+                {/* Ringkasan Baris Produk */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-2.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-1.5 text-ink-700">
+                    <span className="font-semibold text-ink-900">
+                      {order.items.length} macam produk:
+                    </span>
+                    <span className="max-w-[260px] truncate text-muted sm:max-w-md">
+                      {order.items.map((i) => i.product_name).join(', ')}
+                    </span>
+                  </div>
+
+                  <div className="font-medium text-ink-800">
+                    {isApproved ? (
+                      <span className="font-bold text-ok">
+                        Disetujui: {totalApproved} pcs
+                      </span>
                     ) : (
-                      <span className="font-semibold tabular-nums text-ink-700">
-                        Diminta {item.qty_requested} {item.product_unit}
+                      <span className="text-muted">
+                        Diminta: {totalRequested} pcs
                       </span>
                     )}
                   </div>
-                </li>
-              ))}
-            </ul>
-
-            {order.admin_note ? (
-              <div className="mt-3 rounded-md border border-line bg-ink-50/70 p-3.5 text-sm">
-                <div className="flex items-center gap-2 font-semibold text-ink-900">
-                  <MessageSquare
-                    className="size-4 text-ume"
-                    aria-hidden="true"
-                  />
-                  <span>Penjelasan / Catatan Admin Pusat:</span>
                 </div>
-                <p className="mt-1 text-ink-800">{order.admin_note}</p>
-              </div>
-            ) : null}
+              </article>
+            )
+          })}
+        </div>
+      ) : allOrders.length > 0 ? (
+        <div className="mt-6 rounded-lg border border-line bg-white p-8 text-center">
+          <p className="text-sm font-semibold text-ink-900">
+            Tidak ada pesanan dengan status ini
+          </p>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('semua')}
+            className="mt-3 inline-flex min-h-9 items-center rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-paper"
+          >
+            Tampilkan Semua Pesanan
+          </button>
+        </div>
+      ) : null}
 
-            {order.status === 'ditolak' && order.rejected_reason ? (
-              <div className="mt-3 rounded-md border border-crit/30 bg-crit-bg/30 p-3.5 text-sm">
-                <p className="font-semibold text-crit">
-                  Alasan penolakan admin
+      {/* Modal Popup Detail Pesanan */}
+      {selectedOrder ? (
+        <Dialog.Root
+          open={Boolean(selectedOrder)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedOrder(null)
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
+            <Dialog.Content
+              className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-xl animate-in fade-in zoom-in-95 duration-200 focus:outline-hidden sm:p-6"
+              aria-describedby="mitra-order-dialog-desc"
+            >
+              {/* Header Dialog */}
+              <div className="flex items-start justify-between border-b border-line pb-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Dialog.Title className="font-display text-lg font-bold tabular-nums text-ink-900">
+                      {selectedOrder.order_no}
+                    </Dialog.Title>
+                    <OrderStatusBadge status={selectedOrder.status} />
+                  </div>
+                  <Dialog.Description
+                    id="mitra-order-dialog-desc"
+                    className="mt-1 text-xs text-muted"
+                  >
+                    Diajukan pada {formatDetailedDateTime(selectedOrder.created_at)}
+                  </Dialog.Description>
+                </div>
+
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    className="rounded-md p-1.5 text-muted hover:bg-paper hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
+                    aria-label="Tutup detail pesanan"
+                  >
+                    <X className="size-5" />
+                  </button>
+                </Dialog.Close>
+              </div>
+
+              {/* Rincian Produk yang Diminta & Disetujui */}
+              <div className="mt-4">
+                <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">
+                  Rincian Barang ({selectedOrder.items.length} Item)
+                </h4>
+                <div className="divide-y divide-line overflow-hidden rounded-md border border-line bg-paper/40">
+                  {selectedOrder.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-3 text-sm"
+                    >
+                      <div>
+                        <p className="font-semibold text-ink-900">
+                          {item.product_name}
+                        </p>
+                        <p className="text-xs font-mono text-muted">
+                          {item.product_sku}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        {item.qty_approved !== null ? (
+                          <div className="flex flex-col items-end">
+                            {item.qty_approved !== item.qty_requested ? (
+                              <span className="text-xs text-muted line-through">
+                                Diminta {item.qty_requested} {item.product_unit}
+                              </span>
+                            ) : null}
+                            <span className="font-bold tabular-nums text-ok">
+                              Disetujui {item.qty_approved} {item.product_unit}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="font-semibold tabular-nums text-ink-700">
+                            Diminta {item.qty_requested} {item.product_unit}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Penjelasan / Catatan Admin Pusat */}
+              {selectedOrder.admin_note ? (
+                <div className="mt-4 rounded-md border border-line bg-ink-50/80 p-3.5 text-sm">
+                  <div className="flex items-center gap-2 font-semibold text-ink-900">
+                    <MessageSquare className="size-4 text-ume" aria-hidden="true" />
+                    <span>Penjelasan / Catatan Admin Pusat:</span>
+                  </div>
+                  <p className="mt-1.5 font-medium leading-relaxed text-ink-800">
+                    "{selectedOrder.admin_note}"
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Alasan Penolakan Admin jika ada */}
+              {selectedOrder.status === 'ditolak' &&
+              selectedOrder.rejected_reason ? (
+                <div className="mt-4 rounded-md border border-crit/30 bg-crit-bg/30 p-3.5 text-sm">
+                  <p className="font-semibold text-crit">
+                    Alasan penolakan admin:
+                  </p>
+                  <p className="mt-1 text-ink-800">
+                    {selectedOrder.rejected_reason}
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Catatan Cabang saat memesan */}
+              {selectedOrder.note ? (
+                <p className="mt-3 text-xs text-muted">
+                  Catatan dari cabang:{' '}
+                  <span className="font-medium text-ink-800">
+                    {selectedOrder.note}
+                  </span>
                 </p>
-                <p className="mt-1 text-ink-800">{order.rejected_reason}</p>
+              ) : null}
+
+              {/* Status Banner & Aksi Pengiriman */}
+              <div className="mt-5 border-t border-line pt-4">
+                {selectedOrder.status === 'disetujui' ? (
+                  <div className="rounded-md bg-ok/10 p-3 text-sm font-medium text-ok-fg">
+                    Jumlah barang disetujui admin pusat. Pesanan sedang dipersiapkan untuk pengiriman.
+                  </div>
+                ) : null}
+
+                {selectedOrder.status === 'dalam_pengiriman' ? (
+                  <div className="rounded-md border border-line bg-ink-50 p-4">
+                    <div className="flex items-center gap-2 font-semibold text-ink-900 text-sm">
+                      <Truck className="size-4 text-order-pengiriman" />
+                      <span>Barang Dalam Pengiriman</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">
+                      Setelah paket tiba di cabang dan kuantitas barang sesuai,
+                      konfirmasikan penerimaan untuk menambahkan stok cabang secara otomatis.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onConfirm(selectedOrder.id)
+                        setSelectedOrder(null)
+                      }}
+                      disabled={confirming}
+                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-ok px-4 text-sm font-semibold text-white shadow-xs hover:bg-ok-fg disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {confirming &&
+                      confirmingOrderId === selectedOrder.id ? (
+                        <Loader2
+                          className="size-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <CheckCircle2 className="size-4" aria-hidden="true" />
+                      )}
+                      <span>Konfirmasi Barang Diterima</span>
+                    </button>
+                  </div>
+                ) : null}
+
+                {selectedOrder.status === 'selesai' ? (
+                  <div className="rounded-md bg-ok/10 p-3 text-sm font-medium text-ok-fg flex items-center gap-2">
+                    <CheckCircle2 className="size-4 text-ok shrink-0" />
+                    <span>
+                      Pesanan selesai. Barang diterima mitra dan stok cabang sudah bertambah.
+                    </span>
+                  </div>
+                ) : null}
+
+                <div className="mt-4 flex justify-end">
+                  <Dialog.Close asChild>
+                    <button
+                      type="button"
+                      className="min-h-10 rounded-md border border-line bg-white px-4 text-xs font-semibold text-ink-900 hover:bg-paper"
+                    >
+                      Tutup
+                    </button>
+                  </Dialog.Close>
+                </div>
               </div>
-            ) : null}
-
-            {order.note ? (
-              <p className="mt-2 text-xs text-muted">
-                Catatan cabang: {order.note}
-              </p>
-            ) : null}
-
-            {order.status === 'disetujui' ? (
-              <div className="mt-3 rounded-md bg-ok/10 p-3 text-sm text-ok-fg">
-                Jumlah barang disetujui admin pusat. Pesanan menunggu
-                pengiriman.
-              </div>
-            ) : null}
-
-            {order.status === 'dalam_pengiriman' ? (
-              <div className="mt-4 rounded-md border border-line bg-ink-50 p-4">
-                <p className="text-sm font-semibold text-ink-900">
-                  Pesanan dalam pengiriman
-                </p>
-                <p className="mt-1 text-sm text-muted">
-                  Setelah barang tiba dan jumlahnya sesuai, tandai pesanan sudah
-                  diterima.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onConfirm(order.id)}
-                  disabled={confirming}
-                  className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ok px-4 text-sm font-semibold text-white hover:bg-ok-fg disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:w-auto"
-                >
-                  {confirming && confirmingOrderId === order.id ? (
-                    <Loader2
-                      className="size-4 animate-spin"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <CheckCircle2 className="size-4" aria-hidden="true" />
-                  )}
-                  Pesanan sudah diterima
-                </button>
-              </div>
-            ) : null}
-
-            {order.status === 'selesai' ? (
-              <p className="mt-4 rounded-md bg-ok/10 p-3 text-sm font-medium text-ok-fg">
-                Pesanan selesai. Barang diterima mitra dan stok cabang sudah
-                bertambah.
-              </p>
-            ) : null}
-          </article>
-        ))}
-      </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      ) : null}
     </section>
   )
 }
@@ -1516,14 +1877,14 @@ function groupLogsByBatch(logs: StockLog[]): StockLogBatch[] {
     const d = new Date(firstLog.created_at)
     const hour = String(d.getHours()).padStart(2, '0')
     const minute = String(d.getMinutes()).padStart(2, '0')
-    const timeFormatted = `Jam ${hour}.${minute} WIB`
+    const timeFormatted = `${hour}.${minute} WIB`
     const dateStr = toLocalDateStr(d)
     const sourceLabel =
       firstLog.source === 'manual_update'
-        ? 'Laporan stok fisik'
+        ? 'Laporan Fisik'
         : firstLog.source === 'order_received'
-          ? 'Pesanan diterima (Restock)'
-          : 'Penyesuaian stok'
+          ? 'Restock Masuk'
+          : 'Penyesuaian'
 
     const totalConsumed = batchLogs.reduce(
       (sum, item) => (item.delta > 0 ? sum + item.delta : sum),
@@ -2010,21 +2371,21 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
                   {dayBatches.length > 0
-                    ? `${dayBatches.length} sesi waktu perubahan · ${activeDateLogs.length} total produk terpengaruh`
+                    ? `${dayBatches.length} sesi · ${activeDateLogs.length} produk`
                     : 'Tidak ada laporan stok tercatat pada tanggal ini'}
                 </p>
               </div>
 
               {activeDateLogs.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
                   {totalDayConsumed > 0 ? (
-                    <span className="rounded-md bg-crit-bg px-2.5 py-1 font-semibold text-crit-fg tabular-nums">
-                      −{totalDayConsumed} pcs terjual / keluar
+                    <span className="rounded-md bg-crit-bg px-2 py-0.5 font-bold text-crit-fg tabular-nums">
+                      −{totalDayConsumed} pcs
                     </span>
                   ) : null}
                   {totalDayRestocked > 0 ? (
-                    <span className="rounded-md bg-ok-bg px-2.5 py-1 font-semibold text-ok-fg tabular-nums">
-                      +{totalDayRestocked} pcs restock diterima
+                    <span className="rounded-md bg-ok-bg px-2 py-0.5 font-bold text-ok-fg tabular-nums">
+                      +{totalDayRestocked} pcs
                     </span>
                   ) : null}
                 </div>
@@ -2039,11 +2400,11 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 />
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-muted">
-                      Pilih sesi jam di bawah untuk melihat rincian item (popup):
-                    </p>
-                    <span className="text-xs text-muted">
+                  <div className="flex items-center justify-between text-xs text-muted">
+                    <span className="font-semibold text-ink-900">
+                      Sesi Waktu
+                    </span>
+                    <span>
                       {dayBatches.length} sesi tercatat
                     </span>
                   </div>
@@ -2066,7 +2427,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                                 {batch.timeFormatted}
                               </span>
                               <p className="text-[11px] text-muted">
-                                {batch.totalItems} item berubah
+                                {batch.totalItems} item
                               </p>
                             </div>
                           </div>

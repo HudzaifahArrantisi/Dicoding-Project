@@ -358,14 +358,14 @@ function groupLogsByBatch(logs: StockLog[]): StockLogBatch[] {
     const d = new Date(firstLog.created_at)
     const hour = String(d.getHours()).padStart(2, '0')
     const minute = String(d.getMinutes()).padStart(2, '0')
-    const timeFormatted = `Jam ${hour}.${minute} WIB`
+    const timeFormatted = `${hour}.${minute} WIB`
     const dateStr = toLocalDateStr(d)
     const sourceLabel =
       firstLog.source === 'manual_update'
-        ? 'Laporan stok fisik mitra'
+        ? 'Laporan Mitra'
         : firstLog.source === 'order_received'
-          ? 'Pesanan diterima (Restock)'
-          : 'Penyesuaian stok'
+          ? 'Restock Masuk'
+          : 'Penyesuaian'
 
     const totalConsumed = batchLogs.reduce(
       (sum, item) => (item.delta > 0 ? sum + item.delta : sum),
@@ -576,15 +576,15 @@ function PartnerStockLogDialog({
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-ink-50/70 p-3 text-xs text-muted">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <span>
-                  Laporan Terakhir:{' '}
+                  Terakhir:{' '}
                   <strong className="font-semibold text-ink-900">
                     {formatDetailedDateTime(partner.latest_update)}
                   </strong>
                 </span>
                 <span>
-                  Total Catatan:{' '}
+                  Total:{' '}
                   <strong className="font-semibold tabular-nums text-ink-900">
-                    {partner.log_count} data
+                    {partner.log_count} log
                   </strong>
                 </span>
               </div>
@@ -601,7 +601,7 @@ function PartnerStockLogDialog({
                   }`}
                 >
                   <Calendar className="size-3.5" aria-hidden="true" />
-                  <span>Kalender & Jam</span>
+                  <span>Kalender</span>
                 </button>
                 <button
                   type="button"
@@ -641,10 +641,10 @@ function PartnerStockLogDialog({
                     const isRestock = log.delta < 0
                     const sourceLabel =
                       log.source === 'manual_update'
-                        ? 'Laporan stok mitra'
+                        ? 'Laporan Mitra'
                         : log.source === 'order_received'
-                          ? 'Pesanan diterima'
-                          : 'Penyesuaian stok'
+                          ? 'Restock Masuk'
+                          : 'Penyesuaian'
 
                     return (
                       <article
@@ -851,21 +851,21 @@ function PartnerStockLogDialog({
                       </div>
                       <p className="mt-0.5 text-xs text-muted">
                         {dayBatches.length > 0
-                          ? `${dayBatches.length} sesi waktu perubahan · ${activeDateLogs.length} total produk terpengaruh`
+                          ? `${dayBatches.length} sesi · ${activeDateLogs.length} produk`
                           : 'Tidak ada laporan stok tercatat pada tanggal ini'}
                       </p>
                     </div>
 
                     {activeDateLogs.length > 0 ? (
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
                         {totalDayConsumed > 0 ? (
-                          <span className="rounded-md bg-crit-bg px-2.5 py-1 font-semibold text-crit-fg tabular-nums">
-                            −{totalDayConsumed} pcs terjual / keluar
+                          <span className="rounded-md bg-crit-bg px-2 py-0.5 font-bold text-crit-fg tabular-nums">
+                            −{totalDayConsumed} pcs
                           </span>
                         ) : null}
                         {totalDayRestocked > 0 ? (
-                          <span className="rounded-md bg-ok-bg px-2.5 py-1 font-semibold text-ok-fg tabular-nums">
-                            +{totalDayRestocked} pcs restock diterima
+                          <span className="rounded-md bg-ok-bg px-2 py-0.5 font-bold text-ok-fg tabular-nums">
+                            +{totalDayRestocked} pcs
                           </span>
                         ) : null}
                       </div>
@@ -880,11 +880,11 @@ function PartnerStockLogDialog({
                       />
                     ) : (
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-muted">
-                            Pilih sesi jam di bawah untuk melihat rincian item (popup):
-                          </p>
-                          <span className="text-xs text-muted">
+                        <div className="flex items-center justify-between text-xs text-muted">
+                          <span className="font-semibold text-ink-900">
+                            Sesi Waktu
+                          </span>
+                          <span>
                             {dayBatches.length} sesi tercatat
                           </span>
                         </div>
@@ -907,7 +907,7 @@ function PartnerStockLogDialog({
                                       {batch.timeFormatted}
                                     </span>
                                     <p className="text-[11px] text-muted">
-                                      {batch.totalItems} item berubah
+                                      {batch.totalItems} item
                                     </p>
                                   </div>
                                 </div>
@@ -1289,7 +1289,7 @@ function AdminDashboard() {
     return (
       <main className="grid min-h-screen place-items-center bg-paper">
         <p className="text-sm text-muted" role="status">
-          Memeriksa akses admin...
+          wait....
         </p>
       </main>
     )
@@ -1367,7 +1367,7 @@ function AdminDashboard() {
             onClick={() => setTab('alerts')}
           />
           <TabButton
-            label="Data Science"
+            label="Data"
             Icon={Database}
             active={tab === 'data-science'}
             onClick={() => setTab('data-science')}
@@ -3321,7 +3321,6 @@ function AlertPanel({
                       }}
                       className="inline-flex min-h-9 items-center gap-1.5 rounded-sm bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-ink-700 transition-colors focus-visible:outline-2 focus-visible:outline-ink-700"
                     >
-                      <ClipboardCheck className="size-3.5 text-emerald-400" aria-hidden="true" />
                       <span>Detail Pesan</span>
                       <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
                     </button>
@@ -3336,7 +3335,6 @@ function AlertPanel({
                       }
                       className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-paper transition-colors"
                     >
-                      <ClipboardCheck className="size-3.5 text-muted" aria-hidden="true" />
                       <span>Detail Pesan</span>
                       <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
                     </button>
@@ -3351,7 +3349,6 @@ function AlertPanel({
                       }
                       className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-paper transition-colors"
                     >
-                      <Boxes className="size-3.5 text-muted" aria-hidden="true" />
                       <span>Lihat Stok</span>
                       <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
                     </button>
