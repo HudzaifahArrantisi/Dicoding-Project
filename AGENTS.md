@@ -63,8 +63,7 @@ daisuki-inventory/
 ├── data-science/      # Python workspace: EDA, notebook modeling, data sintetis
 ├── ai/                # Python workspace: alert jobs, reminder scheduler, bot
 ├── neon/
-│   ├── migrations/    # Sumber kebenaran skema SQL Neon DB PostgreSQL
-│   └── seed.sql       # Data inisialisasi pengembangan
+│   └── init.sql       # Sumber kebenaran skema SQL & data inisialisasi Neon DB PostgreSQL
 └── docs/              # Dokumentasi arsitektur, panduan alur, dan pembagian tugas
 ```
 

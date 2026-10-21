@@ -1,6 +1,6 @@
 -- ============================================================================
 -- DAISUKI B2B INVENTORY & ORDER MANAGEMENT SYSTEM
--- Unified Database Schema (Single Source of Truth)
+-- Unified Database Initialization & Schema (Single Source of Truth)
 -- Kompatibel: PostgreSQL / Neon DB
 -- ============================================================================
 
@@ -15,7 +15,9 @@ begin
   end if;
 
   if not exists (select 1 from pg_type where typname = 'partner_type') then
-    create type partner_type as enum ('hotel', 'restoran', 'kafe', 'minimarket');
+    create type partner_type as enum ('hotel', 'restoran', 'kafe', 'minimarket', 'lainnya');
+  else
+    alter type partner_type add value if not exists 'lainnya';
   end if;
 
   if not exists (select 1 from pg_type where typname = 'order_status') then
@@ -44,15 +46,39 @@ create table if not exists partners (
   address text,
   pic_name text,
   pic_phone text,
+  province_code text,
+  province_name text,
+  regency_code text,
+  regency_name text,
+  district_code text,
+  district_name text,
+  village_code text,
+  village_name text,
   profile_photo text,
   is_active boolean not null default true,
   created_at timestamptz not null default now()
 );
 
+-- Kolom tambahan jika tabel sudah ada sebelumnya
+alter table partners add column if not exists province_code text;
+alter table partners add column if not exists province_name text;
+alter table partners add column if not exists regency_code text;
+alter table partners add column if not exists regency_name text;
+alter table partners add column if not exists district_code text;
+alter table partners add column if not exists district_name text;
+alter table partners add column if not exists village_code text;
+alter table partners add column if not exists village_name text;
+alter table partners add column if not exists profile_photo text;
+
+-- Index optimasi pencarian & filter mitra
+create index if not exists partners_active_name_idx on partners (is_active, name);
+create index if not exists partners_type_idx on partners (type);
+
 -- B. Pengguna Sistem (Users - Neon DB / Elysia Auth)
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   email text not null unique,
+  username text unique,
   password_hash text not null,
   role user_role not null,
   partner_id uuid references partners(id) on delete set null,
@@ -60,6 +86,10 @@ create table if not exists users (
   created_at timestamptz not null default now(),
   constraint mitra_user_needs_partner check (role = 'admin' or partner_id is not null)
 );
+
+-- Kolom & index username jika tabel sudah ada sebelumnya
+alter table users add column if not exists username text;
+create unique index if not exists users_username_unique on users (username);
 create index if not exists users_partner_idx on users (partner_id);
 
 -- C. Produk Resmi Daisuki (Products & Central Warehouse Stock)
@@ -218,3 +248,52 @@ create policy ai_manage_restock_recommendations on restock_recommendations for a
 
 drop policy if exists ai_manage_stocks on partner_stocks;
 create policy ai_manage_stocks on partner_stocks for all to ai_job using (true) with check (true);
+
+-- 6. SEED DATA AWAL (DEMO & DEVELOPMENT)
+
+-- A. Cabang Mitra Demo (Partners)
+insert into partners (id, name, type, address, pic_name, pic_phone, is_active) values
+  ('11111111-1111-1111-1111-111111111111', 'Kafe Sejuk BSD', 'kafe', 'BSD, Tangerang Selatan', 'Rina', '081200000001', true),
+  ('22222222-2222-2222-2222-222222222222', 'Hotel Aruna Jakarta', 'hotel', 'Jakarta Selatan', 'Budi', '081200000002', true),
+  ('33333333-3333-3333-3333-333333333333', 'Resto Bento Serpong', 'restoran', 'Serpong, Tangerang', 'Siti', '081200000003', true)
+on conflict (id) do nothing;
+
+-- B. Akun Pengguna Demo (Users: password default adalah "password123")
+-- Hash di bawah adalah bcrypt untuk "password123"
+insert into users (id, email, username, password_hash, role, partner_id, full_name) values
+  ('00000000-0000-0000-0000-000000000001', 'admin@daisuki.test', 'admin', '$2a$10$wB5TqU0oZ3/6M5r9z6N8x.0L7zT9gT1rQ8bQ2yW7uD4vK5pY6eL6m', 'admin', null, 'Admin Daisuki Pusat'),
+  ('00000000-0000-0000-0000-000000000002', 'mitra1@daisuki.test', 'mitra1', '$2a$10$wB5TqU0oZ3/6M5r9z6N8x.0L7zT9gT1rQ8bQ2yW7uD4vK5pY6eL6m', 'mitra', '11111111-1111-1111-1111-111111111111', 'Rina (Kafe Sejuk)'),
+  ('00000000-0000-0000-0000-000000000003', 'mitra2@daisuki.test', 'mitra2', '$2a$10$wB5TqU0oZ3/6M5r9z6N8x.0L7zT9gT1rQ8bQ2yW7uD4vK5pY6eL6m', 'mitra', '22222222-2222-2222-2222-222222222222', 'Budi (Hotel Aruna)')
+on conflict (email) do update set
+  username = excluded.username,
+  full_name = excluded.full_name;
+
+-- C. 4 Produk Resmi Daisuki
+insert into products (id, sku, name, unit, b2b_price, central_stock, is_active) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'DSK-SB-001', 'Seblak Jadul Instan', 'pcs', 12000.00, 1000, true),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'DSK-BR-002', 'Basreng Daun Jeruk', 'pcs', 10000.00, 1000, true),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'DSK-MK-003', 'Makaroni Daun Jeruk', 'pcs', 8500.00, 1000, true),
+  ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'DSK-KP-004', 'Keripik Pisang Rasa Coklat', 'pcs', 15000.00, 1000, true)
+on conflict (sku) do update set
+  name = excluded.name,
+  unit = excluded.unit,
+  b2b_price = excluded.b2b_price,
+  central_stock = excluded.central_stock,
+  is_active = true;
+
+-- D. Matriks Stok Awal Cabang (Setiap Cabang x 4 Produk)
+insert into partner_stocks (partner_id, product_id, current_qty, par_level)
+select
+  p.id as partner_id,
+  pr.id as product_id,
+  case
+    when pr.sku = 'DSK-SB-001' then 30
+    when pr.sku = 'DSK-BR-002' then 20
+    when pr.sku = 'DSK-MK-003' then 15
+    else 25
+  end as current_qty,
+  40 as par_level
+from partners p
+cross join products pr
+where pr.is_active = true
+on conflict (partner_id, product_id) do nothing;

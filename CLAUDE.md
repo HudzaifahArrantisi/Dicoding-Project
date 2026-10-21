@@ -101,8 +101,7 @@ daisuki-inventory/
 ├── data-science/      # Python workspace: EDA, ROP/safety stock modeling, synthetic data
 ├── ai/                # Python workspace: batch restock jobs, LLM assistant, Telegram bot
 ├── neon/
-│   ├── migrations/    # Authoritative SQL schema, constraints, and roles for Neon DB
-│   └── seed.sql       # Initial development data and partner/product seeding
+│   └── init.sql       # Authoritative unified SQL schema, constraints, roles, and seed data for Neon DB
 └── docs/
     └── ALUR_SISTEM_DAN_ROLE.md # Comprehensive system workflow, role guide, and business rules
 ```
@@ -124,9 +123,9 @@ daisuki-inventory/
    - Partner data isolation is enforced at Elysia route guards and schema constraints.
 
 4. **Database & ORM Guidelines**:
-   - **Source of Truth**: Raw SQL files in [neon/migrations/](neon/migrations/) are the schema source of truth.
+   - **Source of Truth**: The unified SQL file in [neon/init.sql](neon/init.sql) is the authoritative database schema and initial seed source of truth.
    - [apps/api/src/db/schema.ts](apps/api/src/db/schema.ts) mirrors the database schema using Drizzle ORM for query building.
-   - **Do not run `drizzle-kit push` or `drizzle-kit generate`**. Schema changes must be written as versioned SQL migrations in [neon/migrations/](neon/migrations/).
+   - **Do not run `drizzle-kit push` or `drizzle-kit generate`**.
    - **Neon DB Connection Pooler**: Neon pooled connections work seamlessly with `{ prepare: false }` in [apps/api/src/db/client.ts](apps/api/src/db/client.ts).
    - **Concurrency Safety**: Stock updates in Elysia must wrap operations in transactions and use `SELECT ... FOR UPDATE` row locks to prevent race conditions when writing to `partner_stocks` and `stock_logs`.
 

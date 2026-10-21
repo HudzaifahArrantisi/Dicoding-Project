@@ -56,13 +56,10 @@ Buka dan sesuaikan file berikut:
 
 ### 4. Setup Database & Data Demo
 
-1. **Buat Tabel Database**:  
-   Buka menu **SQL Editor** di console database Anda ([Neon DB](https://neon.tech)), lalu salin dan jalankan seluruh isi file skema database terbaru:  
-    **`neon/migrations/0001_init.sql`**
-
-   Jika database sudah dibuat sebelumnya, jalankan juga **`neon/migrations/0002_partner_management.sql`** di SQL Editor untuk mengaktifkan username mitra dan kategori perusahaan lainnya. Untuk database baru, jalankan migrasi 0002 setelah 0001.
-
-   Untuk fitur wilayah profil mitra, lanjutkan dengan **`neon/migrations/0003_partner_regions.sql`** setelah migrasi 0002.
+1. **Setup Skema Database & Data Demo**:  
+   Buka menu **SQL Editor** di console database Anda ([Neon DB](https://neon.tech)), lalu salin dan jalankan seluruh isi file skema database terpadu:  
+    **`neon/init.sql`**  
+   *(File tunggal ini sudah mencakup seluruh ekstensi, enum, tabel, kolom wilayah, optimasi index, hak akses RLS, dan seed data awal).*
 
    Pilihan provinsi, kabupaten/kota, kecamatan, dan kelurahan/desa diambil melalui API backend dari [Wilayah.id](https://wilayah.id/). Server API memerlukan akses HTTPS ke layanan tersebut saat daftar wilayah belum tersedia di cache.
 
