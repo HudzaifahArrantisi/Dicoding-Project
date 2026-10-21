@@ -8,6 +8,7 @@ dist
 .tanstack
 .wrangler
 *.log
+.demo-mitra-credentials.txt
 .DS_Store
 
 data-science/data/*

@@ -60,6 +60,8 @@ Buka dan sesuaikan file berikut:
    Buka menu **SQL Editor** di console database Anda ([Neon DB](https://neon.tech)), lalu salin dan jalankan seluruh isi file skema database terbaru:  
     **`neon/migrations/0001_init.sql`**
 
+   Jika database sudah dibuat sebelumnya, jalankan juga **`neon/migrations/0002_partner_management.sql`** di SQL Editor untuk mengaktifkan username mitra dan kategori perusahaan lainnya. Untuk database baru, jalankan migrasi 0002 setelah 0001.
+
 2. **Isi Data Awal (Seeding)**:  
    Setelah tabel berhasil dibuat, isi data awal demo (cabang, 4 produk resmi, dan akun demo) dengan perintah:
    ```bash

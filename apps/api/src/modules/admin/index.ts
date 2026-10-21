@@ -1,5 +1,5 @@
-import { Elysia } from "elysia";
-import { desc, eq, sql } from "drizzle-orm";
+import { Elysia, t } from "elysia";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db, sql as postgres } from "../../db/client";
 import {
   orders,
@@ -7,6 +7,7 @@ import {
   products,
   restockRecommendations,
   stockLogs,
+  users,
 } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
 
@@ -69,7 +70,119 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       .where(eq(partners.is_active, true))
       .orderBy(partners.name);
 
-    return { data: partnerList };
+    const accounts = partnerList.length
+      ? await db
+          .select({ partner_id: users.partner_id, username: users.username, email: users.email })
+          .from(users)
+          .where(inArray(users.partner_id, partnerList.map((partner) => partner.id)))
+      : [];
+    const accountByPartner = new Map(accounts.map((account) => [account.partner_id, account]));
+    return {
+      data: partnerList.map((partner) => ({
+        ...partner,
+        username: accountByPartner.get(partner.id)?.username ?? accountByPartner.get(partner.id)?.email ?? null,
+      })),
+    };
+  })
+  .post(
+    "/partners",
+    async ({ headers, body, set }) => {
+      const admin = await getAuthUser(headers);
+      if (!admin) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      if (admin.role !== "admin") {
+        set.status = 403;
+        return { error: "Forbidden: Admin only" };
+      }
+
+      const name = body.name.trim();
+      const address = body.address.trim();
+      const picName = body.pic_name.trim();
+      const phone = body.phone.trim();
+      const username = body.username.toLowerCase().trim();
+      if (!name || !address || !picName || !phone || !/^[a-z0-9._-]{3,40}$/.test(username)) {
+        set.status = 422;
+        return { error: "Lengkapi data mitra dan gunakan username 3–40 karakter (huruf kecil, angka, titik, garis bawah, atau tanda hubung)" };
+      }
+
+      const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1);
+      if (existing) {
+        set.status = 409;
+        return { error: "Username sudah digunakan" };
+      }
+
+      const passwordHash = await Bun.password.hash(body.password);
+      try {
+        const partner = await db.transaction(async (tx) => {
+          const [created] = await tx.insert(partners).values({
+            name,
+            type: body.type,
+            address,
+            pic_name: picName,
+            pic_phone: phone,
+          }).returning();
+          const accountId = crypto.randomUUID();
+          await tx.insert(users).values({
+            id: accountId,
+            email: `${accountId}@mitra.daisuki.internal`,
+            username,
+            password_hash: passwordHash,
+            role: "mitra",
+            partner_id: created.id,
+            full_name: picName,
+          });
+          return created;
+        });
+        set.status = 201;
+        return { data: { ...partner, username } };
+      } catch (error) {
+        if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+          set.status = 409;
+          return { error: "Username sudah digunakan" };
+        }
+        throw error;
+      }
+    },
+    {
+      body: t.Object({
+        name: t.String({ minLength: 2, maxLength: 120 }),
+        type: t.Union([t.Literal("hotel"), t.Literal("restoran"), t.Literal("kafe"), t.Literal("minimarket"), t.Literal("lainnya")]),
+        address: t.String({ minLength: 5, maxLength: 500 }),
+        pic_name: t.String({ minLength: 2, maxLength: 120 }),
+        phone: t.String({ minLength: 8, maxLength: 24 }),
+        username: t.String({ minLength: 3, maxLength: 40 }),
+        password: t.String({ minLength: 8, maxLength: 128 }),
+      }),
+    },
+  )
+  .delete("/partners/:id", async ({ headers, params, set }) => {
+    const admin = await getAuthUser(headers);
+    if (!admin) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    if (admin.role !== "admin") {
+      set.status = 403;
+      return { error: "Forbidden: Admin only" };
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.id)) {
+      set.status = 400;
+      return { error: "ID mitra tidak valid" };
+    }
+    const deleted = await db.transaction(async (tx) => {
+      const [partner] = await tx.select({ id: partners.id }).from(partners).where(eq(partners.id, params.id)).limit(1);
+      if (!partner) return false;
+      await tx.delete(users).where(eq(users.partner_id, params.id));
+      await tx.delete(partners).where(eq(partners.id, params.id));
+      return true;
+    });
+    if (!deleted) {
+      set.status = 404;
+      return { error: "Mitra tidak ditemukan" };
+    }
+    return { success: true };
   })
   .get("/stock-logs", async ({ headers, set }) => {
     const user = await getAuthUser(headers);

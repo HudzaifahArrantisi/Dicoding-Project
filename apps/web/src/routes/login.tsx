@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { Building2, Loader2, Package, Store } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { InstallApp } from '@/components/install-app'
 
@@ -11,6 +11,7 @@ function LoginPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [pendingAction, setPendingAction] = useState<
     'form' | 'admin' | 'mitra' | null
   >(null)
@@ -25,7 +26,8 @@ function LoginPage() {
   async function finishLogin(result: Awaited<ReturnType<typeof login>>) {
     if (!result.success || !result.role) {
       setError(
-        result.error ?? 'Login belum berhasil. Periksa kembali data Anda.',
+        result.error ??
+          'Login belum berhasil. Periksa kembali email dan kata sandi Anda.',
       )
       return
     }
@@ -50,145 +52,169 @@ function LoginPage() {
 
   if (isLoading) {
     return (
-      <main className="grid min-h-screen place-items-center bg-paper p-6">
-        <p className="text-sm font-medium text-muted" role="status">
+      <main className="grid min-h-dvh place-items-center bg-paper px-6">
+        <div
+          className="flex items-center gap-3 text-sm text-muted"
+          role="status"
+        >
+          <Loader2 className="size-5 animate-spin" aria-hidden="true" />
           Memeriksa sesi login...
-        </p>
+        </div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-paper px-4 py-8 sm:grid sm:place-items-center sm:px-6">
-      <section className="mx-auto w-full max-w-5xl overflow-hidden rounded-lg border border-line bg-surface lg:grid lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="flex flex-col justify-between bg-ink-900 p-6 text-white sm:p-9">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="grid size-11 place-items-center rounded-md bg-white text-ume">
-                <Package className="size-6" aria-hidden="true" />
-              </span>
-              <p className="font-display text-xl font-semibold">
-                Daisuki Inventory
-              </p>
-            </div>
-            <h1 className="mt-10 max-w-md text-3xl font-semibold leading-tight text-white sm:text-4xl">
-              Stok cabang dan restock dalam satu alur kerja.
+    <main className="min-h-dvh bg-paper sm:grid sm:place-items-center sm:px-6 sm:py-10">
+      <section className="mx-auto w-full max-w-4xl bg-white sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:shadow-[0_20px_55px_-45px_rgba(20,27,61,0.35)] lg:grid lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="flex flex-col bg-[#eff1ed] px-6 pb-7 pt-8 sm:px-10 sm:pb-9 sm:pt-10 lg:justify-between lg:px-12 lg:py-12">
+          <div className="flex items-baseline gap-2">
+            <span className="font-display text-xl font-semibold tracking-tight text-ink-900">
+              Daisuki
+            </span>
+            <span className="text-sm text-muted">Inventory</span>
+          </div>
+
+          <div className="mt-10 max-w-sm lg:mb-2 lg:mt-24">
+            <div
+              className="mb-5 h-1 w-10 rounded-full bg-ume/75"
+              aria-hidden="true"
+            />
+            <h1 className="font-display text-[clamp(1.8rem,3.3vw,2.55rem)] font-semibold leading-[1.15] text-ink-900">
+              Stok cabang dan restock, lebih mudah diikuti.
             </h1>
-            <p className="mt-4 max-w-md text-base leading-7 text-ink-100">
-              Mitra melaporkan stok fisik. Admin pusat menindak stok kritis dan
-              pesanan masuk.
+            <p className="mt-4 max-w-xs text-sm leading-6 text-muted sm:text-base sm:leading-7">
+              Satu tempat untuk laporan stok mitra dan tindak lanjut pesanan
+              oleh admin pusat.
             </p>
           </div>
-          <p className="mt-10 text-sm text-ink-100">
-            Akun demo memakai kata sandi{' '}
-            <span className="font-semibold text-white">password123</span>.
-          </p>
         </div>
 
-        <div className="p-6 sm:p-9">
-          <div className="max-w-lg">
-            <p className="text-sm font-semibold text-ume">Akses operasional</p>
-            <h2 className="mt-1 text-2xl font-semibold text-ink-900">
-              Masuk ke akun Anda
+        <div className="px-6 pb-8 pt-8 sm:px-10 sm:pb-10 sm:pt-10 lg:px-12 lg:py-12">
+          <div className="mx-auto max-w-sm">
+            <h2 className="font-display text-2xl font-semibold text-ink-900">
+              Masuk ke akun
             </h2>
-            <p className="mt-2 text-sm text-muted">
-              Gunakan akun cabang atau akun admin pusat.
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Gunakan email atau username dan kata sandi akun Daisuki Anda.
             </p>
-          </div>
 
-          <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-1.5 block text-sm font-semibold text-ink-900"
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="nama@daisuki.test"
-                className="min-h-12 w-full rounded-sm border border-line bg-white px-3 text-base text-text placeholder:text-stale focus:border-ink-700"
-                required
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-1.5 block text-sm font-semibold text-ink-900"
-              >
-                Kata sandi
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="min-h-12 w-full rounded-sm border border-line bg-white px-3 text-base text-text focus:border-ink-700"
-                required
-                minLength={8}
-                aria-describedby={error ? 'login-error' : undefined}
-              />
-            </div>
+            <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
+              <div>
+                <label
+                  htmlFor="email"
+                  className="mb-2 block text-sm font-medium text-ink-900"
+                >
+                  Email atau username
+                </label>
+                <input
+                  id="email"
+                  type="text"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="Email atau username"
+                  className="min-h-12 w-full rounded-lg border border-[#858e9d] bg-white px-4 text-base text-text placeholder:text-[#687080] focus-visible:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                  required
+                  aria-describedby={error ? 'login-error' : undefined}
+                />
+              </div>
 
-            {error ? (
-              <p
-                id="login-error"
-                className="rounded-sm bg-crit-bg p-3 text-sm font-medium text-crit-fg"
-                role="alert"
-              >
-                {error}
-              </p>
-            ) : null}
+              <div>
+                <label
+                  htmlFor="password"
+                  className="mb-2 block text-sm font-medium text-ink-900"
+                >
+                  Kata sandi
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Masukkan kata sandi"
+                    className="min-h-12 w-full rounded-lg border border-[#858e9d] bg-white py-2 pl-4 pr-14 text-base text-text placeholder:text-[#687080] focus-visible:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                    required
+                    aria-describedby={error ? 'login-error' : undefined}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-1 top-1 grid size-10 place-items-center rounded-md text-muted hover:bg-ink-50 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                    aria-label={
+                      showPassword
+                        ? 'Sembunyikan kata sandi'
+                        : 'Tampilkan kata sandi'
+                    }
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="size-5" aria-hidden="true" />
+                    ) : (
+                      <Eye className="size-5" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+              </div>
 
-            <button
-              type="submit"
-              disabled={pendingAction !== null}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ink-700 px-4 font-semibold text-white hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {pendingAction === 'form' ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              {error ? (
+                <p
+                  id="login-error"
+                  role="alert"
+                  className="rounded-lg border border-crit/25 bg-crit-bg px-3 py-2.5 text-sm leading-5 text-crit-fg"
+                >
+                  {error}
+                </p>
               ) : null}
-              Masuk ke portal
-            </button>
-          </form>
 
-          <InstallApp />
+              <button
+                type="submit"
+                disabled={pendingAction !== null}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink-700 px-5 text-sm font-semibold text-white transition-colors hover:bg-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:cursor-wait disabled:opacity-60"
+              >
+                {pendingAction === 'form' ? (
+                  <>
+                    <Loader2
+                      className="size-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                    Sedang masuk...
+                  </>
+                ) : (
+                  'Masuk'
+                )}
+              </button>
+            </form>
 
-          <div className="mt-8 border-t border-line pt-6">
-            <p className="text-sm font-semibold text-ink-900">Akses demo</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => void handleDemo('admin')}
-                disabled={pendingAction !== null}
-                className="flex min-h-14 items-center gap-3 rounded-md border border-ink-700 bg-white px-3 text-left text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-60"
-              >
-                {pendingAction === 'admin' ? (
-                  <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Building2 className="size-5" aria-hidden="true" />
-                )}
-                Login Demo Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleDemo('mitra')}
-                disabled={pendingAction !== null}
-                className="flex min-h-14 items-center gap-3 rounded-md border border-line bg-ink-50 px-3 text-left text-sm font-semibold text-ink-900 hover:border-ink-500 disabled:opacity-60"
-              >
-                {pendingAction === 'mitra' ? (
-                  <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Store className="size-5 text-ume" aria-hidden="true" />
-                )}
-                Login Demo Mitra
-              </button>
+            <div className="mt-8 border-t border-line pt-6">
+              <p className="text-sm font-medium text-ink-900">Coba akun demo</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void handleDemo('admin')}
+                  disabled={pendingAction !== null}
+                  className="min-h-12 rounded-lg border border-[#858e9d] bg-white px-4 text-left text-sm font-medium text-ink-900 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {pendingAction === 'admin'
+                    ? 'Sedang masuk...'
+                    : 'Admin pusat'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDemo('mitra')}
+                  disabled={pendingAction !== null}
+                  className="min-h-12 rounded-lg border border-[#858e9d] bg-white px-4 text-left text-sm font-medium text-ink-900 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {pendingAction === 'mitra'
+                    ? 'Sedang masuk...'
+                    : 'Mitra cabang'}
+                </button>
+              </div>
             </div>
+
+            <InstallApp />
           </div>
         </div>
       </section>

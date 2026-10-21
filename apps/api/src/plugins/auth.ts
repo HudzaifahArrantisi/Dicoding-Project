@@ -1,6 +1,9 @@
 import { Elysia } from "elysia";
 import * as jose from "jose";
 import { env } from "../env";
+import { eq } from "drizzle-orm";
+import { db } from "../db/client";
+import { partners, users } from "../db/schema";
 
 const jwtSecret =
   env.JWT_SECRET ||
@@ -71,7 +74,29 @@ export async function getAuthUser(
     return null;
   }
   const token = authHeader.slice(7).trim();
-  return await verifyToken(token);
+  const payload = await verifyToken(token);
+  if (!payload) return null;
+  const [account] = await db
+    .select({
+      id: users.id,
+      role: users.role,
+      partnerId: users.partner_id,
+      email: users.email,
+      fullName: users.full_name,
+      partnerActive: partners.is_active,
+    })
+    .from(users)
+    .leftJoin(partners, eq(users.partner_id, partners.id))
+    .where(eq(users.id, payload.userId))
+    .limit(1);
+  if (!account || (account.role === "mitra" && (!account.partnerId || !account.partnerActive))) return null;
+  return {
+    userId: account.id,
+    role: account.role,
+    partnerId: account.partnerId,
+    email: account.email,
+    fullName: account.fullName,
+  };
 }
 
 export const authPlugin = new Elysia({ name: "auth" }).derive(

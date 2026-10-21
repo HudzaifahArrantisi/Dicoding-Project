@@ -17,6 +17,7 @@ export const partnerTypeEnum = pgEnum("partner_type", [
   "restoran",
   "kafe",
   "minimarket",
+  "lainnya",
 ]);
 export const orderStatusEnum = pgEnum("order_status", [
   "diproses",
@@ -49,6 +50,7 @@ export const partners = pgTable("partners", {
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
+  username: text("username").unique(),
   password_hash: text("password_hash").notNull(),
   role: userRoleEnum("role").notNull(),
   partner_id: uuid("partner_id").references(() => partners.id),

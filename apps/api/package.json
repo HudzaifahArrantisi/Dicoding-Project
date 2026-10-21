@@ -5,6 +5,7 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "seed": "bun run src/db/seed.ts",
+    "seed:mitra": "bun run src/db/seed-mitra.ts",
     "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

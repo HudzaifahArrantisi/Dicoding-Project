@@ -20,7 +20,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   ClipboardCheck,
   Clock,
   Download,
@@ -34,6 +33,7 @@ import {
   RotateCcw,
   Search,
   Store,
+  Trash2,
   Truck,
   X,
   XCircle,
@@ -44,11 +44,14 @@ import {
   ErrorState,
   LoadingState,
 } from '@/components/inventory/query-state'
-import { RakBar } from '@/components/inventory/rak-bar'
 import {
   BatchDetailModal,
   type StockLogBatch,
 } from '@/components/inventory/batch-detail-modal'
+import {
+  PartnerStockDetailModal,
+  type PartnerStockGroup,
+} from '@/components/inventory/partner-stock-detail-modal'
 import {
   OrderStatusBadge,
   StaleBadge,
@@ -73,7 +76,7 @@ interface Metrics {
   criticalItemsCount: number
 }
 
-type AdminTab = 'stocks' | 'orders' | 'alerts' | 'data-science' | 'ai-insights'
+type AdminTab = 'stocks' | 'orders' | 'alerts' | 'partners' | 'data-science' | 'ai-insights'
 type OrderCategoryTab = 'menunggu' | 'selesai' | 'ditolak'
 
 interface WeeklySummary {
@@ -114,7 +117,7 @@ interface AIInsights {
   }>
 }
 
-async function adminFetch<T>(path: string): Promise<T> {
+async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const host = window.location.hostname
   const apiUrl =
     host !== 'localhost' && host !== '127.0.0.1'
@@ -122,9 +125,17 @@ async function adminFetch<T>(path: string): Promise<T> {
       : import.meta.env.VITE_API_URL || 'http://localhost:3001'
   const token = localStorage.getItem('daisuki_token')
   const response = await fetch(`${apiUrl}/admin/${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    ...init,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
   })
-  if (!response.ok) throw new Error('Data admin belum dapat dimuat.')
+  if (!response.ok) {
+    const result = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(result?.error ?? 'Permintaan belum berhasil. Coba lagi.')
+  }
   return response.json() as Promise<T>
 }
 
@@ -1385,6 +1396,12 @@ function AdminDashboard() {
             onClick={() => setTab('alerts')}
           />
           <TabButton
+            label="Manajemen mitra"
+            Icon={Building2}
+            active={tab === 'partners'}
+            onClick={() => setTab('partners')}
+          />
+          <TabButton
             label="Data"
             Icon={Database}
             active={tab === 'data-science'}
@@ -1499,6 +1516,7 @@ function AdminDashboard() {
             onNavigateToStock={handleNavigateToStock}
           />
         ) : null}
+        {tab === 'partners' ? <PartnerManagementPanel /> : null}
         {tab === 'data-science' ? (
           <DataSciencePanel
             summary={weeklySummary.data?.data}
@@ -1585,13 +1603,136 @@ function Metric({
   )
 }
 
-interface PartnerStockGroup {
-  partner_id: string
-  partner_name: string
-  partner_type: string
-  overall_status: StockStatus
-  is_stale: boolean
-  items: StockItem[]
+type PartnerType = 'hotel' | 'restoran' | 'kafe' | 'minimarket' | 'lainnya'
+interface ManagedPartner {
+  id: string
+  name: string
+  type: PartnerType
+  address: string | null
+  pic_name: string | null
+  pic_phone: string | null
+  username: string | null
+}
+
+const emptyPartnerForm = {
+  name: '',
+  type: 'hotel' as PartnerType,
+  address: '',
+  pic_name: '',
+  phone: '',
+  username: '',
+  password: '',
+}
+
+function PartnerManagementPanel() {
+  const queryClient = useQueryClient()
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm] = useState(emptyPartnerForm)
+  const [partnerToDelete, setPartnerToDelete] = useState<ManagedPartner | null>(null)
+  const partnersQuery = useQuery<{ data: ManagedPartner[] }>({
+    queryKey: ['admin-partners'],
+    queryFn: () => adminFetch('partners'),
+  })
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['admin-partners'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin-metrics'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin-stocks'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin-notifications'] }),
+    ])
+  }
+  const createPartner = useMutation({
+    mutationFn: () => adminFetch('partners', { method: 'POST', body: JSON.stringify(form) }),
+    onSuccess: async () => {
+      setFormOpen(false)
+      setForm(emptyPartnerForm)
+      toast.success('Mitra baru dan akun login berhasil dibuat')
+      await refresh()
+    },
+    onError: (error: unknown) => toast.error(getErrorMessage(error)),
+  })
+  const deletePartner = useMutation({
+    mutationFn: (id: string) => adminFetch(`partners/${id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      setPartnerToDelete(null)
+      toast.success('Mitra dan datanya berhasil dihapus')
+      await refresh()
+    },
+    onError: (error: unknown) => toast.error(getErrorMessage(error)),
+  })
+  const fieldClass = 'min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700'
+  const labelClass = 'mb-1.5 block text-sm font-semibold text-ink-900'
+
+  return (
+    <section aria-labelledby="partner-management-title" className="space-y-5">
+      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 id="partner-management-title" className="font-display text-2xl font-semibold text-ink-900">Manajemen mitra</h1>
+          <p className="mt-1 text-sm text-muted">Kelola cabang dan akun masuk portal mitra.</p>
+        </div>
+        <button type="button" onClick={() => setFormOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">
+          <Plus className="size-4" aria-hidden="true" /> Tambah mitra
+        </button>
+      </div>
+
+      {partnersQuery.isLoading ? <LoadingState label="Memuat daftar mitra..." /> : null}
+      {partnersQuery.isError ? <ErrorState message={getErrorMessage(partnersQuery.error)} onRetry={() => void partnersQuery.refetch()} /> : null}
+      {partnersQuery.data?.data.length === 0 ? <EmptyState title="Belum ada mitra" description="Tambahkan mitra pertama untuk membuat akun portal cabang." /> : null}
+      <div className="grid gap-3 md:grid-cols-2">
+        {partnersQuery.data?.data.map((partner) => (
+          <article key={partner.id} className="rounded-md border border-line bg-white p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="font-display text-lg font-semibold text-ink-900">{partner.name}</h2>
+                <p className="mt-0.5 text-sm capitalize text-muted">{partner.type}</p>
+              </div>
+              <button type="button" onClick={() => setPartnerToDelete(partner)} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-crit-fg hover:bg-crit-bg focus-visible:outline-2 focus-visible:outline-crit" aria-label={`Hapus ${partner.name}`}>
+                <Trash2 className="size-4" aria-hidden="true" /> Hapus
+              </button>
+            </div>
+            <dl className="mt-4 grid gap-2 border-t border-line pt-4 text-sm sm:grid-cols-2">
+              <div><dt className="text-muted">PIC</dt><dd className="font-medium text-ink-900">{partner.pic_name || '—'}</dd></div>
+              <div><dt className="text-muted">Nomor telepon</dt><dd className="font-medium tabular-nums text-ink-900">{partner.pic_phone || '—'}</dd></div>
+              <div><dt className="text-muted">Username</dt><dd className="break-all font-medium text-ink-900">{partner.username || '—'}</dd></div>
+              <div><dt className="text-muted">Alamat</dt><dd className="font-medium text-ink-900">{partner.address || '—'}</dd></div>
+            </dl>
+          </article>
+        ))}
+      </div>
+
+      <Dialog.Root open={formOpen} onOpenChange={(open) => { setFormOpen(open); if (!open && !createPartner.isPending) setForm(emptyPartnerForm) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-md border border-line bg-white p-5 shadow-xl focus-visible:outline-2 focus-visible:outline-ink-700 sm:p-6">
+            <Dialog.Title className="font-display text-xl font-semibold text-ink-900">Tambah mitra baru</Dialog.Title>
+            <Dialog.Description className="mt-1 text-sm text-muted">Isi data cabang dan buat akun untuk PIC mitra.</Dialog.Description>
+            <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); createPartner.mutate() }}>
+              <div className="sm:col-span-2"><label className={labelClass} htmlFor="partner-name">Nama mitra</label><input id="partner-name" className={fieldClass} required minLength={2} maxLength={120} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></div>
+              <div><label className={labelClass} htmlFor="partner-type">Jenis perusahaan</label><select id="partner-type" className={fieldClass} value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as PartnerType })}><option value="hotel">Hotel</option><option value="restoran">Rumah makan / restoran</option><option value="kafe">Kafe</option><option value="minimarket">Minimarket</option><option value="lainnya">Lainnya</option></select></div>
+              <div><label className={labelClass} htmlFor="partner-phone">Nomor telepon</label><input id="partner-phone" className={fieldClass} type="tel" required minLength={8} maxLength={24} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
+              <div className="sm:col-span-2"><label className={labelClass} htmlFor="partner-address">Alamat</label><textarea id="partner-address" className={`${fieldClass} min-h-24 py-3`} required minLength={5} maxLength={500} value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></div>
+              <div className="sm:col-span-2"><label className={labelClass} htmlFor="partner-pic">Nama PIC mitra</label><input id="partner-pic" className={fieldClass} required minLength={2} maxLength={120} value={form.pic_name} onChange={(event) => setForm({ ...form, pic_name: event.target.value })} /></div>
+              <div><label className={labelClass} htmlFor="partner-username">Username</label><input id="partner-username" className={fieldClass} required minLength={3} maxLength={40} pattern="[a-z0-9._-]+" autoComplete="off" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value.toLowerCase().trim() })} /><p className="mt-1 text-xs text-muted">Huruf kecil, angka, titik, _ atau -</p></div>
+              <div><label className={labelClass} htmlFor="partner-password">Kata sandi</label><input id="partner-password" className={fieldClass} type="password" required minLength={8} maxLength={128} autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /><p className="mt-1 text-xs text-muted">Minimal 8 karakter.</p></div>
+              <div className="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:col-span-2 sm:flex-row sm:justify-end"><Dialog.Close asChild><button type="button" className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">Batal</button></Dialog.Close><button type="submit" disabled={createPartner.isPending} className="min-h-11 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:opacity-60">{createPartner.isPending ? 'Menyimpan...' : 'Simpan mitra'}</button></div>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={partnerToDelete !== null} onOpenChange={(open) => { if (!open && !deletePartner.isPending) setPartnerToDelete(null) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-md border border-line bg-white p-5 shadow-xl focus-visible:outline-2 focus-visible:outline-ink-700 sm:p-6">
+            <Dialog.Title className="font-display text-xl font-semibold text-ink-900">Hapus {partnerToDelete?.name}?</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm leading-6 text-muted">Akun login, stok, riwayat laporan, pesanan, dan notifikasi mitra ini akan dihapus permanen dari database.</Dialog.Description>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setPartnerToDelete(null)} disabled={deletePartner.isPending} className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">Batal</button><button type="button" onClick={() => { if (partnerToDelete) deletePartner.mutate(partnerToDelete.id) }} disabled={deletePartner.isPending} className="min-h-11 rounded-md bg-crit px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit disabled:opacity-60">{deletePartner.isPending ? 'Menghapus...' : 'Hapus permanen'}</button></div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </section>
+  )
 }
 
 function StockPanel({
@@ -1618,9 +1759,7 @@ function StockPanel({
   onStatus: (value: StockStatus | 'semua' | 'belum_update') => void
 }) {
   const queryClient = useQueryClient()
-  const [expandedPartners, setExpandedPartners] = useState<
-    Record<string, boolean>
-  >({})
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null)
   const [centralStockDrafts, setCentralStockDrafts] = useState<
     Record<string, string>
   >({})
@@ -1774,13 +1913,6 @@ function StockPanel({
     }))
   }
 
-  const toggleExpand = (partnerId: string) => {
-    setExpandedPartners((prev) => ({
-      ...prev,
-      [partnerId]: !prev[partnerId],
-    }))
-  }
-
   const branchGroups = useMemo<PartnerStockGroup[]>(() => {
     const map = new Map<string, PartnerStockGroup>()
     for (const item of rows) {
@@ -1814,6 +1946,11 @@ function StockPanel({
       }
     })
   }, [rows])
+
+  const selectedGroup = useMemo(() => {
+    if (!selectedPartnerId) return null
+    return branchGroups.find((g) => g.partner_id === selectedPartnerId) ?? null
+  }, [branchGroups, selectedPartnerId])
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-1 duration-300">
@@ -2146,103 +2283,75 @@ function StockPanel({
             />
           </div>
         ) : null}
-        <div className="divide-y divide-line">
-          {branchGroups.map((group) => {
-            const isExpanded = !!expandedPartners[group.partner_id]
-            return (
-              <article
-                key={group.partner_id}
-                className={`transition-colors ${
-                  group.overall_status === 'kritis'
-                    ? 'border-l-[3px] border-l-crit bg-crit-bg/15'
-                    : group.overall_status === 'waspada'
-                      ? 'border-l-[3px] border-l-warn bg-warn-bg/15'
-                      : ''
-                }`}
+        <div className="p-4 space-y-2.5 bg-paper/30">
+          {branchGroups.map((group, index) => (
+            <article
+              key={group.partner_id}
+              className={`overflow-hidden rounded-lg border border-line bg-white shadow-2xs transition-all hover:border-ink-400 hover:shadow-xs ${
+                group.overall_status === 'kritis'
+                  ? 'border-l-4 border-l-crit'
+                  : group.overall_status === 'waspada'
+                    ? 'border-l-4 border-l-warn'
+                    : 'border-l-4 border-l-ok'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setSelectedPartnerId(group.partner_id)}
+                aria-haspopup="dialog"
+                className="group flex w-full items-center justify-between p-3.5 sm:p-4 text-left transition hover:bg-ink-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-700"
               >
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(group.partner_id)}
-                  aria-expanded={isExpanded}
-                  className="flex w-full items-center justify-between p-4 text-left transition hover:bg-ink-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-700"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`grid size-10 shrink-0 place-items-center rounded-md ${
-                        group.overall_status === 'kritis'
-                          ? 'bg-crit-bg text-crit'
-                          : group.overall_status === 'waspada'
-                            ? 'bg-warn-bg text-warn'
-                            : 'bg-ok-bg text-ok'
-                      }`}
-                    >
-                      <Building2 className="size-5" aria-hidden="true" />
-                    </span>
-                    <div>
-                      <p className="font-semibold text-ink-900">
-                        {group.partner_name}
-                      </p>
-                      <p className="text-xs capitalize text-muted">
-                        Cabang {group.partner_type} • Klik untuk{' '}
-                        {isExpanded ? 'tutup' : 'lihat'} detail (
-                        {group.items.length} produk)
-                      </p>
-                    </div>
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="grid size-7 shrink-0 place-items-center rounded-md bg-paper border border-line font-display text-xs font-bold tabular-nums text-ink-700">
+                    {index + 1}
+                  </span>
+                  <span
+                    className={`grid size-10 shrink-0 place-items-center rounded-lg ${
+                      group.overall_status === 'kritis'
+                        ? 'bg-crit-bg text-crit'
+                        : group.overall_status === 'waspada'
+                          ? 'bg-warn-bg text-warn'
+                          : 'bg-ok-bg text-ok'
+                    }`}
+                  >
+                    <Building2 className="size-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink-900 group-hover:text-ink-700 truncate">
+                      {group.partner_name}
+                    </p>
+                    <p className="text-xs capitalize text-muted">
+                      Cabang {group.partner_type} • Klik untuk lihat detail ({group.items.length} produk)
+                    </p>
                   </div>
+                </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <StockStatusBadge status={group.overall_status} />
-                      {group.is_stale ? <StaleBadge /> : null}
-                    </div>
-                    <span className="grid size-8 place-items-center text-muted">
-                      {isExpanded ? (
-                        <ChevronUp className="size-5" aria-hidden="true" />
-                      ) : (
-                        <ChevronDown className="size-5" aria-hidden="true" />
-                      )}
-                    </span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StockStatusBadge status={group.overall_status} />
+                    {group.is_stale ? <StaleBadge /> : null}
                   </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="border-t border-line bg-paper/60 p-4">
-                    <div className="divide-y divide-line rounded-md border border-line bg-white">
-                      {group.items.map((stock) => (
-                        <div
-                          key={stock.product_id}
-                          className="grid gap-3 p-3.5 sm:grid-cols-[1.5fr_1.5fr_130px] sm:items-center"
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-ink-900">
-                              {stock.product_name}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <RakBar
-                              compact
-                              percentage={stock.percentage}
-                              status={stock.status}
-                              label={`${stock.percentage} persen`}
-                            />
-                            <span className="text-sm font-semibold tabular-nums text-ink-800">
-                              {stock.current_qty}/{stock.par_level}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-start gap-1 sm:justify-end">
-                            <StockStatusBadge status={stock.status} />
-                            {stock.is_stale ? <StaleBadge /> : null}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </article>
-            )
-          })}
+                  <span className="flex items-center gap-1 text-xs font-medium text-muted transition-colors group-hover:text-ink-900">
+                    <span className="hidden sm:inline">Detail</span>
+                    <ChevronRight
+                      className="size-4 transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </span>
+                </div>
+              </button>
+            </article>
+          ))}
         </div>
       </section>
+
+      <PartnerStockDetailModal
+        group={selectedGroup}
+        open={selectedPartnerId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedPartnerId(null)
+        }}
+      />
     </div>
   )
 }

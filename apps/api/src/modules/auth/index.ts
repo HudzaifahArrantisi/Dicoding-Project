@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db } from "../../db/client";
 import { users, partners } from "../../db/schema";
 import { signToken, getAuthUser } from "../../plugins/auth";
@@ -8,11 +8,12 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
   "/login",
   async ({ body, set }) => {
     const { email, password } = body;
+    const identifier = email.toLowerCase().trim();
 
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
+      .where(or(eq(users.email, identifier), eq(users.username, identifier)))
       .limit(1);
 
     if (!user) {
@@ -24,6 +25,18 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
     if (!isValid) {
       set.status = 401;
       return { error: "Email atau password salah" };
+    }
+
+    if (user.partner_id) {
+      const [partner] = await db
+        .select({ is_active: partners.is_active })
+        .from(partners)
+        .where(eq(partners.id, user.partner_id))
+        .limit(1);
+      if (!partner?.is_active) {
+        set.status = 401;
+        return { error: "Akun mitra tidak aktif" };
+      }
     }
 
     let partnerName: string | null = null;
@@ -76,7 +89,7 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
   },
   {
     body: t.Object({
-      email: t.String({ format: "email", maxLength: 254 }),
+      email: t.String({ minLength: 3, maxLength: 254 }),
       password: t.String({ minLength: 8, maxLength: 128 }),
     }),
   },
