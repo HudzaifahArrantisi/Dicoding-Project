@@ -81,3 +81,24 @@ export interface StockLog {
   source: string
   created_at: string
 }
+
+export type PartnerType = 'hotel' | 'restoran' | 'kafe' | 'minimarket' | 'lainnya'
+
+export interface ManagedPartner {
+  id: string
+  name: string
+  type: PartnerType
+  address: string | null
+  pic_name: string | null
+  pic_phone: string | null
+  username: string | null
+  province_code: string | null
+  province_name: string | null
+  regency_code: string | null
+  regency_name: string | null
+  district_code: string | null
+  district_name: string | null
+  village_code: string | null
+  village_name: string | null
+}
+

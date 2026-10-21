@@ -3,6 +3,7 @@ import { eq, or } from "drizzle-orm";
 import { db } from "../../db/client";
 import { users, partners } from "../../db/schema";
 import { signToken, getAuthUser } from "../../plugins/auth";
+import { resolveRegion, RegionError, type RegionCodes } from "../regions";
 
 export const authModule = new Elysia({ prefix: "/auth" }).post(
   "/login",
@@ -44,6 +45,7 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
     let partnerPhone: string | null = null;
     let partnerAddress: string | null = null;
     let partnerPhoto: string | null = null;
+    let partnerRegion: RegionCodes | null = null;
     if (user.partner_id) {
       const [partner] = await db
         .select({
@@ -52,6 +54,10 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
           phone: partners.pic_phone,
           address: partners.address,
           photo: partners.profile_photo,
+          province_code: partners.province_code,
+          regency_code: partners.regency_code,
+          district_code: partners.district_code,
+          village_code: partners.village_code,
         })
         .from(partners)
         .where(eq(partners.id, user.partner_id))
@@ -61,6 +67,12 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
       partnerPhone = partner?.phone ?? null;
       partnerAddress = partner?.address ?? null;
       partnerPhoto = partner?.photo ?? null;
+      partnerRegion = partner ? {
+        province_code: partner.province_code ?? "",
+        regency_code: partner.regency_code ?? "",
+        district_code: partner.district_code ?? "",
+        village_code: partner.village_code ?? "",
+      } : null;
     }
 
     const token = await signToken({
@@ -83,6 +95,7 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
         partner_phone: partnerPhone,
         partner_address: partnerAddress,
         partner_photo: partnerPhoto,
+        partner_region: partnerRegion,
         full_name: user.full_name,
       },
     };
@@ -119,6 +132,7 @@ export const meModule = new Elysia()
     let partnerPhone: string | null = null;
     let partnerAddress: string | null = null;
     let partnerPhoto: string | null = null;
+    let partnerRegion: RegionCodes | null = null;
     if (dbUser.partner_id) {
       const [partner] = await db
         .select({
@@ -127,6 +141,10 @@ export const meModule = new Elysia()
           phone: partners.pic_phone,
           address: partners.address,
           photo: partners.profile_photo,
+          province_code: partners.province_code,
+          regency_code: partners.regency_code,
+          district_code: partners.district_code,
+          village_code: partners.village_code,
         })
         .from(partners)
         .where(eq(partners.id, dbUser.partner_id))
@@ -136,6 +154,12 @@ export const meModule = new Elysia()
       partnerPhone = partner?.phone ?? null;
       partnerAddress = partner?.address ?? null;
       partnerPhoto = partner?.photo ?? null;
+      partnerRegion = partner ? {
+        province_code: partner.province_code ?? "",
+        regency_code: partner.regency_code ?? "",
+        district_code: partner.district_code ?? "",
+        village_code: partner.village_code ?? "",
+      } : null;
     }
 
     return {
@@ -149,6 +173,7 @@ export const meModule = new Elysia()
         partner_phone: partnerPhone,
         partner_address: partnerAddress,
         partner_photo: partnerPhoto,
+        partner_region: partnerRegion,
         full_name: dbUser.full_name,
       },
     };
@@ -191,6 +216,19 @@ export const meModule = new Elysia()
         return { error: "Nomor telepon tidak valid" };
       }
 
+      let region;
+      try {
+        region = await resolveRegion({
+          province_code: body.province_code,
+          regency_code: body.regency_code,
+          district_code: body.district_code,
+          village_code: body.village_code,
+        });
+      } catch (error) {
+        set.status = error instanceof RegionError ? error.status : 503;
+        return { error: error instanceof Error ? error.message : "Wilayah belum dapat diperiksa" };
+      }
+
       if (body.photo_data_url !== null) {
         const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(
           body.photo_data_url,
@@ -220,6 +258,7 @@ export const meModule = new Elysia()
           pic_name: picName,
           pic_phone: phone,
           address,
+          ...region,
           profile_photo: body.photo_data_url,
         })
         .where(eq(partners.id, dbUser.partner_id))
@@ -237,6 +276,10 @@ export const meModule = new Elysia()
         pic_name: t.String({ minLength: 2, maxLength: 120 }),
         phone: t.String({ minLength: 8, maxLength: 24 }),
         address: t.String({ minLength: 5, maxLength: 500 }),
+        province_code: t.String({ maxLength: 20 }),
+        regency_code: t.String({ maxLength: 20 }),
+        district_code: t.String({ maxLength: 20 }),
+        village_code: t.String({ maxLength: 20 }),
         photo_data_url: t.Union([t.String({ maxLength: 350_000 }), t.Null()]),
       }),
     },

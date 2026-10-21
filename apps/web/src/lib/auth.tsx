@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api } from './api'
 import { apiError } from './api-response'
+import type { RegionCodes } from '@/components/inventory/region-picker'
 
 export interface User {
   id: string
@@ -12,6 +13,7 @@ export interface User {
   partner_phone?: string | null
   partner_address?: string | null
   partner_photo?: string | null
+  partner_region?: RegionCodes | null
   full_name: string
 }
 

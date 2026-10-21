@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db, sql as postgres } from "../../db/client";
 import {
   orders,
@@ -10,6 +10,7 @@ import {
   users,
 } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
+import { resolveRegion, RegionError } from "../regions";
 
 export const adminModule = new Elysia({ prefix: "/admin" })
   .get("/metrics", async ({ headers, set }) => {
@@ -52,38 +53,159 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       criticalItemsCount: Number(criticalItems[0]?.count ?? 0),
     };
   })
-  .get("/partners", async ({ headers, set }) => {
-    const user = await getAuthUser(headers);
-    if (!user) {
-      set.status = 401;
-      return { error: "Unauthorized" };
+  .get(
+    "/partners",
+    async ({ headers, query, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+
+      if (user.role !== "admin") {
+        set.status = 403;
+        return { error: "Forbidden: Admin only" };
+      }
+
+      const page = Math.max(1, Number(query.page) || 1);
+      const limit = Math.min(500, Math.max(1, Number(query.limit) || 200));
+      const offset = (page - 1) * limit;
+      const search = query.search?.trim() || "";
+      const type = query.type?.trim() || "";
+
+      // Ekstrak kondisi search dan type menjadi fragment SQL yang dipakai bersama
+      const typeFilterClause =
+        type && type !== "all" ? sql`AND p.type = ${type}::partner_type` : sql``;
+
+      const searchFilterClause = search
+        ? sql`AND (
+            p.name ILIKE ${`%${search}%`} OR
+            COALESCE(p.pic_name, '') ILIKE ${`%${search}%`} OR
+            COALESCE(p.pic_phone, '') ILIKE ${`%${search}%`} OR
+            COALESCE(p.address, '') ILIKE ${`%${search}%`} OR
+            COALESCE(p.province_name, '') ILIKE ${`%${search}%`} OR
+            COALESCE(p.regency_name, '') ILIKE ${`%${search}%`} OR
+            COALESCE(p.district_name, '') ILIKE ${`%${search}%`} OR
+            COALESCE(p.village_name, '') ILIKE ${`%${search}%`} OR
+            COALESCE(u.username, '') ILIKE ${`%${search}%`} OR
+            COALESCE(u.email, '') ILIKE ${`%${search}%`}
+          )`
+        : sql``;
+
+      // Single SQL round-trip query: LEFT JOIN LATERAL deterministik (ORDER BY created_at, id LIMIT 1) & COUNT(*) OVER() untuk total
+      const rows = await db.execute<{
+        id: string;
+        name: string;
+        type: string;
+        address: string | null;
+        pic_name: string | null;
+        pic_phone: string | null;
+        province_code: string | null;
+        province_name: string | null;
+        regency_code: string | null;
+        regency_name: string | null;
+        district_code: string | null;
+        district_name: string | null;
+        village_code: string | null;
+        village_name: string | null;
+        username: string | null;
+        total_count: number;
+      }>(sql`
+        SELECT 
+          p.id,
+          p.name,
+          p.type,
+          p.address,
+          p.pic_name,
+          p.pic_phone,
+          p.province_code,
+          p.province_name,
+          p.regency_code,
+          p.regency_name,
+          p.district_code,
+          p.district_name,
+          p.village_code,
+          p.village_name,
+          COALESCE(u.username, u.email) AS username,
+          COUNT(*) OVER()::int AS total_count
+        FROM partners p
+        LEFT JOIN LATERAL (
+          SELECT username, email
+          FROM users
+          WHERE users.partner_id = p.id
+          ORDER BY users.created_at ASC, users.id ASC
+          LIMIT 1
+        ) u ON true
+        WHERE p.is_active = true
+          ${typeFilterClause}
+          ${searchFilterClause}
+        ORDER BY p.name ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+
+      let total = rows.length > 0 ? rows[0].total_count : 0;
+
+      // Handle edge case: jika page > totalPages (offset > 0 dan rows kosong), jalankan fallback count dengan kondisi identik
+      if (total === 0 && offset > 0) {
+        const countRows = await db.execute<{ count: number }>(sql`
+          SELECT COUNT(*)::int AS count
+          FROM partners p
+          LEFT JOIN LATERAL (
+            SELECT username, email
+            FROM users
+            WHERE users.partner_id = p.id
+            ORDER BY users.created_at ASC, users.id ASC
+            LIMIT 1
+          ) u ON true
+          WHERE p.is_active = true
+            ${typeFilterClause}
+            ${searchFilterClause}
+        `);
+        total = countRows[0]?.count ?? 0;
+      }
+
+      const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+
+      const data = rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        address: row.address,
+        pic_name: row.pic_name,
+        pic_phone: row.pic_phone,
+        province_code: row.province_code,
+        province_name: row.province_name,
+        regency_code: row.regency_code,
+        regency_name: row.regency_name,
+        district_code: row.district_code,
+        district_name: row.district_name,
+        village_code: row.village_code,
+        village_name: row.village_name,
+        username: row.username,
+      }));
+
+      return {
+        data,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+        },
+      };
+    },
+    {
+      query: t.Optional(
+        t.Object({
+          search: t.Optional(t.String()),
+          type: t.Optional(t.String()),
+          status: t.Optional(t.String()),
+          page: t.Optional(t.Union([t.String(), t.Number()])),
+          limit: t.Optional(t.Union([t.String(), t.Number()])),
+        })
+      ),
     }
-
-    if (user.role !== "admin") {
-      set.status = 403;
-      return { error: "Forbidden: Admin only" };
-    }
-
-    const partnerList = await db
-      .select()
-      .from(partners)
-      .where(eq(partners.is_active, true))
-      .orderBy(partners.name);
-
-    const accounts = partnerList.length
-      ? await db
-          .select({ partner_id: users.partner_id, username: users.username, email: users.email })
-          .from(users)
-          .where(inArray(users.partner_id, partnerList.map((partner) => partner.id)))
-      : [];
-    const accountByPartner = new Map(accounts.map((account) => [account.partner_id, account]));
-    return {
-      data: partnerList.map((partner) => ({
-        ...partner,
-        username: accountByPartner.get(partner.id)?.username ?? accountByPartner.get(partner.id)?.email ?? null,
-      })),
-    };
-  })
+  )
   .post(
     "/partners",
     async ({ headers, body, set }) => {
@@ -113,6 +235,23 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         return { error: "Username sudah digunakan" };
       }
 
+      let region;
+      try {
+        region = await resolveRegion({
+          province_code: body.province_code,
+          regency_code: body.regency_code,
+          district_code: body.district_code,
+          village_code: body.village_code,
+        });
+      } catch (error) {
+        set.status = error instanceof RegionError ? error.status : 503;
+        return { error: error instanceof Error ? error.message : "Wilayah belum dapat diperiksa" };
+      }
+      if (!region.province_code) {
+        set.status = 422;
+        return { error: "Lengkapi wilayah mitra" };
+      }
+
       const passwordHash = await Bun.password.hash(body.password);
       try {
         const partner = await db.transaction(async (tx) => {
@@ -122,6 +261,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
             address,
             pic_name: picName,
             pic_phone: phone,
+            ...region,
           }).returning();
           const accountId = crypto.randomUUID();
           await tx.insert(users).values({
@@ -154,9 +294,62 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         phone: t.String({ minLength: 8, maxLength: 24 }),
         username: t.String({ minLength: 3, maxLength: 40 }),
         password: t.String({ minLength: 8, maxLength: 128 }),
+        province_code: t.String({ maxLength: 20 }),
+        regency_code: t.String({ maxLength: 20 }),
+        district_code: t.String({ maxLength: 20 }),
+        village_code: t.String({ maxLength: 20 }),
       }),
     },
   )
+  .patch("/partners/:id", async ({ headers, params, body, set }) => {
+    const admin = await getAuthUser(headers);
+    if (!admin) { set.status = 401; return { error: "Unauthorized" }; }
+    if (admin.role !== "admin") { set.status = 403; return { error: "Forbidden: Admin only" }; }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.id)) {
+      set.status = 400; return { error: "ID mitra tidak valid" };
+    }
+    const name = body.name.trim();
+    const address = body.address.trim();
+    const picName = body.pic_name.trim();
+    const phone = body.phone.trim();
+    if (name.length < 2 || address.length < 5 || picName.length < 2 || !/^\+?[0-9][0-9 ()-]{7,23}$/.test(phone)) {
+      set.status = 422; return { error: "Periksa nama mitra, alamat, PIC, dan nomor telepon" };
+    }
+    let region;
+    try {
+      region = await resolveRegion({
+        province_code: body.province_code,
+        regency_code: body.regency_code,
+        district_code: body.district_code,
+        village_code: body.village_code,
+      });
+    } catch (error) {
+      set.status = error instanceof RegionError ? error.status : 503;
+      return { error: error instanceof Error ? error.message : "Wilayah belum dapat diperiksa" };
+    }
+    const updated = await db.transaction(async (tx) => {
+      const [partner] = await tx.update(partners).set({
+        name, type: body.type, address, pic_name: picName, pic_phone: phone, ...region,
+      }).where(eq(partners.id, params.id)).returning({ id: partners.id });
+      if (!partner) return false;
+      await tx.update(users).set({ full_name: picName }).where(eq(users.partner_id, params.id));
+      return true;
+    });
+    if (!updated) { set.status = 404; return { error: "Mitra tidak ditemukan" }; }
+    return { success: true };
+  }, {
+    body: t.Object({
+      name: t.String({ minLength: 2, maxLength: 120 }),
+      type: t.Union([t.Literal("hotel"), t.Literal("restoran"), t.Literal("kafe"), t.Literal("minimarket"), t.Literal("lainnya")]),
+      address: t.String({ minLength: 5, maxLength: 500 }),
+      pic_name: t.String({ minLength: 2, maxLength: 120 }),
+      phone: t.String({ minLength: 8, maxLength: 24 }),
+      province_code: t.String({ maxLength: 20 }),
+      regency_code: t.String({ maxLength: 20 }),
+      district_code: t.String({ maxLength: 20 }),
+      village_code: t.String({ maxLength: 20 }),
+    }),
+  })
   .delete("/partners/:id", async ({ headers, params, set }) => {
     const admin = await getAuthUser(headers);
     if (!admin) {

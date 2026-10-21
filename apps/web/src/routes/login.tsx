@@ -67,23 +67,31 @@ function LoginPage() {
   return (
     <main className="min-h-dvh bg-paper sm:grid sm:place-items-center sm:px-6 sm:py-10">
       <section className="mx-auto w-full max-w-4xl bg-white sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:shadow-[0_20px_55px_-45px_rgba(20,27,61,0.35)] lg:grid lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="flex flex-col bg-[#eff1ed] px-6 pb-7 pt-8 sm:px-10 sm:pb-9 sm:pt-10 lg:justify-between lg:px-12 lg:py-12">
+        <div className="relative isolate flex flex-col overflow-hidden bg-[#a9000c] px-6 pb-7 pt-8 text-white sm:px-10 sm:pb-9 sm:pt-10 lg:justify-between lg:px-12 lg:py-12">
+          <img
+            src="/icons/logo.jpg"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-8 bottom-0 -z-20 size-64 object-contain opacity-90 lg:-right-10 lg:bottom-16 lg:size-72"
+            style={{ maskImage: 'radial-gradient(ellipse at center, black 38%, transparent 76%)' }}
+          />
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(105deg,rgba(42,0,8,0.92)_0%,rgba(62,0,11,0.85)_52%,rgba(68,0,12,0.48)_100%)]" aria-hidden="true" />
           <div className="flex items-baseline gap-2">
-            <span className="font-display text-xl font-semibold tracking-tight text-ink-900">
+            <span className="font-display text-xl font-semibold tracking-tight text-white">
               Daisuki
             </span>
-            <span className="text-sm text-muted">Inventory</span>
+            <span className="text-sm text-white/85">Inventory</span>
           </div>
 
           <div className="mt-10 max-w-sm lg:mb-2 lg:mt-24">
             <div
-              className="mb-5 h-1 w-10 rounded-full bg-ume/75"
+              className="mb-5 h-1 w-10 rounded-full bg-white/80"
               aria-hidden="true"
             />
-            <h1 className="font-display text-[clamp(1.8rem,3.3vw,2.55rem)] font-semibold leading-[1.15] text-ink-900">
+            <h1 className="font-display text-[clamp(1.8rem,3.3vw,2.55rem)] font-semibold leading-[1.15] text-white">
               Stok cabang dan restock, lebih mudah diikuti.
             </h1>
-            <p className="mt-4 max-w-xs text-sm leading-6 text-muted sm:text-base sm:leading-7">
+            <p className="mt-4 max-w-xs text-sm leading-6 text-white/90 sm:text-base sm:leading-7">
               Satu tempat untuk laporan stok mitra dan tindak lanjut pesanan
               oleh admin pusat.
             </p>

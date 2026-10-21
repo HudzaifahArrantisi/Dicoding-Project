@@ -62,6 +62,10 @@ Buka dan sesuaikan file berikut:
 
    Jika database sudah dibuat sebelumnya, jalankan juga **`neon/migrations/0002_partner_management.sql`** di SQL Editor untuk mengaktifkan username mitra dan kategori perusahaan lainnya. Untuk database baru, jalankan migrasi 0002 setelah 0001.
 
+   Untuk fitur wilayah profil mitra, lanjutkan dengan **`neon/migrations/0003_partner_regions.sql`** setelah migrasi 0002.
+
+   Pilihan provinsi, kabupaten/kota, kecamatan, dan kelurahan/desa diambil melalui API backend dari [Wilayah.id](https://wilayah.id/). Server API memerlukan akses HTTPS ke layanan tersebut saat daftar wilayah belum tersedia di cache.
+
 2. **Isi Data Awal (Seeding)**:  
    Setelah tabel berhasil dibuat, isi data awal demo (cabang, 4 produk resmi, dan akun demo) dengan perintah:
    ```bash

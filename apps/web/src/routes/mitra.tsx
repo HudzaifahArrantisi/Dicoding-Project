@@ -34,6 +34,7 @@ import {
   LoadingState,
 } from '@/components/inventory/query-state'
 import { RakBar } from '@/components/inventory/rak-bar'
+import { RegionPicker, emptyRegion } from '@/components/inventory/region-picker'
 import {
   BatchDetailModal,
   type StockLogBatch,
@@ -74,7 +75,7 @@ function errorMessage(error: unknown) {
 }
 
 function MitraPortal() {
-  const { user, logout, isLoading: authLoading } = useAuth()
+  const { user, logout, refreshUser, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<MitraTab>('stocks')
@@ -84,6 +85,13 @@ function MitraPortal() {
     () => new Set(),
   )
   const [orderNote, setOrderNote] = useState('')
+
+  const openTab = (nextTab: MitraTab) => {
+    setActiveTab(nextTab)
+    if (nextTab === 'profile') {
+      void refreshUser().catch(() => toast.error('Profil terbaru belum dapat dimuat'))
+    }
+  }
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'mitra')) {
@@ -282,7 +290,7 @@ function MitraPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-paper pb-24 text-text md:pb-8">
+    <div className="dashboard-page mitra-dashboard min-h-screen bg-paper pb-24 text-text md:pb-8">
       <header className="sticky top-0 z-20 border-b border-line bg-white">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="min-w-0">
@@ -299,10 +307,10 @@ function MitraPortal() {
                 </span>
               )}
               <div className="min-w-0">
-                <p className="truncate font-display text-lg font-semibold text-ink-900">
+                <p className="truncate font-display text-base font-semibold text-ink-900 sm:text-lg">
                   {user.partner_name ?? 'Portal mitra'}
                 </p>
-                <p className="truncate text-sm text-muted">
+                <p className="truncate text-xs text-muted sm:text-sm">
                   PIC {user.partner_pic_name || user.full_name}
                 </p>
               </div>
@@ -311,7 +319,7 @@ function MitraPortal() {
           <div className="flex items-center gap-1 sm:gap-2">
             <button
               type="button"
-              onClick={() => setActiveTab('profile')}
+              onClick={() => openTab('profile')}
               aria-current={activeTab === 'profile' ? 'page' : undefined}
               className={`hidden min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition md:inline-flex ${
                 activeTab === 'profile'
@@ -340,11 +348,11 @@ function MitraPortal() {
             <button
               key={id}
               type="button"
-              onClick={() => setActiveTab(id)}
+              onClick={() => openTab(id)}
               aria-current={activeTab === id ? 'page' : undefined}
-              className={`inline-flex min-h-11 items-center gap-2 border-b-2 px-4 text-sm font-semibold ${
+              className={`inline-flex min-h-12 items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors duration-150 ${
                 activeTab === id
-                  ? 'border-ink-700 text-ink-700'
+                  ? 'border-ink-900 text-ink-900'
                   : 'border-transparent text-muted hover:text-ink-900'
               }`}
             >
@@ -355,7 +363,7 @@ function MitraPortal() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
         {activeTab === 'stocks' ? (
           <StocksPanel
             query={stocksQuery}
@@ -410,17 +418,17 @@ function MitraPortal() {
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden"
         aria-label="Menu mitra"
       >
         {tabItems.map(({ id, label, Icon }) => (
           <button
             key={id}
             type="button"
-            onClick={() => setActiveTab(id)}
+            onClick={() => openTab(id)}
             aria-current={activeTab === id ? 'page' : undefined}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-sm text-xs font-semibold ${
-              activeTab === id ? 'bg-ink-100 text-ink-700' : 'text-muted'
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-colors duration-150 ${
+              activeTab === id ? 'bg-ink-100 text-ink-900' : 'text-muted hover:bg-ink-50'
             }`}
           >
             <Icon className="size-5" aria-hidden="true" />
@@ -452,13 +460,13 @@ function StocksPanel({
   isSaving,
 }: StocksPanelProps) {
   return (
-    <section aria-labelledby="stock-heading">
+    <section aria-labelledby="stock-heading" className="dashboard-panel-enter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-ume">Laporan harian</p>
+          <p className="dashboard-eyebrow">Laporan harian</p>
           <h1
             id="stock-heading"
-            className="mt-1 text-2xl font-semibold text-ink-900"
+            className="mt-1 text-2xl font-semibold text-ink-900 sm:text-3xl"
           >
             Sisa stok fisik
           </h1>
@@ -470,7 +478,7 @@ function StocksPanel({
           type="button"
           onClick={onSave}
           disabled={changedIds.size === 0 || isSaving}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-ink-700 px-5 text-sm font-semibold text-white hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-ink-900 px-5 text-sm font-semibold text-white hover:bg-ink-700 disabled:opacity-50"
         >
           {isSaving ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -483,11 +491,11 @@ function StocksPanel({
         </button>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-md border border-line bg-white shadow-xs">
-        <div className="flex flex-col gap-2 border-b border-line bg-ink-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="dashboard-surface mt-6 overflow-hidden">
+        <div className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-ink-900 text-white">
-              <Boxes className="size-5 text-ume" aria-hidden="true" />
+            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-ink-100 text-ink-700">
+              <Boxes className="size-5" aria-hidden="true" />
             </span>
             <div>
               <h2 className="text-sm font-semibold text-ink-900 sm:text-base">
@@ -498,8 +506,8 @@ function StocksPanel({
               </p>
             </div>
           </div>
-          <span className="inline-flex w-fit items-center rounded bg-ok/10 px-3 py-1 text-xs font-semibold text-ok-fg">
-            Diperbarui otomatis
+          <span className="text-xs text-muted">
+            Stok siap kirim · Diperbarui otomatis
           </span>
         </div>
 
@@ -524,26 +532,26 @@ function StocksPanel({
             />
           </div>
         ) : null}
-        <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 sm:p-5">
+        <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4">
           {centralProductsQuery.data?.map((product) => (
             <div
               key={product.id}
-              className="rounded-md border border-line bg-paper/50 p-3.5 transition-colors hover:border-ink-400"
+              className="min-w-0 bg-white p-4"
             >
               <p
-                className="truncate text-xs font-medium text-muted"
+                className="text-xs font-medium leading-snug text-muted"
                 title={product.name}
               >
                 {product.name}
               </p>
-              <p className="mt-1 font-display text-xl font-bold tabular-nums text-ink-900">
+              <p className="mt-2 font-display text-2xl font-semibold tabular-nums text-ink-900">
                 {product.central_stock.toLocaleString('id-ID')}{' '}
                 <span className="text-xs font-normal text-muted">
                   {product.unit}
                 </span>
               </p>
               <p
-                className={`mt-1 text-[11px] font-semibold ${
+                className={`mt-1 text-xs font-medium ${
                   product.central_stock > 0 ? 'text-ok-fg' : 'text-crit-fg'
                 }`}
               >
@@ -583,7 +591,7 @@ function StocksPanel({
           return (
             <article
               key={stock.product_id}
-              className="rounded-md border border-line bg-white p-4"
+              className="dashboard-surface p-4 sm:p-5"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -649,7 +657,7 @@ function StocksPanel({
                         Number.parseInt(event.target.value, 10) || 0,
                       )
                     }
-                    className="h-11 w-16 rounded-sm border border-line text-center text-lg font-semibold tabular-nums"
+                    className="h-11 w-16 rounded-md border border-line bg-white text-center text-lg font-semibold tabular-nums"
                   />
                   <button
                     type="button"
@@ -715,12 +723,12 @@ function OrderForm({
   })
 
   return (
-    <section aria-labelledby="order-heading">
+    <section aria-labelledby="order-heading" className="dashboard-panel-enter">
       <div>
-        <p className="text-sm font-semibold text-ume">Restock cabang</p>
+        <p className="dashboard-eyebrow">Restock cabang</p>
         <h1
           id="order-heading"
-          className="mt-1 text-2xl font-semibold text-ink-900"
+          className="mt-1 text-2xl font-semibold text-ink-900 sm:text-3xl"
         >
           Ajukan restock barang
         </h1>
@@ -779,13 +787,13 @@ function OrderForm({
           return (
             <article
               key={stock.product_id}
-              className={`rounded-md border p-4 sm:p-5 transition-colors ${
+              className={`rounded-md border p-4 sm:p-5 ${
                 isExceeded
-                  ? 'border-amber-300 bg-amber-50/25 shadow-2xs'
+                  ? 'border-warn bg-warn-bg/30'
                   : selected
-                    ? 'border-ink-700 bg-ink-50/70'
+                    ? 'border-ink-700 bg-white'
                     : skipped
-                      ? 'border-line bg-ink-50/50'
+                      ? 'border-line bg-ink-50'
                       : 'border-line bg-white'
               }`}
             >
@@ -939,7 +947,7 @@ function OrderForm({
                             onClick={() =>
                               onQtyChange(stock.product_id, centralQty)
                             }
-                            className="shrink-0 rounded bg-amber-200/90 px-2.5 py-1 text-xs font-bold text-amber-900 hover:bg-amber-300 transition-colors"
+                            className="min-h-11 shrink-0 rounded-md border border-warn px-3 text-xs font-semibold text-warn-fg hover:bg-white"
                           >
                             Sesuaikan ke {centralQty} {stock.product_unit}
                           </button>
@@ -960,7 +968,7 @@ function OrderForm({
         })}
       </div>
 
-      <div className="mt-6 rounded-md border border-line bg-white p-4 sm:p-5">
+      <div className="dashboard-surface mt-6 p-4 sm:p-5">
         <h2 className="text-lg font-semibold text-ink-900">
           Periksa pengajuan
         </h2>
@@ -1100,13 +1108,13 @@ function OrderHistory({
   }, [allOrders, statusFilter])
 
   return (
-    <section aria-labelledby="history-heading" className="animate-in fade-in slide-in-from-bottom-1 duration-300">
+    <section aria-labelledby="history-heading" className="dashboard-panel-enter">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-ume">Riwayat restock</p>
+          <p className="dashboard-eyebrow">Riwayat restock</p>
           <h1
             id="history-heading"
-            className="mt-1 text-2xl font-semibold text-ink-900 font-display"
+            className="mt-1 text-2xl font-semibold text-ink-900 sm:text-3xl"
           >
             Status pesanan
           </h1>
@@ -1120,7 +1128,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={onOpenOrder}
-            className="mt-2 sm:mt-0 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md bg-ink-900 px-4 text-xs font-semibold text-white shadow-xs hover:bg-ink-700 transition-colors self-start sm:self-auto"
+            className="mt-2 inline-flex min-h-11 items-center justify-center gap-1.5 self-start rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 sm:mt-0 sm:self-auto"
           >
             <PackagePlus className="size-4 text-ume" />
             <span>Ajukan Restock Baru</span>
@@ -1167,7 +1175,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('semua')}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
               statusFilter === 'semua'
                 ? 'bg-ink-900 text-white'
                 : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
@@ -1178,7 +1186,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('diproses')}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
               statusFilter === 'diproses'
                 ? 'bg-ink-900 text-white'
                 : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
@@ -1190,7 +1198,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('disetujui')}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
               statusFilter === 'disetujui'
                 ? 'bg-ink-900 text-white'
                 : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
@@ -1202,7 +1210,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('dalam_pengiriman')}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
               statusFilter === 'dalam_pengiriman'
                 ? 'bg-ink-900 text-white'
                 : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
@@ -1214,7 +1222,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('selesai')}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
               statusFilter === 'selesai'
                 ? 'bg-ink-900 text-white'
                 : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
@@ -1562,6 +1570,7 @@ function ProfilePanel({ user }: { user: User }) {
   )
   const [phone, setPhone] = useState(user.partner_phone ?? '')
   const [address, setAddress] = useState(user.partner_address ?? '')
+  const [region, setRegion] = useState(user.partner_region ?? emptyRegion)
   const [photo, setPhoto] = useState<string | null>(user.partner_photo ?? null)
   const [photoError, setPhotoError] = useState('')
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false)
@@ -1571,6 +1580,7 @@ function ProfilePanel({ user }: { user: User }) {
     setPicName(user.partner_pic_name ?? user.full_name)
     setPhone(user.partner_phone ?? '')
     setAddress(user.partner_address ?? '')
+    setRegion(user.partner_region ?? emptyRegion)
     setPhoto(user.partner_photo ?? null)
   }, [user])
 
@@ -1581,6 +1591,7 @@ function ProfilePanel({ user }: { user: User }) {
         pic_name: picName.trim(),
         phone: phone.trim(),
         address: address.trim(),
+        ...region,
         photo_data_url: photo,
       })
       if (response.error) {
@@ -1606,11 +1617,11 @@ function ProfilePanel({ user }: { user: User }) {
   }
 
   return (
-    <section aria-labelledby="profile-heading">
-      <p className="text-sm font-semibold text-ume">Data mitra</p>
+    <section aria-labelledby="profile-heading" className="dashboard-panel-enter">
+      <p className="dashboard-eyebrow">Data mitra</p>
       <h1
         id="profile-heading"
-        className="mt-1 text-2xl font-semibold text-ink-900"
+        className="mt-1 text-2xl font-semibold text-ink-900 sm:text-3xl"
       >
         Profil mitra
       </h1>
@@ -1619,7 +1630,7 @@ function ProfilePanel({ user }: { user: User }) {
       </p>
 
       <form
-        className="mt-6 space-y-5 rounded-md border border-line bg-white p-4 sm:p-6"
+        className="dashboard-surface mt-6 space-y-5 p-4 sm:p-6"
         onSubmit={(event) => {
           event.preventDefault()
           saveProfile.mutate()
@@ -1759,6 +1770,7 @@ function ProfilePanel({ user }: { user: User }) {
             />
           </div>
         </div>
+        <RegionPicker idPrefix="profile-region" value={region} onChange={setRegion} />
         <button
           type="submit"
           disabled={saveProfile.isPending || isProcessingPhoto}
@@ -1928,9 +1940,9 @@ function MitraInsightMetric({
   detail?: string
 }) {
   return (
-    <article className="min-w-[50%] flex-1 px-4 py-3 sm:min-w-[25%] sm:px-5">
-      <p className="text-xs font-medium text-muted">{label}</p>
-      <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">
+    <article className="min-w-0 px-4 py-4 sm:px-5">
+      <p className="text-sm font-medium text-muted">{label}</p>
+      <p className="mt-2 font-display text-2xl font-semibold tabular-nums text-ink-900">
         {value}
       </p>
       {detail ? <p className="mt-1 text-xs text-muted">{detail}</p> : null}
@@ -2105,13 +2117,13 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
   )
 
   return (
-    <section aria-labelledby="mitra-logs-title" className="space-y-6 animate-in fade-in slide-in-from-bottom-1 duration-300">
-      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <section aria-labelledby="mitra-logs-title" className="dashboard-panel-enter space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-ume">Data Science & Log Stok</p>
+          <p className="dashboard-eyebrow">Aktivitas stok</p>
           <h1
             id="mitra-logs-title"
-            className="mt-1 font-display text-2xl font-semibold text-ink-900"
+            className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl"
           >
             Riwayat Log Stok Cabang
           </h1>
@@ -2137,13 +2149,13 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         </p>
 
         {/* View Mode Toggle */}
-        <div className="flex items-center rounded-md border border-line bg-white p-0.5 text-xs font-semibold shadow-2xs">
+        <div className="flex items-center rounded-md border border-line bg-white p-1 text-xs font-semibold">
           <button
             type="button"
             onClick={() => setViewMode('calendar')}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors ${
+            className={`inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 transition-colors ${
               viewMode === 'calendar'
-                ? 'bg-ink-900 text-white shadow-2xs'
+                ? 'bg-ink-900 text-white'
                 : 'text-muted hover:text-ink-900'
             }`}
           >
@@ -2153,9 +2165,9 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
           <button
             type="button"
             onClick={() => setViewMode('list')}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors ${
+            className={`inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 transition-colors ${
               viewMode === 'list'
-                ? 'bg-ink-900 text-white shadow-2xs'
+                ? 'bg-ink-900 text-white'
                 : 'text-muted hover:text-ink-900'
             }`}
           >
@@ -2172,7 +2184,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         />
       ) : null}
 
-      <div className="flex flex-wrap divide-y divide-line rounded-md border border-line bg-white shadow-xs sm:divide-x sm:divide-y-0">
+      <div className="dashboard-surface grid divide-y divide-line sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         <MitraInsightMetric
           label="Total Log Tercatat"
           value={query.isLoading ? '…' : logs.length}

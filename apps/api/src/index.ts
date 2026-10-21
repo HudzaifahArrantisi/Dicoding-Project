@@ -7,6 +7,7 @@ import { stocksModule, productsModule } from "./modules/stocks";
 import { ordersModule } from "./modules/orders";
 import { notificationsModule } from "./modules/notifications";
 import { adminModule } from "./modules/admin";
+import { regionModule } from "./modules/regions";
 
 export const app = new Elysia()
   .onRequest(({ request }) => {
@@ -63,6 +64,7 @@ export const app = new Elysia()
   .use(ordersModule)
   .use(notificationsModule)
   .use(adminModule)
+  .use(regionModule)
   .listen({
     port: env.PORT,
     hostname: "0.0.0.0",

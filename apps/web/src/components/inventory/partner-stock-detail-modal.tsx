@@ -60,7 +60,7 @@ export function PartnerStockDetailModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-lg sm:max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
           {/* Header */}
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-5 py-4 backdrop-blur-sm">
             <div className="flex items-center gap-3 min-w-0">
@@ -84,8 +84,11 @@ export function PartnerStockDetailModal({
                   {group.is_stale ? <StaleBadge /> : null}
                 </div>
                 <Dialog.Description className="mt-0.5 truncate text-xs text-muted">
-                  Cabang <span className="capitalize">{group.partner_type}</span>
-                  {latestUpdate ? ` · Update: ${formatShortDateTime(latestUpdate)}` : ''}
+                  Cabang{' '}
+                  <span className="capitalize">{group.partner_type}</span>
+                  {latestUpdate
+                    ? ` · Update: ${formatShortDateTime(latestUpdate)}`
+                    : ''}
                 </Dialog.Description>
               </div>
             </div>
@@ -105,8 +108,13 @@ export function PartnerStockDetailModal({
             {/* Stale Warning Banner (hanya tampil jika terlambat update) */}
             {group.is_stale ? (
               <div className="flex items-center gap-2.5 rounded-lg border border-stale/30 bg-stale-bg px-3.5 py-2.5 text-xs text-stale-fg">
-                <Clock className="size-4 shrink-0 text-stale" aria-hidden="true" />
-                <span>Stok belum diperbarui oleh mitra dalam 24 jam terakhir.</span>
+                <Clock
+                  className="size-4 shrink-0 text-stale"
+                  aria-hidden="true"
+                />
+                <span>
+                  Stok belum diperbarui oleh mitra dalam 24 jam terakhir.
+                </span>
               </div>
             ) : null}
 
@@ -137,44 +145,55 @@ export function PartnerStockDetailModal({
               </div>
             </div>
 
-            {/* Daftar Produk Simpel (Tanpa Kode Makanan / SKU) */}
-            <div className="overflow-hidden rounded-lg border border-line bg-white shadow-xs">
+            {/* Daftar Produk dengan Grid Terstruktur & Lurus Sempurna */}
+            <div className="overflow-hidden rounded-xl border border-line bg-white shadow-xs">
+              {/* Header Kolom Tabel */}
+              <div className="grid grid-cols-[minmax(0,1fr)_112px_50px_84px] sm:grid-cols-[minmax(0,1fr)_130px_56px_90px] items-center gap-2.5 sm:gap-4 border-b border-line bg-paper/70 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                <span>Produk</span>
+                <span className="text-center">Kapasitas Rak</span>
+                <span className="text-right">Sisa / Par</span>
+                <span className="text-right">Status</span>
+              </div>
+
+              {/* Baris Produk */}
               <div className="divide-y divide-line">
                 {group.items.map((stock) => (
                   <div
                     key={stock.product_id}
-                    className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-paper/40"
+                    className="grid grid-cols-[minmax(0,1fr)_112px_50px_84px] sm:grid-cols-[minmax(0,1fr)_130px_56px_90px] items-center gap-2.5 sm:gap-4 px-4 py-3 transition-colors hover:bg-paper/40"
                   >
-                    {/* Nama Produk Bersih */}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-ink-900">
+                    {/* 1. Nama Produk */}
+                    <div className="min-w-0 pr-1">
+                      <p
+                        className="truncate text-sm font-medium text-ink-900"
+                        title={stock.product_name}
+                      >
                         {stock.product_name}
                       </p>
                     </div>
 
-                    {/* Visual Rak, Angka Stok & Status */}
-                    <div className="flex shrink-0 items-center gap-3 sm:gap-4">
-                      <div className="w-20 sm:w-28">
-                        <RakBar
-                          compact
-                          percentage={stock.percentage}
-                          status={stock.status}
-                          label={`${stock.product_name}: ${stock.percentage} persen`}
-                        />
-                      </div>
+                    {/* 2. Visual Petak Rak (Panjang Tetap & Lurus Sejajar) */}
+                    <div className="w-full">
+                      <RakBar
+                        percentage={stock.percentage}
+                        status={stock.status}
+                        label={`${stock.product_name}: ${stock.percentage} persen`}
+                      />
+                    </div>
 
-                      <div className="text-right">
-                        <span className="font-display text-sm font-semibold tabular-nums text-ink-900">
-                          {stock.current_qty}
-                        </span>
-                        <span className="text-xs text-muted">
-                          /{stock.par_level}
-                        </span>
-                      </div>
+                    {/* 3. Angka Stok Tabular Terjajar Rapi */}
+                    <div className="text-right whitespace-nowrap">
+                      <span className="font-display text-sm font-semibold tabular-nums text-ink-900">
+                        {stock.current_qty}
+                      </span>
+                      <span className="text-xs text-muted">
+                        /{stock.par_level}
+                      </span>
+                    </div>
 
-                      <div className="flex shrink-0 items-center">
-                        <StockStatusBadge status={stock.status} />
-                      </div>
+                    {/* 4. Status Badge Right-Aligned */}
+                    <div className="flex justify-end">
+                      <StockStatusBadge status={stock.status} />
                     </div>
                   </div>
                 ))}
@@ -184,9 +203,7 @@ export function PartnerStockDetailModal({
 
           {/* Footer Simpel */}
           <div className="sticky bottom-0 flex items-center justify-between border-t border-line bg-paper/90 px-5 py-3 backdrop-blur-sm">
-            <span className="text-xs text-muted">
-              Data sinkron otomatis
-            </span>
+            <span className="text-xs text-muted">Data sinkron otomatis</span>
             <Dialog.Close asChild>
               <button
                 type="button"
