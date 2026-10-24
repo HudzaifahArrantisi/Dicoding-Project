@@ -27,6 +27,8 @@ export interface OrderItem {
   central_stock: number
   qty_requested: number
   qty_approved: number | null
+  partner_current_stock?: number
+  partner_par_level?: number
 }
 
 export interface Product {

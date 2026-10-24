@@ -2,7 +2,7 @@ import { treaty } from '@elysiajs/eden'
 import type { App } from '../../../api/src/index'
 import { env } from '@/env'
 
-function resolveApiUrl(): string {
+export function resolveApiUrl(): string {
   if (typeof window !== 'undefined' && window.location.hostname) {
     const isLocalhost =
       window.location.hostname === 'localhost' ||

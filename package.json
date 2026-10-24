@@ -6,9 +6,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --cwd apps/web dev",
+    "dev": "bun scripts/banner.ts && bun run --cwd apps/web dev",
     "dev:web": "bun run --cwd apps/web dev:web",
-    "dev:api": "bun run --cwd apps/api dev",
+    "dev:api": "bun scripts/banner.ts && bun run --cwd apps/api dev",
+    "seed": "bun run --cwd apps/api seed",
     "typecheck": "bun run --cwd apps/web typecheck && bun run --cwd apps/api typecheck"
   }
 }

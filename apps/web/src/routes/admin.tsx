@@ -7,10 +7,11 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query'
-import type { OrderStatus, StockStatus } from '@daisuki/shared'
+import { getStockStatus, type OrderStatus, type StockStatus } from '@daisuki/shared'
 import { Dialog } from 'radix-ui'
 import {
   AlertOctagon,
+  AlertTriangle,
   Bell,
   Boxes,
   Building2,
@@ -29,7 +30,11 @@ import {
   Filter,
   Loader2,
   LogOut,
+  Menu,
+  MessageSquare,
   Minus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   RotateCcw,
@@ -61,6 +66,7 @@ import {
   StockStatusBadge,
 } from '@/components/inventory/status-badge'
 import { api } from '@/lib/api'
+import { useInventoryEvents } from '@/lib/inventory-events'
 import { RegionPicker, emptyRegion } from '@/components/inventory/region-picker'
 import { apiError, unwrapData } from '@/lib/api-response'
 import { useAuth } from '@/lib/auth'
@@ -84,6 +90,15 @@ interface Metrics {
 
 type AdminTab = 'stocks' | 'orders' | 'alerts' | 'partners' | 'data-science' | 'ai-insights'
 type OrderCategoryTab = 'menunggu' | 'selesai' | 'ditolak'
+
+const adminTabLabels: Record<AdminTab, string> = {
+  stocks: 'Stok cabang',
+  orders: 'Persetujuan pesanan',
+  alerts: 'Notifikasi',
+  partners: 'Manajemen mitra',
+  'data-science': 'Data Science',
+  'ai-insights': 'AI Insights',
+}
 
 interface WeeklySummary {
   total_logs_this_week: number
@@ -197,8 +212,6 @@ function DataSciencePanel({
     queryKey: ['admin-stock-logs-partner', selectedPartner?.partner_id],
     queryFn: () => adminFetch(`stock-logs/partners/${selectedPartner?.partner_id}`),
     enabled: selectedPartner !== null,
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: true,
   })
 
   return (
@@ -442,8 +455,6 @@ function PartnerStockLogDialog({
       }
     },
     enabled: open,
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: true,
   })
 
   const isDbConnected = Boolean(dbHealthQuery.data)
@@ -1057,10 +1068,63 @@ function AIInsightsPanel({
 }
 
 function AdminDashboard() {
-  const { user, logout, isLoading: authLoading } = useAuth()
+  const { user, token, logout, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  useInventoryEvents(user?.role === 'admin' ? token : null, 'admin')
   const [tab, setTab] = useState<AdminTab>('stocks')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
+  const mobileCloseButtonRef = useRef<HTMLButtonElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
+  const selectTab = (nextTab: AdminTab) => {
+    setTab(nextTab)
+    setMobileMenuOpen(false)
+  }
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    mobileCloseButtonRef.current?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileMenuOpen(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') ?? [],
+      ).filter((button) => button.offsetParent !== null)
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+      mobileMenuButtonRef.current?.focus()
+    }
+  }, [mobileMenuOpen])
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const closeMobileMenu = () => {
+      if (desktop.matches) setMobileMenuOpen(false)
+    }
+    desktop.addEventListener('change', closeMobileMenu)
+    return () => desktop.removeEventListener('change', closeMobileMenu)
+  }, [])
   const [search, setSearch] = useState('')
   const [partner, setPartner] = useState('semua')
   const [status, setStatus] = useState<StockStatus | 'semua' | 'belum_update'>(
@@ -1112,7 +1176,6 @@ function AdminDashboard() {
       return response.data
     },
     enabled: user?.role === 'admin',
-    refetchInterval: 15_000,
   })
   const stocks = useQuery<StockItem[]>({
     queryKey: ['admin-stocks'],
@@ -1122,48 +1185,41 @@ function AdminDashboard() {
         'Stok cabang belum dimuat',
       ),
     enabled: user?.role === 'admin',
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: true,
   })
   const centralProducts = useQuery<Product[]>({
     queryKey: ['admin-central-products'],
     queryFn: async () =>
       unwrapData(await api.products.get(), 'Stok pusat belum dimuat'),
     enabled: user?.role === 'admin',
-    refetchInterval: 10_000,
   })
   const orders = useQuery<Order[]>({
     queryKey: ['admin-orders'],
     queryFn: async () =>
       unwrapData(await api.orders.get({ query: {} }), 'Pesanan belum dimuat'),
     enabled: user?.role === 'admin',
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: true,
   })
   const notifications = useQuery<NotificationItem[]>({
     queryKey: ['admin-notifications'],
     queryFn: async () =>
       unwrapData(await api.notifications.get(), 'Notifikasi belum dimuat'),
     enabled: user?.role === 'admin',
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   })
   const weeklySummary = useQuery<{ data: WeeklySummary }>({
     queryKey: ['admin-weekly-summary'],
     queryFn: () => adminFetch('weekly-summary'),
     enabled: user?.role === 'admin' && tab === 'data-science',
-    refetchInterval: 30_000,
   })
   const logPartners = useQuery<{ data: StockLogPartner[] }>({
     queryKey: ['admin-stock-log-partners'],
     queryFn: () => adminFetch('stock-logs/partners'),
     enabled: user?.role === 'admin' && tab === 'data-science',
-    refetchInterval: 15_000,
   })
   const aiInsights = useQuery<{ data: AIInsights }>({
     queryKey: ['admin-ai-insights'],
     queryFn: () => adminFetch('ai-insights'),
     enabled: user?.role === 'admin' && tab === 'ai-insights',
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   })
 
   const exportRawLogs = async () => {
@@ -1333,112 +1389,117 @@ function AdminDashboard() {
   }
 
   return (
-    <div className="dashboard-page admin-dashboard min-h-screen bg-paper text-text">
-      <header className="sticky top-0 z-30 border-b border-line bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-md bg-ink-900 text-white">
-              <Boxes className="size-5" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate font-display text-base font-semibold text-ink-900 sm:text-lg">
-                Daisuki Inventory
-              </p>
-              <p className="truncate text-xs text-muted">
-                Admin pusat · {user.full_name}
-              </p>
+    <div className="dashboard-page admin-dashboard min-h-screen text-text lg:flex">
+      {mobileMenuOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-ink-900/35 lg:hidden"
+          aria-label="Tutup menu admin"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      ) : null}
+      <aside
+        id="admin-sidebar"
+        ref={sidebarRef}
+        className={`admin-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(18rem,calc(100vw-3rem))] shrink-0 flex-col overflow-y-auto border-r border-line px-3 py-5 transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 ${mobileMenuOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'} ${sidebarCollapsed ? 'lg:invisible lg:w-0 lg:border-r-0 lg:px-0' : 'lg:visible lg:w-64'}`}
+        inert={sidebarCollapsed && !mobileMenuOpen}
+        role={mobileMenuOpen ? 'dialog' : undefined}
+        aria-modal={mobileMenuOpen ? true : undefined}
+        aria-label="Navigasi admin pusat"
+      >
+        <div className="flex items-center gap-2">
+          <span className="grid size-10 shrink-0 place-items-center rounded-md bg-ink-900 text-white">
+            <Boxes className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-base font-semibold leading-tight text-ink-900">Daisuki</p>
+            <p className="text-xs text-muted">Admin Pusat</p>
+          </div>
+          <button
+            ref={mobileCloseButtonRef}
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            className="grid size-11 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-white lg:hidden"
+            aria-label="Tutup sidebar"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            className="hidden size-10 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-white lg:grid"
+            aria-label="Tutup sidebar"
+            title="Tutup sidebar"
+          >
+            <PanelLeftClose className="size-5" aria-hidden="true" />
+          </button>
+        </div>
+        <nav className="mt-9 flex-1 space-y-1" aria-label="Menu admin">
+          <p className="px-3 pb-2 text-xs font-semibold text-muted">Operasional</p>
+          <TabButton label="Stok cabang" Icon={Boxes} active={tab === 'stocks'} onClick={() => selectTab('stocks')} />
+          <TabButton label="Persetujuan" Icon={ClipboardCheck} active={tab === 'orders'} count={metrics.data?.pendingOrders} onClick={() => selectTab('orders')} />
+          <TabButton label="Notifikasi" Icon={Bell} active={tab === 'alerts'} count={unread} critical onClick={() => selectTab('alerts')} />
+          <TabButton label="Mitra" Icon={Building2} active={tab === 'partners'} onClick={() => selectTab('partners')} />
+          <p className="px-3 pb-2 pt-6 text-xs font-semibold text-muted">Analisis</p>
+          <TabButton label="Data Science" Icon={Database} active={tab === 'data-science'} onClick={() => selectTab('data-science')} />
+          <TabButton label="AI Insights" Icon={BrainCircuit} active={tab === 'ai-insights'} onClick={() => selectTab('ai-insights')} />
+        </nav>
+        <div className="border-t border-line pt-4">
+          <p className="truncate px-3 text-sm font-semibold text-ink-900">{user.full_name}</p>
+          <p className="px-3 text-xs text-muted">Admin Pusat</p>
+          <button
+            type="button"
+            onClick={() => { logout(); void navigate({ to: '/login' }) }}
+            className="mt-4 flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm font-medium text-ink-700 hover:bg-white"
+            aria-label="Keluar"
+            title="Keluar"
+          >
+            <LogOut className="size-4 shrink-0" aria-hidden="true" /> <span>Keluar</span>
+          </button>
+        </div>
+      </aside>
+
+      <div className="min-w-0 flex-1">
+        <header className="admin-topbar sticky top-0 z-30 border-b border-line bg-white">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                ref={mobileMenuButtonRef}
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className="grid size-11 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-ink-50 lg:hidden"
+                aria-label="Buka menu admin"
+                aria-controls="admin-sidebar"
+                aria-expanded={mobileMenuOpen}
+              >
+                <Menu className="size-5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((current) => !current)}
+                className="hidden size-11 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-ink-50 lg:grid"
+                aria-label={sidebarCollapsed ? 'Buka sidebar' : 'Tutup sidebar'}
+                aria-controls="admin-sidebar"
+                aria-expanded={!sidebarCollapsed}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen className="size-5" aria-hidden="true" /> : <PanelLeftClose className="size-5" aria-hidden="true" />}
+              </button>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-ink-700 lg:text-muted">Admin Pusat</p>
+                <p className="truncate font-display text-base font-semibold text-ink-900 sm:text-lg">{adminTabLabels[tab]}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setTab('alerts')} className="relative grid size-11 place-items-center rounded-md text-ink-700 hover:bg-ink-50" aria-label={`${unread} notifikasi belum dibaca`}>
+                <Bell className="size-5" aria-hidden="true" />
+                {unread ? <span className="absolute right-1 top-1 rounded-sm bg-crit px-1 text-[10px] font-bold text-white">{unread}</span> : null}
+              </button>
+              <button type="button" aria-label="Keluar" onClick={() => { logout(); void navigate({ to: '/login' }) }} className="grid size-11 place-items-center rounded-md text-muted hover:bg-ink-50 lg:hidden">
+                <LogOut className="size-4" aria-hidden="true" />
+              </button>
             </div>
           </div>
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={() => setTab('alerts')}
-              className="relative grid size-11 place-items-center rounded-md text-muted hover:bg-ink-50 hover:text-ink-900"
-              aria-label={`${unread} notifikasi belum dibaca`}
-            >
-              <Bell className="size-5" aria-hidden="true" />
-              {unread ? (
-                <span className="absolute right-1 top-1 rounded-sm bg-crit px-1 text-[10px] font-bold text-white">
-                  {unread}
-                </span>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              aria-label="Keluar"
-              onClick={() => {
-                logout()
-                void navigate({ to: '/login' })
-              }}
-              className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted hover:bg-ink-50"
-            >
-              <LogOut className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Keluar</span>
-            </button>
-          </div>
-        </div>
-        <nav
-          className="mx-auto hidden max-w-7xl gap-1 overflow-x-auto px-3 sm:flex sm:px-6 lg:px-8"
-          aria-label="Menu admin"
-          style={{ scrollbarWidth: 'none' }}
-        >
-          <TabButton
-            label="Stok"
-            Icon={Boxes}
-            active={tab === 'stocks'}
-            onClick={() => setTab('stocks')}
-          />
-          <TabButton
-            label="Approval"
-            Icon={ClipboardCheck}
-            active={tab === 'orders'}
-            count={metrics.data?.pendingOrders}
-            onClick={() => setTab('orders')}
-          />
-          <TabButton
-            label="Alert"
-            Icon={AlertOctagon}
-            active={tab === 'alerts'}
-            count={unread}
-            critical
-            onClick={() => setTab('alerts')}
-          />
-          <TabButton
-            label="Manajemen mitra"
-            Icon={Building2}
-            active={tab === 'partners'}
-            onClick={() => setTab('partners')}
-          />
-          <TabButton
-            label="Data"
-            Icon={Database}
-            active={tab === 'data-science'}
-            onClick={() => setTab('data-science')}
-          />
-          <TabButton
-            label="AI Insights"
-            Icon={BrainCircuit}
-            active={tab === 'ai-insights'}
-            onClick={() => setTab('ai-insights')}
-          />
-        </nav>
-        <div className="border-t border-line/70 px-4 py-2 sm:hidden">
-          <label htmlFor="admin-section" className="sr-only">Pilih halaman admin</label>
-          <select
-            id="admin-section"
-            value={tab}
-            onChange={(event) => setTab(event.target.value as AdminTab)}
-            className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-900"
-          >
-            <option value="stocks">Stok</option>
-            <option value="orders">Approval{metrics.data?.pendingOrders ? ` (${metrics.data.pendingOrders})` : ''}</option>
-            <option value="alerts">Alert{unread ? ` (${unread})` : ''}</option>
-            <option value="partners">Manajemen mitra</option>
-            <option value="data-science">Data</option>
-            <option value="ai-insights">AI Insights</option>
-          </select>
-        </div>
-      </header>
+        </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {tab === 'stocks' ? (
@@ -1448,15 +1509,15 @@ function AdminDashboard() {
                 <p className="dashboard-eyebrow">Ringkasan</p>
                 <h1 id="summary-title" className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Kondisi operasional</h1>
               </div>
-              <span className="hidden text-xs text-muted sm:block">Data diperbarui otomatis</span>
+              <span className="hidden text-xs text-muted sm:block">Data terkini dari seluruh cabang</span>
             </div>
             {metrics.isError ? (
               <ErrorState message={getErrorMessage(metrics.error)} onRetry={() => void metrics.refetch()} />
             ) : (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Metric label="Jumlah mitra" value={metrics.data?.totalBranches} />
-                <Metric label="Stok kritis" value={metrics.data?.criticalBranches} detail={`${metrics.data?.criticalItemsCount ?? 0} produk di bawah 20%`} critical />
-                <Metric label="Menunggu approval" value={metrics.data?.pendingOrders} detail="Pesanan mitra" />
+              <div className="admin-summary grid md:grid-cols-3">
+                <Metric label="Cabang mitra" value={metrics.data?.totalBranches} detail="Cabang terdaftar" Icon={Building2} />
+                <Metric label="Cabang kritis" value={metrics.data?.criticalBranches} detail={`${metrics.data?.criticalItemsCount ?? 0} produk perlu perhatian`} Icon={AlertOctagon} critical />
+                <Metric label="Perlu persetujuan" value={metrics.data?.pendingOrders} detail="Pesanan menunggu keputusan" Icon={ClipboardCheck} />
               </div>
             )}
           </section>
@@ -1479,6 +1540,7 @@ function AdminDashboard() {
         {tab === 'orders' ? (
           <OrderPanel
             query={orders}
+            stocks={stocks.data}
             approved={approved}
             adminNotes={adminNotes}
             onAdminNoteChange={(orderId, note) => {
@@ -1566,6 +1628,7 @@ function AdminDashboard() {
           />
         ) : null}
       </main>
+      </div>
     </div>
   )
 }
@@ -1590,13 +1653,15 @@ function TabButton({
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`flex min-h-12 shrink-0 items-center justify-center gap-2 border-b-2 px-3 text-sm font-semibold transition-colors duration-150 ${active ? 'border-ink-900 text-ink-900' : 'border-transparent text-muted hover:text-ink-900'}`}
+      aria-label={label}
+      title={label}
+      className={`flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-colors duration-150 ${active ? 'border-line bg-white text-ink-900' : 'border-transparent text-ink-700 hover:bg-white hover:text-ink-900'}`}
     >
-      <Icon className="size-4" aria-hidden="true" />
-      {label}
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{label}</span>
       {count ? (
         <span
-          className={`rounded-sm px-1.5 py-0.5 text-xs ${critical ? 'bg-crit-bg text-crit-fg' : 'bg-ink-100 text-ink-700'}`}
+          className={`rounded-sm px-1.5 py-0.5 text-xs tabular-nums ${critical ? 'bg-crit-bg text-crit-fg' : 'bg-ink-100 text-ink-700'}`}
         >
           {count}
         </span>
@@ -1609,20 +1674,25 @@ function Metric({
   label,
   value,
   detail,
+  Icon,
   critical = false,
 }: {
   label: string
   value?: number
   detail?: string
+  Icon: typeof Boxes
   critical?: boolean
 }) {
   return (
-    <article className="dashboard-surface min-w-0 px-4 py-4 sm:px-5 sm:py-5">
-      <p className="text-sm font-medium text-muted">{label}</p>
-      <p className={`mt-2 font-display text-3xl font-semibold tabular-nums leading-none ${critical && value ? 'text-crit-fg' : 'text-ink-900'}`}>
+    <article className="admin-metric min-w-0 px-5 py-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-muted">{label}</p>
+        <Icon className={`size-5 ${critical && value ? 'text-crit-fg' : 'text-ink-500'}`} aria-hidden="true" />
+      </div>
+      <p className={`mt-5 font-display text-4xl font-semibold tabular-nums leading-none ${critical && value ? 'text-crit-fg' : 'text-ink-900'}`}>
         {value ?? '–'}
       </p>
-      {detail ? <p className="mt-0.5 text-xs text-muted">{detail}</p> : null}
+      {detail ? <p className="mt-2 text-xs text-muted">{detail}</p> : null}
     </article>
   )
 }
@@ -2227,12 +2297,11 @@ function StockPanel({
                 id="central-stock-admin-title"
                 className="text-lg font-semibold text-ink-900"
               >
-                Stok Gudang Daisuki Pusat (Ready Stock)
+                Stok gudang pusat
               </h2>
             </div>
             <p className="mt-1 text-sm text-muted">
-              Ubah jumlah ready stock. Nilai terbaru dibaca otomatis oleh
-              dashboard mitra.
+              Perbarui stok siap kirim yang dilihat mitra saat memesan.
             </p>
           </div>
 
@@ -2310,7 +2379,7 @@ function StockPanel({
             />
           </div>
         ) : null}
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {centralProductsQuery.data?.map((prod) => {
             const draft =
               centralStockDrafts[prod.id] ?? String(prod.central_stock)
@@ -2476,7 +2545,7 @@ function StockPanel({
               Stok cabang mitra
             </h2>
             <span className="text-xs text-muted">
-              {branchGroups.length} cabang · Diperbarui setiap 5 detik
+              {branchGroups.length} cabang · Diperbarui otomatis
             </span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_220px_180px]">
@@ -2595,6 +2664,7 @@ function StockPanel({
 
 function OrderPanel({
   query,
+  stocks,
   approved,
   adminNotes,
   onAdminNoteChange,
@@ -2609,6 +2679,7 @@ function OrderPanel({
   onActiveCategoryChange,
 }: {
   query: UseQueryResult<Order[]>
+  stocks?: StockItem[]
   approved: Partial<Record<string, Partial<Record<string, number>>>>
   adminNotes: Partial<Record<string, string>>
   onAdminNoteChange: (orderId: string, note: string) => void
@@ -2832,6 +2903,7 @@ function OrderPanel({
       <ApprovalDialog
         order={selectedOrder ?? null}
         open={selectedOrderId !== null}
+        stocks={stocks}
         approved={approved}
         adminNotes={adminNotes}
         pending={pending}
@@ -2857,6 +2929,7 @@ function OrderPanel({
 function ApprovalDialog({
   order,
   open,
+  stocks,
   approved,
   adminNotes,
   pending,
@@ -2869,6 +2942,7 @@ function ApprovalDialog({
 }: {
   order: Order | null
   open: boolean
+  stocks?: StockItem[]
   approved: Partial<Record<string, Partial<Record<string, number>>>>
   adminNotes: Partial<Record<string, string>>
   pending: boolean
@@ -2892,14 +2966,46 @@ function ApprovalDialog({
   if (!order) return null
 
   const editable = order.status === 'diproses' || order.status === 'disetujui'
-  const values = order.items.map((item) => ({
-    item,
-    qty:
+  const values = order.items.map((item) => {
+    const matchingStock = stocks?.find(
+      (s) => s.partner_id === order.partner_id && s.product_id === item.product_id,
+    )
+    const currentQty = item.partner_current_stock ?? matchingStock?.current_qty ?? 0
+    const parLevel = item.partner_par_level ?? matchingStock?.par_level ?? 40
+    const stockPercentage =
+      parLevel > 0 ? Math.round((currentQty / parLevel) * 100) : 0
+    const stockStatus: StockStatus =
+      matchingStock?.status ?? getStockStatus(currentQty, parLevel)
+
+    const qty =
       approved[order.id]?.[item.product_id] ??
       item.qty_approved ??
-      item.qty_requested,
-    max: Math.min(item.qty_requested, item.central_stock),
-  }))
+      item.qty_requested
+    const max = Math.min(item.qty_requested, item.central_stock)
+
+    const projectedQty = currentQty + qty
+    const projectedPercent =
+      parLevel > 0 ? Math.round((projectedQty / parLevel) * 100) : 0
+    const projectedStatus = getStockStatus(projectedQty, parLevel)
+
+    return {
+      item,
+      qty,
+      max,
+      currentQty,
+      parLevel,
+      stockPercentage,
+      stockStatus,
+      projectedQty,
+      projectedPercent,
+      projectedStatus,
+    }
+  })
+
+  const totalRequested = order.items.reduce(
+    (total, item) => total + item.qty_requested,
+    0,
+  )
   const totalApproved = values.reduce((total, entry) => total + entry.qty, 0)
   const hasInvalidQuantity = values.some(
     ({ qty, max }) => !Number.isInteger(qty) || qty < 0 || qty > max,
@@ -2916,6 +3022,23 @@ function ApprovalDialog({
   const approvalDisabled =
     pending || hasInvalidQuantity || totalApproved < 1 || noteRequired
 
+  const partnerTypeLabel =
+    order.partner_type === 'kafe'
+      ? 'Kafe'
+      : order.partner_type === 'hotel'
+        ? 'Hotel'
+        : order.partner_type === 'restoran'
+          ? 'Restoran'
+          : order.partner_type === 'minimarket'
+            ? 'Minimarket'
+            : order.partner_type
+
+  const quickNoteTemplates = [
+    'Stok gudang pusat dialokasikan sebagian',
+    'Penyesuaian kuota kapasitas rak cabang',
+    'Pengiriman batch berikutnya dalam 3 hari',
+  ]
+
   const runAction = async (action: () => Promise<unknown>, close = true) => {
     setActionError('')
     try {
@@ -2929,129 +3052,488 @@ function ApprovalDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-md border border-line bg-white shadow-xl focus:outline-none">
-          <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-white p-4 sm:p-5">
-            <div>
-              <Dialog.Title className="text-lg font-semibold text-ink-900">
-                {order.partner_name} meminta restock barang
-              </Dialog.Title>
-              <Dialog.Description className="mt-1 text-sm text-muted">
-                {order.order_no} ·{' '}
-                {new Date(order.created_at).toLocaleString('id-ID', {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                })}
-              </Dialog.Description>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45 backdrop-blur-xs" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-white shadow-2xl focus:outline-none">
+          {/* Header Dialog */}
+          <div className="sticky top-0 z-10 border-b border-line bg-white/95 px-5 py-4 backdrop-blur-md sm:px-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Dialog.Title className="font-display text-xl font-bold text-ink-900 sm:text-2xl">
+                    {order.partner_name}
+                  </Dialog.Title>
+                  {partnerTypeLabel ? (
+                    <span className="inline-flex items-center rounded-full bg-ink-50 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-ink-700">
+                      {partnerTypeLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <Dialog.Description className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted sm:text-sm">
+                  <span className="font-semibold text-ink-700">{order.order_no}</span>
+                  <span>•</span>
+                  <span>
+                    Diajukan{' '}
+                    {new Date(order.created_at).toLocaleString('id-ID', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </span>
+                  <span>•</span>
+                  <span className="font-medium text-ink-800">
+                    {order.items.length} Jenis Produk
+                  </span>
+                </Dialog.Description>
+              </div>
+
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  aria-label="Tutup detail permintaan"
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-line text-muted transition-colors hover:bg-ink-50 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                >
+                  <X className="size-5" aria-hidden="true" />
+                </button>
+              </Dialog.Close>
             </div>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                aria-label="Tutup detail permintaan"
-                className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line text-muted hover:bg-ink-50 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-              >
-                <X className="size-5" aria-hidden="true" />
-              </button>
-            </Dialog.Close>
+
+            {/* Sub-bar Status & Ringkasan Alokasi */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line/70 pt-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <OrderStatusBadge status={order.status} />
+                {order.status === 'dalam_pengiriman' ? (
+                  <span className="text-xs font-semibold text-order-pengiriman">
+                    Barang sedang dalam perjalanan ekspedisi ke cabang
+                  </span>
+                ) : null}
+                {order.status === 'selesai' ? (
+                  <span className="text-xs font-semibold text-ok-fg">
+                    Pesanan selesai · Barang telah diterima mitra & stok cabang bertambah
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="flex items-center gap-3 text-xs sm:text-sm">
+                <span className="text-muted">
+                  Total Diminta:{' '}
+                  <strong className="font-bold tabular-nums text-ink-900">
+                    {totalRequested} pcs
+                  </strong>
+                </span>
+                {editable ? (
+                  <span className="text-muted">
+                    Total Disetujui:{' '}
+                    <strong
+                      className={`font-bold tabular-nums ${
+                        totalApproved > 0 ? 'text-ok-fg' : 'text-crit'
+                      }`}
+                    >
+                      {totalApproved} pcs
+                    </strong>
+                  </span>
+                ) : null}
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-4 p-4 sm:p-5">
-            <OrderStatusBadge status={order.status} />
+          <div className="space-y-5 p-5 sm:p-6">
+            {/* Banner Informasi Pengiriman */}
             {order.status === 'dalam_pengiriman' ? (
-              <p className="rounded-md bg-ink-50 p-3 text-sm text-ink-900">
-                Barang sedang dikirim dan belum dikonfirmasi diterima oleh
-                mitra.
-              </p>
-            ) : null}
-            {order.status === 'selesai' ? (
-              <p className="rounded-md bg-ok/10 p-3 text-sm text-ok-fg">
-                Pesanan selesai. Mitra sudah mengonfirmasi penerimaan barang.
-              </p>
-            ) : null}
-
-            {order.note ? (
-              <div className="rounded-md bg-ink-50 p-3 text-sm text-ink-800">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Catatan mitra
+              <div className="rounded-lg border border-order-pengiriman-bg bg-order-pengiriman-bg/40 p-3.5 text-sm text-ink-900">
+                <p className="font-semibold text-order-pengiriman">
+                  🚚 Dalam Pengiriman
                 </p>
-                <p className="mt-1">{order.note}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Barang kiriman sedang dalam perjalanan. Menunggu konfirmasi penerimaan fisik dari PIC cabang mitra.
+                </p>
               </div>
             ) : null}
 
-            <div className="divide-y divide-line rounded-md border border-line">
-              {values.map(({ item, qty, max }) => {
-                const invalid = !Number.isInteger(qty) || qty < 0 || qty > max
-                return (
-                  <div
-                    key={item.id}
-                    className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-4"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-ink-900">
-                        {item.product_name}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted">
-                        {item.product_sku} · Diminta {item.qty_requested}{' '}
-                        {item.product_unit} · Stok pusat {item.central_stock}{' '}
-                        {item.product_unit}
-                      </p>
-                      {invalid ? (
-                        <p
-                          className="mt-1 text-xs font-medium text-crit"
-                          role="alert"
-                        >
-                          Isi 0 sampai {max} {item.product_unit}.
-                        </p>
-                      ) : null}
-                    </div>
-                    {editable ? (
-                      <div className="flex items-center gap-2">
-                        <label
-                          htmlFor={`approval-${order.id}-${item.product_id}`}
-                          className="text-xs font-medium text-muted"
-                        >
-                          Disetujui
-                        </label>
-                        <input
-                          id={`approval-${order.id}-${item.product_id}`}
-                          type="number"
-                          min={0}
-                          max={max}
-                          step={1}
-                          value={qty}
-                          aria-invalid={invalid}
-                          onChange={(event) =>
-                            onApprovedChange(
-                              order.id,
-                              item.product_id,
-                              Number.parseInt(event.target.value, 10) || 0,
-                            )
-                          }
-                          className="h-11 w-24 rounded-md border border-line px-3 text-right font-semibold tabular-nums text-ink-900 focus:border-ink-700 focus:outline-none focus:ring-1 focus:ring-ink-700"
-                        />
+            {/* Catatan dari Mitra */}
+            {order.note ? (
+              <div className="rounded-lg border border-ink-100 bg-ink-50/70 p-4">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-700">
+                  <MessageSquare className="size-3.5" aria-hidden="true" />
+                  <span>Catatan Dari Mitra</span>
+                </div>
+                <p className="mt-1.5 text-sm font-medium italic text-ink-900">
+                  "{order.note}"
+                </p>
+              </div>
+            ) : null}
+
+            {/* Daftar Produk dengan Kartu Analisis 3-Dimensi */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-base font-bold text-ink-900">
+                  Rincian Permintaan Restock ({order.items.length} Produk)
+                </h3>
+                <span className="text-xs text-muted">
+                  Bandingkan sisa rak cabang, jumlah diminta, dan ketersediaan gudang pusat
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                {values.map(
+                  ({
+                    item,
+                    qty,
+                    max,
+                    currentQty,
+                    parLevel,
+                    stockPercentage,
+                    stockStatus,
+                    projectedQty,
+                    projectedPercent,
+                    projectedStatus,
+                  }) => {
+                    const invalid =
+                      !Number.isInteger(qty) || qty < 0 || qty > max
+                    const isFull = qty === item.qty_requested
+                    const isPartial = qty > 0 && qty < item.qty_requested
+                    const isZero = qty === 0
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-xl border border-line bg-white p-4 shadow-xs transition-all hover:border-ink-500/40 sm:p-5"
+                      >
+                        {/* Header Item: Nama Resmi Bersih & Status Cabang */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-3">
+                          <div>
+                            <h4 className="font-display text-base font-bold text-ink-900 sm:text-lg">
+                              {item.product_name}
+                            </h4>
+                            <p className="text-xs text-muted">
+                              Produk Resmi Daisuki · Satuan Kemasan:{' '}
+                              <span className="font-semibold text-ink-700">
+                                {item.product_unit}
+                              </span>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-muted">
+                              Kondisi Cabang Saat Ini:
+                            </span>
+                            <StockStatusBadge status={stockStatus} />
+                          </div>
+                        </div>
+
+                        {/* 3 Kartu Dimensi: Sisa Cabang, Permintaan, dan Ready Pusat */}
+                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          {/* 1. Sisa Stok Mitra Cabang */}
+                          <div
+                            className={`rounded-lg border p-3.5 transition-colors ${
+                              stockStatus === 'kritis'
+                                ? 'border-crit/30 bg-crit-bg/25'
+                                : stockStatus === 'waspada'
+                                  ? 'border-warn/30 bg-warn-bg/25'
+                                  : 'border-line/80 bg-ink-50/50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-ink-900">
+                                Sisa di Rak Mitra
+                              </span>
+                              <span className="font-bold tabular-nums text-muted">
+                                {stockPercentage}%
+                              </span>
+                            </div>
+                            <div className="mt-1.5 flex items-baseline gap-1.5">
+                              <span className="font-display text-2xl font-bold tabular-nums text-ink-900">
+                                {currentQty}
+                              </span>
+                              <span className="text-xs text-muted">
+                                / {parLevel} {item.product_unit} (Kapasitas)
+                              </span>
+                            </div>
+                            {/* Bar Visual Kapasitas Rak Cabang */}
+                            <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-line/60">
+                              <div
+                                className={`h-full transition-all ${
+                                  stockStatus === 'kritis'
+                                    ? 'bg-crit'
+                                    : stockStatus === 'waspada'
+                                      ? 'bg-warn'
+                                      : 'bg-ok'
+                                }`}
+                                style={{
+                                  width: `${Math.min(100, Math.max(5, stockPercentage))}%`,
+                                }}
+                              />
+                            </div>
+                            <p className="mt-2 text-[11px] font-medium text-muted">
+                              {stockStatus === 'kritis'
+                                ? '🚨 Kritis (<20%) · Sangat butuh restock'
+                                : stockStatus === 'waspada'
+                                  ? '⚠️ Menipis (20-50%) · Disarankan top-up'
+                                  : '✅ Aman (>50%) · Stok mencukupi'}
+                            </p>
+                          </div>
+
+                          {/* 2. Permintaan Restock Mitra */}
+                          <div className="rounded-lg border border-ink-100 bg-ink-50/70 p-3.5">
+                            <div className="flex items-center justify-between text-xs text-ink-700">
+                              <span className="font-semibold">
+                                Permintaan Mitra
+                              </span>
+                              <span className="rounded bg-ink-700/10 px-1.5 py-0.5 text-[10px] font-bold text-ink-700">
+                                PO Ini
+                              </span>
+                            </div>
+                            <div className="mt-1.5 flex items-baseline gap-1.5">
+                              <span className="font-display text-2xl font-bold tabular-nums text-ink-700">
+                                +{item.qty_requested}
+                              </span>
+                              <span className="text-xs font-semibold text-ink-500">
+                                {item.product_unit}
+                              </span>
+                            </div>
+                            <p className="mt-4 text-[11px] text-muted">
+                              Kuantitas yang diajukan oleh PIC cabang
+                            </p>
+                          </div>
+
+                          {/* 3. Ready Stock Gudang Pusat */}
+                          <div className="rounded-lg border border-line/80 bg-ink-50/50 p-3.5">
+                            <div className="flex items-center justify-between text-xs text-muted">
+                              <span className="font-semibold text-ink-900">
+                                Ready Gudang Pusat
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold ${
+                                  item.central_stock >= item.qty_requested
+                                    ? 'text-ok-fg'
+                                    : 'text-crit'
+                                }`}
+                              >
+                                {item.central_stock >= item.qty_requested
+                                  ? '✓ Mencukupi'
+                                  : '⚠️ Terbatas'}
+                              </span>
+                            </div>
+                            <div className="mt-1.5 flex items-baseline gap-1.5">
+                              <span className="font-display text-2xl font-bold tabular-nums text-ink-900">
+                                {item.central_stock.toLocaleString('id-ID')}
+                              </span>
+                              <span className="text-xs text-muted">
+                                {item.product_unit}
+                              </span>
+                            </div>
+                            <p className="mt-4 text-[11px] text-muted">
+                              {item.central_stock >= item.qty_requested
+                                ? 'Gudang siap alokasi penuh untuk pesanan ini'
+                                : `Pusat hanya memiliki ${item.central_stock} ${item.product_unit}`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Kontrol Persetujuan & Estimasi Dampak */}
+                        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-line/80 bg-paper p-3.5 sm:flex-row sm:items-center sm:justify-between">
+                          {editable ? (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label
+                                  htmlFor={`approval-${order.id}-${item.product_id}`}
+                                  className="text-xs font-bold text-ink-900"
+                                >
+                                  Disetujui Admin:
+                                </label>
+                                <div className="inline-flex items-center rounded-lg border border-line bg-white shadow-xs">
+                                  <button
+                                    type="button"
+                                    aria-label="Kurangi kuantitas"
+                                    disabled={qty <= 0}
+                                    onClick={() =>
+                                      onApprovedChange(
+                                        order.id,
+                                        item.product_id,
+                                        Math.max(0, qty - 1),
+                                      )
+                                    }
+                                    className="inline-flex size-9 items-center justify-center text-muted hover:bg-ink-50 hover:text-ink-900 disabled:opacity-30"
+                                  >
+                                    <Minus className="size-3.5" />
+                                  </button>
+                                  <input
+                                    id={`approval-${order.id}-${item.product_id}`}
+                                    type="number"
+                                    min={0}
+                                    max={max}
+                                    step={1}
+                                    value={qty}
+                                    aria-invalid={invalid}
+                                    onChange={(event) =>
+                                      onApprovedChange(
+                                        order.id,
+                                        item.product_id,
+                                        Number.parseInt(event.target.value, 10) || 0,
+                                      )
+                                    }
+                                    className="h-9 w-20 border-x border-line px-2 text-center font-display text-base font-bold tabular-nums text-ink-900 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label="Tambah kuantitas"
+                                    disabled={qty >= max}
+                                    onClick={() =>
+                                      onApprovedChange(
+                                        order.id,
+                                        item.product_id,
+                                        Math.min(max, qty + 1),
+                                      )
+                                    }
+                                    className="inline-flex size-9 items-center justify-center text-muted hover:bg-ink-50 hover:text-ink-900 disabled:opacity-30"
+                                  >
+                                    <Plus className="size-3.5" />
+                                  </button>
+                                </div>
+                                <span className="text-xs font-semibold text-muted">
+                                  {item.product_unit}
+                                </span>
+
+                                {/* Quick Fill Buttons */}
+                                <div className="flex items-center gap-1.5 pl-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onApprovedChange(order.id, item.product_id, max)
+                                    }
+                                    className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                                      isFull
+                                        ? 'border-ink-700 bg-ink-700 text-white'
+                                        : 'border-line bg-white text-ink-700 hover:bg-ink-50'
+                                    }`}
+                                  >
+                                    Penuh ({max})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onApprovedChange(order.id, item.product_id, 0)
+                                    }
+                                    className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                                      isZero
+                                        ? 'border-crit bg-crit text-white'
+                                        : 'border-line bg-white text-crit hover:bg-crit-bg/20'
+                                    }`}
+                                  >
+                                    0 (Tolak)
+                                  </button>
+                                </div>
+                              </div>
+
+                              {invalid ? (
+                                <p
+                                  className="text-xs font-bold text-crit"
+                                  role="alert"
+                                >
+                                  Isi antara 0 sampai {max} {item.product_unit}.
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs font-medium text-muted">
+                                Kuantitas Disetujui Pusat:
+                              </p>
+                              <p className="font-display text-xl font-bold tabular-nums text-ink-900">
+                                {item.qty_approved ?? 0} {item.product_unit}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Status Badge & Proyeksi Setelah Tiba */}
+                          <div className="flex flex-col items-start gap-1.5 sm:items-end">
+                            {isFull ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-ok-bg px-2.5 py-1 text-xs font-bold text-ok-fg">
+                                <CheckCircle2 className="size-3.5" /> Disetujui Penuh ({qty} {item.product_unit})
+                              </span>
+                            ) : isPartial ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-warn-bg px-2.5 py-1 text-xs font-bold text-warn-fg">
+                                <AlertTriangle className="size-3.5" /> Disetujui Sebagian ({qty} dari {item.qty_requested})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-crit-bg px-2.5 py-1 text-xs font-bold text-crit-fg">
+                                <XCircle className="size-3.5" /> Tidak Dialokasikan (0 {item.product_unit})
+                              </span>
+                            )}
+
+                            <p className="text-xs text-muted">
+                              Estimasi rak cabang setelah tiba:{' '}
+                              <strong className="font-bold tabular-nums text-ink-900">
+                                {projectedQty} / {parLevel} {item.product_unit}
+                              </strong>{' '}
+                              ({projectedPercent}% ·{' '}
+                              <span
+                                className={`font-semibold ${
+                                  projectedStatus === 'kritis'
+                                    ? 'text-crit'
+                                    : projectedStatus === 'waspada'
+                                      ? 'text-warn-fg'
+                                      : 'text-ok-fg'
+                                }`}
+                              >
+                                {projectedStatus === 'aman'
+                                  ? 'Aman'
+                                  : projectedStatus === 'waspada'
+                                    ? 'Waspada'
+                                    : 'Kritis'}
+                              </span>)
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    ) : (
-                      <p className="text-sm font-semibold tabular-nums text-ink-900">
-                        Disetujui {item.qty_approved ?? 0} {item.product_unit}
-                      </p>
-                    )}
-                  </div>
-                )
-              })}
+                    )
+                  },
+                )}
+              </div>
             </div>
 
+            {/* Input Catatan Admin & Template Cepat */}
             {editable ? (
-              <div>
-                <label
-                  htmlFor={`approval-note-${order.id}`}
-                  className="text-sm font-semibold text-ink-900"
-                >
-                  Catatan admin {hasAdjustment ? '(wajib)' : '(opsional)'}
-                </label>
+              <div className="rounded-xl border border-line bg-white p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor={`approval-note-${order.id}`}
+                    className="text-sm font-bold text-ink-900"
+                  >
+                    Catatan Admin{' '}
+                    {hasAdjustment ? (
+                      <span className="text-crit">(Wajib Diisi Karena Kuantitas Disesuaikan)</span>
+                    ) : (
+                      <span className="font-normal text-muted">(Opsional)</span>
+                    )}
+                  </label>
+                  {hasAdjustment ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-warn-bg px-2 py-0.5 text-xs font-bold text-warn-fg">
+                      <AlertTriangle className="size-3" /> Ada penyesuaian kuantitas
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-xs text-muted">
-                  Jelaskan penyesuaian jika jumlah yang disetujui berbeda dari
-                  permintaan mitra.
+                  Jelaskan alasan penyesuaian jika kuantitas barang yang disetujui berbeda dari permintaan mitra agar PIC cabang memahaminya.
                 </p>
+
+                {/* Template Cepat */}
+                {hasAdjustment ? (
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-medium text-muted">
+                      Template cepat:
+                    </span>
+                    {quickNoteTemplates.map((template) => (
+                      <button
+                        key={template}
+                        type="button"
+                        onClick={() => onAdminNoteChange(order.id, template)}
+                        className="rounded-md border border-line bg-ink-50 px-2 py-1 text-xs font-medium text-ink-800 transition-colors hover:border-ink-700 hover:bg-white"
+                      >
+                        {template}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
                 <textarea
                   id={`approval-note-${order.id}`}
                   rows={3}
@@ -3061,43 +3543,47 @@ function ApprovalDialog({
                   onChange={(event) =>
                     onAdminNoteChange(order.id, event.target.value)
                   }
-                  className="mt-2 w-full rounded-md border border-line p-3 text-sm text-ink-900 focus:border-ink-700 focus:outline-none focus:ring-1 focus:ring-ink-700"
-                  placeholder="Contoh: stok gudang tersedia sebagian"
+                  className={`mt-2.5 w-full rounded-lg border p-3 text-sm text-ink-900 focus:outline-none focus:ring-1 ${
+                    noteRequired
+                      ? 'border-crit focus:border-crit focus:ring-crit'
+                      : 'border-line focus:border-ink-700 focus:ring-ink-700'
+                  }`}
+                  placeholder="Contoh: Stok gudang pusat dialokasikan sebagian, sisa akan dikirim batch berikutnya..."
                 />
                 {noteRequired ? (
                   <p
-                    className="mt-1 text-xs font-medium text-crit"
+                    className="mt-1.5 text-xs font-bold text-crit"
                     role="alert"
                   >
-                    Catatan wajib diisi karena jumlah disesuaikan.
+                    Catatan admin wajib diisi karena terdapat penyesuaian kuantitas dari permintaan mitra.
                   </p>
                 ) : null}
               </div>
             ) : order.admin_note ? (
-              <div className="rounded-md border border-line bg-ink-50 p-3 text-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Catatan admin
+              <div className="rounded-xl border border-line bg-ink-50 p-4 text-sm">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted">
+                  Catatan Admin
                 </p>
-                <p className="mt-1 text-ink-800">{order.admin_note}</p>
+                <p className="mt-1.5 font-medium text-ink-900">{order.admin_note}</p>
               </div>
             ) : null}
 
             {order.status === 'ditolak' && order.rejected_reason ? (
-              <div className="rounded-md border border-crit/30 bg-crit-bg/30 p-3 text-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-crit">
-                  Alasan penolakan
+              <div className="rounded-xl border border-crit/30 bg-crit-bg/30 p-4 text-sm">
+                <p className="text-xs font-bold uppercase tracking-wider text-crit">
+                  Alasan Penolakan
                 </p>
-                <p className="mt-1 text-ink-800">{order.rejected_reason}</p>
+                <p className="mt-1.5 font-medium text-ink-900">{order.rejected_reason}</p>
               </div>
             ) : null}
 
             {rejectionMode && order.status === 'diproses' ? (
-              <div className="rounded-md border border-crit/30 p-3">
+              <div className="rounded-xl border border-crit/40 bg-crit-bg/10 p-4 sm:p-5">
                 <label
                   htmlFor={`rejection-reason-${order.id}`}
-                  className="text-sm font-semibold text-ink-900"
+                  className="text-sm font-bold text-ink-900"
                 >
-                  Alasan penolakan
+                  Alasan Penolakan Permintaan Restock
                 </label>
                 <textarea
                   id={`rejection-reason-${order.id}`}

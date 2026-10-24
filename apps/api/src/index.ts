@@ -8,6 +8,7 @@ import { ordersModule } from "./modules/orders";
 import { notificationsModule } from "./modules/notifications";
 import { adminModule } from "./modules/admin";
 import { regionModule } from "./modules/regions";
+import { realtimeModule } from "./realtime";
 
 export const app = new Elysia()
   .onRequest(({ request }) => {
@@ -59,6 +60,7 @@ export const app = new Elysia()
   })
   .use(authModule)
   .use(meModule)
+  .use(realtimeModule)
   .use(stocksModule)
   .use(productsModule)
   .use(ordersModule)

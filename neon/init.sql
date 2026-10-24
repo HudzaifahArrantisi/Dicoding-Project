@@ -259,13 +259,14 @@ insert into partners (id, name, type, address, pic_name, pic_phone, is_active) v
 on conflict (id) do nothing;
 
 -- B. Akun Pengguna Demo (Users: password default adalah "password123")
--- Hash di bawah adalah bcrypt untuk "password123"
+-- Menggunakan crypt pgcrypto untuk menghasilkan hash bcrypt resmi 'password123'
 insert into users (id, email, username, password_hash, role, partner_id, full_name) values
-  ('00000000-0000-0000-0000-000000000001', 'admin@daisuki.test', 'admin', '$2a$10$wB5TqU0oZ3/6M5r9z6N8x.0L7zT9gT1rQ8bQ2yW7uD4vK5pY6eL6m', 'admin', null, 'Admin Daisuki Pusat'),
-  ('00000000-0000-0000-0000-000000000002', 'mitra1@daisuki.test', 'mitra1', '$2a$10$wB5TqU0oZ3/6M5r9z6N8x.0L7zT9gT1rQ8bQ2yW7uD4vK5pY6eL6m', 'mitra', '11111111-1111-1111-1111-111111111111', 'Rina (Kafe Sejuk)'),
-  ('00000000-0000-0000-0000-000000000003', 'mitra2@daisuki.test', 'mitra2', '$2a$10$wB5TqU0oZ3/6M5r9z6N8x.0L7zT9gT1rQ8bQ2yW7uD4vK5pY6eL6m', 'mitra', '22222222-2222-2222-2222-222222222222', 'Budi (Hotel Aruna)')
+  ('00000000-0000-0000-0000-000000000001', 'admin@daisuki.test', 'admin', crypt('password123', gen_salt('bf', 10)), 'admin', null, 'Admin Daisuki Pusat'),
+  ('00000000-0000-0000-0000-000000000002', 'mitra1@daisuki.test', 'mitra1', crypt('password123', gen_salt('bf', 10)), 'mitra', '11111111-1111-1111-1111-111111111111', 'Rina (Kafe Sejuk)'),
+  ('00000000-0000-0000-0000-000000000003', 'mitra2@daisuki.test', 'mitra2', crypt('password123', gen_salt('bf', 10)), 'mitra', '22222222-2222-2222-2222-222222222222', 'Budi (Hotel Aruna)')
 on conflict (email) do update set
   username = excluded.username,
+  password_hash = excluded.password_hash,
   full_name = excluded.full_name;
 
 -- C. 4 Produk Resmi Daisuki

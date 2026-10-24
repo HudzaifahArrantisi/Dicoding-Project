@@ -11,6 +11,7 @@ import {
 } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
 import { resolveRegion, RegionError } from "../regions";
+import { publishInventoryChange } from "../../realtime";
 
 export const adminModule = new Elysia({ prefix: "/admin" })
   .get("/metrics", async ({ headers, set }) => {
@@ -276,6 +277,10 @@ export const adminModule = new Elysia({ prefix: "/admin" })
           return created;
         });
         set.status = 201;
+        publishInventoryChange({
+          partnerId: partner.id,
+          topics: ["partners", "stocks", "orders", "metrics"],
+        });
         return { data: { ...partner, username } };
       } catch (error) {
         if (error && typeof error === "object" && "code" in error && error.code === "23505") {
@@ -336,6 +341,10 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       return true;
     });
     if (!updated) { set.status = 404; return { error: "Mitra tidak ditemukan" }; }
+    publishInventoryChange({
+      partnerId: params.id,
+      topics: ["partners", "stocks", "orders", "metrics"],
+    });
     return { success: true };
   }, {
     body: t.Object({
@@ -375,6 +384,10 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       set.status = 404;
       return { error: "Mitra tidak ditemukan" };
     }
+    publishInventoryChange({
+      partnerId: params.id,
+      topics: ["partners", "stocks", "orders", "metrics"],
+    });
     return { success: true };
   })
   .get("/stock-logs", async ({ headers, set }) => {

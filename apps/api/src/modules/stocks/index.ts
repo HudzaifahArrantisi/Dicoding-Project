@@ -11,6 +11,7 @@ import {
 } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
 import { stockPercent, getStockStatus, isStale } from "@daisuki/shared";
+import { publishInventoryChange } from "../../realtime";
 
 export const stocksModule = new Elysia({ prefix: "/stocks" })
   .get(
@@ -354,6 +355,11 @@ export const stocksModule = new Elysia({ prefix: "/stocks" })
         results.push(updatedRow);
       }
 
+      publishInventoryChange({
+        partnerId: targetPartnerId,
+        topics: ["stocks", "logs", "metrics", "notifications"],
+      });
+
       return {
         success: true,
         message: "Stok berhasil diperbarui",
@@ -419,6 +425,11 @@ export const productsModule = new Elysia({ prefix: "/products" })
         set.status = 404;
         return { error: "Produk aktif tidak ditemukan" };
       }
+
+      publishInventoryChange({
+        partnerId: null,
+        topics: ["products"],
+      });
 
       return {
         success: true,

@@ -17,6 +17,7 @@ import {
   type OrderStatus,
   ORDER_STATUS_LABEL,
 } from "@daisuki/shared";
+import { publishInventoryChange } from "../../realtime";
 
 class CentralStockConflictError extends Error {}
 class OrderWorkflowError extends Error {
@@ -88,9 +89,19 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           central_stock: products.central_stock,
           qty_requested: orderItems.qty_requested,
           qty_approved: orderItems.qty_approved,
+          partner_current_stock: partnerStocks.current_qty,
+          partner_par_level: partnerStocks.par_level,
         })
         .from(orderItems)
         .innerJoin(products, eq(orderItems.product_id, products.id))
+        .innerJoin(orders, eq(orderItems.order_id, orders.id))
+        .leftJoin(
+          partnerStocks,
+          and(
+            eq(partnerStocks.partner_id, orders.partner_id),
+            eq(partnerStocks.product_id, orderItems.product_id),
+          ),
+        )
         .where(inArray(orderItems.order_id, orderIds));
 
       const itemsByOrderId = new Map<string, typeof items>();
@@ -200,6 +211,11 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           status_label: ORDER_STATUS_LABEL["diproses"],
           items: insertedItems,
         };
+      });
+
+      publishInventoryChange({
+        partnerId,
+        topics: ["orders", "metrics", "notifications"],
       });
 
       return {
@@ -355,6 +371,11 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           });
 
           return updatedOrder;
+        });
+
+        publishInventoryChange({
+          partnerId: result.partner_id,
+          topics: ["orders", "metrics", "notifications"],
         });
 
         return {
@@ -630,6 +651,20 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           return { error: error.message };
         }
         throw error;
+      }
+
+      publishInventoryChange({
+        partnerId: ord.partner_id,
+        topics:
+          targetStatus === "selesai"
+            ? ["orders", "stocks", "logs", "metrics", "notifications"]
+            : ["orders", "metrics", "notifications"],
+      });
+      if (targetStatus === "dalam_pengiriman") {
+        publishInventoryChange({
+          partnerId: null,
+          topics: ["products"],
+        });
       }
 
       return {

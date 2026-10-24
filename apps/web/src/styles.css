@@ -220,6 +220,57 @@
 }
 
 @layer components {
+  .admin-dashboard {
+    background: #f7f8fa;
+  }
+
+  .admin-sidebar {
+    background: #f1f3f7;
+  }
+
+  .admin-sidebar button:focus-visible {
+    outline: 2px solid var(--color-ink-700);
+    outline-offset: 2px;
+  }
+
+  .admin-topbar {
+    box-shadow: 0 1px 2px rgb(20 27 61 / 0.03);
+  }
+
+  .admin-summary {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .admin-metric + .admin-metric {
+    border-top: 1px solid var(--color-line);
+  }
+
+  @media (min-width: 768px) {
+    .admin-metric + .admin-metric {
+      border-top: 0;
+      border-left: 1px solid var(--color-line);
+    }
+  }
+
+  .mitra-dashboard {
+    background: #faf7f2;
+  }
+
+  .mitra-header,
+  .mitra-bottom-nav {
+    border-color: #e9ddd6;
+    background: #fffdfb;
+  }
+
+  .mitra-welcome {
+    border: 1px solid #ead8d1;
+    border-radius: var(--radius-lg);
+    background: #fff7f3;
+  }
+
   .dashboard-surface {
     border: 1px solid var(--color-line);
     border-radius: var(--radius-md);

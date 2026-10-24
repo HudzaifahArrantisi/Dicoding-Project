@@ -45,6 +45,7 @@ import {
   StockStatusBadge,
 } from '@/components/inventory/status-badge'
 import { api } from '@/lib/api'
+import { useInventoryEvents } from '@/lib/inventory-events'
 import { apiError, unwrapData } from '@/lib/api-response'
 import { useAuth, type User } from '@/lib/auth'
 import type { Order, Product, StockItem, StockLog } from '@/lib/inventory-types'
@@ -75,9 +76,10 @@ function errorMessage(error: unknown) {
 }
 
 function MitraPortal() {
-  const { user, logout, refreshUser, isLoading: authLoading } = useAuth()
+  const { user, token, logout, refreshUser, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  useInventoryEvents(user?.role === 'mitra' ? token : null, 'mitra')
   const [activeTab, setActiveTab] = useState<MitraTab>('stocks')
   const [editedStocks, setEditedStocks] = useState<Record<string, number>>({})
   const [orderItems, setOrderItems] = useState<DraftOrderItem[]>([])
@@ -115,8 +117,6 @@ function MitraPortal() {
       return unwrapData<Order[]>(response, 'Pesanan belum dapat dimuat')
     },
     enabled: user?.role === 'mitra',
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: true,
   })
 
   const centralProductsQuery = useQuery<Product[]>({
@@ -129,7 +129,6 @@ function MitraPortal() {
       )
     },
     enabled: user?.role === 'mitra',
-    refetchInterval: 10_000,
   })
 
   const logsQuery = useQuery<StockLog[]>({
@@ -139,8 +138,6 @@ function MitraPortal() {
       return unwrapData<StockLog[]>(response, 'Log stok belum dapat dimuat')
     },
     enabled: user?.role === 'mitra',
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: true,
   })
 
   useEffect(() => {
@@ -290,8 +287,8 @@ function MitraPortal() {
   }
 
   return (
-    <div className="dashboard-page mitra-dashboard min-h-screen bg-paper pb-24 text-text md:pb-8">
-      <header className="sticky top-0 z-20 border-b border-line bg-white">
+    <div className="dashboard-page mitra-dashboard min-h-screen pb-24 text-text md:pb-8">
+      <header className="mitra-header sticky top-0 z-20 border-b">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
@@ -302,7 +299,7 @@ function MitraPortal() {
                   className="size-10 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ink-100 text-ink-700">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ume/10 text-ume">
                   <Store className="size-5" aria-hidden="true" />
                 </span>
               )}
@@ -310,8 +307,8 @@ function MitraPortal() {
                 <p className="truncate font-display text-base font-semibold text-ink-900 sm:text-lg">
                   {user.partner_name ?? 'Portal mitra'}
                 </p>
-                <p className="truncate text-xs text-muted sm:text-sm">
-                  PIC {user.partner_pic_name || user.full_name}
+                <p className="truncate text-xs font-semibold text-ume sm:text-sm">
+                  Portal Mitra Cabang · PIC {user.partner_pic_name || user.full_name}
                 </p>
               </div>
             </div>
@@ -323,8 +320,8 @@ function MitraPortal() {
               aria-current={activeTab === 'profile' ? 'page' : undefined}
               className={`hidden min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition md:inline-flex ${
                 activeTab === 'profile'
-                  ? 'bg-ink-100 text-ink-900 ring-1 ring-ink-200'
-                  : 'text-muted hover:bg-ink-50 hover:text-ink-900'
+                  ? 'bg-ume/10 text-ume ring-1 ring-ume/20'
+                  : 'text-muted hover:bg-ume/5 hover:text-ume'
               }`}
             >
               <UserRound className="size-4" aria-hidden="true" />
@@ -333,7 +330,7 @@ function MitraPortal() {
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted hover:bg-ink-50 hover:text-crit-fg"
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted hover:bg-ume/5 hover:text-crit-fg"
             >
               <LogOut className="size-4" aria-hidden="true" />
               <span>Keluar</span>
@@ -352,8 +349,8 @@ function MitraPortal() {
               aria-current={activeTab === id ? 'page' : undefined}
               className={`inline-flex min-h-12 items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors duration-150 ${
                 activeTab === id
-                  ? 'border-ink-900 text-ink-900'
-                  : 'border-transparent text-muted hover:text-ink-900'
+                  ? 'border-ume text-ume'
+                  : 'border-transparent text-muted hover:text-ume'
               }`}
             >
               <Icon className="size-4" aria-hidden="true" />
@@ -364,6 +361,23 @@ function MitraPortal() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mitra-welcome mb-7 flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:py-6">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-ume">Ruang kerja cabang</p>
+            <p className="mt-1 font-display text-xl font-semibold text-ink-900 sm:text-2xl">
+              {user.partner_name ?? 'Mitra Daisuki'}
+            </p>
+            <p className="mt-1 text-sm text-muted">Catat stok rak dan ajukan restock dari satu tempat.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openTab('order')}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-ume px-4 text-sm font-semibold text-white hover:bg-ume/90"
+          >
+            <PackagePlus className="size-4" aria-hidden="true" />
+            Ajukan restock
+          </button>
+        </div>
         {activeTab === 'stocks' ? (
           <StocksPanel
             query={stocksQuery}
@@ -418,7 +432,7 @@ function MitraPortal() {
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden"
+        className="mitra-bottom-nav fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden"
         aria-label="Menu mitra"
       >
         {tabItems.map(({ id, label, Icon }) => (
@@ -428,7 +442,7 @@ function MitraPortal() {
             onClick={() => openTab(id)}
             aria-current={activeTab === id ? 'page' : undefined}
             className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-colors duration-150 ${
-              activeTab === id ? 'bg-ink-100 text-ink-900' : 'text-muted hover:bg-ink-50'
+              activeTab === id ? 'bg-ume/10 text-ume' : 'text-muted hover:bg-ume/5'
             }`}
           >
             <Icon className="size-5" aria-hidden="true" />
@@ -1260,9 +1274,9 @@ function OrderHistory({
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-display text-base font-bold tabular-nums text-ink-900 group-hover:text-ume transition-colors sm:text-lg">
-                        {order.order_no}
-                      </span>
+                      <h2 className="font-display text-base font-bold tabular-nums text-ink-900 sm:text-lg">
+                        {formatOrderDate(order.created_at)}
+                      </h2>
                       <OrderStatusBadge status={order.status} />
                       {order.admin_note ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-ume/10 px-2 py-0.5 text-[11px] font-semibold text-ume">
@@ -1271,10 +1285,6 @@ function OrderHistory({
                         </span>
                       ) : null}
                     </div>
-
-                    <p className="mt-1 text-xs text-muted">
-                      Diajukan {formatDetailedDateTime(order.created_at)}
-                    </p>
                   </div>
 
                   <div className="flex items-center gap-2 self-start sm:self-center">
@@ -1788,6 +1798,20 @@ function ProfilePanel({ user }: { user: User }) {
   )
 }
 
+function formatOrderDate(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return 'Tanggal pesanan tidak tersedia'
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  if (Number.isNaN(date.getTime())) return 'Tanggal pesanan tidak tersedia'
+
+  const formatted = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(date)
+
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+}
+
 function formatDetailedDateTime(dateInput: string | Date | null | undefined): string {
   if (!dateInput) return '—'
   const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
@@ -1809,6 +1833,21 @@ function formatDetailedDateTime(dateInput: string | Date | null | undefined): st
   const minutes = String(date.getMinutes()).padStart(2, '0')
 
   return `${datePart} jam ${hours}.${minutes}`
+}
+
+function formatCompactDateTime(
+  dateInput: string | Date | null | undefined,
+): string {
+  if (!dateInput) return 'Waktu tidak tersedia'
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  if (Number.isNaN(date.getTime())) return 'Waktu tidak tersedia'
+
+  return new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
 }
 
 function toLocalDateStr(dateInput: string | Date): string {
@@ -1940,12 +1979,14 @@ function MitraInsightMetric({
   detail?: string
 }) {
   return (
-    <article className="min-w-0 px-4 py-4 sm:px-5">
-      <p className="text-sm font-medium text-muted">{label}</p>
-      <p className="mt-2 font-display text-2xl font-semibold tabular-nums text-ink-900">
+    <article className="min-w-0 px-3 py-3 sm:px-5 sm:py-4">
+      <p className="text-xs font-medium text-ink-700 sm:text-sm">{label}</p>
+      <p className="mt-1 font-display text-xl font-semibold tabular-nums text-ink-900 sm:mt-2 sm:text-2xl">
         {value}
       </p>
-      {detail ? <p className="mt-1 text-xs text-muted">{detail}</p> : null}
+      {detail ? (
+        <p className="mt-1 hidden text-xs text-muted sm:block">{detail}</p>
+      ) : null}
     </article>
   )
 }
@@ -2117,7 +2158,10 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
   )
 
   return (
-    <section aria-labelledby="mitra-logs-title" className="dashboard-panel-enter space-y-6">
+    <section
+      aria-labelledby="mitra-logs-title"
+      className="dashboard-panel-enter space-y-4 sm:space-y-6"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="dashboard-eyebrow">Aktivitas stok</p>
@@ -2125,10 +2169,10 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
             id="mitra-logs-title"
             className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl"
           >
-            Riwayat Log Stok Cabang
+            Log stok
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Perkembangan laporan stok fisik dan riwayat konsumsi cabang Anda.
+            Lihat stok keluar dan barang yang diterima cabang.
           </p>
         </div>
         <button
@@ -2138,41 +2182,38 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download className="size-4" aria-hidden="true" />
-          Export CSV
+          Unduh CSV
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 -mt-3">
-        <p className="inline-flex items-center gap-1.5 text-xs text-muted">
-          <Clock className="size-3.5" aria-hidden="true" />
-          Riwayat mutasi stok cabang · otomatis tersinkronisasi khusus cabang Anda
-        </p>
-
+      <div className="flex items-center justify-start sm:justify-end">
         {/* View Mode Toggle */}
-        <div className="flex items-center rounded-md border border-line bg-white p-1 text-xs font-semibold">
+        <div className="flex w-full items-center rounded-md border border-line bg-white p-1 text-sm font-semibold sm:w-auto">
           <button
             type="button"
             onClick={() => setViewMode('calendar')}
-            className={`inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 transition-colors ${
+            aria-pressed={viewMode === 'calendar'}
+            className={`inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-3 transition-colors sm:flex-none ${
               viewMode === 'calendar'
                 ? 'bg-ink-900 text-white'
                 : 'text-muted hover:text-ink-900'
             }`}
           >
             <Calendar className="size-3.5" aria-hidden="true" />
-            <span>Kalender & Jam</span>
+            <span>Kalender</span>
           </button>
           <button
             type="button"
             onClick={() => setViewMode('list')}
-            className={`inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 transition-colors ${
+            aria-pressed={viewMode === 'list'}
+            className={`inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-3 transition-colors sm:flex-none ${
               viewMode === 'list'
                 ? 'bg-ink-900 text-white'
                 : 'text-muted hover:text-ink-900'
             }`}
           >
             <Clock className="size-3.5" aria-hidden="true" />
-            <span>Semua Log</span>
+            <span>Daftar</span>
           </button>
         </div>
       </div>
@@ -2184,38 +2225,42 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         />
       ) : null}
 
-      <div className="dashboard-surface grid divide-y divide-line sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
+      <div className="dashboard-surface grid grid-cols-2 divide-x divide-line sm:divide-x-0 lg:grid-cols-4 lg:divide-x">
+        <div className="hidden sm:block">
+          <MitraInsightMetric
+            label="Total Log Tercatat"
+            value={query.isLoading ? '…' : logs.length}
+            detail="Seluruh riwayat perubahan stok"
+          />
+        </div>
         <MitraInsightMetric
-          label="Total Log Tercatat"
-          value={query.isLoading ? '…' : logs.length}
-          detail="Seluruh riwayat perubahan stok"
-        />
-        <MitraInsightMetric
-          label="Total Unit Terjual/Keluar"
+          label="Stok keluar"
           value={query.isLoading ? '…' : `${totalConsumed} pcs`}
           detail="Konsumsi dari laporan stok fisik"
         />
         <MitraInsightMetric
-          label="Total Restock Masuk"
+          label="Stok masuk"
           value={query.isLoading ? '…' : `${totalReceived} pcs`}
           detail="Barang diterima dari pesanan selesai"
         />
-        <MitraInsightMetric
-          label="Laporan Terakhir"
-          value={
-            query.isLoading
-              ? '…'
-              : latestUpdate
-                ? new Date(latestUpdate).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : '—'
-          }
-          detail={latestUpdate ? formatDetailedDateTime(latestUpdate) : 'Belum ada data'}
-        />
+        <div className="hidden sm:block">
+          <MitraInsightMetric
+            label="Laporan Terakhir"
+            value={
+              query.isLoading
+                ? '…'
+                : latestUpdate
+                  ? new Date(latestUpdate).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : '—'
+            }
+            detail={latestUpdate ? formatDetailedDateTime(latestUpdate) : 'Belum ada data'}
+          />
+        </div>
       </div>
 
       {query.isLoading ? (
@@ -2234,23 +2279,26 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         <div className="space-y-4">
           {/* Navigasi Minggu (< dan >) */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-white p-3 shadow-2xs">
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
               <button
                 type="button"
                 onClick={() => {
                   setWeekOffset((w) => w - 1)
                   setSelectedBatch(null)
                 }}
-                className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
                 title="Lihat minggu kemarin (<)"
                 aria-label="Minggu kemarin"
               >
                 <ChevronLeft className="size-4" aria-hidden="true" />
               </button>
 
-              <div className="flex items-center gap-2 px-1">
-                <Calendar className="size-4 text-ink-700" aria-hidden="true" />
-                <span className="font-display text-sm font-semibold text-ink-900">
+              <div className="min-w-0 px-1 text-center sm:flex sm:items-center sm:gap-2">
+                <Calendar
+                  className="hidden size-4 text-ink-700 sm:block"
+                  aria-hidden="true"
+                />
+                <span className="font-display text-xs font-semibold text-ink-900 sm:text-sm">
                   {formatWeekRange(weekDays, weekOffset)}
                 </span>
               </div>
@@ -2262,7 +2310,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                   setSelectedBatch(null)
                 }}
                 disabled={weekOffset >= 0}
-                className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"
                 title="Lihat minggu berikutnya (>)"
                 aria-label="Minggu berikutnya"
               >
@@ -2277,7 +2325,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                   setWeekOffset(0)
                   setSelectedBatch(null)
                 }}
-                className="inline-flex items-center rounded-md border border-line bg-ink-50 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900"
+                className="inline-flex min-h-11 items-center rounded-md border border-line bg-ink-50 px-3 text-xs font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900"
               >
                 Kembali ke Minggu Ini
               </button>
@@ -2285,7 +2333,8 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
           </div>
 
           {/* Grid 7 Hari (Senin sampai Minggu) */}
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+          <div className="overflow-x-auto pb-1">
+            <div className="grid min-w-[332px] grid-cols-7 gap-1 sm:min-w-0 sm:gap-2">
             {weekDays.map((d, index) => {
               const dStr = toLocalDateStr(d)
               const isSelected = dStr === activeDateStr
@@ -2303,7 +2352,9 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                     setSelectedDateStr(dStr)
                     setSelectedBatch(null)
                   }}
-                  className={`group relative flex flex-col items-center justify-between rounded-md border p-2 text-center transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:p-2.5 ${
+                  aria-label={`${dayNameFull}, ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}, ${count} catatan${isToday ? ', hari ini' : ''}`}
+                  aria-pressed={isSelected}
+                  className={`group relative flex min-h-16 flex-col items-center justify-center rounded-md border px-0.5 py-1 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:justify-between sm:p-2.5 ${
                     isSelected
                       ? 'border-ink-900 bg-ink-900 text-white shadow-sm ring-2 ring-ink-900/20'
                       : count > 0
@@ -2328,7 +2379,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                     {dayNumber}
                   </span>
 
-                  <div className="flex items-center gap-1">
+                  <div className="hidden items-center gap-1 sm:flex">
                     {count > 0 ? (
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
@@ -2355,9 +2406,13 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                     )}
                   </div>
 
+                  {count > 0 ? (
+                    <span className={`size-1.5 rounded-full sm:hidden ${isSelected ? 'bg-white' : 'bg-ok'}`} aria-hidden="true" />
+                  ) : null}
+
                   {isToday ? (
                     <span
-                      className={`absolute -top-1.5 right-1 rounded-sm px-1 text-[8px] font-bold uppercase tracking-wider ${
+                      className={`absolute -top-1.5 right-1 hidden rounded-sm px-1 text-[8px] font-bold uppercase tracking-wider sm:block ${
                         isSelected
                           ? 'bg-white text-ink-900'
                           : 'bg-ink-900 text-white'
@@ -2369,6 +2424,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 </button>
               )
             })}
+            </div>
           </div>
 
           {/* Panel Detail Hari Terpilih & Jam-Jam Perubahan */}
@@ -2383,8 +2439,8 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
                   {dayBatches.length > 0
-                    ? `${dayBatches.length} sesi · ${activeDateLogs.length} produk`
-                    : 'Tidak ada laporan stok tercatat pada tanggal ini'}
+                    ? `${activeDateLogs.length} catatan stok`
+                    : 'Belum ada catatan pada tanggal ini'}
                 </p>
               </div>
 
@@ -2412,67 +2468,44 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 />
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-muted">
-                    <span className="font-semibold text-ink-900">
-                      Sesi Waktu
-                    </span>
-                    <span>
-                      {dayBatches.length} sesi tercatat
-                    </span>
-                  </div>
-
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     {dayBatches.map((batch) => (
                       <button
                         key={batch.key}
                         type="button"
                         onClick={() => setSelectedBatch(batch)}
-                        className="group flex flex-col justify-between rounded-lg border border-line bg-white p-3.5 text-left shadow-2xs transition-all hover:border-ink-500 hover:bg-ink-50/40 hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                        className="group flex min-h-16 flex-col justify-center gap-2 rounded-md border border-line bg-white p-3 text-left transition-colors hover:border-ink-500 hover:bg-ink-50/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:p-3.5"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-ink-100 text-ink-700 transition-colors group-hover:bg-ink-700 group-hover:text-white">
-                              <Clock className="size-3.5" aria-hidden="true" />
-                            </span>
                             <div>
                               <span className="font-display text-sm font-bold text-ink-900">
                                 {batch.timeFormatted}
                               </span>
-                              <p className="text-[11px] text-muted">
-                                {batch.totalItems} item
+                              <p className="text-xs text-ink-700">
+                                {batch.sourceLabel} · {batch.totalItems} produk
                               </p>
                             </div>
                           </div>
-
-                          <span
-                            className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-semibold ${
-                              batch.source === 'order_received'
-                                ? 'bg-ok-bg text-ok-fg'
-                                : 'bg-ink-100 text-ink-700'
-                            }`}
-                          >
-                            {batch.sourceLabel}
-                          </span>
+                          <ChevronRight
+                            className="size-4 shrink-0 text-ink-700"
+                            aria-hidden="true"
+                          />
                         </div>
 
-                        <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2 text-xs">
-                          <div className="flex items-center gap-1.5 font-bold tabular-nums">
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="flex items-center gap-2 font-semibold tabular-nums">
                             {batch.totalConsumed > 0 ? (
-                              <span className="rounded bg-crit-bg px-1.5 py-0.5 text-crit-fg">
-                                −{batch.totalConsumed} pcs
+                              <span className="text-crit-fg">
+                                Keluar {batch.totalConsumed} pcs
                               </span>
                             ) : null}
                             {batch.totalRestocked > 0 ? (
-                              <span className="rounded bg-ok-bg px-1.5 py-0.5 text-ok-fg">
-                                +{batch.totalRestocked} pcs
+                              <span className="text-ok-fg">
+                                Masuk {batch.totalRestocked} pcs
                               </span>
                             ) : null}
                           </div>
-
-                          <span className="inline-flex items-center gap-1 font-semibold text-ink-700 transition-transform group-hover:translate-x-0.5">
-                            <span>Lihat detail</span>
-                            <span aria-hidden="true">→</span>
-                          </span>
                         </div>
                       </button>
                     ))}
@@ -2499,30 +2532,27 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-semibold text-ink-900">
-                  Daftar Semua Catatan Log
+                  Semua catatan
                 </h2>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-bg px-2 py-0.5 text-[11px] font-medium text-ok-fg">
-                  <span className="size-1.5 animate-pulse rounded-full bg-ok" />
-                  Live Sync
-                </span>
               </div>
               <p className="mt-0.5 text-xs text-muted">
-                Menampilkan {filteredLogs.length} dari {logs.length} catatan log
+                {filteredLogs.length} dari {logs.length} catatan
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-44 flex-1 sm:w-52 sm:flex-none">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <div className="relative col-span-2 sm:w-52">
                 <Search
                   className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
                   aria-hidden="true"
                 />
                 <input
                   type="text"
+                  aria-label="Cari produk dalam catatan stok"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Cari produk..."
-                  className="h-10 w-full rounded-md border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+                  className="h-11 w-full rounded-md border border-line bg-white pl-9 pr-3 text-sm text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
                 />
               </div>
 
@@ -2530,7 +2560,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 <select
                   value={selectedProduct}
                   onChange={(e) => setSelectedProduct(e.target.value)}
-                  className="h-10 rounded-md border border-line bg-white px-3 text-xs text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+                  className="h-11 min-w-0 rounded-md border border-line bg-white px-2 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:px-3"
                   aria-label="Filter berdasarkan produk"
                 >
                   <option value="all">Semua Produk</option>
@@ -2545,12 +2575,12 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
               <select
                 value={selectedSource}
                 onChange={(e) => setSelectedSource(e.target.value)}
-                className="h-10 rounded-md border border-line bg-white px-3 text-xs text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+                className={`h-11 min-w-0 rounded-md border border-line bg-white px-2 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:px-3 ${productOptions.length > 1 ? '' : 'col-span-2'}`}
                 aria-label="Filter berdasarkan tipe aktivitas"
               >
                 <option value="all">Semua Tipe</option>
-                <option value="manual_update">Laporan Stok Fisik</option>
-                <option value="order_received">Pesanan Diterima (Restock)</option>
+                <option value="manual_update">Laporan stok</option>
+                <option value="order_received">Barang diterima</option>
               </select>
             </div>
           </div>
@@ -2569,40 +2599,38 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 const isRestock = log.delta < 0
                 const sourceLabel =
                   log.source === 'manual_update'
-                    ? 'Laporan stok mitra'
+                    ? 'Laporan stok'
                     : log.source === 'order_received'
-                      ? 'Pesanan diterima'
+                      ? 'Barang diterima'
                       : 'Penyesuaian stok'
 
                 return (
                   <article
                     key={log.id}
-                    className="flex flex-col gap-2 p-3.5 transition-colors hover:bg-ink-50/50 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 p-4 transition-colors hover:bg-ink-50/50 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink-900">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold leading-snug text-ink-900">
                         {log.product_name}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-700">
                         <span className="font-medium text-ink-700">
-                          {formatDetailedDateTime(log.created_at)}
+                          <span className="sm:hidden">
+                            {formatCompactDateTime(log.created_at)}
+                          </span>
+                          <span className="hidden sm:inline">
+                            {formatDetailedDateTime(log.created_at)}
+                          </span>
                         </span>
                         <span aria-hidden="true">·</span>
-                        <span
-                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                            log.source === 'order_received'
-                              ? 'bg-ok-bg text-ok-fg'
-                              : 'bg-ink-100 text-ink-700'
-                          }`}
-                        >
-                          {sourceLabel}
-                        </span>
+                        <span className="text-xs">{sourceLabel}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 self-end sm:self-center">
-                      <div className="flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-sm tabular-nums">
-                        <span className="text-muted">{log.qty_before}</span>
+                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                      <div className="flex items-center gap-1.5 text-xs tabular-nums text-ink-700 sm:rounded-md sm:border sm:border-line sm:bg-white sm:px-2.5 sm:py-1 sm:text-sm">
+                        <span className="sm:hidden">Stok</span>
+                        <span>{log.qty_before}</span>
                         <span className="text-xs text-muted" aria-hidden="true">
                           →
                         </span>
@@ -2611,12 +2639,12 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                         </span>
                       </div>
                       <span
-                        className={`min-w-16 rounded px-2 py-1 text-center text-xs font-bold tabular-nums ${
+                        className={`min-w-16 text-right text-sm font-bold tabular-nums sm:rounded sm:px-2 sm:py-1 sm:text-center sm:text-xs ${
                           isConsumption
-                            ? 'bg-crit-bg text-crit-fg'
+                            ? 'text-crit-fg sm:bg-crit-bg'
                             : isRestock
-                              ? 'bg-ok-bg text-ok-fg'
-                              : 'bg-ink-100 text-muted'
+                              ? 'text-ok-fg sm:bg-ok-bg'
+                              : 'text-ink-700 sm:bg-ink-100'
                         }`}
                       >
                         {isConsumption
