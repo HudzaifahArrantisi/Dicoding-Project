@@ -106,7 +106,7 @@ const adminNavTabs: Array<{
   Icon: typeof Boxes
 }> = [
   { id: 'stocks', label: 'Stok cabang', shortLabel: 'Stok', Icon: Boxes },
-  { id: 'orders', label: 'Persetujuan pesanan', shortLabel: 'Persetujuan', Icon: ClipboardCheck },
+  { id: 'orders', label: 'Persetujuan pesanan', shortLabel: 'Pesanan', Icon: ClipboardCheck },
   { id: 'shipments', label: 'Log pengiriman', shortLabel: 'Kirim', Icon: Truck },
   { id: 'partners', label: 'Manajemen mitra', shortLabel: 'Mitra', Icon: Building2 },
   { id: 'data-science', label: 'Log & Data', shortLabel: 'Log & Data', Icon: Database },
@@ -1729,7 +1729,7 @@ function AdminDashboard() {
                   }`}
                   aria-hidden="true"
                 />
-                <span className="leading-tight truncate max-w-[54px]">{shortLabel}</span>
+                <span className="leading-tight truncate max-w-[60px] whitespace-nowrap">{shortLabel}</span>
                 {badgeCount && badgeCount > 0 ? (
                   <span
                     className={`absolute -right-0.5 -top-0.5 grid min-w-4 h-4 place-items-center rounded-full px-1 text-[9px] font-bold tabular-nums text-white ${
@@ -2228,38 +2228,37 @@ function PartnerManagementPanel() {
           return (
             <article
               key={partner.id}
-              className={`dashboard-surface flex flex-col justify-between gap-3 p-4 transition-all sm:flex-row sm:items-center sm:p-5 ${isSelected
+              className={`dashboard-surface flex flex-col justify-between gap-2.5 p-3.5 transition-all sm:flex-row sm:items-center sm:gap-4 sm:p-4.5 ${isSelected
                   ? 'border-ink-700 bg-ink-50/50 shadow-xs ring-1 ring-ink-700'
                   : 'hover:border-line'
                 }`}
             >
               {/* Sisi Kiri: Checkbox, Nomor Urut, Ikon & Rincian Ringkas */}
-              <div className="flex min-w-0 flex-1 items-start gap-3">
+              <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3">
                 {/* Checkbox Pilihan */}
-                <div className="flex items-center pt-1">
+                <div className="flex items-center pt-0.5">
                   <input
                     type="checkbox"
                     id={`select-partner-${partner.id}`}
                     checked={isSelected}
                     onChange={() => toggleSelectPartner(partner.id)}
                     aria-label={`Pilih mitra ${partner.name}`}
-                    className="size-4.5 cursor-pointer rounded border-line text-ink-900 accent-ink-900 focus:ring-ink-700"
+                    className="size-4 cursor-pointer rounded border-line text-ink-900 accent-ink-900 focus:ring-ink-700 sm:size-4.5"
                   />
                 </div>
 
                 {/* Badge Nomor Urut */}
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-ink-100 font-display text-xs font-bold tabular-nums text-ink-700">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-ink-100 font-display text-xs font-bold tabular-nums text-ink-700 sm:size-8">
                   {index + 1}
                 </span>
 
-                {/* Ikon Cabang */}
                 {/* Informasi Mitra */}
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <button
                       type="button"
                       onClick={() => setSelectedDetailPartner(partner)}
-                      className="min-h-11 max-w-full truncate text-left font-display text-base font-semibold text-ink-900 hover:underline"
+                      className="max-w-full truncate text-left font-display text-sm font-semibold text-ink-900 hover:underline sm:text-base"
                     >
                       {partner.name}
                     </button>
@@ -2273,7 +2272,7 @@ function PartnerManagementPanel() {
                     ) : null}
                   </div>
 
-                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted sm:gap-x-4">
                     <span>
                       PIC:{' '}
                       <strong className="font-medium text-ink-900">
@@ -2289,7 +2288,7 @@ function PartnerManagementPanel() {
                       </span>
                     ) : null}
                     {regionSummary ? (
-                      <span className="truncate max-w-xs">
+                      <span className="truncate max-w-[200px] sm:max-w-xs">
                         Wilayah:{' '}
                         <span className="font-medium text-ink-900">
                           {regionSummary}
@@ -2301,18 +2300,18 @@ function PartnerManagementPanel() {
               </div>
 
               {/* Sisi Kanan: Aksi (Detail popup, Ubah, Hapus) */}
-              <div className="flex shrink-0 items-center gap-1 border-t border-line pt-3 sm:border-t-0 sm:pt-0">
+              <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-line/60 pt-2.5 sm:border-t-0 sm:pt-0">
                 <button
                   type="button"
                   onClick={() => setSelectedDetailPartner(partner)}
-                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-900 hover:bg-ink-50"
+                  className="inline-flex min-h-9 sm:min-h-10 items-center justify-center rounded-md border border-line bg-white px-3 text-xs sm:text-sm font-semibold text-ink-900 hover:bg-ink-50 shadow-2xs"
                 >
                   Detail
                 </button>
                 <button
                   type="button"
                   onClick={() => openEdit(partner)}
-                  className="inline-flex min-h-11 items-center justify-center gap-1 rounded-md px-3 text-sm font-semibold text-ink-700 hover:bg-ink-100"
+                  className="inline-flex min-h-9 sm:min-h-10 items-center justify-center gap-1 rounded-md border border-line/60 bg-paper px-2.5 sm:px-3 text-xs sm:text-sm font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900"
                   aria-label={`Ubah profil ${partner.name}`}
                 >
                   <Pencil className="size-3.5" aria-hidden="true" />
@@ -2321,7 +2320,7 @@ function PartnerManagementPanel() {
                 <button
                   type="button"
                   onClick={() => setPartnerToDelete(partner)}
-                  className="inline-flex min-h-11 items-center justify-center gap-1 rounded-md px-3 text-sm font-semibold text-crit-fg hover:bg-crit-bg"
+                  className="inline-flex min-h-9 sm:min-h-10 items-center justify-center gap-1 rounded-md border border-crit/20 bg-crit-bg/40 px-2.5 sm:px-3 text-xs sm:text-sm font-semibold text-crit-fg hover:bg-crit-bg"
                   aria-label={`Hapus ${partner.name}`}
                 >
                   <Trash2 className="size-3.5" aria-hidden="true" />
@@ -3325,7 +3324,7 @@ function OrderPanel({
             >
               {/* Baris 1: Nomor Urut, Nama Mitra, Tipe, No PO, Status & Tanggal */}
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-2.5">
-                <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                   <span className="flex size-6 shrink-0 items-center justify-center rounded bg-ink-100 font-display text-xs font-bold tabular-nums text-ink-700">
                     {index + 1}
                   </span>
@@ -3337,12 +3336,15 @@ function OrderPanel({
                       {partnerTypeLabel}
                     </span>
                   ) : null}
-                  <span className="font-mono text-xs text-muted">
+                  <span className="hidden font-mono text-xs text-muted sm:inline">
                     {order.order_no}
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-mono text-[11px] text-muted sm:hidden">
+                    {order.order_no}
+                  </span>
                   <OrderStatusBadge status={order.status} />
                   {order.status === 'disetujui' ? (
                     <span className="inline-flex items-center gap-1 rounded bg-order-disetujui-bg px-2 py-0.5 text-[10px] font-bold text-order-disetujui border border-order-disetujui/30">
@@ -3362,19 +3364,19 @@ function OrderPanel({
               </div>
 
               {/* Baris 2: Rincian Produk Singkat, Catatan Inline & Kuantitas */}
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-col gap-2.5 text-xs sm:flex-row sm:items-center sm:justify-between">
                 {/* Rincian Produk & Catatan Mitra */}
-                <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
-                  <span className="font-medium text-ink-700 shrink-0">
-                    {order.items.length} Macam:
-                  </span>
+                <div className="min-w-0 flex-1 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-semibold text-ink-700 shrink-0">
+                      {order.items.length} Macam:
+                    </span>
                     {order.items.map((item) => (
                       <span
                         key={item.id}
                         className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-800 border border-line/70"
                       >
-                        <span>{item.product_name}</span>
+                        <span className="truncate max-w-[150px] sm:max-w-none">{item.product_name}</span>
                         <strong className="font-bold tabular-nums text-ink-900">
                           ({item.qty_requested})
                         </strong>
@@ -3391,8 +3393,8 @@ function OrderPanel({
                 </div>
 
                 {/* Ringkasan Jumlah Diminta/Disetujui & Tanda Detail */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="flex items-baseline gap-2 tabular-nums">
+                <div className="flex items-center justify-between border-t border-line/50 pt-2 sm:border-t-0 sm:pt-0 sm:justify-end gap-3 shrink-0">
+                  <div className="flex items-baseline gap-1.5 tabular-nums text-xs">
                     <span className="text-muted">
                       Diminta: <strong className="font-bold text-ink-900">{totalRequested}</strong> pcs
                     </span>
@@ -3406,12 +3408,12 @@ function OrderPanel({
                   {order.status === 'disetujui' ? (
                     <span className="inline-flex items-center gap-1 rounded-md bg-order-pengiriman text-white px-2.5 py-1 text-xs font-bold shadow-2xs group-hover:bg-order-pengiriman/90 transition-all">
                       <Truck className="size-3.5" aria-hidden="true" />
-                      <span>Kirim sekarang ke mitra</span>
+                      <span>Kirim sekarang</span>
                       <ChevronRight className="size-3.5" aria-hidden="true" />
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-ink-700 group-hover:text-ink-900 group-hover:translate-x-0.5 transition-all">
-                      <span className="hidden sm:inline">Detail</span>
+                      <span>Detail</span>
                       <ChevronRight className="size-4" aria-hidden="true" />
                     </span>
                   )}
@@ -4699,11 +4701,11 @@ function AlertPanel({
           </div>
 
           {/* Segmented Control Status Baca */}
-          <div className="inline-flex max-w-full gap-1 overflow-x-auto rounded-md border border-line bg-ink-50 p-1 self-start sm:self-auto">
+          <div className="grid grid-cols-3 w-full sm:inline-flex sm:w-auto gap-1 overflow-x-auto rounded-md border border-line bg-ink-50 p-1">
             <button
               type="button"
               onClick={() => setReadFilter('semua')}
-              className={`min-h-11 shrink-0 rounded-md px-3 text-xs font-semibold ${readFilter === 'semua'
+              className={`min-h-10 sm:min-h-11 shrink-0 rounded-md px-2 sm:px-3 text-center justify-center text-xs font-semibold ${readFilter === 'semua'
                   ? 'bg-white text-ink-900'
                   : 'text-muted hover:text-ink-900'
                 }`}
@@ -4713,7 +4715,7 @@ function AlertPanel({
             <button
               type="button"
               onClick={() => setReadFilter('unread')}
-              className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold ${readFilter === 'unread'
+              className={`inline-flex min-h-10 sm:min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 sm:px-3 text-center text-xs font-semibold ${readFilter === 'unread'
                   ? 'bg-white text-ink-900'
                   : 'text-muted hover:text-ink-900'
                 }`}
@@ -4733,7 +4735,7 @@ function AlertPanel({
             <button
               type="button"
               onClick={() => setReadFilter('read')}
-              className={`min-h-11 shrink-0 rounded-md px-3 text-xs font-semibold ${readFilter === 'read'
+              className={`min-h-10 sm:min-h-11 shrink-0 rounded-md px-2 sm:px-3 text-center justify-center text-xs font-semibold ${readFilter === 'read'
                   ? 'bg-white text-ink-900'
                   : 'text-muted hover:text-ink-900'
                 }`}
@@ -4746,8 +4748,8 @@ function AlertPanel({
         {/* Baris 2: Filter Waktu (Pill Presets + Elegant Date Picker) & Jenis Alert */}
         <div className="flex flex-col gap-3 pt-3 border-t border-line/60 lg:flex-row lg:items-center lg:justify-between">
           {/* Quick Time Pills + Smooth Date Selector */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 flex items-center gap-1 text-xs font-semibold text-muted">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <span className="mr-1 flex shrink-0 items-center gap-1 text-xs font-semibold text-muted">
               <Clock className="size-3 text-muted" aria-hidden="true" />
               <span>Waktu:</span>
             </span>
@@ -4770,7 +4772,7 @@ function AlertPanel({
                     setTimePreset(preset.id)
                     setSelectedDate('')
                   }}
-                  className={`min-h-11 rounded-md px-3 text-xs font-semibold ${isActive
+                  className={`min-h-9 sm:min-h-11 shrink-0 whitespace-nowrap rounded-md px-3 text-xs font-semibold ${isActive
                       ? 'bg-ink-900 text-white'
                       : 'border border-line bg-white text-muted hover:bg-ink-50 hover:text-ink-900'
                     }`}
@@ -4781,24 +4783,24 @@ function AlertPanel({
             })}
 
             {/* Smooth Custom Date Trigger (Disguised Native Picker) */}
-            <div className="relative inline-flex items-center">
+            <div className="relative inline-flex items-center shrink-0">
               {selectedDate ? (
-                <div className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line bg-white pl-3 text-xs font-semibold text-ink-900">
+                <div className="inline-flex min-h-9 sm:min-h-11 items-center gap-1.5 rounded-md border border-line bg-white pl-3 text-xs font-semibold text-ink-900">
                   <Calendar className="size-3 text-ume" aria-hidden="true" />
                   <span>{formatSelectedDate(selectedDate)}</span>
                   <button
                     type="button"
                     onClick={() => setSelectedDate('')}
-                    className="grid size-10 place-items-center rounded-md text-muted hover:bg-ink-50"
+                    className="grid size-9 sm:size-10 place-items-center rounded-md text-muted hover:bg-ink-50"
                     aria-label="Hapus filter tanggal"
                   >
                     <X className="size-3" />
                   </button>
                 </div>
               ) : (
-                <label className="relative inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-muted hover:bg-ink-50 hover:text-ink-900">
+                <label className="relative inline-flex min-h-9 sm:min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-muted hover:bg-ink-50 hover:text-ink-900">
                   <Calendar className="size-3 text-muted" aria-hidden="true" />
-                  <span>Pilih Tanggal</span>
+                  <span className="whitespace-nowrap">Pilih Tanggal</span>
                   <input
                     type="date"
                     value={selectedDate}
@@ -4815,15 +4817,15 @@ function AlertPanel({
           </div>
 
           {/* Jenis Alert Dropdown & Tombol Aksi Tambahan */}
-          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {/* Filter Jenis Alert Dropdown */}
-            <div className="relative">
+            <div className="relative flex-1 sm:flex-initial">
               <select
                 value={typeFilter}
                 onChange={(e) =>
                   setTypeFilter(e.target.value as typeof typeFilter)
                 }
-                className="min-h-11 rounded-md border border-line bg-white px-3 pr-8 text-xs font-semibold text-ink-900"
+                className="min-h-10 sm:min-h-11 w-full rounded-md border border-line bg-white px-3 pr-8 text-xs font-semibold text-ink-900"
                 aria-label="Filter kategori jenis alert"
               >
                 <option value="semua">Semua Kategori</option>
@@ -4844,7 +4846,7 @@ function AlertPanel({
               <button
                 type="button"
                 onClick={resetFilters}
-                className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 text-xs font-semibold text-warn-fg hover:bg-warn-bg"
+                className="inline-flex min-h-10 sm:min-h-11 items-center gap-1 rounded-md px-3 text-xs font-semibold text-warn-fg hover:bg-warn-bg"
                 title="Reset semua filter ke kondisi awal"
               >
                 <RotateCcw className="size-3" aria-hidden="true" />
@@ -4863,7 +4865,7 @@ function AlertPanel({
                     .map((a) => a.id)
                   if (unreadIds.length > 0) onReadAll(unreadIds)
                 }}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
+                className="inline-flex min-h-10 sm:min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
                 title="Tandai semua alert yang belum dibaca menjadi sudah dibaca"
               >
                 {isMarkingAll ? (
@@ -4998,7 +5000,7 @@ function AlertPanel({
                 </div>
 
                 {/* Bagian Kanan: Tombol Aksi yang Selaras dan Berjajar Rapi */}
-                <div className="flex items-center gap-2 self-start sm:self-center shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-line/60">
+                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto self-start sm:self-center shrink-0 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-line/60">
                   {/* Status Sudah Dibaca / Tombol Tandai Dibaca */}
                   {isUnread ? (
                     <button

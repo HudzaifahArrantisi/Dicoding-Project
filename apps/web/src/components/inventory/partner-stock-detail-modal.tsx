@@ -147,56 +147,97 @@ export function PartnerStockDetailModal({
 
             {/* Daftar Produk dengan Grid Terstruktur & Lurus Sempurna */}
             <div className="overflow-hidden rounded-xl border border-line bg-white shadow-xs">
-              {/* Header Kolom Tabel */}
-              <div className="grid grid-cols-[minmax(0,1fr)_112px_50px_84px] sm:grid-cols-[minmax(0,1fr)_130px_56px_90px] items-center gap-2.5 sm:gap-4 border-b border-line bg-paper/70 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
-                <span>Produk</span>
-                <span className="text-center">Kapasitas Rak</span>
-                <span className="text-right">Sisa / Par</span>
-                <span className="text-right">Status</span>
-              </div>
-
-              {/* Baris Produk */}
-              <div className="divide-y divide-line">
+              {/* Tampilan Mobile: Kartu Vertikal Responsif & Rapi */}
+              <div className="divide-y divide-line sm:hidden">
                 {group.items.map((stock) => (
-                  <div
-                    key={stock.product_id}
-                    className="grid grid-cols-[minmax(0,1fr)_112px_50px_84px] sm:grid-cols-[minmax(0,1fr)_130px_56px_90px] items-center gap-2.5 sm:gap-4 px-4 py-3 transition-colors hover:bg-paper/40"
-                  >
-                    {/* 1. Nama Produk */}
-                    <div className="min-w-0 pr-1">
+                  <div key={stock.product_id} className="p-3.5 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
                       <p
-                        className="truncate text-sm font-medium text-ink-900"
+                        className="truncate text-sm font-semibold text-ink-900"
                         title={stock.product_name}
                       >
                         {stock.product_name}
                       </p>
-                    </div>
-
-                    {/* 2. Visual Petak Rak (Panjang Tetap & Lurus Sejajar) */}
-                    <div className="w-full">
-                      <RakBar
-                        percentage={stock.percentage}
-                        status={stock.status}
-                        label={`${stock.product_name}: ${stock.percentage} persen`}
-                      />
-                    </div>
-
-                    {/* 3. Angka Stok Tabular Terjajar Rapi */}
-                    <div className="text-right whitespace-nowrap">
-                      <span className="font-display text-sm font-semibold tabular-nums text-ink-900">
-                        {stock.current_qty}
-                      </span>
-                      <span className="text-xs text-muted">
-                        /{stock.par_level}
-                      </span>
-                    </div>
-
-                    {/* 4. Status Badge Right-Aligned */}
-                    <div className="flex justify-end">
                       <StockStatusBadge status={stock.status} />
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <RakBar
+                          percentage={stock.percentage}
+                          status={stock.status}
+                          label={`${stock.product_name}: ${stock.percentage} persen`}
+                        />
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span className="font-display text-sm font-bold tabular-nums text-ink-900">
+                          {stock.current_qty}
+                        </span>
+                        <span className="text-xs text-muted">
+                          /{stock.par_level}
+                        </span>
+                        <span className="ml-1 text-[11px] font-semibold tabular-nums text-muted">
+                          ({Math.round(stock.percentage)}%)
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Tampilan Desktop: Tabel Grid Presisi */}
+              <div className="hidden sm:block">
+                {/* Header Kolom Tabel */}
+                <div className="grid grid-cols-[minmax(0,1fr)_130px_60px_90px] items-center gap-4 border-b border-line bg-paper/70 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                  <span>Produk</span>
+                  <span className="text-center">Kapasitas Rak</span>
+                  <span className="text-right">Sisa / Par</span>
+                  <span className="text-right">Status</span>
+                </div>
+
+                {/* Baris Produk */}
+                <div className="divide-y divide-line">
+                  {group.items.map((stock) => (
+                    <div
+                      key={stock.product_id}
+                      className="grid grid-cols-[minmax(0,1fr)_130px_60px_90px] items-center gap-4 px-4 py-3 transition-colors hover:bg-paper/40"
+                    >
+                      {/* 1. Nama Produk */}
+                      <div className="min-w-0 pr-1">
+                        <p
+                          className="truncate text-sm font-medium text-ink-900"
+                          title={stock.product_name}
+                        >
+                          {stock.product_name}
+                        </p>
+                      </div>
+
+                      {/* 2. Visual Petak Rak */}
+                      <div className="w-full">
+                        <RakBar
+                          percentage={stock.percentage}
+                          status={stock.status}
+                          label={`${stock.product_name}: ${stock.percentage} persen`}
+                        />
+                      </div>
+
+                      {/* 3. Angka Stok Tabular */}
+                      <div className="text-right whitespace-nowrap">
+                        <span className="font-display text-sm font-semibold tabular-nums text-ink-900">
+                          {stock.current_qty}
+                        </span>
+                        <span className="text-xs text-muted">
+                          /{stock.par_level}
+                        </span>
+                      </div>
+
+                      {/* 4. Status Badge */}
+                      <div className="flex justify-end">
+                        <StockStatusBadge status={stock.status} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

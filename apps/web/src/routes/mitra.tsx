@@ -423,23 +423,7 @@ function MitraPortal() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
-        <div className="mitra-welcome mb-7 flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:py-6">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-ume">Ruang kerja cabang</p>
-            <p className="mt-1 font-display text-xl font-semibold text-ink-900 sm:text-2xl">
-              {user.partner_name ?? 'Mitra Daisuki'}
-            </p>
-            <p className="mt-1 text-sm text-muted">Catat stok rak dan ajukan restock dari satu tempat.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => openTab('order')}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-ume px-4 text-sm font-semibold text-white hover:bg-ume/90"
-          >
-            <PackagePlus className="size-4" aria-hidden="true" />
-            Ajukan restock
-          </button>
-        </div>
+      
         {activeTab === 'stocks' ? (
           <StocksPanel
             query={stocksQuery}
@@ -763,31 +747,37 @@ function StocksPanel({
       </div>
 
       {query.data && query.data.length > 0 ? (
-        <div className="dashboard-surface mt-6 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold text-ink-900">
-              Konfirmasi stok rak
-            </h2>
-            <p className="mt-0.5 text-xs text-muted sm:text-sm">
-              {changedIds.size > 0
-                ? `${changedIds.size} produk telah diubah. Simpan untuk memperbarui laporan stok cabang.`
-                : 'Semua jumlah stok sudah sesuai dengan kondisi rak fisik toko saat ini.'}
-            </p>
-          </div>
+        <div className="mt-8 flex justify-center">
           <button
             type="button"
             onClick={onSave}
             disabled={changedIds.size === 0 || isSaving}
-            className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-6 text-sm font-semibold text-white transition hover:bg-ink-700 disabled:opacity-50 sm:w-auto"
+            className={`group relative inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2.5 overflow-hidden rounded-full px-6 py-3 text-sm font-semibold transition-all duration-300 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:w-auto ${
+              changedIds.size > 0
+                ? 'border border-white/30 bg-gradient-to-r from-ink-900 via-ink-800 to-ink-900 text-white shadow-xl shadow-ink-900/20 backdrop-blur-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98]'
+                : 'border border-line/80 bg-gradient-to-r from-white/90 via-white/80 to-white/90 text-muted shadow-sm backdrop-blur-xl disabled:cursor-not-allowed disabled:opacity-60'
+            }`}
           >
+            {/* Efek kilau kaca atas */}
+            <span
+              className="pointer-events-none absolute inset-x-6 top-1 h-[1.5px] rounded-full bg-gradient-to-r from-transparent via-white/60 to-transparent"
+              aria-hidden="true"
+            />
             {isSaving ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
-              <Save className="size-4" aria-hidden="true" />
+              <Save
+                className={`size-4 transition-transform duration-300 ${
+                  changedIds.size > 0 ? 'group-hover:scale-110' : ''
+                }`}
+                aria-hidden="true"
+              />
             )}
-            {changedIds.size > 0
-              ? `Simpan ${changedIds.size} perubahan`
-              : 'Stok sudah sesuai'}
+            <span>
+              {changedIds.size > 0
+                ? `Simpan ${changedIds.size} Perubahan Stok`
+                : 'Stok Rak Sudah Sesuai'}
+            </span>
           </button>
         </div>
       ) : null}
@@ -879,9 +869,6 @@ function OrderForm({
       {products.length > 0 ? (
         <div className="mt-6 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-semibold text-ink-900">Pilih barang</h2>
-          <p className="text-xs text-muted">
-            Persentase stok terendah ditampilkan lebih dulu
-          </p>
         </div>
       ) : null}
       <div className="mt-3 space-y-3">
@@ -1186,15 +1173,9 @@ function OrderForm({
         >
           {isSubmitting ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <PackagePlus className="size-4" aria-hidden="true" />
-          )}
+          ) : null}
           Kirim pengajuan ({orderItems.length} barang)
         </button>
-        <p className="mt-2 text-xs text-muted">
-          Admin pusat akan meninjau jumlah yang diajukan. Statusnya dapat
-          dilihat di Riwayat pesanan.
-        </p>
       </div>
     </section>
   )
