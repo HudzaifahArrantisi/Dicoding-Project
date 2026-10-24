@@ -7,14 +7,12 @@ import { InstallApp } from '@/components/install-app'
 export const Route = createFileRoute('/login')({ component: LoginPage })
 
 function LoginPage() {
-  const { user, login, quickLogin, isLoading } = useAuth()
+  const { user, login, isLoading } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [pendingAction, setPendingAction] = useState<
-    'form' | 'admin' | 'mitra' | null
-  >(null)
+  const [pendingAction, setPendingAction] = useState<'form' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -42,13 +40,6 @@ function LoginPage() {
     setError(null)
     setPendingAction('form')
     await finishLogin(await login(email, password))
-    setPendingAction(null)
-  }
-
-  async function handleDemo(type: 'admin' | 'mitra') {
-    setError(null)
-    setPendingAction(type)
-    await finishLogin(await quickLogin(type))
     setPendingAction(null)
   }
 
@@ -197,32 +188,6 @@ function LoginPage() {
                 )}
               </button>
             </form>
-
-            <div className="mt-8 border-t border-line pt-6">
-              <p className="text-sm font-medium text-ink-900">Coba akun demo</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => void handleDemo('admin')}
-                  disabled={pendingAction !== null}
-                  className="min-h-12 rounded-lg border border-[#858e9d] bg-white px-4 text-left text-sm font-medium text-ink-900 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-wait disabled:opacity-60"
-                >
-                  {pendingAction === 'admin'
-                    ? 'Sedang masuk...'
-                    : 'Admin pusat'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDemo('mitra')}
-                  disabled={pendingAction !== null}
-                  className="min-h-12 rounded-lg border border-[#858e9d] bg-white px-4 text-left text-sm font-medium text-ink-900 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-wait disabled:opacity-60"
-                >
-                  {pendingAction === 'mitra'
-                    ? 'Sedang masuk...'
-                    : 'Mitra cabang'}
-                </button>
-              </div>
-            </div>
 
             <InstallApp />
           </div>

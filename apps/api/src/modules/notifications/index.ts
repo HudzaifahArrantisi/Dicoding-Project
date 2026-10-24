@@ -88,7 +88,7 @@ export const notificationsModule = new Elysia({ prefix: "/notifications" })
         return { error: "Notifikasi tidak ditemukan" };
       }
 
-      return { success: true };
+      return { status: "ok" };
     },
     {
       params: t.Object({

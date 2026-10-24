@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
+  auditLogs,
   orders,
   orderItems,
   partners,
@@ -18,7 +19,7 @@ import {
   ORDER_STATUS_LABEL,
 } from "@daisuki/shared";
 import { publishInventoryChange } from "../../realtime";
-import { saveUploadedFile, saveBase64Image } from "../../lib/storage";
+import { saveBase64Image } from "../../lib/storage";
 
 class CentralStockConflictError extends Error {}
 class OrderWorkflowError extends Error {
@@ -31,9 +32,6 @@ class OrderWorkflowError extends Error {
 }
 
 function validReceiptPhoto(value: string): boolean {
-  if (value.startsWith("/uploads/receipts/")) {
-    return true;
-  }
   const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
   if (!match) return false;
   const bytes = Buffer.from(match[1], "base64");
@@ -195,7 +193,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       const uniqueSuffix = crypto.randomUUID().slice(0, 8).toUpperCase();
       const orderNo = `PO-${dateStr}-${uniqueSuffix}`;
 
-      const createdOrder = await db.transaction(async (tx) => {
+      await db.transaction(async (tx) => {
         const [ord] = await tx
           .insert(orders)
           .values({
@@ -239,11 +237,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         topics: ["orders", "metrics", "notifications"],
       });
 
-      return {
-        success: true,
-        message: "Pesanan restock berhasil dibuat",
-        data: createdOrder,
-      };
+      return { status: "ok" };
     },
     {
       body: t.Object({
@@ -390,6 +384,10 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             title: `${isRevision ? "Persetujuan Direvisi" : "Pesanan Disetujui"}: ${ord.order_no}`,
             body: `${approvalSummary.join(", ")}.${adminNote ? ` Catatan admin: ${adminNote}` : ""}`,
           });
+          await tx.insert(auditLogs).values({
+            actor_id: user.userId, action: isRevision ? "order.approval.revise" : "order.approve",
+            target_type: "order", target_id: ord.id,
+          });
 
           return updatedOrder;
         });
@@ -399,14 +397,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           topics: ["orders", "metrics", "notifications"],
         });
 
-        return {
-          success: true,
-          message:
-            result.status === "disetujui"
-              ? "Jumlah persetujuan berhasil disimpan"
-              : "Pesanan berhasil disetujui",
-          data: result,
-        };
+        return { status: "ok" };
       } catch (error) {
         if (error instanceof OrderWorkflowError) {
           set.status = error.status;
@@ -453,125 +444,6 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
     }
     return { data: { photo_data_url: ord.receipt_photo_data_url } };
   })
-  .post(
-    "/:id/receipt-photo",
-    async ({ headers, params, body, set }) => {
-      const user = await getAuthUser(headers);
-      if (!user) {
-        set.status = 401;
-        return { error: "Unauthorized" };
-      }
-      if (user.role !== "mitra" || !user.partnerId) {
-        set.status = 403;
-        return { error: "Hanya mitra yang dapat mengunggah bukti penerimaan" };
-      }
-      const [ord] = await db
-        .select({ id: orders.id, partner_id: orders.partner_id })
-        .from(orders)
-        .where(eq(orders.id, params.id))
-        .limit(1);
-
-      if (!ord) {
-        set.status = 404;
-        return { error: "Pesanan tidak ditemukan" };
-      }
-      if (ord.partner_id !== user.partnerId) {
-        set.status = 403;
-        return { error: "Tidak memiliki akses ke pesanan ini" };
-      }
-
-      const file = body.file;
-      if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-        set.status = 422;
-        return { error: "File bukti harus berupa gambar JPG, PNG, atau WebP" };
-      }
-      if (file.size > 5_000_000) {
-        set.status = 422;
-        return { error: "Ukuran foto maksimal 5 MB" };
-      }
-
-      const { path: photoUrl } = await saveUploadedFile(file, "receipts", `receipt-${ord.id}`);
-      return { success: true, photo_url: photoUrl };
-    },
-    {
-      body: t.Object({
-        file: t.File(),
-      }),
-    },
-  )
-  .post(
-    "/:id/receipt-proof",
-    async ({ headers, params, body, set }) => {
-      const user = await getAuthUser(headers);
-      if (!user) {
-        set.status = 401;
-        return { error: "Unauthorized" };
-      }
-      if (user.role !== "mitra" || !user.partnerId) {
-        set.status = 403;
-        return { error: "Hanya mitra yang dapat mengunggah bukti penerimaan" };
-      }
-
-      const file = body.file;
-      if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-        set.status = 422;
-        return { error: "File bukti harus berupa gambar JPG, PNG, atau WebP" };
-      }
-      if (file.size > 5_000_000) {
-        set.status = 422;
-        return { error: "Ukuran foto maksimal 5 MB" };
-      }
-
-      const { path: photoUrl } = await saveUploadedFile(file, "receipts", `receipt-${params.id}`);
-
-      try {
-        await db.transaction(async (tx) => {
-          const [ord] = await tx
-            .select()
-            .from(orders)
-            .where(eq(orders.id, params.id))
-            .for("update");
-          if (!ord) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
-          if (ord.partner_id !== user.partnerId) {
-            throw new OrderWorkflowError(403, "Tidak memiliki akses ke pesanan ini");
-          }
-          if (ord.status !== "selesai") {
-            throw new OrderWorkflowError(409, "Bukti susulan hanya untuk barang yang sudah diterima");
-          }
-          if (ord.receipt_photo_data_url) {
-            throw new OrderWorkflowError(409, "Bukti penerimaan sudah tersedia");
-          }
-          await tx
-            .update(orders)
-            .set({
-              receipt_photo_data_url: photoUrl,
-              receipt_proof_requested_at: null,
-            })
-            .where(eq(orders.id, ord.id));
-          await tx.insert(notifications).values({
-            audience: "admin",
-            type: "receipt_proof_uploaded",
-            partner_id: ord.partner_id,
-            title: `Bukti penerimaan ${ord.order_no} telah diunggah`,
-            body: `Mitra telah mengunggah foto bukti penerimaan untuk ${ord.order_no}.`,
-          });
-        });
-      } catch (error) {
-        if (error instanceof OrderWorkflowError) {
-          set.status = error.status;
-          return { error: error.message };
-        }
-        throw error;
-      }
-      publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "notifications"] });
-      return { success: true, photo_url: photoUrl };
-    },
-    {
-      body: t.Object({
-        file: t.File(),
-      }),
-    },
-  )
   .patch(
     "/:id/receipt-proof",
     async ({ headers, params, body, set }) => {
@@ -586,14 +458,11 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       }
       if (!validReceiptPhoto(body.photo_data_url)) {
         set.status = 422;
-        return { error: "Bukti harus berupa foto JPEG maksimal 500 KB atau URL valid" };
+        return { error: "Bukti harus berupa foto JPEG maksimal 500 KB" };
       }
 
-      let photoUrl = body.photo_data_url;
-      if (photoUrl.startsWith("data:image/")) {
-        const saved = await saveBase64Image(photoUrl, "receipts", `receipt-${params.id}`);
-        photoUrl = saved.path;
-      }
+      const saved = await saveBase64Image(body.photo_data_url, "receipts", `receipt-${params.id}`);
+      const photoUrl = saved.path;
 
       try {
         await db.transaction(async (tx) => {
@@ -635,7 +504,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         throw error;
       }
       publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "notifications"] });
-      return { success: true, photo_url: photoUrl };
+      return { status: "ok" };
     },
     { body: t.Object({ photo_data_url: t.String({ maxLength: 700_000 }) }) },
   )
@@ -685,7 +554,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       throw error;
     }
     publishInventoryChange({ partnerId, topics: ["orders", "notifications"] });
-    return { success: true };
+    return { status: "ok" };
   })
   .patch(
     "/:id/status",
@@ -760,9 +629,8 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         return { error: "Bukti penerimaan harus berupa foto JPEG maksimal 500 KB" };
       }
 
-      let result: typeof orders.$inferSelect;
       try {
-        result = await db.transaction(async (tx) => {
+        await db.transaction(async (tx) => {
           const [lockedOrder] = await tx
             .select()
             .from(orders)
@@ -846,11 +714,10 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             updateData.rejected_reason = body.rejected_reason?.trim();
           }
 
-          const [updatedOrder] = await tx
+          await tx
             .update(orders)
             .set(updateData)
-            .where(eq(orders.id, orderId))
-            .returning();
+            .where(eq(orders.id, orderId));
 
           if (targetStatus === "selesai") {
             const ordItems = await tx
@@ -945,7 +812,13 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             });
           }
 
-          return updatedOrder;
+          await tx.insert(auditLogs).values({
+            actor_id: user.userId,
+            action: `order.status.${targetStatus}`,
+            target_type: "order",
+            target_id: ord.id,
+          });
+
         });
       } catch (error) {
         if (
@@ -972,11 +845,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         });
       }
 
-      return {
-        success: true,
-        message: `Status pesanan berhasil diubah menjadi '${ORDER_STATUS_LABEL[targetStatus]}'`,
-        data: result,
-      };
+      return { status: "ok" };
     },
     {
       params: t.Object({

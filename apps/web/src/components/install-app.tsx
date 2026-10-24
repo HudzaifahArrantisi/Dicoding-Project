@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import { Download, Loader2, Share } from 'lucide-react'
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -20,7 +20,9 @@ export function InstallApp() {
   const [available, setAvailable] = useState(false)
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('')
+  const [showIosGuide, setShowIosGuide] = useState(false)
   const prompting = useRef(false)
+  const guideRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const sync = () => {
@@ -33,6 +35,10 @@ export function InstallApp() {
     return () => window.removeEventListener('daisuki:pwa-change', sync)
   }, [])
 
+  useEffect(() => {
+    if (showIosGuide) guideRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [showIosGuide])
+
   async function install() {
     if (prompting.current) return
     const state = window.daisukiPwa
@@ -41,16 +47,21 @@ export function InstallApp() {
       const isIos =
         /iPad|iPhone|iPod/.test(navigator.userAgent) ||
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      if (isIos) {
+        setShowIosGuide(true)
+        setMessage('')
+        return
+      }
+      setShowIosGuide(false)
       setMessage(
         !window.isSecureContext
           ? 'Buka alamat HTTPS Daisuki agar aplikasi dapat diinstal di ponsel.'
-          : isIos
-            ? 'Buka di Safari, pilih Bagikan, lalu Tambahkan ke Layar Utama.'
-            : 'Jika dialog belum tersedia, buka menu browser (⋮), lalu pilih Instal aplikasi atau Tambahkan ke layar utama. Gunakan Chrome di luar mode samaran.',
+          : 'Di Android, buka menu Chrome lalu pilih Instal aplikasi atau Tambahkan ke layar utama. Dialog instalasi akan muncul di sini saat Chrome menyediakannya.',
       )
       return
     }
 
+    setShowIosGuide(false)
     prompting.current = true
     setPending(true)
     setMessage('')
@@ -85,6 +96,8 @@ export function InstallApp() {
         onClick={() => void install()}
         disabled={pending}
         aria-describedby="install-app-description"
+        aria-expanded={showIosGuide ? true : undefined}
+        aria-controls={showIosGuide ? 'install-ios-guide' : undefined}
         className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 transition-colors hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-wait disabled:opacity-60"
       >
         {pending ? (
@@ -92,15 +105,19 @@ export function InstallApp() {
         ) : (
           <Download className="size-4" aria-hidden="true" />
         )}
-        {pending ? 'Membuka instalasi…' : 'Instal aplikasi Daisuki'}
+        {pending
+          ? 'Membuka instalasi…'
+          : available
+            ? 'Instal aplikasi Daisuki'
+            : 'Cara pasang aplikasi Daisuki'}
       </button>
       <p
         id="install-app-description"
         className="mt-2 text-center text-xs leading-5 text-muted"
       >
         {available
-          ? 'Pasang di layar utama. Pilih Instal atau Batal pada dialog browser.'
-          : 'Akses Daisuki langsung dari layar utama ponsel.'}
+          ? 'Ketuk untuk membuka dialog instalasi. Pilih Instal agar Daisuki terpasang di ponsel.'
+          : 'Saat dialog instalasi tersedia, tombol ini akan berubah menjadi Instal aplikasi.'}
       </p>
       <p
         role="status"
@@ -109,6 +126,29 @@ export function InstallApp() {
       >
         {message}
       </p>
+      {showIosGuide ? (
+        <div
+          id="install-ios-guide"
+          ref={guideRef}
+          className="mt-4 rounded-lg border border-line bg-ink-50 p-4 text-sm leading-6 text-ink-900"
+        >
+          <p className="font-semibold">Pasang di layar utama iPhone</p>
+          <p className="mt-1 text-muted">
+            Buka halaman ini di Safari dengan alamat HTTPS, lalu:
+          </p>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 marker:font-semibold">
+            <li>
+              Di Safari, ketuk Bagikan{' '}
+              <Share className="inline size-4 align-[-2px]" aria-hidden="true" />.
+            </li>
+            <li>Pilih Tambahkan ke Layar Utama.</li>
+            <li>Aktifkan Buka sebagai App Web, lalu ketuk Tambah.</li>
+          </ol>
+          <p className="mt-3 text-muted">
+            Setelah ikon Daisuki muncul, ketuk ikonnya untuk membuka aplikasi.
+          </p>
+        </div>
+      ) : null}
     </div>
   )
 }

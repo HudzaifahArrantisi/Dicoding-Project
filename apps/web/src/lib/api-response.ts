@@ -47,9 +47,13 @@ function messageFromUnknown(value: unknown): string | null {
   return null
 }
 
-export function apiError(error: unknown, fallback: string): Error {
+export function apiError(error: unknown, fallback: string): Error & { status?: number } {
   const msg = messageFromUnknown(error)
-  return new Error(msg && msg !== '[object Object]' ? msg : fallback)
+  const err = new Error(msg && msg !== '[object Object]' ? msg : fallback) as Error & { status?: number }
+  if (error && typeof error === 'object' && 'status' in error && typeof error.status === 'number') {
+    err.status = error.status
+  }
+  return err
 }
 
 export function unwrapData<T>(response: ApiResponse, fallback: string): T {

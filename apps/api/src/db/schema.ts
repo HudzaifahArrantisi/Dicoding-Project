@@ -68,6 +68,26 @@ export const users = pgTable("users", {
     .defaultNow(),
 });
 
+export const authSessions = pgTable("auth_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  user_id: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token_hash: text("token_hash").notNull().unique(),
+  csrf_token: text("csrf_token").notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  last_seen_at: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revoked_at: timestamp("revoked_at", { withTimezone: true }),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  actor_id: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  target_type: text("target_type").notNull(),
+  target_id: uuid("target_id").notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
   sku: text("sku").notNull().unique(),

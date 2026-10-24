@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { resolveApiUrl } from './api'
+import { resolveApiUrl, sessionRequest } from './api'
 
 type Role = 'admin' | 'mitra'
 type Topic = 'orders' | 'stocks' | 'logs' | 'products' | 'notifications' | 'metrics' | 'partners'
@@ -64,11 +64,11 @@ function parseTopics(frame: string): Topic[] {
   }
 }
 
-export function useInventoryEvents(token: string | null, role: Role): void {
+export function useInventoryEvents(enabled: boolean, role: Role): void {
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    if (!token) return
+    if (!enabled) return
 
     let stopped = false
     let connectedBefore = false
@@ -124,11 +124,10 @@ export function useInventoryEvents(token: string | null, role: Role): void {
       controller = new AbortController()
       const signal = controller.signal
       try {
-        const response = await fetch(`${resolveApiUrl()}/events`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const response = await fetch(`${resolveApiUrl()}/events`, sessionRequest({
           signal,
           cache: 'no-store',
-        })
+        }))
         if (response.status === 401 || response.status === 403) {
           stopped = true
           return
@@ -194,5 +193,5 @@ export function useInventoryEvents(token: string | null, role: Role): void {
       window.removeEventListener('online', resume)
       window.removeEventListener('offline', resume)
     }
-  }, [token, role, queryClient])
+  }, [enabled, role, queryClient])
 }

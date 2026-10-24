@@ -2,15 +2,59 @@ import { Elysia, t } from "elysia";
 import { eq, or, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { users, partners } from "../../db/schema";
-import { signToken, getAuthUser } from "../../plugins/auth";
+import { createSession, getAuthUser, revokeSession, sessionCookie } from "../../plugins/auth";
 import { resolveRegion, RegionError, type RegionCodes } from "../regions";
-import { saveUploadedFile, saveBase64Image } from "../../lib/storage";
+import { saveBase64Image } from "../../lib/storage";
+
+const loginAttempts = new Map<string, { count: number; until: number }>();
+const loginWindowMs = 15 * 60_000;
+
+function failedLogin(keys: string[]): void {
+  const now = Date.now();
+  if (loginAttempts.size > 10_000) {
+    for (const [key, value] of loginAttempts) {
+      if (value.until <= now) loginAttempts.delete(key);
+    }
+    while (loginAttempts.size > 10_000) {
+      const oldest = loginAttempts.keys().next().value;
+      if (!oldest) break;
+      loginAttempts.delete(oldest);
+    }
+  }
+  for (const key of keys) {
+    const previous = loginAttempts.get(key);
+    loginAttempts.set(key, {
+      count: (previous && previous.until > now ? previous.count : 0) + 1,
+      until: now + loginWindowMs,
+    });
+  }
+}
+
+function tooManyLogins(key: string, limit: number): boolean {
+  const attempt = loginAttempts.get(key);
+  return !!attempt && attempt.until > Date.now() && attempt.count >= limit;
+}
+
+function validProfilePhoto(value: string): boolean {
+  const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match) return false;
+  const bytes = Buffer.from(match[1], "base64");
+  return bytes.length > 0 && bytes.length <= 350_000 &&
+    bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff &&
+    bytes[bytes.length - 2] === 0xff && bytes[bytes.length - 1] === 0xd9;
+}
 
 export const authModule = new Elysia({ prefix: "/auth" }).post(
   "/login",
-  async ({ body, set }) => {
+  async ({ body, request, server, set }) => {
     const { email, password } = body;
     const identifier = email.toLowerCase().trim();
+    const ipKey = `ip:${server?.requestIP(request)?.address ?? "unknown"}`;
+    const attemptKey = `${ipKey}:${identifier}`;
+    if (tooManyLogins(attemptKey, 5) || tooManyLogins(ipKey, 30)) {
+      set.status = 429;
+      return { error: "Terlalu banyak percobaan. Coba lagi nanti." };
+    }
 
     const [user] = await db
       .select()
@@ -24,7 +68,7 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
       .limit(1);
 
     if (!user) {
-      console.warn(`[AUTH] Login failed: User not found for identifier "${identifier}"`);
+      failedLogin([attemptKey, ipKey]);
       set.status = 401;
       return { error: "Email atau password salah" };
     }
@@ -36,30 +80,12 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
       isValid = false;
     }
 
-    // Self-healing: jika akun demo dan password adalah 'password123', perbaiki hash di database otomatis
-    if (
-      !isValid &&
-      password === "password123" &&
-      (user.email.endsWith("@daisuki.test") ||
-        user.role === "admin" ||
-        user.username === "admin" ||
-        user.username?.startsWith("mitra"))
-    ) {
-      try {
-        const newHash = await Bun.password.hash("password123");
-        await db.update(users).set({ password_hash: newHash }).where(eq(users.id, user.id));
-        isValid = true;
-        console.log(`[AUTH] Auto-repaired password hash for demo user: ${user.email} (${user.username})`);
-      } catch (err) {
-        console.error("[AUTH] Failed to auto-repair password hash:", err);
-      }
-    }
-
-    if (!isValid) {
-      console.warn(`[AUTH] Login failed: Password mismatch for user "${identifier}"`);
+    if (!isValid || (process.env.NODE_ENV === "production" && user.email.endsWith("@daisuki.test"))) {
+      failedLogin([attemptKey, ipKey]);
       set.status = 401;
       return { error: "Email atau password salah" };
     }
+    loginAttempts.delete(attemptKey);
 
     if (user.partner_id) {
       const [partner] = await db
@@ -69,77 +95,19 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
         .limit(1);
 
       if (!partner) {
-        console.warn(`[AUTH] Login failed: Partner not found for partner_id "${user.partner_id}"`);
         set.status = 401;
-        return { error: "Data cabang mitra tidak ditemukan" };
+        return { error: "Email atau password salah" };
       }
 
       if (!partner.is_active) {
-        console.warn(`[AUTH] Login failed: Partner inactive for partner_id "${user.partner_id}"`);
         set.status = 401;
-        return { error: "Akun mitra tidak aktif" };
+        return { error: "Email atau password salah" };
       }
     }
 
-    let partnerName: string | null = null;
-    let partnerPicName: string | null = null;
-    let partnerPhone: string | null = null;
-    let partnerAddress: string | null = null;
-    let partnerPhoto: string | null = null;
-    let partnerRegion: RegionCodes | null = null;
-    if (user.partner_id) {
-      const [partner] = await db
-        .select({
-          name: partners.name,
-          pic_name: partners.pic_name,
-          phone: partners.pic_phone,
-          address: partners.address,
-          photo: partners.profile_photo,
-          province_code: partners.province_code,
-          regency_code: partners.regency_code,
-          district_code: partners.district_code,
-          village_code: partners.village_code,
-        })
-        .from(partners)
-        .where(eq(partners.id, user.partner_id))
-        .limit(1);
-      partnerName = partner?.name ?? null;
-      partnerPicName = partner?.pic_name ?? null;
-      partnerPhone = partner?.phone ?? null;
-      partnerAddress = partner?.address ?? null;
-      partnerPhoto = partner?.photo ?? null;
-      partnerRegion = partner ? {
-        province_code: partner.province_code ?? "",
-        regency_code: partner.regency_code ?? "",
-        district_code: partner.district_code ?? "",
-        village_code: partner.village_code ?? "",
-      } : null;
-    }
-
-    const token = await signToken({
-      userId: user.id,
-      role: user.role,
-      partnerId: user.partner_id,
-      email: user.email,
-      fullName: user.full_name,
-    });
-
-    return {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        partner_id: user.partner_id,
-        partner_name: partnerName,
-        partner_pic_name: partnerPicName,
-        partner_phone: partnerPhone,
-        partner_address: partnerAddress,
-        partner_photo: partnerPhoto,
-        partner_region: partnerRegion,
-        full_name: user.full_name,
-      },
-    };
+    const token = await createSession(user.id, user.role);
+    set.headers["Set-Cookie"] = sessionCookie(token);
+    return { status: "ok" };
   },
   {
     body: t.Object({
@@ -147,7 +115,12 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
       password: t.String({ minLength: 8, maxLength: 128 }),
     }),
   },
-);
+).post("/logout", async ({ headers, set }) => {
+  const user = await getAuthUser(headers);
+  if (user) await revokeSession(user.sessionId);
+  set.headers["Set-Cookie"] = sessionCookie(null);
+  return { status: "ok" };
+});
 
 export const meModule = new Elysia()
   .get("/me", async ({ headers, set }) => {
@@ -204,6 +177,7 @@ export const meModule = new Elysia()
     }
 
     return {
+      csrf_token: user.csrfToken,
       user: {
         id: dbUser.id,
         email: dbUser.email,
@@ -219,55 +193,6 @@ export const meModule = new Elysia()
       },
     };
   })
-  .post(
-    "/me/profile/photo",
-    async ({ headers, body, set }) => {
-      const authUser = await getAuthUser(headers);
-      if (!authUser) {
-        set.status = 401;
-        return { error: "Unauthorized" };
-      }
-
-      const [dbUser] = await db
-        .select({ role: users.role, partner_id: users.partner_id })
-        .from(users)
-        .where(eq(users.id, authUser.userId))
-        .limit(1);
-
-      if (!dbUser || dbUser.role !== "mitra" || !dbUser.partner_id) {
-        set.status = 403;
-        return { error: "Hanya mitra yang dapat mengubah foto profil cabang" };
-      }
-
-      const file = body.file;
-      if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-        set.status = 422;
-        return { error: "Foto profil harus berupa gambar JPEG, PNG, atau WebP" };
-      }
-      if (file.size > 5_000_000) {
-        set.status = 422;
-        return { error: "Ukuran file foto maksimal 5 MB" };
-      }
-
-      const { path: photoUrl } = await saveUploadedFile(
-        file,
-        "profiles",
-        `profile-${dbUser.partner_id}`,
-      );
-
-      await db
-        .update(partners)
-        .set({ profile_photo: photoUrl })
-        .where(eq(partners.id, dbUser.partner_id));
-
-      return { success: true, photo_url: photoUrl };
-    },
-    {
-      body: t.Object({
-        file: t.File(),
-      }),
-    },
-  )
   .patch(
     "/me/profile",
     async ({ headers, body, set }) => {
@@ -322,8 +247,14 @@ export const meModule = new Elysia()
       let photoPath: string | null = null;
       if (body.photo_data_url !== null) {
         if (body.photo_data_url.startsWith("/uploads/profiles/")) {
+          const [current] = await db.select({ profile_photo: partners.profile_photo })
+            .from(partners).where(eq(partners.id, dbUser.partner_id)).limit(1);
+          if (current?.profile_photo !== body.photo_data_url) {
+            set.status = 403;
+            return { error: "Foto profil tidak memiliki akses" };
+          }
           photoPath = body.photo_data_url;
-        } else if (body.photo_data_url.startsWith("data:image/")) {
+        } else if (validProfilePhoto(body.photo_data_url)) {
           const saved = await saveBase64Image(
             body.photo_data_url,
             "profiles",
@@ -353,7 +284,7 @@ export const meModule = new Elysia()
         set.status = 404;
         return { error: "Profil mitra tidak ditemukan" };
       }
-      return { success: true };
+      return { status: "ok" };
     },
     {
       body: t.Object({

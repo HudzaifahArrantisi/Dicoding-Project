@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
+  auditLogs,
   partnerStocks,
   products,
   partners,
@@ -360,11 +361,7 @@ export const stocksModule = new Elysia({ prefix: "/stocks" })
         topics: ["stocks", "logs", "metrics", "notifications"],
       });
 
-      return {
-        success: true,
-        message: "Stok berhasil diperbarui",
-        data: results,
-      };
+      return { status: "ok" };
     },
     {
       body: t.Union([
@@ -415,11 +412,20 @@ export const productsModule = new Elysia({ prefix: "/products" })
         return { error: "Hanya admin yang dapat memperbarui stok pusat" };
       }
 
-      const [updated] = await db
-        .update(products)
-        .set({ central_stock: body.central_stock })
-        .where(and(eq(products.id, params.id), eq(products.is_active, true)))
-        .returning();
+      const updated = await db.transaction(async (tx) => {
+        const [product] = await tx
+          .update(products)
+          .set({ central_stock: body.central_stock })
+          .where(and(eq(products.id, params.id), eq(products.is_active, true)))
+          .returning({ id: products.id });
+        if (product) {
+          await tx.insert(auditLogs).values({
+            actor_id: user.userId, action: "product.central_stock.update",
+            target_type: "product", target_id: product.id,
+          });
+        }
+        return product;
+      });
 
       if (!updated) {
         set.status = 404;
@@ -431,11 +437,7 @@ export const productsModule = new Elysia({ prefix: "/products" })
         topics: ["products"],
       });
 
-      return {
-        success: true,
-        message: "Stok gudang pusat berhasil diperbarui",
-        data: updated,
-      };
+      return { status: "ok" };
     },
     {
       params: t.Object({ id: t.String() }),

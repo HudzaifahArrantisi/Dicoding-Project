@@ -11,7 +11,8 @@
       "elysia": ["../api/node_modules/elysia"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
+    "types": ["vite/client", "bun-types"],
+    "typeRoots": ["./node_modules", "../api/node_modules"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",

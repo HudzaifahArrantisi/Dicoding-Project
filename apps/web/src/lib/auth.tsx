@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { api } from './api'
+import { api, setCsrfToken } from './api'
 import { apiError } from './api-response'
 import type { RegionCodes } from '@/components/inventory/region-picker'
 
@@ -25,143 +25,76 @@ interface AuthResult {
 
 interface AuthContextType {
   user: User | null
-  token: string | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<AuthResult>
   refreshUser: () => Promise<User>
-  logout: () => void
-  quickLogin: (type: 'admin' | 'mitra') => Promise<AuthResult>
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-function clearStoredSession() {
-  localStorage.removeItem('daisuki_token')
-  localStorage.removeItem('daisuki_user')
-}
-
-function storeSession(token: string, user: User) {
-  localStorage.setItem('daisuki_token', token)
-  localStorage.setItem('daisuki_user', JSON.stringify(user))
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function restoreSession() {
-      const savedToken = localStorage.getItem('daisuki_token')
-      if (!savedToken) {
-        setIsLoading(false)
-        return
-      }
-
-      try {
-        const response = await api.me.get()
-        if (response.error || !('user' in response.data)) {
-          throw apiError(response.error, 'Sesi tidak valid')
-        }
-
-        if (!cancelled) {
-          const restoredUser = response.data.user as User
-          setToken(savedToken)
-          setUser(restoredUser)
-          storeSession(savedToken, restoredUser)
-        }
-      } catch {
-        if (!cancelled) clearStoredSession()
-      } finally {
-        if (!cancelled) setIsLoading(false)
-      }
-    }
-
-    void restoreSession()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const login = async (
-    email: string,
-    password: string,
-  ): Promise<AuthResult> => {
-    try {
-      const response = await api.auth.login.post({ email, password })
-      if (
-        response.error ||
-        !('token' in response.data) ||
-        !('user' in response.data)
-      ) {
-        throw apiError(response.error, 'Email atau password salah')
-      }
-
-      const nextUser = response.data.user as User
-      const nextToken = response.data.token
-      if (typeof nextToken !== 'string') {
-        throw apiError(response.error, 'Token autentikasi tidak valid')
-      }
-      setToken(nextToken)
-      setUser(nextUser)
-      storeSession(nextToken, nextUser)
-      return { success: true, role: nextUser.role }
-    } catch (error: unknown) {
-      const rawMessage = error instanceof Error ? error.message : null
-      const displayError =
-        rawMessage && rawMessage !== '[object Object]' && rawMessage.trim() !== ''
-          ? rawMessage
-          : 'Email atau password salah'
-      return {
-        success: false,
-        error: displayError,
-      }
-    }
-  }
-
-  const logout = () => {
-    setToken(null)
-    setUser(null)
-    clearStoredSession()
-  }
-
-  const refreshUser = async () => {
+  const refreshUser = async (): Promise<User> => {
     const response = await api.me.get()
-    if (response.error || !('user' in response.data)) {
-      throw apiError(response.error, 'Profil belum dapat dimuat')
+    if (response.error || !('user' in response.data) || !('csrf_token' in response.data)) {
+      throw apiError(response.error, 'Sesi tidak valid')
     }
     const nextUser = response.data.user as User
-    const currentToken = localStorage.getItem('daisuki_token')
-    if (!currentToken) throw new Error('Sesi tidak tersedia')
+    setCsrfToken(response.data.csrf_token as string)
     setUser(nextUser)
-    storeSession(currentToken, nextUser)
     return nextUser
   }
 
-  const quickLogin = (type: 'admin' | 'mitra') => {
-    const credentials = {
-      admin: { email: 'admin@daisuki.test', password: 'password123' },
-      mitra: { email: 'mitra1@daisuki.test', password: 'password123' },
-    }[type]
+  useEffect(() => {
+    const status = { cancelled: false }
+    void (async () => {
+      try {
+        const response = await api.me.get()
+        if (response.error || !('user' in response.data) || !('csrf_token' in response.data)) return
+        if (!status.cancelled) {
+          setCsrfToken(response.data.csrf_token as string)
+          setUser(response.data.user as User)
+        }
+      } finally {
+        if (!status.cancelled) setIsLoading(false)
+      }
+    })().catch(() => {
+      if (!status.cancelled) setIsLoading(false)
+    })
+    return () => {
+      status.cancelled = true
+    }
+  }, [])
 
-    return login(credentials.email, credentials.password)
+  const login = async (email: string, password: string): Promise<AuthResult> => {
+    try {
+      const response = await api.auth.login.post({ email, password })
+      if (response.error) throw apiError(response.error, 'Email atau password salah')
+      const nextUser = await refreshUser()
+      return { success: true, role: nextUser.role }
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: error instanceof Error && error.message.trim() ? error.message : 'Email atau password salah',
+      }
+    }
   }
 
-  return (
-    <AuthContext.Provider
-      value={{ user, token, isLoading, login, refreshUser, logout, quickLogin }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
+  const logout = async (): Promise<void> => {
+    const response = await api.auth.logout.post()
+    if (response.error) throw apiError(response.error, 'Gagal keluar. Coba lagi.')
+    setCsrfToken(null)
+    setUser(null)
+  }
+
+  return <AuthContext.Provider value={{ user, isLoading, login, refreshUser, logout }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth harus dipakai di dalam AuthProvider')
-  }
+  if (!context) throw new Error('useAuth harus dipakai di dalam AuthProvider')
   return context
 }

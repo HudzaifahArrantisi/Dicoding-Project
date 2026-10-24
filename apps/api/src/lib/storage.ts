@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 
 // Resolve upload directories relative to apps/api directory
 const API_ROOT = resolve(import.meta.dir, "../..");
@@ -33,7 +34,7 @@ export async function saveUploadedFile(
   else if (file.type === "image/jpeg") ext = "jpg";
 
   const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const randomSuffix = Math.random().toString(36).substring(2, 9);
+  const randomSuffix = randomBytes(16).toString("hex");
   const filename = `${safePrefix}-${Date.now()}-${randomSuffix}.${ext}`;
   const filePath = join(targetDir, filename);
 
@@ -70,7 +71,7 @@ export async function saveBase64Image(
 
   const targetDir = folder === "receipts" ? RECEIPTS_DIR : PROFILES_DIR;
   const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const randomSuffix = Math.random().toString(36).substring(2, 9);
+  const randomSuffix = randomBytes(16).toString("hex");
   const filename = `${safePrefix}-${Date.now()}-${randomSuffix}.${ext}`;
   const filePath = join(targetDir, filename);
 

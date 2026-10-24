@@ -1,8 +1,13 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
-import { resolve } from "node:path";
+import { cron } from "@elysiajs/cron";
+import { isAbsolute, relative, resolve } from "node:path";
+import { eq } from "drizzle-orm";
 import { env } from "./env";
 import { sql } from "./db/client";
+import { db } from "./db/client";
+import { orders, partners } from "./db/schema";
+import { getAuthUser, validCsrf } from "./plugins/auth";
 import { UPLOADS_DIR } from "./lib/storage";
 import { authModule, meModule } from "./modules/auth";
 import { stocksModule, productsModule } from "./modules/stocks";
@@ -12,9 +17,69 @@ import { adminModule } from "./modules/admin";
 import { regionModule } from "./modules/regions";
 import { realtimeModule } from "./realtime";
 
+function isAllowedOrigin(origin?: string | null): boolean {
+  if (!origin) return false;
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname;
+
+    // 1. Matches configured WEB_ORIGIN
+    if (origin === env.WEB_ORIGIN) return true;
+
+    // 2. Localhost & Loopback
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "0.0.0.0"
+    ) {
+      return true;
+    }
+
+    // 3. Local Area Network (Private IPv4)
+    if (
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname)
+    ) {
+      return true;
+    }
+
+    // 4. Common Public Tunnel Providers (Cloudflare, ngrok, localtunnel, zrok, pinggy)
+    if (
+      hostname.endsWith(".trycloudflare.com") ||
+      hostname.endsWith(".cloudflarestream.com") ||
+      hostname.endsWith(".cfargotunnel.com") ||
+      hostname.endsWith(".ngrok.app") ||
+      hostname.endsWith(".ngrok-free.app") ||
+      hostname.endsWith(".ngrok.io") ||
+      hostname.endsWith(".loca.lt") ||
+      hostname.endsWith(".zrok.io") ||
+      hostname.endsWith(".pinggy.link")
+    ) {
+      return true;
+    }
+
+    // 5. Custom allowed origins from env if provided
+    const custom = (process.env.ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (custom.includes(origin) || custom.includes(hostname)) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export const app = new Elysia()
-  .onRequest(({ request }) => {
+  .onRequest(({ request, set }) => {
     (request as unknown as { _startTime?: number })._startTime = performance.now();
+    set.headers["X-Content-Type-Options"] = "nosniff";
+    set.headers["Referrer-Policy"] = "no-referrer";
+    set.headers["Cache-Control"] = "no-store";
   })
   .onAfterResponse(({ request, set }) => {
     const start = (request as unknown as { _startTime?: number })._startTime;
@@ -34,38 +99,86 @@ export const app = new Elysia()
       `[HTTP] ${method.padEnd(6)} ${url.pathname} ${statusColor} (${duration}ms)`,
     );
   })
-  .onError(({ request, error, code }) => {
+  .onError(({ request, error, code, set }) => {
     const url = new URL(request.url);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "message" in error && typeof error.message === "string"
-          ? error.message
-          : String(error);
-    console.error(
-      `\x1b[31m[ERROR]\x1b[0m ${request.method} ${url.pathname} [${code}]:`,
-      message,
-    );
+    console.error(`[ERROR] ${request.method} ${url.pathname} [${code}]`, error instanceof Error ? error.name : "Error");
+    if (code === "VALIDATION" || code === "PARSE") {
+      set.status = code === "VALIDATION" ? 422 : 400;
+      return { error: "Data permintaan tidak valid" };
+    }
+    if (code === "UNKNOWN" || code === "INTERNAL_SERVER_ERROR") {
+      set.status = 500;
+      return { error: "Terjadi gangguan server" };
+    }
   })
   .use(
     cors({
-      origin: true,
+      origin: (request: Request) => {
+        const origin = request.headers.get("origin");
+        if (!origin) return true;
+        return isAllowedOrigin(origin);
+      },
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization"],
+      allowedHeaders: ["Content-Type", "X-CSRF-Token"],
     }),
   )
-  .get("/health", () => ({ ok: true }))
-  .get("/health/db", async () => {
-    const [row] = await sql`select now() as now`;
-    return { ok: true, now: row.now };
+  .onBeforeHandle(async ({ request, headers, set }) => {
+    if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
+    const origin = headers.origin;
+    if (origin && !isAllowedOrigin(origin)) {
+      set.status = 403;
+      return { error: "Origin tidak diizinkan" };
+    }
+    if (new URL(request.url).pathname === "/auth/login") return;
+    const user = await getAuthUser(headers);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    if (!validCsrf(headers, user.csrfToken)) {
+      set.status = 403;
+      return { error: "Sesi tidak valid" };
+    }
   })
-  .get("/uploads/*", async ({ params, set }) => {
+  .get("/health", () => ({ ok: true }))
+  .get("/health/db", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    if (user.role !== "admin") {
+      set.status = 403;
+      return { error: "Forbidden" };
+    }
+    await sql`select 1`;
+    return { status: "ok" };
+  })
+  .get("/uploads/*", async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) {
+      set.status = 401;
+      return "Unauthorized";
+    }
     const relativePath = params["*"];
+    if (!/^(receipts|profiles)\/[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(relativePath)) {
+      set.status = 404;
+      return "File tidak ditemukan";
+    }
     const safePath = resolve(UPLOADS_DIR, relativePath);
-    if (!safePath.startsWith(UPLOADS_DIR)) {
+    const withinUploads = relative(UPLOADS_DIR, safePath);
+    if (withinUploads.startsWith("..") || isAbsolute(withinUploads)) {
       set.status = 403;
       return "Forbidden";
+    }
+    const storedPath = `/uploads/${relativePath}`;
+    const [owner] = relativePath.startsWith("receipts/")
+      ? await db.select({ partnerId: orders.partner_id }).from(orders).where(eq(orders.receipt_photo_data_url, storedPath)).limit(1)
+      : await db.select({ partnerId: partners.id }).from(partners).where(eq(partners.profile_photo, storedPath)).limit(1);
+    if (!owner || (user.role !== "admin" && owner.partnerId !== user.partnerId)) {
+      set.status = 404;
+      return "File tidak ditemukan";
     }
     const file = Bun.file(safePath);
     const exists = await file.exists();
@@ -73,6 +186,8 @@ export const app = new Elysia()
       set.status = 404;
       return "File tidak ditemukan";
     }
+    set.headers["Cache-Control"] = "private, no-store";
+    set.headers["X-Content-Type-Options"] = "nosniff";
     return file;
   })
   .use(authModule)
@@ -84,6 +199,25 @@ export const app = new Elysia()
   .use(notificationsModule)
   .use(adminModule)
   .use(regionModule)
+  .use(
+    cron({
+      name: "ai-company-analytics",
+      pattern: "0 */2 * * *", // Evaluasi otonom berkala setiap 2 jam
+      run() {
+        console.log(
+          `[${new Date().toLocaleTimeString()}] 🤖 [AI CRON] Menjalankan evaluasi berkala perkembangan mitra & perusahaan...`,
+        );
+        try {
+          Bun.spawn(["python", "ai/jobs/company_analytics.py"], {
+            stdout: "ignore",
+            stderr: "ignore",
+          });
+        } catch {
+          // background execution fallback
+        }
+      },
+    }),
+  )
   .listen({
     port: env.PORT,
     hostname: "0.0.0.0",

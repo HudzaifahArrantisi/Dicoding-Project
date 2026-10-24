@@ -45,7 +45,7 @@ import {
   StaleBadge,
   StockStatusBadge,
 } from '@/components/inventory/status-badge'
-import { api, resolveApiUrl, resolveImageUrl, dataUrlToBlob } from '@/lib/api'
+import { api, resolveImageUrl } from '@/lib/api'
 import { useInventoryEvents } from '@/lib/inventory-events'
 import { apiError, unwrapData } from '@/lib/api-response'
 import { useAuth, type User } from '@/lib/auth'
@@ -79,10 +79,10 @@ function errorMessage(error: unknown) {
 }
 
 function MitraPortal() {
-  const { user, token, logout, refreshUser, isLoading: authLoading } = useAuth()
+  const { user, logout, refreshUser, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  useInventoryEvents(user?.role === 'mitra' ? token : null, 'mitra')
+  useInventoryEvents(user?.role === 'mitra', 'mitra')
   const [activeTab, setActiveTab] = useState<MitraTab>('stocks')
   const [editedStocks, setEditedStocks] = useState<Record<string, number>>({})
   const [orderItems, setOrderItems] = useState<DraftOrderItem[]>([])
@@ -217,28 +217,9 @@ function MitraPortal() {
 
   const confirmReceived = useMutation({
     mutationFn: async ({ orderId, photo }: { orderId: string; photo: string | null }) => {
-      let photoUrl: string | undefined = undefined
-      if (photo) {
-        // Konversi base64 dari canvas menjadi Blob dan kirim via FormData (multipart)
-        const blob = dataUrlToBlob(photo)
-        const formData = new FormData()
-        formData.append('file', blob, 'receipt.jpg')
-        const token = localStorage.getItem('daisuki_token')
-        const uploadRes = await fetch(`${resolveApiUrl()}/orders/${orderId}/receipt-photo`, {
-          method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: formData,
-        })
-        const uploadJson = await uploadRes.json()
-        if (!uploadRes.ok || !uploadJson.photo_url) {
-          throw new Error(uploadJson.error || 'Gagal mengunggah foto bukti')
-        }
-        photoUrl = uploadJson.photo_url
-      }
-
       const response = await api.orders({ id: orderId }).status.patch({
         status: 'selesai',
-        receipt_photo_data_url: photoUrl,
+        receipt_photo_data_url: photo ?? undefined,
       })
       if (response.error) {
         throw apiError(response.error, 'Penerimaan barang belum tercatat')
@@ -258,21 +239,8 @@ function MitraPortal() {
 
   const uploadReceiptProof = useMutation({
     mutationFn: async ({ orderId, photo }: { orderId: string; photo: string }) => {
-      // Konversi base64 dari canvas menjadi Blob dan kirim via FormData (multipart)
-      const blob = dataUrlToBlob(photo)
-      const formData = new FormData()
-      formData.append('file', blob, 'receipt.jpg')
-      const token = localStorage.getItem('daisuki_token')
-      const res = await fetch(`${resolveApiUrl()}/orders/${orderId}/receipt-proof`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        throw new Error(json.error || 'Foto bukti belum tersimpan')
-      }
-      return json
+      const response = await api.orders({ id: orderId })['receipt-proof'].patch({ photo_data_url: photo })
+      if (response.error) throw apiError(response.error, 'Foto bukti belum tersimpan')
     },
     onSuccess: async () => {
       toast.success('Foto bukti berhasil dikirim ke admin pusat')
@@ -329,8 +297,7 @@ function MitraPortal() {
   }
 
   function handleLogout() {
-    logout()
-    void navigate({ to: '/login' })
+    void logout().then(() => navigate({ to: '/login' })).catch((error) => toast.error(errorMessage(error)))
   }
 
   if (authLoading || !user || user.role !== 'mitra') {
@@ -1816,32 +1783,13 @@ function ProfilePanel({ user }: { user: User }) {
 
   const saveProfile = useMutation({
     mutationFn: async () => {
-      let finalPhotoUrl = photo
-      // Jika pengguna memilih foto baru (berupa base64 preview), ubah ke FormData dan upload via multipart
-      if (photo && photo.startsWith('data:image/')) {
-        const blob = dataUrlToBlob(photo)
-        const formData = new FormData()
-        formData.append('file', blob, 'profile.jpg')
-        const token = localStorage.getItem('daisuki_token')
-        const uploadRes = await fetch(`${resolveApiUrl()}/me/profile/photo`, {
-          method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: formData,
-        })
-        const uploadJson = await uploadRes.json()
-        if (!uploadRes.ok || !uploadJson.photo_url) {
-          throw new Error(uploadJson.error || 'Gagal mengunggah foto profil')
-        }
-        finalPhotoUrl = uploadJson.photo_url
-      }
-
       const response = await api.me.profile.patch({
         name: name.trim(),
         pic_name: picName.trim(),
         phone: phone.trim(),
         address: address.trim(),
         ...region,
-        photo_data_url: finalPhotoUrl,
+        photo_data_url: photo,
       })
       if (response.error) {
         throw apiError(response.error, 'Profil belum tersimpan')
