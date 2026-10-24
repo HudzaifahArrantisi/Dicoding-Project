@@ -94,25 +94,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (
         response.error ||
         !('token' in response.data) ||
-        !('user' in response.data) ||
-        typeof response.data.token !== 'string'
+        !('user' in response.data)
       ) {
-        throw apiError(response.error, 'Email atau kata sandi salah')
+        throw apiError(response.error, 'Email atau password salah')
       }
 
       const nextUser = response.data.user as User
       const nextToken = response.data.token
+      if (typeof nextToken !== 'string') {
+        throw apiError(response.error, 'Token autentikasi tidak valid')
+      }
       setToken(nextToken)
       setUser(nextUser)
       storeSession(nextToken, nextUser)
       return { success: true, role: nextUser.role }
     } catch (error: unknown) {
+      const rawMessage = error instanceof Error ? error.message : null
+      const displayError =
+        rawMessage && rawMessage !== '[object Object]' && rawMessage.trim() !== ''
+          ? rawMessage
+          : 'Email atau password salah'
       return {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Server login belum dapat dihubungi',
+        error: displayError,
       }
     }
   }

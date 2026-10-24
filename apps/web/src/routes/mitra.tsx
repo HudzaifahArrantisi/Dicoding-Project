@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Clock,
   Download,
+  ImagePlus,
   History,
   Loader2,
   LogOut,
@@ -44,7 +45,7 @@ import {
   StaleBadge,
   StockStatusBadge,
 } from '@/components/inventory/status-badge'
-import { api } from '@/lib/api'
+import { api, resolveApiUrl, resolveImageUrl, dataUrlToBlob } from '@/lib/api'
 import { useInventoryEvents } from '@/lib/inventory-events'
 import { apiError, unwrapData } from '@/lib/api-response'
 import { useAuth, type User } from '@/lib/auth'
@@ -70,9 +71,11 @@ const tabItems: Array<{
 const desktopTabItems = tabItems.filter((tab) => tab.id !== 'profile')
 
 function errorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : 'Periksa koneksi, lalu coba lagi.'
+  if (error instanceof Error) {
+    const msg = error.message.trim()
+    if (msg && msg !== '[object Object]') return msg
+  }
+  return 'Periksa koneksi, lalu coba lagi.'
 }
 
 function MitraPortal() {
@@ -140,6 +143,15 @@ function MitraPortal() {
     enabled: user?.role === 'mitra',
   })
 
+  const pendingProofRequests = useMemo(
+    () => (ordersQuery.data ?? []).filter(
+      (order) => order.status === 'selesai' &&
+        Boolean(order.receipt_proof_requested_at) &&
+        !order.receipt_photo_present,
+    ).length,
+    [ordersQuery.data],
+  )
+
   useEffect(() => {
     if (!stocksQuery.data) return
     setEditedStocks(
@@ -204,9 +216,29 @@ function MitraPortal() {
   })
 
   const confirmReceived = useMutation({
-    mutationFn: async (orderId: string) => {
+    mutationFn: async ({ orderId, photo }: { orderId: string; photo: string | null }) => {
+      let photoUrl: string | undefined = undefined
+      if (photo) {
+        // Konversi base64 dari canvas menjadi Blob dan kirim via FormData (multipart)
+        const blob = dataUrlToBlob(photo)
+        const formData = new FormData()
+        formData.append('file', blob, 'receipt.jpg')
+        const token = localStorage.getItem('daisuki_token')
+        const uploadRes = await fetch(`${resolveApiUrl()}/orders/${orderId}/receipt-photo`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        })
+        const uploadJson = await uploadRes.json()
+        if (!uploadRes.ok || !uploadJson.photo_url) {
+          throw new Error(uploadJson.error || 'Gagal mengunggah foto bukti')
+        }
+        photoUrl = uploadJson.photo_url
+      }
+
       const response = await api.orders({ id: orderId }).status.patch({
         status: 'selesai',
+        receipt_photo_data_url: photoUrl,
       })
       if (response.error) {
         throw apiError(response.error, 'Penerimaan barang belum tercatat')
@@ -220,6 +252,31 @@ function MitraPortal() {
         queryClient.invalidateQueries({ queryKey: ['mitra-stocks'] }),
         queryClient.invalidateQueries({ queryKey: ['mitra-stock-logs'] }),
       ])
+    },
+    onError: (error: unknown) => toast.error(errorMessage(error)),
+  })
+
+  const uploadReceiptProof = useMutation({
+    mutationFn: async ({ orderId, photo }: { orderId: string; photo: string }) => {
+      // Konversi base64 dari canvas menjadi Blob dan kirim via FormData (multipart)
+      const blob = dataUrlToBlob(photo)
+      const formData = new FormData()
+      formData.append('file', blob, 'receipt.jpg')
+      const token = localStorage.getItem('daisuki_token')
+      const res = await fetch(`${resolveApiUrl()}/orders/${orderId}/receipt-proof`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error || 'Foto bukti belum tersimpan')
+      }
+      return json
+    },
+    onSuccess: async () => {
+      toast.success('Foto bukti berhasil dikirim ke admin pusat')
+      await queryClient.invalidateQueries({ queryKey: ['mitra-orders'] })
     },
     onError: (error: unknown) => toast.error(errorMessage(error)),
   })
@@ -294,7 +351,7 @@ function MitraPortal() {
             <div className="flex items-center gap-3">
               {user.partner_photo ? (
                 <img
-                  src={user.partner_photo}
+                  src={resolveImageUrl(user.partner_photo) ?? ''}
                   alt=""
                   className="size-10 shrink-0 rounded-full object-cover"
                 />
@@ -355,6 +412,11 @@ function MitraPortal() {
             >
               <Icon className="size-4" aria-hidden="true" />
               {label}
+              {id === 'history' && pendingProofRequests > 0 ? (
+                <span className="rounded-md bg-warn-bg px-1.5 py-0.5 text-xs tabular-nums text-warn-fg" aria-label={`${pendingProofRequests} permintaan foto bukti`}>
+                  {pendingProofRequests}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -415,9 +477,11 @@ function MitraPortal() {
           <OrderHistory
             query={ordersQuery}
             onOpenOrder={() => setActiveTab('order')}
-            onConfirm={(orderId) => confirmReceived.mutate(orderId)}
+            onConfirm={(orderId, photo) => confirmReceived.mutateAsync({ orderId, photo })}
             confirming={confirmReceived.isPending}
-            confirmingOrderId={confirmReceived.variables}
+            confirmingOrderId={confirmReceived.variables?.orderId}
+            onUploadProof={(orderId, photo) => uploadReceiptProof.mutateAsync({ orderId, photo })}
+            uploadingProof={uploadReceiptProof.isPending}
           />
         ) : null}
 
@@ -431,25 +495,52 @@ function MitraPortal() {
         {activeTab === 'profile' ? <ProfilePanel user={user} /> : null}
       </main>
 
-      <nav
-        className="mitra-bottom-nav fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden"
-        aria-label="Menu mitra"
-      >
-        {tabItems.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => openTab(id)}
-            aria-current={activeTab === id ? 'page' : undefined}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-colors duration-150 ${
-              activeTab === id ? 'bg-ume/10 text-ume' : 'text-muted hover:bg-ume/5'
-            }`}
-          >
-            <Icon className="size-5" aria-hidden="true" />
-            {label}
-          </button>
-        ))}
-      </nav>
+      {/* Floating Pill Nav Bar (Mode Mobile) */}
+      <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none bg-gradient-to-t from-[#faf7f2] via-[#faf7f2]/80 to-transparent px-3 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
+        <nav
+          className="pointer-events-auto mx-auto flex max-w-md items-center justify-between gap-1 rounded-full border border-line/80 bg-white/95 p-1.5 shadow-xl shadow-ink-900/8 backdrop-blur-xl ring-1 ring-black/5"
+          aria-label="Menu mitra"
+        >
+          {tabItems.map(({ id, label, Icon }) => {
+            const isActive = activeTab === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => openTab(id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 px-1 text-[11px] font-semibold transition-all duration-300 ease-out focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ume ${
+                  isActive
+                    ? 'border border-ume/30 bg-ume/15 text-ume shadow-xs backdrop-blur-md font-bold scale-[1.03]'
+                    : 'border border-transparent text-muted hover:border-ume/20 hover:bg-ume/8 hover:text-ume hover:shadow-2xs hover:backdrop-blur-md active:scale-95'
+                }`}
+              >
+                {/* Efek kilau kaca atas untuk tab aktif */}
+                {isActive ? (
+                  <span
+                    className="pointer-events-none absolute inset-x-3 top-1 h-[1.5px] rounded-full bg-white/80"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <Icon
+                  className={`size-4.5 shrink-0 transition-all duration-300 ease-out ${
+                    isActive
+                      ? 'scale-110 text-ume drop-shadow-xs'
+                      : 'text-muted group-hover:scale-105 group-hover:text-ume'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span className="leading-tight truncate max-w-full">{label}</span>
+                {id === 'history' && pendingProofRequests > 0 ? (
+                  <span className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-warn-fg px-1 text-[10px] tabular-nums text-white" aria-label={`${pendingProofRequests} permintaan foto bukti`}>
+                    {pendingProofRequests}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </nav>
+      </div>
     </div>
   )
 }
@@ -513,7 +604,7 @@ function StocksPanel({
             </span>
             <div>
               <h2 className="text-sm font-semibold text-ink-900 sm:text-base">
-                Stok barang Pusat Daisuki
+                Stok Pusat
               </h2>
               <p className="text-xs text-muted">
                 Ketersediaan stok siap kirim yang dikelola admin pusat
@@ -1102,19 +1193,41 @@ function OrderHistory({
   onConfirm,
   confirming,
   confirmingOrderId,
+  onUploadProof,
+  uploadingProof,
 }: {
   query: ReturnType<typeof useQuery<Order[]>>
   onOpenOrder: () => void
-  onConfirm: (orderId: string) => void
+  onConfirm: (orderId: string, photo: string | null) => Promise<unknown>
   confirming: boolean
   confirmingOrderId?: string
+  onUploadProof: (orderId: string, photo: string) => Promise<unknown>
+  uploadingProof: boolean
 }) {
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [receiptPhoto, setReceiptPhoto] = useState<string | null>(null)
+  const [receiptPhotoError, setReceiptPhotoError] = useState('')
+  const [preparingPhoto, setPreparingPhoto] = useState(false)
   const [statusFilter, setStatusFilter] = useState<
     'semua' | 'diproses' | 'disetujui' | 'dalam_pengiriman' | 'selesai' | 'ditolak'
   >('semua')
 
   const allOrders = query.data ?? []
+  const selectedOrder = allOrders.find((order) => order.id === selectedOrderId) ?? null
+
+  const handleReceiptFile = async (file?: File) => {
+    if (!file) return
+    setPreparingPhoto(true)
+    setReceiptPhotoError('')
+    try {
+      setReceiptPhoto(await prepareReceiptPhoto(file))
+    } catch (error) {
+      setReceiptPhoto(null)
+      setReceiptPhotoError(errorMessage(error))
+    } finally {
+      setPreparingPhoto(false)
+    }
+  }
 
   const filteredOrders = useMemo(() => {
     if (statusFilter === 'semua') return allOrders
@@ -1268,7 +1381,11 @@ function OrderHistory({
             return (
               <article
                 key={order.id}
-                onClick={() => setSelectedOrder(order)}
+                onClick={() => {
+                  setSelectedOrderId(order.id)
+                  setReceiptPhoto(null)
+                  setReceiptPhotoError('')
+                }}
                 className="group relative flex flex-col justify-between gap-3 rounded-lg border border-line bg-white p-4 transition-all duration-200 hover:border-ink-400 hover:shadow-2xs cursor-pointer sm:p-5"
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1278,6 +1395,11 @@ function OrderHistory({
                         {formatOrderDate(order.created_at)}
                       </h2>
                       <OrderStatusBadge status={order.status} />
+                      {order.status === 'selesai' && !order.receipt_photo_present ? (
+                        <span className="rounded-md bg-warn-bg px-2 py-1 text-xs font-semibold text-warn-fg">
+                          {order.receipt_proof_requested_at ? 'Admin meminta foto bukti' : 'Foto bukti belum ada'}
+                        </span>
+                      ) : null}
                       {order.admin_note ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-ume/10 px-2 py-0.5 text-[11px] font-semibold text-ume">
                           <MessageSquare className="size-3" />
@@ -1342,7 +1464,11 @@ function OrderHistory({
         <Dialog.Root
           open={Boolean(selectedOrder)}
           onOpenChange={(open) => {
-            if (!open) setSelectedOrder(null)
+            if (!open) {
+              setSelectedOrderId(null)
+              setReceiptPhoto(null)
+              setReceiptPhotoError('')
+            }
           }}
         >
           <Dialog.Portal>
@@ -1393,9 +1519,6 @@ function OrderHistory({
                       <div>
                         <p className="font-semibold text-ink-900">
                           {item.product_name}
-                        </p>
-                        <p className="text-xs font-mono text-muted">
-                          {item.product_sku}
                         </p>
                       </div>
 
@@ -1460,6 +1583,50 @@ function OrderHistory({
 
               {/* Status Banner & Aksi Pengiriman */}
               <div className="mt-5 border-t border-line pt-4">
+                {(selectedOrder.status === 'dalam_pengiriman' ||
+                  (selectedOrder.status === 'selesai' && !selectedOrder.receipt_photo_present)) ? (
+                  <div className="mb-4 rounded-md border border-line bg-white p-4">
+                    <p className="text-sm font-semibold text-ink-900">Foto bukti barang diterima</p>
+                    <p className="mt-1 text-xs text-muted">
+                      Foto paket atau barang yang tiba di cabang. JPG, PNG, atau WebP; maksimal 5 MB sebelum diproses.
+                    </p>
+                    {selectedOrder.receipt_proof_requested_at ? (
+                      <p className="mt-2 rounded-md bg-warn-bg p-2 text-xs font-semibold text-warn-fg">
+                        Admin pusat meminta foto bukti untuk pesanan ini.
+                      </p>
+                    ) : null}
+                    {receiptPhoto ? (
+                      <img
+                        src={receiptPhoto}
+                        alt="Pratinjau foto bukti barang diterima"
+                        className="mt-3 max-h-52 w-full rounded-md border border-line object-contain"
+                      />
+                    ) : null}
+                    <label
+                      htmlFor={`receipt-photo-${selectedOrder.id}`}
+                      className="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-line bg-paper px-4 text-sm font-semibold text-ink-900 hover:bg-ink-50"
+                    >
+                      <ImagePlus className="size-4" aria-hidden="true" />
+                      {receiptPhoto ? 'Ganti foto' : 'Ambil atau pilih foto'}
+                    </label>
+                    <input
+                      id={`receipt-photo-${selectedOrder.id}`}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={(event) => {
+                        void handleReceiptFile(event.currentTarget.files?.[0])
+                        event.currentTarget.value = ''
+                      }}
+                    />
+                    {preparingPhoto ? <p className="mt-2 text-xs text-muted">Memproses foto...</p> : null}
+                    {receiptPhotoError ? <p className="mt-2 text-xs text-crit-fg" role="alert">{receiptPhotoError}</p> : null}
+                    {selectedOrder.status === 'dalam_pengiriman' && !receiptPhoto ? (
+                      <p className="mt-2 text-xs text-warn-fg">Tanpa foto, Admin dapat meminta bukti susulan.</p>
+                    ) : null}
+                  </div>
+                ) : null}
                 {selectedOrder.status === 'disetujui' ? (
                   <div className="rounded-md bg-ok/10 p-3 text-sm font-medium text-ok-fg">
                     Jumlah barang disetujui admin pusat. Pesanan sedang dipersiapkan untuk pengiriman.
@@ -1479,10 +1646,14 @@ function OrderHistory({
                     <button
                       type="button"
                       onClick={() => {
-                        onConfirm(selectedOrder.id)
-                        setSelectedOrder(null)
+                        void onConfirm(selectedOrder.id, receiptPhoto)
+                          .then(() => {
+                            setSelectedOrderId(null)
+                            setReceiptPhoto(null)
+                          })
+                          .catch(() => undefined)
                       }}
-                      disabled={confirming}
+                      disabled={confirming || preparingPhoto}
                       className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-ok px-4 text-sm font-semibold text-white shadow-xs hover:bg-ok-fg disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {confirming &&
@@ -1494,17 +1665,39 @@ function OrderHistory({
                       ) : (
                         <CheckCircle2 className="size-4" aria-hidden="true" />
                       )}
-                      <span>Konfirmasi Barang Diterima</span>
+                      <span>{receiptPhoto ? 'Konfirmasi dengan foto bukti' : 'Terima tanpa foto bukti'}</span>
                     </button>
                   </div>
                 ) : null}
 
                 {selectedOrder.status === 'selesai' ? (
-                  <div className="rounded-md bg-ok/10 p-3 text-sm font-medium text-ok-fg flex items-center gap-2">
-                    <CheckCircle2 className="size-4 text-ok shrink-0" />
-                    <span>
-                      Pesanan selesai. Barang diterima mitra dan stok cabang sudah bertambah.
-                    </span>
+                  <div className="space-y-3">
+                    <div className="rounded-md bg-ok/10 p-3 text-sm font-medium text-ok-fg flex items-center gap-2">
+                      <CheckCircle2 className="size-4 text-ok shrink-0" />
+                      <span>Pesanan selesai. Barang diterima dan stok cabang sudah bertambah.</span>
+                    </div>
+                    {selectedOrder.receipt_photo_present ? (
+                      <p className="text-xs font-semibold text-ok-fg">Foto bukti sudah dikirim ke admin pusat.</p>
+                    ) : (
+                      <div className="rounded-md border border-warn bg-warn-bg/30 p-3">
+                        <p className="text-sm font-semibold text-warn-fg">Foto bukti belum ada</p>
+                        <p className="mt-1 text-xs text-muted">Unggah foto barang yang diterima agar Admin dapat memeriksanya.</p>
+                        <button
+                          type="button"
+                          disabled={!receiptPhoto || uploadingProof || preparingPhoto}
+                          onClick={() => {
+                            if (!receiptPhoto) return
+                            void onUploadProof(selectedOrder.id, receiptPhoto)
+                              .then(() => setReceiptPhoto(null))
+                              .catch(() => undefined)
+                          }}
+                          className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          {uploadingProof ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <ImagePlus className="size-4" aria-hidden="true" />}
+                          Kirim foto bukti
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : null}
 
@@ -1525,6 +1718,39 @@ function OrderHistory({
       ) : null}
     </section>
   )
+}
+
+async function prepareReceiptPhoto(file: File): Promise<string> {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    throw new Error('Pilih foto JPG, PNG, atau WebP.')
+  }
+  if (file.size > 5_000_000) {
+    throw new Error('Ukuran foto asli maksimal 5 MB.')
+  }
+  let image: ImageBitmap
+  try {
+    image = await createImageBitmap(file)
+  } catch {
+    throw new Error('Foto tidak dapat dibuka. Pilih foto lain.')
+  }
+  try {
+    const scale = Math.min(1, 960 / Math.max(image.width, image.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(image.width * scale))
+    canvas.height = Math.max(1, Math.round(image.height * scale))
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Foto belum dapat diproses di perangkat ini.')
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    for (const quality of [0.78, 0.65, 0.5]) {
+      const dataUrl = canvas.toDataURL('image/jpeg', quality)
+      if (dataUrl.length <= 680_000) return dataUrl
+    }
+    throw new Error('Foto masih terlalu besar. Pilih foto lain.')
+  } finally {
+    image.close()
+  }
 }
 
 async function prepareProfilePhoto(file: File): Promise<string> {
@@ -1596,13 +1822,32 @@ function ProfilePanel({ user }: { user: User }) {
 
   const saveProfile = useMutation({
     mutationFn: async () => {
+      let finalPhotoUrl = photo
+      // Jika pengguna memilih foto baru (berupa base64 preview), ubah ke FormData dan upload via multipart
+      if (photo && photo.startsWith('data:image/')) {
+        const blob = dataUrlToBlob(photo)
+        const formData = new FormData()
+        formData.append('file', blob, 'profile.jpg')
+        const token = localStorage.getItem('daisuki_token')
+        const uploadRes = await fetch(`${resolveApiUrl()}/me/profile/photo`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        })
+        const uploadJson = await uploadRes.json()
+        if (!uploadRes.ok || !uploadJson.photo_url) {
+          throw new Error(uploadJson.error || 'Gagal mengunggah foto profil')
+        }
+        finalPhotoUrl = uploadJson.photo_url
+      }
+
       const response = await api.me.profile.patch({
         name: name.trim(),
         pic_name: picName.trim(),
         phone: phone.trim(),
         address: address.trim(),
         ...region,
-        photo_data_url: photo,
+        photo_data_url: finalPhotoUrl,
       })
       if (response.error) {
         throw apiError(response.error, 'Profil belum tersimpan')
@@ -1649,7 +1894,7 @@ function ProfilePanel({ user }: { user: User }) {
         <div className="flex flex-wrap items-center gap-4 border-b border-line pb-5">
           {photo ? (
             <img
-              src={photo}
+              src={resolveImageUrl(photo) ?? ''}
               alt="Foto profil mitra"
               className="size-24 shrink-0 rounded-full border border-line object-cover"
             />
@@ -2278,8 +2523,8 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         /* ALUR KALENDER MINGGUAN + 7 HARI + JAM-JAM PERUBAHAN */
         <div className="space-y-4">
           {/* Navigasi Minggu (< dan >) */}
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-white p-3 shadow-2xs">
-            <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
+          <div className="relative flex flex-wrap items-center justify-center gap-2 rounded-md border border-line bg-white p-3 shadow-2xs">
+            <div className="flex w-full items-center justify-center gap-2 sm:w-auto">
               <button
                 type="button"
                 onClick={() => {
@@ -2293,7 +2538,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 <ChevronLeft className="size-4" aria-hidden="true" />
               </button>
 
-              <div className="min-w-0 px-1 text-center sm:flex sm:items-center sm:gap-2">
+              <div className="min-w-0 px-2 text-center sm:flex sm:items-center sm:gap-2">
                 <Calendar
                   className="hidden size-4 text-ink-700 sm:block"
                   aria-hidden="true"
@@ -2325,7 +2570,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                   setWeekOffset(0)
                   setSelectedBatch(null)
                 }}
-                className="inline-flex min-h-11 items-center rounded-md border border-line bg-ink-50 px-3 text-xs font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900"
+                className="inline-flex min-h-11 items-center rounded-md border border-line bg-ink-50 px-3 text-xs font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900 sm:absolute sm:right-3"
               >
                 Kembali ke Minggu Ini
               </button>

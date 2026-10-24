@@ -18,6 +18,41 @@ export function resolveApiUrl(): string {
   return env.VITE_API_URL || 'http://localhost:3001'
 }
 
+/**
+ * Resolves an image path (such as /uploads/receipts/xxx.jpg) to a fully qualified URL
+ * pointing to the active API server. Supports data URLs and external URLs without alteration.
+ */
+export function resolveImageUrl(path: string | null | undefined): string | null {
+  if (!path) return null
+  if (
+    path.startsWith('data:') ||
+    path.startsWith('blob:') ||
+    path.startsWith('http://') ||
+    path.startsWith('https://')
+  ) {
+    return path
+  }
+  const baseUrl = resolveApiUrl()
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  return `${baseUrl}${cleanPath}`
+}
+
+/**
+ * Converts a base64 Data URL to a native binary Blob suitable for FormData upload.
+ */
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const parts = dataUrl.split(',')
+  const mimeMatch = parts[0].match(/:(.*?);/)
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg'
+  const binaryString = atob(parts[1])
+  const len = binaryString.length
+  const bytes = new Uint8Array(len)
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: mime })
+}
+
 export const api = treaty<App>(resolveApiUrl(), {
   onRequest() {
     const token =

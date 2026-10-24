@@ -4,6 +4,7 @@ import { db } from "../../db/client";
 import { users, partners } from "../../db/schema";
 import { signToken, getAuthUser } from "../../plugins/auth";
 import { resolveRegion, RegionError, type RegionCodes } from "../regions";
+import { saveUploadedFile, saveBase64Image } from "../../lib/storage";
 
 export const authModule = new Elysia({ prefix: "/auth" }).post(
   "/login",
@@ -218,6 +219,55 @@ export const meModule = new Elysia()
       },
     };
   })
+  .post(
+    "/me/profile/photo",
+    async ({ headers, body, set }) => {
+      const authUser = await getAuthUser(headers);
+      if (!authUser) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+
+      const [dbUser] = await db
+        .select({ role: users.role, partner_id: users.partner_id })
+        .from(users)
+        .where(eq(users.id, authUser.userId))
+        .limit(1);
+
+      if (!dbUser || dbUser.role !== "mitra" || !dbUser.partner_id) {
+        set.status = 403;
+        return { error: "Hanya mitra yang dapat mengubah foto profil cabang" };
+      }
+
+      const file = body.file;
+      if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        set.status = 422;
+        return { error: "Foto profil harus berupa gambar JPEG, PNG, atau WebP" };
+      }
+      if (file.size > 5_000_000) {
+        set.status = 422;
+        return { error: "Ukuran file foto maksimal 5 MB" };
+      }
+
+      const { path: photoUrl } = await saveUploadedFile(
+        file,
+        "profiles",
+        `profile-${dbUser.partner_id}`,
+      );
+
+      await db
+        .update(partners)
+        .set({ profile_photo: photoUrl })
+        .where(eq(partners.id, dbUser.partner_id));
+
+      return { success: true, photo_url: photoUrl };
+    },
+    {
+      body: t.Object({
+        file: t.File(),
+      }),
+    },
+  )
   .patch(
     "/me/profile",
     async ({ headers, body, set }) => {
@@ -269,25 +319,20 @@ export const meModule = new Elysia()
         return { error: error instanceof Error ? error.message : "Wilayah belum dapat diperiksa" };
       }
 
+      let photoPath: string | null = null;
       if (body.photo_data_url !== null) {
-        const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(
-          body.photo_data_url,
-        );
-        const bytes = match ? Buffer.from(match[1], "base64") : null;
-        if (
-          !bytes ||
-          bytes.length === 0 ||
-          bytes.length > 256_000 ||
-          bytes[0] !== 0xff ||
-          bytes[1] !== 0xd8 ||
-          bytes[2] !== 0xff ||
-          bytes[bytes.length - 2] !== 0xff ||
-          bytes[bytes.length - 1] !== 0xd9
-        ) {
+        if (body.photo_data_url.startsWith("/uploads/profiles/")) {
+          photoPath = body.photo_data_url;
+        } else if (body.photo_data_url.startsWith("data:image/")) {
+          const saved = await saveBase64Image(
+            body.photo_data_url,
+            "profiles",
+            `profile-${dbUser.partner_id}`,
+          );
+          photoPath = saved.path;
+        } else {
           set.status = 422;
-          return {
-            error: "Foto profil harus berupa gambar JPEG maksimal 250 KB",
-          };
+          return { error: "Format foto tidak valid" };
         }
       }
 
@@ -299,7 +344,7 @@ export const meModule = new Elysia()
           pic_phone: phone,
           address,
           ...region,
-          profile_photo: body.photo_data_url,
+          profile_photo: photoPath,
         })
         .where(eq(partners.id, dbUser.partner_id))
         .returning({ id: partners.id });
@@ -320,7 +365,7 @@ export const meModule = new Elysia()
         regency_code: t.String({ maxLength: 20 }),
         district_code: t.String({ maxLength: 20 }),
         village_code: t.String({ maxLength: 20 }),
-        photo_data_url: t.Union([t.String({ maxLength: 350_000 }), t.Null()]),
+        photo_data_url: t.Union([t.String({ maxLength: 500_000 }), t.Null()]),
       }),
     },
   );

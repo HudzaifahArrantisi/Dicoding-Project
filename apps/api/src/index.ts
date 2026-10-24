@@ -1,7 +1,9 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
+import { resolve } from "node:path";
 import { env } from "./env";
 import { sql } from "./db/client";
+import { UPLOADS_DIR } from "./lib/storage";
 import { authModule, meModule } from "./modules/auth";
 import { stocksModule, productsModule } from "./modules/stocks";
 import { ordersModule } from "./modules/orders";
@@ -57,6 +59,21 @@ export const app = new Elysia()
   .get("/health/db", async () => {
     const [row] = await sql`select now() as now`;
     return { ok: true, now: row.now };
+  })
+  .get("/uploads/*", async ({ params, set }) => {
+    const relativePath = params["*"];
+    const safePath = resolve(UPLOADS_DIR, relativePath);
+    if (!safePath.startsWith(UPLOADS_DIR)) {
+      set.status = 403;
+      return "Forbidden";
+    }
+    const file = Bun.file(safePath);
+    const exists = await file.exists();
+    if (!exists) {
+      set.status = 404;
+      return "File tidak ditemukan";
+    }
+    return file;
   })
   .use(authModule)
   .use(meModule)

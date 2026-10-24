@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db, sql as postgres } from "../../db/client";
 import {
   orders,
@@ -390,6 +390,55 @@ export const adminModule = new Elysia({ prefix: "/admin" })
     });
     return { success: true };
   })
+  .post(
+    "/partners/bulk-delete",
+    async ({ headers, body, set }) => {
+      const admin = await getAuthUser(headers);
+      if (!admin) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      if (admin.role !== "admin") {
+        set.status = 403;
+        return { error: "Forbidden: Admin only" };
+      }
+      const { ids } = body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        set.status = 400;
+        return { error: "Pilih minimal 1 mitra untuk dihapus" };
+      }
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validIds = ids.filter((id) => uuidRegex.test(id));
+      if (validIds.length === 0) {
+        set.status = 400;
+        return { error: "ID mitra tidak valid" };
+      }
+
+      const deletedCount = await db.transaction(async (tx) => {
+        await tx.delete(users).where(inArray(users.partner_id, validIds));
+        const deleted = await tx
+          .delete(partners)
+          .where(inArray(partners.id, validIds))
+          .returning({ id: partners.id });
+        return deleted.length;
+      });
+
+      for (const partnerId of validIds) {
+        publishInventoryChange({
+          partnerId,
+          topics: ["partners", "stocks", "orders", "metrics"],
+        });
+      }
+
+      return { success: true, count: deletedCount };
+    },
+    {
+      body: t.Object({
+        ids: t.Array(t.String()),
+      }),
+    },
+  )
   .get("/stock-logs", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) {

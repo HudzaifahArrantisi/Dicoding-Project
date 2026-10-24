@@ -226,6 +226,34 @@
 
   .admin-sidebar {
     background: #f1f3f7;
+    transition:
+      transform 220ms cubic-bezier(0.4, 0, 1, 1),
+      visibility 0s linear 220ms;
+  }
+
+  .admin-sidebar[data-mobile-open='true'] {
+    transition:
+      transform 240ms cubic-bezier(0, 0, 0.2, 1),
+      visibility 0s;
+  }
+
+  .admin-sidebar-content {
+    transition: opacity 120ms ease-out;
+  }
+
+  @media (min-width: 1024px) {
+    .admin-sidebar {
+      transition: width 240ms cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    .admin-sidebar[data-collapsed='true'] {
+      transition: width 220ms cubic-bezier(0.4, 0, 1, 1);
+    }
+
+    .admin-sidebar[data-collapsed='true'] .admin-sidebar-content {
+      opacity: 0;
+      pointer-events: none;
+    }
   }
 
   .admin-sidebar button:focus-visible {
@@ -259,8 +287,7 @@
     background: #faf7f2;
   }
 
-  .mitra-header,
-  .mitra-bottom-nav {
+  .mitra-header {
     border-color: #e9ddd6;
     background: #fffdfb;
   }

@@ -4,11 +4,9 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
-import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
-import { TanStackDevtools } from '@tanstack/react-devtools'
+
 import { QueryClientProvider } from '@tanstack/react-query'
 
-import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { NotFound } from '../components/not-found'
 import { AuthProvider } from '../lib/auth'
 import { Toaster } from '../components/ui/sonner'
@@ -81,20 +79,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <div className="hidden md:block">
-          <TanStackDevtools
-            config={{
-              position: 'bottom-right',
-            }}
-            plugins={[
-              {
-                name: 'Tanstack Router',
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-              TanStackQueryDevtools,
-            ]}
-          />
-        </div>
         <Scripts />
       </body>
     </html>

@@ -135,6 +135,10 @@ export const orders = pgTable("orders", {
   approved_at: timestamp("approved_at", { withTimezone: true }),
   shipped_at: timestamp("shipped_at", { withTimezone: true }),
   completed_at: timestamp("completed_at", { withTimezone: true }),
+  receipt_photo_data_url: text("receipt_photo_data_url"),
+  receipt_proof_requested_at: timestamp("receipt_proof_requested_at", {
+    withTimezone: true,
+  }),
 });
 
 export const orderItems = pgTable("order_items", {

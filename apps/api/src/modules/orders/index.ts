@@ -18,6 +18,7 @@ import {
   ORDER_STATUS_LABEL,
 } from "@daisuki/shared";
 import { publishInventoryChange } from "../../realtime";
+import { saveUploadedFile, saveBase64Image } from "../../lib/storage";
 
 class CentralStockConflictError extends Error {}
 class OrderWorkflowError extends Error {
@@ -27,6 +28,24 @@ class OrderWorkflowError extends Error {
   ) {
     super(message);
   }
+}
+
+function validReceiptPhoto(value: string): boolean {
+  if (value.startsWith("/uploads/receipts/")) {
+    return true;
+  }
+  const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match) return false;
+  const bytes = Buffer.from(match[1], "base64");
+  return (
+    bytes.length > 0 &&
+    bytes.length <= 512_000 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff &&
+    bytes[bytes.length - 2] === 0xff &&
+    bytes[bytes.length - 1] === 0xd9
+  );
 }
 
 export const ordersModule = new Elysia({ prefix: "/orders" })
@@ -65,6 +84,8 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           approved_at: orders.approved_at,
           shipped_at: orders.shipped_at,
           completed_at: orders.completed_at,
+          receipt_photo_present: sql<boolean>`${orders.receipt_photo_data_url} is not null`,
+          receipt_proof_requested_at: orders.receipt_proof_requested_at,
         })
         .from(orders)
         .innerJoin(partners, eq(orders.partner_id, partners.id))
@@ -408,6 +429,264 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       }),
     },
   )
+  .get("/:id/receipt-proof", async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    const [ord] = await db
+      .select({
+        partner_id: orders.partner_id,
+        receipt_photo_data_url: orders.receipt_photo_data_url,
+      })
+      .from(orders)
+      .where(eq(orders.id, params.id))
+      .limit(1);
+    if (!ord) {
+      set.status = 404;
+      return { error: "Pesanan tidak ditemukan" };
+    }
+    if (user.role !== "admin" && ord.partner_id !== user.partnerId) {
+      set.status = 403;
+      return { error: "Tidak memiliki akses ke bukti pesanan ini" };
+    }
+    return { data: { photo_data_url: ord.receipt_photo_data_url } };
+  })
+  .post(
+    "/:id/receipt-photo",
+    async ({ headers, params, body, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      if (user.role !== "mitra" || !user.partnerId) {
+        set.status = 403;
+        return { error: "Hanya mitra yang dapat mengunggah bukti penerimaan" };
+      }
+      const [ord] = await db
+        .select({ id: orders.id, partner_id: orders.partner_id })
+        .from(orders)
+        .where(eq(orders.id, params.id))
+        .limit(1);
+
+      if (!ord) {
+        set.status = 404;
+        return { error: "Pesanan tidak ditemukan" };
+      }
+      if (ord.partner_id !== user.partnerId) {
+        set.status = 403;
+        return { error: "Tidak memiliki akses ke pesanan ini" };
+      }
+
+      const file = body.file;
+      if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        set.status = 422;
+        return { error: "File bukti harus berupa gambar JPG, PNG, atau WebP" };
+      }
+      if (file.size > 5_000_000) {
+        set.status = 422;
+        return { error: "Ukuran foto maksimal 5 MB" };
+      }
+
+      const { path: photoUrl } = await saveUploadedFile(file, "receipts", `receipt-${ord.id}`);
+      return { success: true, photo_url: photoUrl };
+    },
+    {
+      body: t.Object({
+        file: t.File(),
+      }),
+    },
+  )
+  .post(
+    "/:id/receipt-proof",
+    async ({ headers, params, body, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      if (user.role !== "mitra" || !user.partnerId) {
+        set.status = 403;
+        return { error: "Hanya mitra yang dapat mengunggah bukti penerimaan" };
+      }
+
+      const file = body.file;
+      if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        set.status = 422;
+        return { error: "File bukti harus berupa gambar JPG, PNG, atau WebP" };
+      }
+      if (file.size > 5_000_000) {
+        set.status = 422;
+        return { error: "Ukuran foto maksimal 5 MB" };
+      }
+
+      const { path: photoUrl } = await saveUploadedFile(file, "receipts", `receipt-${params.id}`);
+
+      try {
+        await db.transaction(async (tx) => {
+          const [ord] = await tx
+            .select()
+            .from(orders)
+            .where(eq(orders.id, params.id))
+            .for("update");
+          if (!ord) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
+          if (ord.partner_id !== user.partnerId) {
+            throw new OrderWorkflowError(403, "Tidak memiliki akses ke pesanan ini");
+          }
+          if (ord.status !== "selesai") {
+            throw new OrderWorkflowError(409, "Bukti susulan hanya untuk barang yang sudah diterima");
+          }
+          if (ord.receipt_photo_data_url) {
+            throw new OrderWorkflowError(409, "Bukti penerimaan sudah tersedia");
+          }
+          await tx
+            .update(orders)
+            .set({
+              receipt_photo_data_url: photoUrl,
+              receipt_proof_requested_at: null,
+            })
+            .where(eq(orders.id, ord.id));
+          await tx.insert(notifications).values({
+            audience: "admin",
+            type: "receipt_proof_uploaded",
+            partner_id: ord.partner_id,
+            title: `Bukti penerimaan ${ord.order_no} telah diunggah`,
+            body: `Mitra telah mengunggah foto bukti penerimaan untuk ${ord.order_no}.`,
+          });
+        });
+      } catch (error) {
+        if (error instanceof OrderWorkflowError) {
+          set.status = error.status;
+          return { error: error.message };
+        }
+        throw error;
+      }
+      publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "notifications"] });
+      return { success: true, photo_url: photoUrl };
+    },
+    {
+      body: t.Object({
+        file: t.File(),
+      }),
+    },
+  )
+  .patch(
+    "/:id/receipt-proof",
+    async ({ headers, params, body, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      if (user.role !== "mitra" || !user.partnerId) {
+        set.status = 403;
+        return { error: "Hanya mitra yang dapat mengunggah bukti penerimaan" };
+      }
+      if (!validReceiptPhoto(body.photo_data_url)) {
+        set.status = 422;
+        return { error: "Bukti harus berupa foto JPEG maksimal 500 KB atau URL valid" };
+      }
+
+      let photoUrl = body.photo_data_url;
+      if (photoUrl.startsWith("data:image/")) {
+        const saved = await saveBase64Image(photoUrl, "receipts", `receipt-${params.id}`);
+        photoUrl = saved.path;
+      }
+
+      try {
+        await db.transaction(async (tx) => {
+          const [ord] = await tx
+            .select()
+            .from(orders)
+            .where(eq(orders.id, params.id))
+            .for("update");
+          if (!ord) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
+          if (ord.partner_id !== user.partnerId) {
+            throw new OrderWorkflowError(403, "Tidak memiliki akses ke pesanan ini");
+          }
+          if (ord.status !== "selesai") {
+            throw new OrderWorkflowError(409, "Bukti susulan hanya untuk barang yang sudah diterima");
+          }
+          if (ord.receipt_photo_data_url) {
+            throw new OrderWorkflowError(409, "Bukti penerimaan sudah tersedia");
+          }
+          await tx
+            .update(orders)
+            .set({
+              receipt_photo_data_url: photoUrl,
+              receipt_proof_requested_at: null,
+            })
+            .where(eq(orders.id, ord.id));
+          await tx.insert(notifications).values({
+            audience: "admin",
+            type: "receipt_proof_uploaded",
+            partner_id: ord.partner_id,
+            title: `Bukti penerimaan ${ord.order_no} telah diunggah`,
+            body: `Mitra telah mengunggah foto bukti penerimaan untuk ${ord.order_no}.`,
+          });
+        });
+      } catch (error) {
+        if (error instanceof OrderWorkflowError) {
+          set.status = error.status;
+          return { error: error.message };
+        }
+        throw error;
+      }
+      publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "notifications"] });
+      return { success: true, photo_url: photoUrl };
+    },
+    { body: t.Object({ photo_data_url: t.String({ maxLength: 700_000 }) }) },
+  )
+  .patch("/:id/request-receipt-proof", async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    if (user.role !== "admin") {
+      set.status = 403;
+      return { error: "Hanya admin yang dapat meminta bukti penerimaan" };
+    }
+    let partnerId: string;
+    try {
+      partnerId = await db.transaction(async (tx) => {
+        const [ord] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, params.id))
+          .for("update");
+        if (!ord) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
+        if (ord.status !== "selesai" || ord.receipt_photo_data_url) {
+          throw new OrderWorkflowError(409, "Pesanan ini tidak memerlukan bukti susulan");
+        }
+        if (ord.receipt_proof_requested_at) {
+          throw new OrderWorkflowError(409, "Permintaan bukti sudah dikirim ke mitra");
+        }
+        await tx
+          .update(orders)
+          .set({ receipt_proof_requested_at: new Date() })
+          .where(eq(orders.id, ord.id));
+        await tx.insert(notifications).values({
+          audience: "mitra",
+          type: "receipt_proof_requested",
+          partner_id: ord.partner_id,
+          title: `Foto bukti penerimaan diperlukan: ${ord.order_no}`,
+          body: `Admin pusat meminta foto barang yang sudah diterima untuk pesanan ${ord.order_no}. Buka riwayat pesanan untuk mengunggahnya.`,
+        });
+        return ord.partner_id;
+      });
+    } catch (error) {
+      if (error instanceof OrderWorkflowError) {
+        set.status = error.status;
+        return { error: error.message };
+      }
+      throw error;
+    }
+    publishInventoryChange({ partnerId, topics: ["orders", "notifications"] });
+    return { success: true };
+  })
   .patch(
     "/:id/status",
     async ({ headers, params, body, set }) => {
@@ -472,6 +751,13 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       if (targetStatus === "ditolak" && !body.rejected_reason?.trim()) {
         set.status = 422;
         return { error: "Alasan penolakan wajib diisi" };
+      }
+      if (
+        body.receipt_photo_data_url !== undefined &&
+        (targetStatus !== "selesai" || !validReceiptPhoto(body.receipt_photo_data_url))
+      ) {
+        set.status = 422;
+        return { error: "Bukti penerimaan harus berupa foto JPEG maksimal 500 KB" };
       }
 
       let result: typeof orders.$inferSelect;
@@ -542,6 +828,20 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             updateData.shipped_at = new Date();
           } else if (targetStatus === "selesai") {
             updateData.completed_at = new Date();
+            if (body.receipt_photo_data_url) {
+              if (body.receipt_photo_data_url.startsWith("data:image/")) {
+                const saved = await saveBase64Image(
+                  body.receipt_photo_data_url,
+                  "receipts",
+                  `receipt-${orderId}`,
+                );
+                updateData.receipt_photo_data_url = saved.path;
+              } else {
+                updateData.receipt_photo_data_url = body.receipt_photo_data_url;
+              }
+            } else {
+              updateData.receipt_photo_data_url = null;
+            }
           } else if (targetStatus === "ditolak") {
             updateData.rejected_reason = body.rejected_reason?.trim();
           }
@@ -610,12 +910,17 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               .where(eq(partners.id, ord.partner_id))
               .limit(1);
 
+            const hasReceiptPhoto = Boolean(body.receipt_photo_data_url);
             await tx.insert(notifications).values({
               audience: "admin",
-              type: "order_update",
+              type: hasReceiptPhoto ? "order_update" : "receipt_missing_proof",
               partner_id: ord.partner_id,
-              title: `Mitra ${receivingPartner?.name ?? 'mitra'} sudah menerima kiriman barang`,
-              body: `Mitra telah mengonfirmasi penerimaan barang untuk cabang. Stok cabang otomatis bertambah.`,
+              title: hasReceiptPhoto
+                ? `Mitra ${receivingPartner?.name ?? 'mitra'} sudah menerima barang ${ord.order_no}`
+                : `Barang ${ord.order_no} diterima tanpa foto bukti`,
+              body: hasReceiptPhoto
+                ? `Mitra telah mengonfirmasi penerimaan dan mengunggah foto bukti untuk ${ord.order_no}. Stok cabang otomatis bertambah.`
+                : `Mitra telah mengonfirmasi penerimaan ${ord.order_no}, tetapi belum menyertakan foto bukti. Admin perlu meminta bukti susulan.`,
             });
           }
 
@@ -687,6 +992,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           t.Literal("dibatalkan"),
         ]),
         rejected_reason: t.Optional(t.String()),
+        receipt_photo_data_url: t.Optional(t.String({ maxLength: 700_000 })),
       }),
     },
   );

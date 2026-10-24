@@ -25,10 +25,12 @@ function LoginPage() {
 
   async function finishLogin(result: Awaited<ReturnType<typeof login>>) {
     if (!result.success || !result.role) {
-      setError(
-        result.error ??
-          'Login belum berhasil. Periksa kembali email dan kata sandi Anda.',
-      )
+      const msg = result.error?.trim()
+      const displayMessage =
+        msg && msg !== '[object Object]'
+          ? msg
+          : 'Email atau password salah'
+      setError(displayMessage)
       return
     }
 

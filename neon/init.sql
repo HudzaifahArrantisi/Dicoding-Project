@@ -144,8 +144,12 @@ create table if not exists orders (
   created_at timestamptz not null default now(),
   approved_at timestamptz,
   shipped_at timestamptz,
-  completed_at timestamptz
+  completed_at timestamptz,
+  receipt_photo_data_url text,
+  receipt_proof_requested_at timestamptz
 );
+alter table orders add column if not exists receipt_photo_data_url text;
+alter table orders add column if not exists receipt_proof_requested_at timestamptz;
 create index if not exists orders_partner_created_idx on orders (partner_id, created_at desc);
 create index if not exists orders_status_idx on orders (status);
 
@@ -163,7 +167,10 @@ create index if not exists order_items_order_idx on order_items (order_id);
 create table if not exists notifications (
   id uuid primary key default gen_random_uuid(),
   audience text not null check (audience in ('admin', 'mitra')),
-  type text not null,
+  type text not null check (type in (
+    'low_stock', 'stale_update', 'new_order', 'order_update',
+    'receipt_missing_proof', 'receipt_proof_requested', 'receipt_proof_uploaded'
+  )),
   partner_id uuid references partners(id) on delete cascade,
   user_id uuid references users(id) on delete cascade,
   title text not null,

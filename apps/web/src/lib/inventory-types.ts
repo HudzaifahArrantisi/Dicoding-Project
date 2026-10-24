@@ -56,6 +56,8 @@ export interface Order {
   approved_at: string | null
   shipped_at: string | null
   completed_at: string | null
+  receipt_photo_present: boolean
+  receipt_proof_requested_at: string | null
   items: OrderItem[]
 }
 
