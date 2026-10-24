@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   keepPreviousData,
   useMutation,
@@ -30,7 +30,6 @@ import {
   Filter,
   Loader2,
   LogOut,
-  Menu,
   MessageSquare,
   Minus,
   PanelLeftClose,
@@ -87,17 +86,33 @@ interface Metrics {
   criticalItemsCount: number
 }
 
-type AdminTab = 'stocks' | 'orders' | 'alerts' | 'partners' | 'data-science' | 'ai-insights'
+type AdminTab = 'stocks' | 'orders' | 'shipments' | 'alerts' | 'partners' | 'data-science' | 'ai-insights'
 type OrderCategoryTab = 'menunggu' | 'selesai' | 'ditolak'
 
 const adminTabLabels: Record<AdminTab, string> = {
   stocks: 'Stok cabang',
   orders: 'Persetujuan pesanan',
+  shipments: 'Log pengiriman',
   alerts: 'Notifikasi',
   partners: 'Manajemen mitra',
   'data-science': 'Log & Data',
   'ai-insights': 'AI Insights',
 }
+
+const adminNavTabs: Array<{
+  id: AdminTab
+  label: string
+  shortLabel: string
+  Icon: typeof Boxes
+}> = [
+  { id: 'stocks', label: 'Stok cabang', shortLabel: 'Stok', Icon: Boxes },
+  { id: 'orders', label: 'Persetujuan pesanan', shortLabel: 'Persetujuan', Icon: ClipboardCheck },
+  { id: 'shipments', label: 'Log pengiriman', shortLabel: 'Kirim', Icon: Truck },
+  { id: 'partners', label: 'Manajemen mitra', shortLabel: 'Mitra', Icon: Building2 },
+  { id: 'data-science', label: 'Log & Data', shortLabel: 'Log & Data', Icon: Database },
+  { id: 'alerts', label: 'Notifikasi', shortLabel: 'Notif', Icon: Bell },
+  { id: 'ai-insights', label: 'AI Insights', shortLabel: 'AI', Icon: BrainCircuit },
+]
 
 const EMPTY_ORDERS: Order[] = []
 
@@ -125,6 +140,27 @@ interface StockLogPartner {
   partner_name: string
   log_count: number
   latest_update: string
+}
+
+interface ShipmentLog {
+  id: string
+  order_no: string
+  partner_name: string
+  status: OrderStatus
+  shipped_at: string
+  items: Array<{
+    order_id: string
+    product_name: string
+    product_unit: string
+    qty_approved: number | null
+  }>
+}
+
+interface ShipmentLogPage {
+  data: ShipmentLog[]
+  total: number
+  page: number
+  page_size: number
 }
 
 interface AIInsights {
@@ -190,6 +226,92 @@ function formatDetailedDateTime(dateInput: string | Date | null | undefined): st
   const minutes = String(date.getMinutes()).padStart(2, '0')
 
   return `${datePart} jam ${hours}.${minutes}`
+}
+
+function ShipmentLogPanel({
+  page,
+  query,
+  onPageChange,
+  onViewOrder,
+}: {
+  page: number
+  query: UseQueryResult<ShipmentLogPage>
+  onPageChange: (page: number) => void
+  onViewOrder: (id: string) => void
+}) {
+  const result = query.data
+  const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / (result?.page_size ?? 20)))
+
+  return (
+    <section className="dashboard-panel-enter space-y-5" aria-labelledby="shipment-log-title">
+      <div>
+        <p className="dashboard-eyebrow">Operasional</p>
+        <h1 id="shipment-log-title" className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log pengiriman</h1>
+        <p className="mt-1 text-sm text-muted">Pesanan yang sudah dikirim dari gudang pusat, diurutkan dari pengiriman terbaru.</p>
+      </div>
+
+      {query.isError ? <ErrorState message={getErrorMessage(query.error)} onRetry={() => void query.refetch()} /> : null}
+      {query.isLoading ? <LoadingState label="Memuat log pengiriman..." /> : null}
+      {!query.isLoading && !query.isError && result?.data.length === 0 ? (
+        <EmptyState title="Belum ada pengiriman" description="Log akan muncul ketika Admin menandai pesanan sebagai dalam pengiriman." />
+      ) : null}
+
+      {result?.data.length ? (
+        <div className="dashboard-surface overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-semibold text-ink-900">Riwayat kirim</h2>
+            <span className="text-xs tabular-nums text-muted">{result.total} pengiriman tercatat</span>
+          </div>
+          <div className="divide-y divide-line">
+            {result.data.map((entry) => {
+              const sentAt = new Intl.DateTimeFormat('id-ID', {
+                weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta',
+              }).format(new Date(entry.shipped_at))
+              const totalQty = entry.items.reduce((sum, item) => sum + (item.qty_approved ?? 0), 0)
+              return (
+                <article key={entry.id} className="px-4 py-4 sm:px-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold tabular-nums text-ink-700">{entry.order_no}</p>
+                      <h3 className="mt-1 font-display text-lg font-semibold text-ink-900">{entry.partner_name}</h3>
+                      <p className="mt-1 text-sm text-muted">Dikirim {sentAt} WIB</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${entry.status === 'selesai' ? 'bg-ok-bg text-ok-fg' : 'bg-ink-50 text-ink-700'}`}>
+                        {entry.status === 'selesai' ? 'Sudah diterima' : 'Dalam pengiriman'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onViewOrder(entry.id)}
+                        className="inline-flex min-h-11 items-center rounded-md border border-line px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50"
+                      >
+                        Lihat pesanan
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line/70 pt-3 text-xs text-ink-700">
+                    {entry.items.map((item) => (
+                      <span key={item.product_name}>{item.product_name} <strong className="tabular-nums">{item.qty_approved ?? 0} {item.product_unit}</strong></span>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs tabular-nums text-muted">Total {totalQty} unit · {entry.items.length} jenis barang</p>
+                </article>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {(result?.total ?? 0) > (result?.page_size ?? 20) ? (
+        <nav className="flex items-center justify-between gap-3" aria-label="Halaman log pengiriman">
+          <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 disabled:opacity-40">Sebelumnya</button>
+          <span className="text-xs tabular-nums text-muted">Halaman {page} dari {totalPages}</span>
+          <button type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 disabled:opacity-40">Berikutnya</button>
+        </nav>
+      ) : null}
+    </section>
+  )
 }
 
 function DataSciencePanel({
@@ -544,21 +666,22 @@ function PartnerStockLogDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45 animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-md border border-line bg-white shadow-xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
-          <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-white p-4 sm:p-5">
-            <div>
-              <div className="flex items-center gap-2">
-                <Dialog.Title className="text-lg font-semibold text-ink-900">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-xs animate-in fade-in duration-200" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[94vh] sm:max-h-[90vh] w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-white px-4 py-3 sm:px-6 sm:py-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Dialog.Title className="truncate font-display text-base font-bold text-ink-900 sm:text-xl">
                   {partner.partner_name}
                 </Dialog.Title>
                 <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${dbHealthQuery.isLoading
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+                    dbHealthQuery.isLoading
                       ? 'bg-ink-100 text-muted'
                       : isDbConnected
                         ? 'bg-ok-bg text-ok-fg'
                         : 'bg-crit-bg text-crit-fg'
-                    }`}
+                  }`}
                   title={
                     isDbConnected
                       ? 'Koneksi database Neon aktif (/health/db)'
@@ -566,12 +689,13 @@ function PartnerStockLogDialog({
                   }
                 >
                   <span
-                    className={`size-1.5 rounded-full ${dbHealthQuery.isLoading
+                    className={`size-1.5 rounded-full ${
+                      dbHealthQuery.isLoading
                         ? 'animate-pulse bg-ink-400'
                         : isDbConnected
                           ? 'animate-pulse bg-ok'
                           : 'bg-crit'
-                      }`}
+                    }`}
                     aria-hidden="true"
                   />
                   <span>
@@ -583,22 +707,22 @@ function PartnerStockLogDialog({
                   </span>
                 </span>
               </div>
-              <Dialog.Description className="mt-1 text-sm text-muted">
-                Riwayat perubahan stok cabang · {partner.log_count} log tercatat
+              <Dialog.Description className="mt-0.5 text-xs text-muted sm:text-sm">
+                Riwayat perubahan stok cabang · <strong className="font-semibold tabular-nums text-ink-900">{partner.log_count}</strong> log tercatat
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
                 aria-label="Tutup log perubahan"
-                className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line text-muted hover:bg-ink-50 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-line text-muted transition-colors hover:bg-ink-50 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
               >
                 <X className="size-5" aria-hidden="true" />
               </button>
             </Dialog.Close>
           </div>
 
-          <div className="space-y-4 p-4 sm:p-5">
+          <div className="flex-1 overflow-y-auto space-y-3.5 p-3 sm:p-5">
             {!isDbConnected && !dbHealthQuery.isLoading ? (
               <div className="flex items-center gap-2 rounded-md border border-crit-fg/20 bg-crit-bg p-3 text-xs text-crit-fg animate-in fade-in duration-200">
                 <AlertOctagon className="size-4 shrink-0" aria-hidden="true" />
@@ -608,14 +732,15 @@ function PartnerStockLogDialog({
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-ink-50/70 p-3 text-xs text-muted">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-ink-50/70 p-2.5 sm:flex-row sm:items-center sm:justify-between sm:p-3 text-xs text-muted">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                 <span>
                   Terakhir:{' '}
                   <strong className="font-semibold text-ink-900">
                     {formatDetailedDateTime(partner.latest_update)}
                   </strong>
                 </span>
+                <span className="hidden sm:inline text-line">•</span>
                 <span>
                   Total:{' '}
                   <strong className="font-semibold tabular-nums text-ink-900">
@@ -625,14 +750,15 @@ function PartnerStockLogDialog({
               </div>
 
               {/* View Mode Toggle */}
-              <div className="flex items-center rounded-md border border-line bg-white p-0.5 font-semibold">
+              <div className="grid grid-cols-2 w-full sm:flex sm:w-auto items-center rounded-md border border-line bg-white p-0.5 font-semibold shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setViewMode('calendar')}
-                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors ${viewMode === 'calendar'
+                  className={`inline-flex items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+                    viewMode === 'calendar'
                       ? 'bg-ink-900 text-white shadow-2xs'
                       : 'text-muted hover:text-ink-900'
-                    }`}
+                  }`}
                 >
                   <Calendar className="size-3.5" aria-hidden="true" />
                   <span>Kalender</span>
@@ -640,10 +766,11 @@ function PartnerStockLogDialog({
                 <button
                   type="button"
                   onClick={() => setViewMode('list')}
-                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors ${viewMode === 'list'
+                  className={`inline-flex items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+                    viewMode === 'list'
                       ? 'bg-ink-900 text-white shadow-2xs'
                       : 'text-muted hover:text-ink-900'
-                    }`}
+                  }`}
                 >
                   <Clock className="size-3.5" aria-hidden="true" />
                   <span>Semua Log</span>
@@ -667,7 +794,7 @@ function PartnerStockLogDialog({
               />
             ) : viewMode === 'list' ? (
               /* Flat list of all logs */
-              <div className="overflow-hidden rounded-md border border-line">
+              <div className="overflow-hidden rounded-lg border border-line bg-white">
                 <div className="divide-y divide-line">
                   {allLogs.map((log) => {
                     const isConsumption = log.delta > 0
@@ -682,10 +809,10 @@ function PartnerStockLogDialog({
                     return (
                       <article
                         key={log.id}
-                        className="flex flex-col gap-2 p-3.5 transition-colors hover:bg-ink-50/50 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex flex-col gap-2 p-3 transition-colors hover:bg-ink-50/50 sm:flex-row sm:items-center sm:justify-between sm:p-3.5"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-ink-900">
+                          <p className="text-sm font-semibold text-ink-900 truncate">
                             {log.product_name}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
@@ -699,8 +826,8 @@ function PartnerStockLogDialog({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 self-end sm:self-center">
-                          <div className="flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-sm tabular-nums">
+                        <div className="flex items-center justify-between sm:justify-end gap-3 pt-1 sm:pt-0 border-t border-line/40 sm:border-t-0">
+                          <div className="flex items-center gap-1.5 rounded-md border border-line bg-white px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs sm:text-sm tabular-nums">
                             <span className="text-muted">{log.qty_before}</span>
                             <span className="text-xs text-muted" aria-hidden="true">
                               →
@@ -710,12 +837,13 @@ function PartnerStockLogDialog({
                             </span>
                           </div>
                           <span
-                            className={`min-w-16 rounded px-2 py-1 text-center text-xs font-bold tabular-nums ${isConsumption
+                            className={`min-w-14 sm:min-w-16 rounded px-2 py-0.5 sm:py-1 text-center text-xs font-bold tabular-nums ${
+                              isConsumption
                                 ? 'bg-crit-bg text-crit-fg'
                                 : isRestock
                                   ? 'bg-ok-bg text-ok-fg'
                                   : 'bg-ink-100 text-muted'
-                              }`}
+                            }`}
                           >
                             {isConsumption
                               ? `−${log.delta}`
@@ -731,26 +859,26 @@ function PartnerStockLogDialog({
               </div>
             ) : (
               /* ALUR UTAMA: Navigasi Minggu + 7 Hari (Senin - Minggu) + Jam Perubahan */
-              <div className="space-y-4">
+              <div className="space-y-3.5">
                 {/* 1. Bar Navigasi Minggu (< dan >) */}
-                <div className="relative flex flex-wrap items-center justify-center gap-2 rounded-md border border-line bg-white p-3 shadow-2xs">
-                  <div className="flex items-center gap-2">
+                <div className="relative flex flex-col gap-2 rounded-lg border border-line bg-white p-2.5 sm:flex-row sm:items-center sm:justify-between sm:p-3 shadow-2xs">
+                  <div className="flex items-center justify-between sm:justify-center gap-2 w-full sm:w-auto sm:mx-auto">
                     <button
                       type="button"
                       onClick={() => {
                         setWeekOffset((w) => w - 1)
                         setSelectedBatch(null)
                       }}
-                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
                       title="Lihat minggu kemarin (<)"
                       aria-label="Minggu kemarin"
                     >
                       <ChevronLeft className="size-4" aria-hidden="true" />
                     </button>
 
-                    <div className="flex items-center gap-2 px-1">
-                      <Calendar className="size-4 text-ink-700" aria-hidden="true" />
-                      <span className="font-display text-sm font-semibold text-ink-900">
+                    <div className="flex items-center gap-1.5 px-1 text-center">
+                      <Calendar className="size-4 text-ink-700 shrink-0" aria-hidden="true" />
+                      <span className="font-display text-xs sm:text-sm font-bold text-ink-900">
                         {formatWeekRange(weekDays, weekOffset)}
                       </span>
                     </div>
@@ -762,7 +890,7 @@ function PartnerStockLogDialog({
                         setSelectedBatch(null)
                       }}
                       disabled={weekOffset >= 0}
-                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"
+                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
                       title="Lihat minggu berikutnya (>)"
                       aria-label="Minggu berikutnya"
                     >
@@ -777,7 +905,7 @@ function PartnerStockLogDialog({
                         setWeekOffset(0)
                         setSelectedBatch(null)
                       }}
-                      className="inline-flex items-center rounded-md border border-line bg-ink-50 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900 sm:absolute sm:right-3"
+                      className="w-full sm:w-auto inline-flex items-center justify-center rounded-md border border-line bg-ink-50 px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-ink-100 hover:text-ink-900 sm:absolute sm:right-3 cursor-pointer"
                     >
                       Kembali ke Minggu Ini
                     </button>
@@ -785,7 +913,7 @@ function PartnerStockLogDialog({
                 </div>
 
                 {/* 2. Grid 7 Hari (Senin sampai Minggu) */}
-                <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                <div className="grid grid-cols-7 gap-1 sm:gap-2">
                   {weekDays.map((d, index) => {
                     const dStr = toLocalDateStr(d)
                     const isSelected = dStr === activeDateStr
@@ -803,46 +931,53 @@ function PartnerStockLogDialog({
                           setSelectedDateStr(dStr)
                           setSelectedBatch(null)
                         }}
-                        className={`group relative flex flex-col items-center justify-between rounded-md border p-2 text-center transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:p-2.5 ${isSelected
+                        className={`group relative flex flex-col items-center justify-between rounded-lg border p-1 sm:p-2 sm:p-2.5 text-center transition-all focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 cursor-pointer min-h-[62px] sm:min-h-[74px] ${
+                          isSelected
                             ? 'border-ink-900 bg-ink-900 text-white shadow-sm ring-2 ring-ink-900/20'
                             : count > 0
-                              ? 'border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50/80'
+                              ? 'border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50/80 active:bg-ink-100'
                               : 'border-line/70 bg-ink-50/40 text-muted hover:border-line hover:bg-ink-50'
-                          }`}
+                        }`}
                       >
                         <span
-                          className={`text-[11px] font-semibold sm:text-xs ${isSelected ? 'text-white/90' : 'text-muted'
-                            }`}
+                          className={`text-[10px] font-semibold sm:text-xs ${
+                            isSelected ? 'text-white/90' : 'text-muted'
+                          }`}
                         >
                           <span className="sm:hidden">{dayNameShort}</span>
                           <span className="hidden sm:inline">{dayNameFull}</span>
                         </span>
 
                         <span
-                          className={`my-1 font-display text-base font-bold tabular-nums sm:text-lg ${isSelected ? 'text-white' : 'text-ink-900'
-                            }`}
+                          className={`my-0.5 font-display text-sm font-bold tabular-nums sm:text-lg ${
+                            isSelected ? 'text-white' : 'text-ink-900'
+                          }`}
                         >
                           {dayNumber}
                         </span>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-center w-full">
                           {count > 0 ? (
                             <span
-                              className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${isSelected
+                              className={`inline-flex items-center justify-center gap-0.5 sm:gap-1 rounded-full px-1 py-0.2 sm:px-1.5 sm:py-0.5 text-[9px] sm:text-[10px] font-bold tabular-nums leading-none ${
+                                isSelected
                                   ? 'bg-white/20 text-white'
                                   : 'bg-ok-bg text-ok-fg'
-                                }`}
+                              }`}
                             >
                               <span
-                                className={`size-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-ok'
-                                  }`}
+                                className={`size-1 sm:size-1.5 rounded-full shrink-0 ${
+                                  isSelected ? 'bg-white' : 'bg-ok'
+                                }`}
                               />
-                              {count} log
+                              <span>{count}</span>
+                              <span className="hidden sm:inline"> log</span>
                             </span>
                           ) : (
                             <span
-                              className={`text-[10px] ${isSelected ? 'text-white/60' : 'text-muted/60'
-                                }`}
+                              className={`text-[9px] sm:text-[10px] leading-none ${
+                                isSelected ? 'text-white/60' : 'text-muted/60'
+                              }`}
                             >
                               —
                             </span>
@@ -851,12 +986,14 @@ function PartnerStockLogDialog({
 
                         {isToday ? (
                           <span
-                            className={`absolute -top-1.5 right-1 rounded-sm px-1 text-[8px] font-bold uppercase tracking-wider ${isSelected
+                            className={`absolute -top-1.5 left-1/2 -translate-x-1/2 rounded-full px-1 text-[7px] sm:text-[8px] font-bold uppercase tracking-wider whitespace-nowrap shadow-2xs ${
+                              isSelected
                                 ? 'bg-white text-ink-900'
                                 : 'bg-ink-900 text-white'
-                              }`}
+                            }`}
                           >
-                            Hari Ini
+                            <span className="hidden sm:inline">Hari Ini</span>
+                            <span className="sm:hidden">Kini</span>
                           </span>
                         ) : null}
                       </button>
@@ -865,18 +1002,18 @@ function PartnerStockLogDialog({
                 </div>
 
                 {/* 3. Panel Detail Hari Terpilih & Jam-Jam Perubahan */}
-                <div className="rounded-md border border-line bg-white p-4 sm:p-5 shadow-xs">
-                  <div className="flex flex-col gap-2 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="rounded-lg border border-line bg-white p-3.5 sm:p-5 shadow-xs">
+                  <div className="flex flex-col gap-2 border-b border-line pb-3 sm:flex-row sm:items-center sm:justify-between sm:pb-4">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Calendar className="size-4 text-ink-700" aria-hidden="true" />
-                        <h4 className="font-display text-base font-bold text-ink-900">
+                        <Calendar className="size-4 text-ink-700 shrink-0" aria-hidden="true" />
+                        <h4 className="font-display text-sm sm:text-base font-bold text-ink-900">
                           {formatDayDate(activeDateObj)}
                         </h4>
                       </div>
                       <p className="mt-0.5 text-xs text-muted">
                         {dayBatches.length > 0
-                          ? `${dayBatches.length} sesi · ${activeDateLogs.length} produk`
+                          ? `${dayBatches.length} sesi · ${activeDateLogs.length} produk tercatat`
                           : 'Tidak ada laporan stok tercatat pada tanggal ini'}
                       </p>
                     </div>
@@ -884,32 +1021,34 @@ function PartnerStockLogDialog({
                     {activeDateLogs.length > 0 ? (
                       <div className="flex flex-wrap items-center gap-1.5 text-xs">
                         {totalDayConsumed > 0 ? (
-                          <span className="rounded-md bg-crit-bg px-2 py-0.5 font-bold text-crit-fg tabular-nums">
-                            −{totalDayConsumed} pcs
+                          <span className="inline-flex items-center gap-1 rounded-md bg-crit-bg px-2 py-0.5 font-bold text-crit-fg tabular-nums">
+                            <span className="text-[10px] uppercase font-semibold text-crit-fg/70">Keluar:</span>
+                            <span>−{totalDayConsumed} pcs</span>
                           </span>
                         ) : null}
                         {totalDayRestocked > 0 ? (
-                          <span className="rounded-md bg-ok-bg px-2 py-0.5 font-bold text-ok-fg tabular-nums">
-                            +{totalDayRestocked} pcs
+                          <span className="inline-flex items-center gap-1 rounded-md bg-ok-bg px-2 py-0.5 font-bold text-ok-fg tabular-nums">
+                            <span className="text-[10px] uppercase font-semibold text-ok-fg/70">Masuk:</span>
+                            <span>+{totalDayRestocked} pcs</span>
                           </span>
                         ) : null}
                       </div>
                     ) : null}
                   </div>
 
-                  <div className="pt-4">
+                  <div className="pt-3.5 sm:pt-4">
                     {dayBatches.length === 0 ? (
                       <EmptyState
                         title="Tidak ada aktivitas stok"
                         description={`Cabang ${partner.partner_name} tidak mencatat perubahan stok fisik pada ${formatDayDate(activeDateObj)}.`}
                       />
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-2.5 sm:space-y-3">
                         <div className="flex items-center justify-between text-xs text-muted">
                           <span className="font-semibold text-ink-900">
                             Sesi Waktu
                           </span>
-                          <span>
+                          <span className="tabular-nums">
                             {dayBatches.length} sesi tercatat
                           </span>
                         </div>
@@ -920,7 +1059,7 @@ function PartnerStockLogDialog({
                               key={batch.key}
                               type="button"
                               onClick={() => setSelectedBatch(batch)}
-                              className="group flex flex-col justify-between rounded-lg border border-line bg-white p-3.5 text-left shadow-2xs transition-all hover:border-ink-500 hover:bg-ink-50/40 hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                              className="group flex flex-col justify-between rounded-lg border border-line bg-white p-3 sm:p-3.5 text-left shadow-2xs transition-all hover:border-ink-500 hover:bg-ink-50/40 hover:shadow-xs active:scale-[0.99] active:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div className="flex items-center gap-2">
@@ -938,16 +1077,17 @@ function PartnerStockLogDialog({
                                 </div>
 
                                 <span
-                                  className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-semibold ${batch.source === 'order_received'
+                                  className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-semibold ${
+                                    batch.source === 'order_received'
                                       ? 'bg-ok-bg text-ok-fg'
                                       : 'bg-ink-100 text-ink-700'
-                                    }`}
+                                  }`}
                                 >
                                   {batch.sourceLabel}
                                 </span>
                               </div>
 
-                              <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2 text-xs">
+                              <div className="mt-2.5 flex items-center justify-between border-t border-line/60 pt-2 text-xs">
                                 <div className="flex items-center gap-1.5 font-bold tabular-nums">
                                   {batch.totalConsumed > 0 ? (
                                     <span className="rounded bg-crit-bg px-1.5 py-0.5 text-crit-fg">
@@ -977,11 +1117,11 @@ function PartnerStockLogDialog({
             )}
           </div>
 
-          <div className="flex justify-end border-t border-line bg-paper/60 px-4 py-3 sm:px-5">
+          <div className="flex shrink-0 items-center justify-end border-t border-line bg-paper/90 px-4 py-3 sm:px-6">
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="min-h-10 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                className="min-h-11 rounded-md border border-line bg-white px-5 text-sm font-semibold text-ink-900 hover:bg-ink-50 active:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer shadow-2xs"
               >
                 Tutup
               </button>
@@ -1066,57 +1206,7 @@ function AdminDashboard() {
   const queryClient = useQueryClient()
   useInventoryEvents(user?.role === 'admin' ? token : null, 'admin')
   const [tab, setTab] = useState<AdminTab>('stocks')
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
-  const mobileCloseButtonRef = useRef<HTMLButtonElement>(null)
-  const sidebarRef = useRef<HTMLElement>(null)
-  const selectTab = (nextTab: AdminTab) => {
-    setTab(nextTab)
-    setMobileMenuOpen(false)
-  }
-
-  useEffect(() => {
-    if (!mobileMenuOpen) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    mobileCloseButtonRef.current?.focus()
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMobileMenuOpen(false)
-        return
-      }
-      if (event.key !== 'Tab') return
-      const focusable = Array.from(
-        sidebarRef.current?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') ?? [],
-      ).filter((button) => button.offsetParent !== null)
-      if (focusable.length === 0) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      document.removeEventListener('keydown', handleKeyDown)
-      mobileMenuButtonRef.current?.focus()
-    }
-  }, [mobileMenuOpen])
-
-  useEffect(() => {
-    const desktop = window.matchMedia('(min-width: 1024px)')
-    const closeMobileMenu = () => {
-      if (desktop.matches) setMobileMenuOpen(false)
-    }
-    desktop.addEventListener('change', closeMobileMenu)
-    return () => desktop.removeEventListener('change', closeMobileMenu)
-  }, [])
+  const [shipmentPage, setShipmentPage] = useState(1)
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [partner, setPartner] = useState('semua')
@@ -1193,6 +1283,12 @@ function AdminDashboard() {
     queryFn: async () =>
       unwrapData(await api.orders.get({ query: {} }), 'Pesanan belum dimuat'),
     enabled: user?.role === 'admin' && (tab === 'orders' || tab === 'alerts'),
+    staleTime: 30_000,
+  })
+  const shipmentLogs = useQuery<ShipmentLogPage>({
+    queryKey: ['admin-shipment-logs', shipmentPage],
+    queryFn: () => adminFetch(`shipment-logs?page=${shipmentPage}`),
+    enabled: user?.role === 'admin' && tab === 'shipments',
     staleTime: 30_000,
   })
   const notifications = useQuery<NotificationItem[]>({
@@ -1292,6 +1388,7 @@ function AdminDashboard() {
         queryClient.invalidateQueries({ queryKey: ['admin-metrics'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-notifications'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-central-products'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-shipment-logs'] }),
       ])
     },
     onError: (error: unknown) => toast.error(getErrorMessage(error)),
@@ -1312,7 +1409,8 @@ function AdminDashboard() {
     },
     onSuccess: async (_data, variables) => {
       dirtyApprovalOrderIds.current.delete(variables.id)
-      toast.success('Jumlah persetujuan disimpan')
+      toast.success('Permintaan disetujui, beralih ke tab Setelah Persetujuan')
+      setActiveOrderCategory('selesai')
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-metrics'] }),
@@ -1388,60 +1486,70 @@ function AdminDashboard() {
   }
 
   return (
-    <div className="dashboard-page admin-dashboard min-h-screen text-text lg:flex">
-      <button
-        type="button"
-        className={`fixed inset-0 z-40 bg-ink-900/35 transition-opacity duration-[240ms] lg:hidden ${mobileMenuOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-        aria-label="Tutup menu admin"
-        inert={!mobileMenuOpen}
-        onClick={() => setMobileMenuOpen(false)}
-      />
+    <div className="dashboard-page admin-dashboard min-h-screen pb-24 text-text lg:flex lg:pb-0">
       <AdminSidebar
-        sidebarRef={sidebarRef}
-        mobileCloseButtonRef={mobileCloseButtonRef}
-        mobileMenuOpen={mobileMenuOpen}
-        onCloseMobile={() => setMobileMenuOpen(false)}
         tab={tab}
-        onSelectTab={selectTab}
+        onSelectTab={setTab}
         pendingOrders={metrics.data?.pendingOrders}
         unread={unread}
         userName={user.full_name}
-        onLogout={() => { logout(); void navigate({ to: '/login' }) }}
+        onLogout={() => {
+          logout()
+          void navigate({ to: '/login' })
+        }}
       />
 
       <div className="min-w-0 flex-1">
         <header className="admin-topbar sticky top-0 z-30 border-b border-line bg-white">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-            <div className="flex min-w-0 items-center gap-2">
-              <button
-                ref={mobileMenuButtonRef}
-                type="button"
-                onClick={() => setMobileMenuOpen(true)}
-                className="grid size-11 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-ink-50 lg:hidden"
-                aria-label="Buka menu admin"
-                aria-controls="admin-sidebar"
-                aria-expanded={mobileMenuOpen}
-              >
-                <Menu className="size-5" aria-hidden="true" />
-              </button>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ume/10 text-ume lg:hidden">
+                <Boxes className="size-5" aria-hidden="true" />
+              </span>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-ink-700 lg:text-muted">Admin Pusat</p>
-                <p className="truncate font-display text-base font-semibold text-ink-900 sm:text-lg">{adminTabLabels[tab]}</p>
+                <p className="truncate font-display text-base font-semibold text-ink-900 sm:text-lg">
+                  {adminTabLabels[tab]}
+                </p>
+                <p className="truncate text-xs font-semibold text-ume sm:text-sm">
+                  Portal Admin Pusat · {user.full_name}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => setTab('alerts')} className="relative grid size-11 place-items-center rounded-md text-ink-700 hover:bg-ink-50" aria-label={`${unread} notifikasi belum dibaca`}>
-                <Bell className="size-5" aria-hidden="true" />
-                {unread ? <span className="absolute right-1 top-1 rounded-sm bg-crit px-1 text-[10px] font-bold text-white">{unread}</span> : null}
+            <div className="flex items-center gap-1 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => setTab('alerts')}
+                aria-label={`${unread} notifikasi belum dibaca`}
+                className={`relative inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition ${
+                  tab === 'alerts'
+                    ? 'bg-ume/10 text-ume ring-1 ring-ume/20'
+                    : 'text-muted hover:bg-ume/5 hover:text-ume'
+                }`}
+              >
+                <Bell className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Notifikasi</span>
+                {unread ? (
+                  <span className="grid min-w-4 h-4 place-items-center rounded-full bg-crit px-1 text-[10px] font-bold text-white tabular-nums">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                ) : null}
               </button>
-              <button type="button" aria-label="Keluar" onClick={() => { logout(); void navigate({ to: '/login' }) }} className="grid size-11 place-items-center rounded-md text-muted hover:bg-ink-50 lg:hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  logout()
+                  void navigate({ to: '/login' })
+                }}
+                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted hover:bg-ume/5 hover:text-crit-fg"
+              >
                 <LogOut className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Keluar</span>
               </button>
             </div>
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28 lg:pb-8">
           {tab === 'stocks' ? (
             <section aria-labelledby="summary-title" className="dashboard-panel-enter">
               <div className="mb-4 flex items-end justify-between gap-3">
@@ -1542,6 +1650,14 @@ function AdminDashboard() {
               onNavigateToStock={handleNavigateToStock}
             />
           ) : null}
+          {tab === 'shipments' ? (
+            <ShipmentLogPanel
+              page={shipmentPage}
+              query={shipmentLogs}
+              onPageChange={setShipmentPage}
+              onViewOrder={(id) => handleViewOrderDetail(id, 'selesai')}
+            />
+          ) : null}
           {tab === 'partners' ? <PartnerManagementPanel /> : null}
           {tab === 'data-science' ? (
             <DataSciencePanel
@@ -1569,15 +1685,71 @@ function AdminDashboard() {
           ) : null}
         </main>
       </div>
+
+      {/* Floating Pill Nav Bar (Mode Mobile) */}
+      <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none bg-gradient-to-t from-[#faf7f2] via-[#faf7f2]/80 to-transparent px-2.5 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+        <nav
+          className="pointer-events-auto mx-auto flex max-w-lg items-center justify-between gap-1 overflow-x-auto rounded-full border border-line/80 bg-white/95 p-1.5 shadow-xl shadow-ink-900/8 backdrop-blur-xl ring-1 ring-black/5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          aria-label="Menu navigasi admin"
+        >
+          {adminNavTabs.map(({ id, shortLabel, Icon }) => {
+            const isActive = tab === id
+            const badgeCount =
+              id === 'orders'
+                ? metrics.data?.pendingOrders
+                : id === 'alerts'
+                  ? unread
+                  : undefined
+            const isCritical = id === 'alerts'
+
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`group relative flex flex-1 shrink-0 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 px-1.5 text-[10px] font-semibold transition-all duration-300 ease-out focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ume ${
+                  isActive
+                    ? 'border border-ume/30 bg-ume/15 text-ume shadow-xs backdrop-blur-md font-bold scale-[1.03]'
+                    : 'border border-transparent text-muted hover:border-ume/20 hover:bg-ume/8 hover:text-ume hover:shadow-2xs hover:backdrop-blur-md active:scale-95'
+                }`}
+              >
+                {/* Efek kilau kaca atas untuk tab aktif */}
+                {isActive ? (
+                  <span
+                    className="pointer-events-none absolute inset-x-2 top-1 h-[1.5px] rounded-full bg-white/80"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <Icon
+                  className={`size-4 shrink-0 transition-all duration-300 ease-out ${
+                    isActive
+                      ? 'scale-110 text-ume drop-shadow-xs'
+                      : 'text-muted group-hover:scale-105 group-hover:text-ume'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span className="leading-tight truncate max-w-[54px]">{shortLabel}</span>
+                {badgeCount && badgeCount > 0 ? (
+                  <span
+                    className={`absolute -right-0.5 -top-0.5 grid min-w-4 h-4 place-items-center rounded-full px-1 text-[9px] font-bold tabular-nums text-white ${
+                      isCritical ? 'bg-crit' : 'bg-ink-900'
+                    }`}
+                    aria-label={`${badgeCount} item`}
+                  >
+                    {badgeCount > 99 ? '99+' : badgeCount}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </nav>
+      </div>
     </div>
   )
 }
 
 function AdminSidebar({
-  sidebarRef,
-  mobileCloseButtonRef,
-  mobileMenuOpen,
-  onCloseMobile,
   tab,
   onSelectTab,
   pendingOrders,
@@ -1585,10 +1757,6 @@ function AdminSidebar({
   userName,
   onLogout,
 }: {
-  sidebarRef: RefObject<HTMLElement | null>
-  mobileCloseButtonRef: RefObject<HTMLButtonElement | null>
-  mobileMenuOpen: boolean
-  onCloseMobile: () => void
   tab: AdminTab
   onSelectTab: (tab: AdminTab) => void
   pendingOrders?: number
@@ -1601,15 +1769,16 @@ function AdminSidebar({
   return (
     <aside
       id="admin-sidebar"
-      ref={sidebarRef}
-      className={`admin-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(18rem,calc(100vw-3rem))] shrink-0 overflow-hidden border-r border-line lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:translate-x-0 lg:visible ${mobileMenuOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'} ${collapsed ? 'lg:w-16' : 'lg:w-64'}`}
-      data-mobile-open={mobileMenuOpen}
+      className={`admin-sidebar sticky top-0 z-20 hidden h-screen shrink-0 overflow-hidden border-r border-line lg:flex ${
+        collapsed ? 'lg:w-16' : 'lg:w-64'
+      }`}
       data-collapsed={collapsed}
-      role={mobileMenuOpen ? 'dialog' : undefined}
-      aria-modal={mobileMenuOpen ? true : undefined}
       aria-label="Navigasi admin pusat"
     >
-      <div className="admin-sidebar-content flex h-full w-[min(18rem,calc(100vw-3rem))] shrink-0 flex-col overflow-y-auto px-3 py-5 lg:w-64" inert={collapsed && !mobileMenuOpen}>
+      <div
+        className="admin-sidebar-content flex h-full w-full shrink-0 flex-col overflow-y-auto px-3 py-5"
+        inert={collapsed ? true : undefined}
+      >
         <div className="flex items-center gap-2 lg:pr-11">
           <span className="grid size-10 shrink-0 place-items-center rounded-md bg-ink-900 text-white">
             <Boxes className="size-5" aria-hidden="true" />
@@ -1618,20 +1787,12 @@ function AdminSidebar({
             <p className="font-display text-base font-semibold leading-tight text-ink-900">Daisuki</p>
             <p className="text-xs text-muted">Admin Pusat</p>
           </div>
-          <button
-            ref={mobileCloseButtonRef}
-            type="button"
-            onClick={onCloseMobile}
-            className="grid size-11 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-white lg:hidden"
-            aria-label="Tutup sidebar"
-          >
-            <X className="size-5" aria-hidden="true" />
-          </button>
         </div>
         <nav className="mt-9 flex-1 space-y-1" aria-label="Menu admin">
           <p className="px-3 pb-2 text-xs font-semibold text-muted">Operasional</p>
           <TabButton label="Stok cabang" Icon={Boxes} active={tab === 'stocks'} onClick={() => onSelectTab('stocks')} />
           <TabButton label="Persetujuan" Icon={ClipboardCheck} active={tab === 'orders'} count={pendingOrders} onClick={() => onSelectTab('orders')} />
+          <TabButton label="Log pengiriman" Icon={Truck} active={tab === 'shipments'} onClick={() => onSelectTab('shipments')} />
           <TabButton label="Notifikasi" Icon={Bell} active={tab === 'alerts'} count={unread} critical onClick={() => onSelectTab('alerts')} />
           <TabButton label="Mitra" Icon={Building2} active={tab === 'partners'} onClick={() => onSelectTab('partners')} />
           <p className="px-3 pb-2 pt-6 text-xs font-semibold text-muted">Analisis</p>
@@ -3183,6 +3344,12 @@ function OrderPanel({
 
                 <div className="flex items-center gap-2 shrink-0">
                   <OrderStatusBadge status={order.status} />
+                  {order.status === 'disetujui' ? (
+                    <span className="inline-flex items-center gap-1 rounded bg-order-disetujui-bg px-2 py-0.5 text-[10px] font-bold text-order-disetujui border border-order-disetujui/30">
+                      <Truck className="size-3" aria-hidden="true" />
+                      <span>Siap Kirim</span>
+                    </span>
+                  ) : null}
                   {order.status === 'selesai' && !order.receipt_photo_present ? (
                     <span className="rounded bg-warn-bg px-1.5 py-0.5 text-[10px] font-semibold text-warn-fg">
                       {order.receipt_proof_requested_at ? 'Bukti diminta' : 'Tanpa foto'}
@@ -3236,10 +3403,18 @@ function OrderPanel({
                     ) : null}
                   </div>
 
-                  <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-ink-700 group-hover:text-ink-900 group-hover:translate-x-0.5 transition-all">
-                    <span className="hidden sm:inline">Detail</span>
-                    <ChevronRight className="size-4" aria-hidden="true" />
-                  </span>
+                  {order.status === 'disetujui' ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-order-pengiriman text-white px-2.5 py-1 text-xs font-bold shadow-2xs group-hover:bg-order-pengiriman/90 transition-all">
+                      <Truck className="size-3.5" aria-hidden="true" />
+                      <span>Kirim sekarang ke mitra</span>
+                      <ChevronRight className="size-3.5" aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-ink-700 group-hover:text-ink-900 group-hover:translate-x-0.5 transition-all">
+                      <span className="hidden sm:inline">Detail</span>
+                      <ChevronRight className="size-4" aria-hidden="true" />
+                    </span>
+                  )}
                 </div>
               </div>
             </button>
@@ -3274,7 +3449,10 @@ function OrderPanel({
         }}
         onApprovedChange={onApprovedChange}
         onAdminNoteChange={onAdminNoteChange}
-        onApprove={onApprove}
+        onApprove={async (order) => {
+          await onApprove(order)
+          setActiveCategory('selesai')
+        }}
         onReject={onReject}
         onShip={onShip}
       />
@@ -3312,6 +3490,7 @@ function ApprovalDialog({
   const [rejectionMode, setRejectionMode] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
   const [actionError, setActionError] = useState('')
+  const [shippingConfirmMode, setShippingConfirmMode] = useState(false)
   const queryClient = useQueryClient()
   const receiptProof = useQuery<{ photo_data_url: string | null }>({
     queryKey: ['admin-receipt-proof', order?.id],
@@ -3341,6 +3520,7 @@ function ApprovalDialog({
     setRejectionMode(false)
     setRejectionReason('')
     setActionError('')
+    setShippingConfirmMode(false)
   }, [order?.id])
 
   if (!order) return null
@@ -3515,6 +3695,29 @@ function ApprovalDialog({
           </div>
 
           <div className="space-y-5 p-5 sm:p-6">
+            {/* Banner Status Persetujuan & Informasi Kesiapan Pengiriman */}
+            {order.status === 'disetujui' ? (
+              <div className="rounded-lg border border-order-disetujui/40 bg-order-disetujui-bg/60 p-4 text-sm text-ink-900">
+                <div className="flex items-center gap-2 font-bold text-order-disetujui">
+                  <CheckCircle2 className="size-4.5" />
+                  <span>Permintaan Restock Telah Disetujui</span>
+                </div>
+                <p className="mt-1 text-xs text-ink-800 leading-relaxed">
+                  Pesanan telah masuk ke tab <strong>Setelah Persetujuan</strong>. Silakan periksa kesiapan fisik barang di gudang pusat:
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
+                    <span className="size-2 rounded-full bg-order-pengiriman" />
+                    <strong>Kirim sekarang ke mitra:</strong> jika armada ekspedisi & barang sudah siap
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
+                    <span className="size-2 rounded-full bg-muted" />
+                    <strong>Tahan dulu pengiriman:</strong> jika fisik barang masih dipersiapkan
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
             {/* Banner Informasi Pengiriman */}
             {order.status === 'dalam_pengiriman' ? (
               <div className="rounded-lg border border-order-pengiriman-bg bg-order-pengiriman-bg/40 p-3.5 text-sm text-ink-900">
@@ -4024,6 +4227,47 @@ function ApprovalDialog({
                 {actionError}
               </p>
             ) : null}
+
+            {/* Box Konfirmasi Kesiapan Pengiriman ke Mitra */}
+            {order.status === 'disetujui' && shippingConfirmMode ? (
+              <div className="rounded-lg border-2 border-order-pengiriman bg-order-pengiriman-bg/40 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-order-pengiriman text-white shadow-xs">
+                    <Truck className="size-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-display font-bold text-ink-900 text-sm sm:text-base">
+                      Kirim Sekarang ke {order.partner_name}?
+                    </h4>
+                    <p className="mt-1 text-xs text-ink-700 leading-relaxed">
+                      Pastikan barang fisik sudah dikemas dan kurir/armada ekspedisi telah siap berangkat ke cabang mitra. Stok gudang pusat akan langsung otomatis terpotong saat Anda mengirim.
+                    </p>
+                    <p className="mt-1.5 text-xs font-semibold text-warn-fg">
+                      Jika armada belum siap atau barang belum selesai dikemas, Anda bisa memilih <strong>Tahan dulu (Belum siap)</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-line/60">
+                  <button
+                    type="button"
+                    onClick={() => setShippingConfirmMode(false)}
+                    className="min-h-10 rounded-md border border-line bg-white px-4 text-xs font-semibold text-ink-700 hover:bg-paper cursor-pointer"
+                  >
+                    Tahan dulu (Belum siap)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => void runAction(() => onShip(order.id), true)}
+                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md bg-order-pengiriman px-4 text-xs font-bold text-white hover:bg-order-pengiriman/90 shadow-2xs disabled:opacity-50 cursor-pointer"
+                  >
+                    {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Truck className="size-3.5" />}
+                    <span>Ya, Sudah Siap & Kirim Sekarang</span>
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-white p-4 sm:flex-row sm:justify-end sm:p-5">
@@ -4032,7 +4276,7 @@ function ApprovalDialog({
                 type="button"
                 disabled={pending}
                 onClick={() => setRejectionMode(true)}
-                className="min-h-11 rounded-md border border-crit/50 px-4 text-sm font-semibold text-crit disabled:opacity-50"
+                className="min-h-11 rounded-md border border-crit/50 px-4 text-sm font-semibold text-crit disabled:opacity-50 cursor-pointer"
               >
                 Tolak permintaan
               </button>
@@ -4041,11 +4285,11 @@ function ApprovalDialog({
               <button
                 type="button"
                 disabled={approvalDisabled}
-                onClick={() => void runAction(() => onApprove(order))}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-700 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void runAction(() => onApprove(order), false)}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-700 px-5 text-sm font-semibold text-white hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-2xs"
               >
-                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-                Setujui jumlah
+                {pending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                <span>Setujui Permintaan</span>
               </button>
             ) : null}
             {order.status === 'disetujui' ? (
@@ -4057,27 +4301,39 @@ function ApprovalDialog({
                     onClick={() =>
                       void runAction(() => onApprove(order), false)
                     }
-                    className="min-h-11 rounded-md bg-ink-700 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="min-h-11 rounded-md bg-ink-700 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                   >
                     Simpan revisi
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  disabled={pending || hasChanges}
-                  onClick={() => void runAction(() => onShip(order.id))}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-order-pengiriman px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Truck className="size-4" aria-hidden="true" />
-                  Mulai kirim
-                </button>
+                {!shippingConfirmMode ? (
+                  <>
+                    <Dialog.Close asChild>
+                      <button
+                        type="button"
+                        className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-paper hover:text-ink-900 cursor-pointer"
+                      >
+                        Tahan dulu pengiriman
+                      </button>
+                    </Dialog.Close>
+                    <button
+                      type="button"
+                      disabled={pending || hasChanges}
+                      onClick={() => setShippingConfirmMode(true)}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-order-pengiriman px-5 text-sm font-bold text-white hover:bg-order-pengiriman/90 shadow-xs disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                    >
+                      <Truck className="size-4" aria-hidden="true" />
+                      <span>Kirim sekarang ke mitra</span>
+                    </button>
+                  </>
+                ) : null}
               </>
             ) : null}
             {!editable ? (
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-900"
+                  className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-900 hover:bg-paper cursor-pointer"
                 >
                   Tutup
                 </button>

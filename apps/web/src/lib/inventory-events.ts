@@ -17,7 +17,7 @@ const topics: Topic[] = [
 
 const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
   admin: {
-    orders: [['admin-orders']],
+    orders: [['admin-orders'], ['admin-shipment-logs']],
     stocks: [['admin-stocks']],
     logs: [
       ['admin-stock-logs-partner'],

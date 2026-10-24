@@ -34,9 +34,9 @@ export function BatchDetailModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[60] max-h-[88vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[60] flex max-h-[90vh] w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
           {/* Header Sticky */}
-          <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-line bg-ink-50/95 p-4 backdrop-blur-sm sm:p-5">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-ink-50/95 p-4 backdrop-blur-sm sm:p-5">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <Dialog.Title className="inline-flex items-center gap-1.5 font-display text-base font-bold text-ink-900 sm:text-lg">
@@ -62,10 +62,10 @@ export function BatchDetailModal({
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="grid size-9 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
+                className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
                 aria-label="Tutup rincian log"
               >
-                <X className="size-4" aria-hidden="true" />
+                <X className="size-5" aria-hidden="true" />
               </button>
             </Dialog.Close>
           </div>
@@ -90,7 +90,7 @@ export function BatchDetailModal({
           </div>
 
           {/* List Item Perubahan */}
-          <div className="p-4 sm:p-5">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5">
             <div className="space-y-2.5">
               {batch.logs.map((log) => {
                 const isConsumption = log.delta > 0
@@ -172,11 +172,11 @@ export function BatchDetailModal({
           </div>
 
           {/* Footer Sticky */}
-          <div className="sticky bottom-0 flex justify-end border-t border-line bg-paper/95 p-3 backdrop-blur-sm sm:px-5">
+          <div className="flex shrink-0 items-center justify-end border-t border-line bg-paper/95 p-3.5 backdrop-blur-sm sm:px-5">
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="min-h-9 rounded-md border border-line bg-white px-4 text-xs font-semibold text-ink-900 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                className="min-h-11 rounded-md border border-line bg-white px-5 text-sm font-semibold text-ink-900 hover:bg-ink-50 active:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer shadow-2xs"
               >
                 Tutup
               </button>

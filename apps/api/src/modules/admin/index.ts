@@ -1,8 +1,9 @@
 import { Elysia, t } from "elysia";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, sql as postgres } from "../../db/client";
 import {
   orders,
+  orderItems,
   partners,
   products,
   restockRecommendations,
@@ -36,15 +37,15 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       .where(eq(orders.status, "diproses"));
 
     const criticalRows = await db.execute(sql`
-      SELECT DISTINCT partner_id 
-      FROM partner_stocks 
-      WHERE (current_qty::float / par_level::float) < 0.20
+      SELECT DISTINCT partner_id
+      FROM partner_stocks
+      WHERE par_level > 0 AND (current_qty::float / NULLIF(par_level, 0)::float) < 0.20
     `);
 
     const criticalItems = await db.execute(sql<{ count: number }>`
-      SELECT count(*)::int as count 
-      FROM partner_stocks 
-      WHERE (current_qty::float / par_level::float) < 0.20
+      SELECT count(*)::int as count
+      FROM partner_stocks
+      WHERE par_level > 0 AND (current_qty::float / NULLIF(par_level, 0)::float) < 0.20
     `);
 
     return {
@@ -54,6 +55,68 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       criticalItemsCount: Number(criticalItems[0]?.count ?? 0),
     };
   })
+  .get(
+    "/shipment-logs",
+    async ({ headers, query, set }) => {
+      const user = await getAuthUser(headers);
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      if (user.role !== "admin") {
+        set.status = 403;
+        return { error: "Forbidden: Admin only" };
+      }
+
+      const page = Math.max(1, Math.min(10_000, Math.floor(Number(query.page) || 1)));
+      const pageSize = 20;
+      const [totalRow] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(orders)
+        .where(isNotNull(orders.shipped_at));
+      const rows = await db
+        .select({
+          id: orders.id,
+          order_no: orders.order_no,
+          partner_name: partners.name,
+          status: orders.status,
+          shipped_at: orders.shipped_at,
+        })
+        .from(orders)
+        .innerJoin(partners, eq(orders.partner_id, partners.id))
+        .where(isNotNull(orders.shipped_at))
+        .orderBy(desc(orders.shipped_at), desc(orders.id))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+
+      const items = rows.length
+        ? await db
+            .select({
+              order_id: orderItems.order_id,
+              product_name: products.name,
+              product_unit: products.unit,
+              qty_approved: orderItems.qty_approved,
+            })
+            .from(orderItems)
+            .innerJoin(products, eq(orderItems.product_id, products.id))
+            .where(inArray(orderItems.order_id, rows.map((row) => row.id)))
+        : [];
+      const itemsByOrder = new Map<string, typeof items>();
+      for (const item of items) {
+        const group = itemsByOrder.get(item.order_id) ?? [];
+        group.push(item);
+        itemsByOrder.set(item.order_id, group);
+      }
+
+      return {
+        data: rows.map((row) => ({ ...row, items: itemsByOrder.get(row.id) ?? [] })),
+        total: totalRow?.count ?? 0,
+        page,
+        page_size: pageSize,
+      };
+    },
+    { query: t.Object({ page: t.Optional(t.String()) }) },
+  )
   .get(
     "/partners",
     async ({ headers, query, set }) => {
