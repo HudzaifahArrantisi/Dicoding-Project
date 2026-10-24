@@ -566,34 +566,17 @@ function StocksPanel({
 }: StocksPanelProps) {
   return (
     <section aria-labelledby="stock-heading" className="dashboard-panel-enter">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="dashboard-eyebrow">Laporan harian</p>
-          <h1
-            id="stock-heading"
-            className="mt-1 text-2xl font-semibold text-ink-900 sm:text-3xl"
-          >
-            Sisa stok fisik
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted">
-            Sesuaikan jumlah dengan stok yang ada di rak, lalu simpan perubahan.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={changedIds.size === 0 || isSaving}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-ink-900 px-5 text-sm font-semibold text-white hover:bg-ink-700 disabled:opacity-50"
+      <div>
+        <p className="dashboard-eyebrow">Laporan harian</p>
+        <h1
+          id="stock-heading"
+          className="mt-1 text-2xl font-semibold text-ink-900 sm:text-3xl"
         >
-          {isSaving ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <Save className="size-4" aria-hidden="true" />
-          )}
-          {changedIds.size > 0
-            ? `Simpan ${changedIds.size} perubahan`
-            : 'Stok sudah sesuai'}
-        </button>
+          Sisa stok fisik
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted">
+          Sesuaikan jumlah dengan stok yang ada di rak, lalu simpan perubahan di bawah.
+        </p>
       </div>
 
       <div className="dashboard-surface mt-6 overflow-hidden">
@@ -778,6 +761,36 @@ function StocksPanel({
           )
         })}
       </div>
+
+      {query.data && query.data.length > 0 ? (
+        <div className="dashboard-surface mt-6 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-ink-900">
+              Konfirmasi stok rak
+            </h2>
+            <p className="mt-0.5 text-xs text-muted sm:text-sm">
+              {changedIds.size > 0
+                ? `${changedIds.size} produk telah diubah. Simpan untuk memperbarui laporan stok cabang.`
+                : 'Semua jumlah stok sudah sesuai dengan kondisi rak fisik toko saat ini.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={changedIds.size === 0 || isSaving}
+            className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-6 text-sm font-semibold text-white transition hover:bg-ink-700 disabled:opacity-50 sm:w-auto"
+          >
+            {isSaving ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Save className="size-4" aria-hidden="true" />
+            )}
+            {changedIds.size > 0
+              ? `Simpan ${changedIds.size} perubahan`
+              : 'Stok sudah sesuai'}
+          </button>
+        </div>
+      ) : null}
     </section>
   )
 }

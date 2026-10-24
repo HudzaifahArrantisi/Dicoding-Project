@@ -202,7 +202,7 @@ const getErrorMessage = (error: unknown) => {
     const msg = error.message.trim()
     if (msg && msg !== '[object Object]') return msg
   }
-  return 'Periksa koneksi, lalu coba lagi.'
+  return 'Periksa koneksi Jaringan anda!.'
 }
 
 function formatDetailedDateTime(dateInput: string | Date | null | undefined): string {
