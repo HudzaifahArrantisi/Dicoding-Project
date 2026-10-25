@@ -113,7 +113,7 @@ async function main() {
   if (existingUsers.length > 0 && !savedPassword) {
     throw new Error("Sebagian akun sudah ada, tetapi file kredensial lokal hilang; hentikan agar kata sandi tidak terpecah");
   }
-  const password = savedPassword ?? randomBytes(24).toString("base64url");
+  const password = savedPassword ?? "password123";
   if (!savedPassword) {
     const contents = [
       "Akun demo mitra Daisuki (jangan commit file ini)",
@@ -139,6 +139,7 @@ async function main() {
     await tx.insert(users).values(examples.map((example) => ({
       id: example.userId,
       email: example.email,
+      username: example.email.replace("@daisuki.test", ""),
       password_hash: passwordHash,
       role: "mitra" as const,
       partner_id: example.partnerId,

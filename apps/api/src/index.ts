@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { env } from "./env";
 import { sql } from "./db/client";
 import { db } from "./db/client";
-import { orders, partners } from "./db/schema";
+import { orders, partners, users } from "./db/schema";
 import { getAuthUser, validCsrf } from "./plugins/auth";
 import { UPLOADS_DIR } from "./lib/storage";
 import { authModule, meModule } from "./modules/auth";
@@ -226,5 +226,32 @@ export const app = new Elysia()
 console.log(
   `[${new Date().toLocaleTimeString()}] 🚀 Daisuki API berjalan di port ${app.server?.port} (host: 0.0.0.0)`,
 );
+
+if (process.env.NODE_ENV !== "production") {
+  void (async () => {
+    try {
+      const demoUsers = await db
+        .select({ id: users.id, email: users.email })
+        .from(users)
+        .where(sql`${users.email} LIKE 'mitra-demo-%@daisuki.test'`);
+
+      if (demoUsers.length > 0) {
+        const defaultHash = await Bun.password.hash("password123");
+        await db.execute(sql`
+          UPDATE users
+          SET
+            password_hash = ${defaultHash},
+            username = COALESCE(username, REPLACE(email, '@daisuki.test', ''))
+          WHERE email LIKE 'mitra-demo-%@daisuki.test'
+        `);
+        console.log(
+          `[AUTH] Berhasil menyinkronkan kata sandi 'password123' untuk ${demoUsers.length} akun demo mitra`,
+        );
+      }
+    } catch (err) {
+      console.warn("[AUTH] Sinkronisasi akun demo dilewati:", err instanceof Error ? err.message : String(err));
+    }
+  })();
+}
 
 export type App = typeof app;

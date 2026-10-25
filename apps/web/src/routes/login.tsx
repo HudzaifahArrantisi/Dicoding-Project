@@ -39,7 +39,7 @@ function LoginPage() {
     event.preventDefault()
     setError(null)
     setPendingAction('form')
-    await finishLogin(await login(email, password))
+    await finishLogin(await login(email.trim(), password))
     setPendingAction(null)
   }
 
