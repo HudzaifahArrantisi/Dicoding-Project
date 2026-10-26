@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Dialog } from 'radix-ui'
 import {
   AlertTriangle,
-  Boxes,
   Calendar,
   CheckCircle2,
   ChevronLeft,
@@ -533,8 +532,14 @@ function StocksPanel({
       <div className="dashboard-surface mt-6 overflow-hidden">
         <div className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-ink-100 text-ink-700">
-              <Boxes className="size-5" aria-hidden="true" />
+            <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-rose-500 via-rose-600 to-amber-400 p-0.5 shadow-sm shadow-rose-300/30" aria-hidden="true">
+              <img
+                src="/icons/logo.jpg"
+                alt=""
+                width={40}
+                height={40}
+                className="size-full rounded-md object-cover"
+              />
             </span>
             <div>
               <h2 className="text-sm font-semibold text-ink-900 sm:text-base">
@@ -719,9 +724,9 @@ function StocksPanel({
             type="button"
             onClick={onSave}
             disabled={changedIds.size === 0 || isSaving}
-            className={`group relative inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2.5 overflow-hidden rounded-full px-6 py-3 text-sm font-semibold transition-all duration-300 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:w-auto ${
+            className={`group relative inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2.5 overflow-hidden rounded-full px-6 py-3 text-sm font-semibold transition-all duration-300 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto ${
               changedIds.size > 0
-                ? 'border border-white/30 bg-gradient-to-r from-ink-900 via-ink-800 to-ink-900 text-white shadow-xl shadow-ink-900/20 backdrop-blur-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98]'
+                ? 'border border-emerald-400/40 bg-gradient-to-r from-emerald-600 via-emerald-700 to-emerald-600 text-white shadow-xl shadow-emerald-700/25 backdrop-blur-xl hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98]'
                 : 'border border-line/80 bg-gradient-to-r from-white/90 via-white/80 to-white/90 text-muted shadow-sm backdrop-blur-xl disabled:cursor-not-allowed disabled:opacity-60'
             }`}
           >
@@ -1136,7 +1141,7 @@ function OrderForm({
           type="button"
           onClick={onSubmit}
           disabled={orderItems.length === 0 || isSubmitting}
-          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ink-700 px-5 text-sm font-semibold text-white hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:w-auto"
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto"
         >
           {isSubmitting ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -1216,9 +1221,9 @@ function OrderHistory({
           <button
             type="button"
             onClick={onOpenOrder}
-            className="mt-2 inline-flex min-h-11 items-center justify-center gap-1.5 self-start rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 sm:mt-0 sm:self-auto"
+            className="mt-2 inline-flex min-h-11 items-center justify-center gap-1.5 self-start rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 sm:mt-0 sm:self-auto"
           >
-            <PackagePlus className="size-4 text-ume" />
+            <PackagePlus className="size-4" />
             <span>Ajukan Restock Baru</span>
           </button>
         ) : null}
@@ -1248,7 +1253,7 @@ function OrderHistory({
               <button
                 type="button"
                 onClick={onOpenOrder}
-                className="min-h-11 rounded-md bg-ink-700 px-4 text-sm font-semibold text-white"
+                className="min-h-11 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700"
               >
                 Ajukan restock
               </button>
@@ -1263,10 +1268,10 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('semua')}
-            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
+            className={`min-h-10 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               statusFilter === 'semua'
-                ? 'bg-ink-900 text-white'
-                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+                ? 'border border-emerald-300/90 bg-emerald-50 text-emerald-950 font-semibold shadow-xs'
+                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
           >
             Semua ({allOrders.length})
@@ -1274,10 +1279,10 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('diproses')}
-            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
+            className={`min-h-10 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               statusFilter === 'diproses'
-                ? 'bg-ink-900 text-white'
-                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+                ? 'border border-amber-300/90 bg-amber-50 text-amber-950 font-semibold shadow-xs'
+                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
           >
             Menunggu Persetujuan (
@@ -1286,10 +1291,10 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('disetujui')}
-            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
+            className={`min-h-10 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               statusFilter === 'disetujui'
-                ? 'bg-ink-900 text-white'
-                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+                ? 'border border-emerald-300/90 bg-emerald-50 text-emerald-950 font-semibold shadow-xs'
+                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
           >
             Disetujui ({allOrders.filter((o) => o.status === 'disetujui').length}
@@ -1298,10 +1303,10 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('dalam_pengiriman')}
-            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
+            className={`min-h-10 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               statusFilter === 'dalam_pengiriman'
-                ? 'bg-ink-900 text-white'
-                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+                ? 'border border-sky-300/90 bg-sky-50 text-sky-950 font-semibold shadow-xs'
+                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
           >
             Dalam Pengiriman (
@@ -1310,10 +1315,10 @@ function OrderHistory({
           <button
             type="button"
             onClick={() => setStatusFilter('selesai')}
-            className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${
+            className={`min-h-10 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
               statusFilter === 'selesai'
-                ? 'bg-ink-900 text-white'
-                : 'bg-white text-muted hover:bg-paper hover:text-ink-900 border border-line'
+                ? 'border border-emerald-300/90 bg-emerald-50 text-emerald-950 font-semibold shadow-xs'
+                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
           >
             Selesai ({allOrders.filter((o) => o.status === 'selesai').length})
@@ -1652,7 +1657,7 @@ function OrderHistory({
                               .then(() => setReceiptPhoto(null))
                               .catch(() => undefined)
                           }}
-                          className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                          className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
                         >
                           {uploadingProof ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <ImagePlus className="size-4" aria-hidden="true" />}
                           Kirim foto bukti
@@ -1971,7 +1976,7 @@ function ProfilePanel({ user }: { user: User }) {
         <button
           type="submit"
           disabled={saveProfile.isPending || isProcessingPhoto}
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-ink-700 px-5 text-sm font-semibold text-white hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:w-auto"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto"
         >
           {saveProfile.isPending || isProcessingPhoto ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -2366,7 +2371,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
           type="button"
           onClick={handleExportCsv}
           disabled={filteredLogs.length === 0}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 shadow-2xs transition-colors hover:border-ink-400 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download className="size-4" aria-hidden="true" />
           Unduh CSV
@@ -2375,15 +2380,15 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
 
       <div className="flex items-center justify-start sm:justify-end">
         {/* View Mode Toggle */}
-        <div className="flex w-full items-center rounded-md border border-line bg-white p-1 text-sm font-semibold sm:w-auto">
+        <div className="flex w-full items-center rounded-lg border border-line bg-white p-1 text-sm font-semibold sm:w-auto">
           <button
             type="button"
             onClick={() => setViewMode('calendar')}
             aria-pressed={viewMode === 'calendar'}
-            className={`inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-3 transition-colors sm:flex-none ${
+            className={`inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-all sm:flex-none ${
               viewMode === 'calendar'
-                ? 'bg-ink-900 text-white'
-                : 'text-muted hover:text-ink-900'
+                ? 'border border-emerald-300/90 bg-emerald-50 text-emerald-950 shadow-xs'
+                : 'border border-transparent text-muted hover:text-ink-900'
             }`}
           >
             <Calendar className="size-3.5" aria-hidden="true" />
@@ -2393,10 +2398,10 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
             type="button"
             onClick={() => setViewMode('list')}
             aria-pressed={viewMode === 'list'}
-            className={`inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-3 transition-colors sm:flex-none ${
+            className={`inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-all sm:flex-none ${
               viewMode === 'list'
-                ? 'bg-ink-900 text-white'
-                : 'text-muted hover:text-ink-900'
+                ? 'border border-emerald-300/90 bg-emerald-50 text-emerald-950 shadow-xs'
+                : 'border border-transparent text-muted hover:text-ink-900'
             }`}
           >
             <Clock className="size-3.5" aria-hidden="true" />
@@ -2541,9 +2546,9 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                   }}
                   aria-label={`${dayNameFull}, ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}, ${count} catatan${isToday ? ', hari ini' : ''}`}
                   aria-pressed={isSelected}
-                  className={`group relative flex min-h-16 flex-col items-center justify-center rounded-md border px-0.5 py-1 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:justify-between sm:p-2.5 ${
+                  className={`group relative flex min-h-16 flex-col items-center justify-center rounded-md border px-0.5 py-1 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald-600 sm:justify-between sm:p-2.5 ${
                     isSelected
-                      ? 'border-ink-900 bg-ink-900 text-white shadow-sm ring-2 ring-ink-900/20'
+                      ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/25'
                       : count > 0
                         ? 'border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50/80'
                         : 'border-line/70 bg-ink-50/40 text-muted hover:border-line hover:bg-ink-50'
@@ -2601,8 +2606,8 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                     <span
                       className={`absolute -top-1.5 right-1 hidden rounded-sm px-1 text-[8px] font-bold uppercase tracking-wider sm:block ${
                         isSelected
-                          ? 'bg-white text-ink-900'
-                          : 'bg-ink-900 text-white'
+                          ? 'bg-white text-emerald-800'
+                          : 'bg-emerald-700 text-white'
                       }`}
                     >
                       Hari Ini

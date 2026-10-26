@@ -349,8 +349,7 @@ function ShipmentLogPanel({
                 <article key={entry.id} className="px-4 py-4 sm:px-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold tabular-nums text-ink-700">{entry.order_no}</p>
-                      <h3 className="mt-1 font-display text-lg font-semibold text-ink-900">{entry.partner_name}</h3>
+                      <h3 className="font-display text-lg font-semibold text-ink-900">{entry.partner_name}</h3>
                       <p className="mt-1 text-sm text-muted">Dikirim {sentAt} WIB</p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -371,7 +370,10 @@ function ShipmentLogPanel({
                       <span key={item.product_name}>{item.product_name} <strong className="tabular-nums">{item.qty_approved ?? 0} {item.product_unit}</strong></span>
                     ))}
                   </div>
-                  <p className="mt-2 text-xs tabular-nums text-muted">Total {totalQty} unit · {entry.items.length} jenis barang</p>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                    <span className="tabular-nums">Total {totalQty} unit · {entry.items.length} jenis barang</span>
+                    <span className="font-mono text-xs text-ink-600">{entry.order_no}</span>
+                  </div>
                 </article>
               )
             })}
@@ -3751,24 +3753,24 @@ function OrderPanel({
       </div>
 
       <nav
-        className="flex max-w-full items-center gap-1 overflow-x-auto border-b border-line pb-1"
+        className="flex max-w-full items-center gap-2 overflow-x-auto border-b border-line pb-2.5"
         aria-label="Kategori status pesanan"
       >
         <button
           type="button"
           onClick={() => setActiveCategory('menunggu')}
-          className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors ${activeCategory === 'menunggu'
-              ? 'bg-ink-900 text-white'
-              : 'text-muted hover:bg-ink-50 hover:text-ink-900'
+          className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'menunggu'
+              ? 'border border-amber-300/90 bg-amber-50/95 text-amber-950 shadow-xs'
+              : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
         >
-          <Clock className="size-4" aria-hidden="true" />
+          <Clock className={`size-4 ${activeCategory === 'menunggu' ? 'text-amber-600' : 'text-muted'}`} aria-hidden="true" />
           <span>Menunggu Persetujuan</span>
           {pendingCount > 0 ? (
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-bold ${activeCategory === 'menunggu'
-                  ? 'bg-ume text-white'
-                  : 'bg-warn-bg text-warn'
+              className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${activeCategory === 'menunggu'
+                  ? 'bg-amber-500 text-white shadow-2xs'
+                  : 'bg-warn-bg text-warn border border-warn/30'
                 }`}
             >
               {pendingCount}
@@ -3779,18 +3781,18 @@ function OrderPanel({
         <button
           type="button"
           onClick={() => setActiveCategory('selesai')}
-          className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors ${activeCategory === 'selesai'
-              ? 'bg-ink-900 text-white'
-              : 'text-muted hover:bg-ink-50 hover:text-ink-900'
+          className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'selesai'
+              ? 'border border-emerald-300/90 bg-emerald-50/95 text-emerald-950 shadow-xs'
+              : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
         >
-          <CheckCircle2 className="size-4" aria-hidden="true" />
+          <CheckCircle2 className={`size-4 ${activeCategory === 'selesai' ? 'text-emerald-600' : 'text-muted'}`} aria-hidden="true" />
           <span>Setelah persetujuan</span>
           {completedCount > 0 ? (
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-bold ${activeCategory === 'selesai'
-                  ? 'bg-ok text-white'
-                  : 'bg-ok-bg text-ok'
+              className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${activeCategory === 'selesai'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'bg-ok-bg text-ok border border-ok/30'
                 }`}
             >
               {completedCount}
@@ -3801,25 +3803,24 @@ function OrderPanel({
         <button
           type="button"
           onClick={() => setActiveCategory('ditolak')}
-          className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-colors ${activeCategory === 'ditolak'
-              ? 'bg-ink-900 text-white'
-              : 'text-muted hover:bg-ink-50 hover:text-ink-900'
+          className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'ditolak'
+              ? 'border border-rose-300/90 bg-rose-50/95 text-rose-950 shadow-xs'
+              : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
         >
-          <XCircle className="size-4" aria-hidden="true" />
+          <XCircle className={`size-4 ${activeCategory === 'ditolak' ? 'text-rose-600' : 'text-muted'}`} aria-hidden="true" />
           <span>Ditolak</span>
           {rejectedCount > 0 ? (
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-bold ${activeCategory === 'ditolak'
-                  ? 'bg-crit text-white'
-                  : 'bg-crit-bg text-crit'
+              className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${activeCategory === 'ditolak'
+                  ? 'bg-rose-600 text-white shadow-2xs'
+                  : 'bg-crit-bg text-crit border border-crit/30'
                 }`}
             >
               {rejectedCount}
             </span>
           ) : null}
         </button>
-
       </nav>
 
       {query.isLoading ? <LoadingState label="Memuat pesanan..." /> : null}

@@ -6,7 +6,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "concurrently -n web,api -c cyan,green \"vite dev --host 0.0.0.0 --port 3000 --clearScreen false\" \"bun --cwd=../api run dev\"",
+    "dev": "concurrently -n api,web -c green,cyan \"bun --cwd=../api run dev\" \"vite dev --host 0.0.0.0 --port 3000 --clearScreen false\"",
     "dev:web": "vite dev --host 0.0.0.0 --port 3000 --clearScreen false",
     "generate-routes": "tsr generate",
     "typecheck": "tsc --noEmit",
