@@ -81,23 +81,6 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
       isValid = false;
     }
 
-    // Dukungan kata sandi default "password123" untuk seluruh akun demo (@daisuki.test) di environment development
-    if (
-      !isValid &&
-      process.env.NODE_ENV !== "production" &&
-      (user.email.endsWith("@daisuki.test") || user.email.includes("demo")) &&
-      password === "password123"
-    ) {
-      isValid = true;
-      try {
-        const newHash = await Bun.password.hash("password123");
-        await db
-          .update(users)
-          .set({ password_hash: newHash })
-          .where(eq(users.id, user.id));
-      } catch {}
-    }
-
     if (!isValid || (process.env.NODE_ENV === "production" && user.email.endsWith("@daisuki.test"))) {
       failedLogin([attemptKey, ipKey]);
       set.status = 401;
