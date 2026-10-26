@@ -1982,6 +1982,7 @@ function AdminDashboard() {
         queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-metrics'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-notifications'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-central-products'] }),
       ])
     },
     onError: (error: unknown) => toast.error(getErrorMessage(error)),
@@ -4102,7 +4103,9 @@ function ApprovalDialog({
       approved[order.id]?.[item.product_id] ??
       item.qty_approved ??
       item.qty_requested
-    const max = Math.min(item.qty_requested, item.central_stock)
+    const availableForOrder =
+      item.central_stock + (order.status === 'disetujui' ? (item.qty_approved ?? 0) : 0)
+    const max = Math.min(item.qty_requested, availableForOrder)
 
     const projectedQty = currentQty + qty
     const projectedPercent =
@@ -4113,6 +4116,7 @@ function ApprovalDialog({
       item,
       qty,
       max,
+      availableForOrder,
       currentQty,
       parLevel,
       stockPercentage,
@@ -4264,7 +4268,7 @@ function ApprovalDialog({
                   <span>Permintaan Restock Telah Disetujui</span>
                 </div>
                 <p className="mt-1 text-xs text-ink-800 leading-relaxed">
-                  Pesanan telah masuk ke tab <strong>Setelah Persetujuan</strong>. Silakan periksa kesiapan fisik barang di gudang pusat:
+                  Stok pusat sudah berkurang sesuai jumlah yang disetujui. Pesanan masuk ke tab <strong>Setelah Persetujuan</strong> untuk disiapkan dan dikirim.
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
                   <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
@@ -4353,6 +4357,7 @@ function ApprovalDialog({
                       item,
                       qty,
                       max,
+                      availableForOrder,
                       currentQty,
                       parLevel,
                       stockPercentage,
@@ -4433,16 +4438,16 @@ function ApprovalDialog({
                           <div className="rounded-lg border border-line/70 bg-paper/40 p-3">
                             <div className="flex items-center justify-between">
                               <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">
-                                Stok Pusat
+                                Stok Pusat Bebas
                               </span>
                               <span
                                 className={`text-[10px] font-bold ${
-                                  item.central_stock >= item.qty_requested
+                                  availableForOrder >= item.qty_requested
                                     ? 'text-ok-fg'
                                     : 'text-crit'
                                 }`}
                               >
-                                {item.central_stock >= item.qty_requested
+                                {availableForOrder >= item.qty_requested
                                   ? '✓ Cukup'
                                   : '⚠️ Terbatas'}
                               </span>
@@ -4454,9 +4459,11 @@ function ApprovalDialog({
                               <span className="text-xs text-muted">{item.product_unit}</span>
                             </div>
                             <p className="mt-1 truncate text-[11px] text-muted">
-                              {item.central_stock >= item.qty_requested
-                                ? 'Tersedia di gudang'
-                                : `Hanya ada ${item.central_stock} ${item.product_unit}`}
+                              {order.status === 'disetujui'
+                                ? `${item.qty_approved ?? 0} ${item.product_unit} sudah dialokasikan untuk pesanan ini`
+                                : availableForOrder >= item.qty_requested
+                                  ? 'Tersedia untuk disetujui'
+                                  : `Hanya ada ${availableForOrder} ${item.product_unit} untuk pesanan ini`}
                             </p>
                           </div>
 
@@ -4801,7 +4808,7 @@ function ApprovalDialog({
                       Kirim Sekarang ke {order.partner_name}?
                     </h4>
                     <p className="mt-1 text-xs text-ink-700 leading-relaxed">
-                      Pastikan barang fisik sudah dikemas dan kurir/armada ekspedisi telah siap berangkat ke cabang mitra. Stok gudang pusat akan langsung otomatis terpotong saat Anda mengirim.
+                      Pastikan barang fisik sudah dikemas dan kurir/armada ekspedisi telah siap berangkat ke cabang mitra. Stok pusat sudah dikurangi saat pesanan disetujui.
                     </p>
                     <p className="mt-1.5 text-xs font-semibold text-warn-fg">
                       Jika armada belum siap atau barang belum selesai dikemas, Anda bisa memilih <strong>Tahan dulu (Belum siap)</strong>.

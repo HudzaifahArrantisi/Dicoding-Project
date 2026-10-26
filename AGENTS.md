@@ -33,7 +33,7 @@
 - **Laporan Stok Fisik Harian (Mobile Friendly)**: Mitra menginput sisa stok fisik di rak toko dengan cepat melalui perangkat mobile.
 - **Monitoring Stok Gudang Pusat (Realtime)**: Melihat ketersediaan stok gudang pusat Daisuki secara langsung sebelum memesan.
 - **Pengajuan Restock Multi-Item**: Mengajukan restock untuk beberapa atau ke-4 produk sekaligus dalam 1 nomor pesanan (`PO-...`).
-- **Konfirmasi Penerimaan Barang**: Mengonfirmasi saat barang kiriman tiba di cabang (`dalam_pengiriman` ➔ `selesai`). Begitu dikonfirmasi, stok cabang bertambah sebesar jumlah yang disetujui (`qty_approved`) dan stok gudang pusat berkurang otomatis.
+- **Konfirmasi Penerimaan Barang**: Mengonfirmasi saat barang kiriman tiba di cabang (`dalam_pengiriman` ➔ `selesai`). Begitu dikonfirmasi, stok cabang bertambah sebesar jumlah yang disetujui (`qty_approved`). Stok gudang pusat sudah berkurang saat admin menyetujui pesanan.
 
 ---
 
@@ -83,6 +83,7 @@ daisuki-inventory/
    ```
    - Stok cabang **hanya bertambah** saat pesanan berpindah dari `dalam_pengiriman` ke `selesai` melalui konfirmasi penerimaan oleh Mitra.
    - Penambahan stok di cabang menggunakan nilai `qty_approved` (bukan `qty_requested`).
+   - Stok gudang pusat berkurang sebesar `qty_approved` saat admin menyetujui pesanan. Revisi persetujuan menyesuaikan stok sebesar selisih kuantitas; pengiriman dan penerimaan tidak menguranginya lagi.
 
 3. **Batasan Mutasi Database (Strict Mutation Boundary)**:
    - Frontend **tidak boleh** melakukan mutasi atau query langsung ke database.

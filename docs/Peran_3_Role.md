@@ -17,7 +17,7 @@ Alurnya sederhana: **Mitra melaporkan stok → Fullstack menyimpan transaksi →
 Fullstack mengelola `apps/web/`, `apps/api/`, `packages/shared/`, dan skema di `neon/init.sql`. Ada dua jalur pengguna yang dibuatnya:
 
 1. **Mitra Cabang** melihat stok sendiri dan stok gudang pusat, melaporkan jumlah barang fisik, lalu mengajukan restock beberapa produk dalam satu pesanan.
-2. **Admin Pusat** memantau stok cabang, menerima notifikasi, menentukan jumlah yang disetujui per barang, dan menandai pesanan sudah dikirim. Pada tahap pengiriman ini, stok pusat berkurang sesuai `qty_approved`.
+2. **Admin Pusat** memantau stok cabang, menerima notifikasi, menentukan jumlah yang disetujui per barang, dan menandai pesanan sudah dikirim. Saat pesanan disetujui, stok pusat berkurang sesuai `qty_approved`; revisi persetujuan menyesuaikan selisihnya.
 3. Saat barang tiba, **Mitra** mengonfirmasi penerimaan. Stok cabang bertambah sesuai `qty_approved` dan perubahan dicatat di `stock_logs`. Mitra dapat menyertakan foto bukti. Jika foto belum ada, Admin mendapat penanda dan dapat meminta bukti susulan.
 
 Status pesanan berjalan dari `diproses` → `disetujui` → `dalam_pengiriman` → `selesai`. Pesanan juga dapat `ditolak` atau `dibatalkan` sesuai tahapnya. Perubahan stok dan status dilakukan melalui API, bukan langsung dari browser ke database. API menentukan identitas cabang Mitra dari JWT.

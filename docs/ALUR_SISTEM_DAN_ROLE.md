@@ -61,7 +61,7 @@ Sistem membedakan hak akses dan antarmuka pengguna berdasarkan peran akun (`user
   - Peringatan instan jika kuantitas yang diminta melebihi stok gudang pusat, lengkap dengan tombol cepat **[Sesuaikan]** untuk menyamakan dengan stok ready pusat.
 - **Konfirmasi Penerimaan Barang**:
   - Mengonfirmasi penerimaan saat kurir logistik tiba di toko cabang (`dalam_pengiriman` ➔ `selesai`).
-  - Begitu dikonfirmasi, stok fisik cabang bertambah sebesar jumlah yang disetujui (`qty_approved`) dan stok gudang pusat otomatis berkurang.
+  - Begitu dikonfirmasi, stok fisik cabang bertambah sebesar jumlah yang disetujui (`qty_approved`). Stok gudang pusat sudah dikurangi saat persetujuan admin.
 - **Riwayat Log & Kalender Perubahan Stok**:
   - Melihat riwayat pergerakan stok toko per tanggal dan per jam sesi pelaporan.
 
@@ -115,7 +115,8 @@ sequenceDiagram
   rect rgb(245, 255, 245)
     note over A, L: 3. Verifikasi & Pengiriman Barang
     A->>API: Setujui kuantitas per item (PATCH /orders/:id/approval)
-    note right of A: Kuantitas approved <= stok gudang pusat.<br/>Status berubah: 'disetujui'
+    note right of A: Kuantitas approved <= stok bebas pusat (+ alokasi PO ini saat revisi).<br/>Status berubah: 'disetujui'
+    API->>DB: Kurangi stok pusat sebesar qty_approved; revisi hanya menyesuaikan selisih
     A->>API: Serahkan barang ke kurir (PATCH /orders/:id/status -> 'dalam_pengiriman')
     L->>M: Ekspedisi membawa barang fisik menuju lokasi cabang
   end
@@ -124,9 +125,9 @@ sequenceDiagram
   rect rgb(255, 245, 245)
     note over M, DB: 4. Konfirmasi Barang Tiba & Mutasi Stok
     M->>API: Klik "Konfirmasi Penerimaan" (PATCH /orders/:id/status -> 'selesai')
-    API->>DB: Mutasi Stok Otomatis:<br/>1. partner_stocks cabang bertambah (+qty_approved)<br/>2. products gudang pusat berkurang (-qty_approved)<br/>3. Catat stock_logs dengan source: 'order_received'
+    API->>DB: Tambah partner_stocks cabang (+qty_approved) dan catat stock_logs dengan source: 'order_received'
     DB-->>M: Stok di cabang resmi bertambah
-    DB-->>A: Laporan pesanan selesai & stok pusat terpotong
+    DB-->>A: Laporan pesanan selesai
   end
 ```
 
@@ -190,7 +191,7 @@ diproses ➔ disetujui (atau ditolak / dibatalkan) ➔ dalam_pengiriman ➔ sele
 - **Strict Boundary Mutasi Stok**:
   - Stok cabang **hanya boleh bertambah** saat pesanan berpindah dari `dalam_pengiriman` ke `selesai` melalui konfirmasi fisik oleh Mitra.
   - Jumlah penambahan stok cabang menggunakan nilai **`qty_approved`** (hasil persetujuan admin), bukan `qty_requested`.
-  - Pada saat yang sama, stok gudang pusat (**`central_stock`**) otomatis dikurangi sebesar `qty_approved`.
+  - Stok gudang pusat (**`central_stock`**) otomatis dikurangi sebesar `qty_approved` saat admin menyetujui pesanan. Revisi kuantitas persetujuan mengubah stok pusat sebesar selisihnya; pengiriman dan penerimaan tidak menguranginya lagi.
 
 ### 3. Batasan Keamanan API (*Strict Mutation Boundary*):
 - Frontend **tidak diizinkan** melakukan query/mutasi langsung ke database.

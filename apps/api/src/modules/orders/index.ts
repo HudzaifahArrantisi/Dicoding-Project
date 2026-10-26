@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, gte, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
   auditLogs,
@@ -288,6 +288,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               product_name: products.name,
               product_unit: products.unit,
               qty_requested: orderItems.qty_requested,
+              qty_approved: orderItems.qty_approved,
               central_stock: products.central_stock,
             })
             .from(orderItems)
@@ -325,10 +326,11 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
                 `Jumlah disetujui untuk ${item.product_name} tidak boleh melebihi jumlah yang diminta`,
               );
             }
-            if (approvedQty > item.central_stock) {
+            const previousQty = ord.status === "disetujui" ? (item.qty_approved ?? 0) : 0;
+            if (approvedQty > item.central_stock + previousQty) {
               throw new OrderWorkflowError(
                 409,
-                `Stok pusat ${item.product_name} hanya tersedia ${item.central_stock} ${item.product_unit}`,
+                `Stok pusat ${item.product_name} hanya tersedia ${item.central_stock + previousQty} ${item.product_unit} untuk pesanan ini`,
               );
             }
 
@@ -351,6 +353,27 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               422,
               "Catatan admin wajib diisi jika jumlah persetujuan disesuaikan",
             );
+          }
+
+          for (const item of [...requestedItems].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
+            const approvedQty = approvalByProduct.get(item.product_id)!;
+            const previousQty = ord.status === "disetujui" ? (item.qty_approved ?? 0) : 0;
+            const delta = approvedQty - previousQty;
+            if (delta === 0) continue;
+
+            const [updatedProduct] = await tx
+              .update(products)
+              .set({ central_stock: sql`${products.central_stock} - ${delta}` })
+              .where(delta > 0
+                ? and(eq(products.id, item.product_id), gte(products.central_stock, delta))
+                : eq(products.id, item.product_id))
+              .returning({ id: products.id });
+            if (!updatedProduct) {
+              throw new OrderWorkflowError(
+                409,
+                `Stok pusat ${item.product_name} telah berubah. Muat ulang data lalu sesuaikan persetujuan`,
+              );
+            }
           }
 
           for (const item of body.items) {
@@ -395,6 +418,10 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         publishInventoryChange({
           partnerId: result.partner_id,
           topics: ["orders", "metrics", "notifications"],
+        });
+        publishInventoryChange({
+          partnerId: null,
+          topics: ["products"],
         });
 
         return { status: "ok" };
@@ -654,9 +681,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           if (targetStatus === "dalam_pengiriman") {
             const shipmentItems = await tx
               .select({
-                product_id: orderItems.product_id,
                 product_name: products.name,
-                product_unit: products.unit,
                 qty_approved: orderItems.qty_approved,
               })
               .from(orderItems)
@@ -664,34 +689,11 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               .where(eq(orderItems.order_id, orderId));
 
             for (const item of shipmentItems) {
-              const approvedQty = item.qty_approved;
-              if (approvedQty === null) {
+              if (item.qty_approved === null) {
                 throw new CentralStockConflictError(
                   `Jumlah persetujuan ${item.product_name} belum tersedia`,
                 );
               }
-
-              const [centralProduct] = await tx
-                .select({ central_stock: products.central_stock })
-                .from(products)
-                .where(eq(products.id, item.product_id))
-                .for("update");
-
-              if (
-                !centralProduct ||
-                centralProduct.central_stock < approvedQty
-              ) {
-                throw new CentralStockConflictError(
-                  `Stok pusat ${item.product_name} hanya tersedia ${centralProduct?.central_stock ?? 0} ${item.product_unit}. Revisi jumlah persetujuan sebelum mengirim.`,
-                );
-              }
-
-              await tx
-                .update(products)
-                .set({
-                  central_stock: sql`${products.central_stock} - ${approvedQty}`,
-                })
-                .where(eq(products.id, item.product_id));
             }
             updateData.shipped_at = new Date();
           } else if (targetStatus === "selesai") {
@@ -838,13 +840,6 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             ? ["orders", "stocks", "logs", "metrics", "notifications"]
             : ["orders", "metrics", "notifications"],
       });
-      if (targetStatus === "dalam_pengiriman") {
-        publishInventoryChange({
-          partnerId: null,
-          topics: ["products"],
-        });
-      }
-
       return { status: "ok" };
     },
     {

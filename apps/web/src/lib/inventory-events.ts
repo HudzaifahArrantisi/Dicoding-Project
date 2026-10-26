@@ -28,6 +28,8 @@ const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
       ['admin-central-products'],
       ['admin-stocks'],
       ['admin-orders'],
+      ['admin-metrics'],
+      ['admin-ai-insights'],
     ],
     notifications: [['admin-notifications']],
     metrics: [['admin-metrics']],
@@ -37,7 +39,7 @@ const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
     orders: [['mitra-orders']],
     stocks: [['mitra-stocks']],
     logs: [['mitra-stock-logs']],
-    products: [['central-products']],
+    products: [['central-products'], ['mitra-stocks']],
   },
 }
 
