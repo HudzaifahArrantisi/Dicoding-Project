@@ -2158,8 +2158,6 @@ function AdminDashboard() {
         admin_note: input.admin_note,
         items: input.items,
       })
-      if (response.error)
-        throw apiError(response.error, 'Persetujuan belum disimpan')
     },
     onSuccess: async (_data, variables) => {
       dirtyApprovalOrderIds.current.delete(variables.id)
