@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { eq, and, desc, gte, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
   auditLogs,
@@ -22,6 +22,10 @@ import { publishInventoryChange } from "../../realtime";
 import { saveBase64Image } from "../../lib/storage";
 
 class CentralStockConflictError extends Error {}
+function canAdminChangeStatus(from: OrderStatus, to: OrderStatus): boolean {
+  return (from === "diproses" && to === "ditolak") ||
+    (from === "disetujui" && to === "dalam_pengiriman");
+}
 class OrderWorkflowError extends Error {
   constructor(
     public readonly status: 403 | 404 | 409 | 422,
@@ -74,6 +78,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           partner_id: orders.partner_id,
           partner_name: partners.name,
           partner_type: partners.type,
+          partner_address: partners.address,
           status: orders.status,
           note: orders.note,
           admin_note: orders.admin_note,
@@ -84,6 +89,10 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           completed_at: orders.completed_at,
           receipt_photo_present: sql<boolean>`${orders.receipt_photo_data_url} is not null`,
           receipt_proof_requested_at: orders.receipt_proof_requested_at,
+          delivery_code: orders.delivery_code,
+          delivery_qr_token: orders.delivery_qr_token,
+          delivery_code_claimed_at: orders.delivery_code_claimed_at,
+          cycle_period: orders.cycle_period,
         })
         .from(orders)
         .innerJoin(partners, eq(orders.partner_id, partners.id))
@@ -108,6 +117,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           central_stock: products.central_stock,
           qty_requested: orderItems.qty_requested,
           qty_approved: orderItems.qty_approved,
+          qty_reserved: orderItems.qty_reserved,
           partner_current_stock: partnerStocks.current_qty,
           partner_par_level: partnerStocks.par_level,
         })
@@ -132,6 +142,8 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
 
       const formatted = orderList.map((ord) => ({
         ...ord,
+        delivery_code: user.role === "admin" ? ord.delivery_code : null,
+        delivery_qr_token: user.role === "admin" ? ord.delivery_qr_token : null,
         status_label:
           ORDER_STATUS_LABEL[ord.status as OrderStatus] || ord.status,
         items: itemsByOrderId.get(ord.id) || [],
@@ -193,8 +205,18 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       const uniqueSuffix = crypto.randomUUID().slice(0, 8).toUpperCase();
       const orderNo = `PO-${dateStr}-${uniqueSuffix}`;
 
-      await db.transaction(async (tx) => {
-        const [ord] = await tx
+      try {
+        await db.transaction(async (tx) => {
+          for (const item of [...body.items].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
+            const [product] = await tx.select({ id: products.id, name: products.name, central_stock: products.central_stock, is_active: products.is_active })
+              .from(products).where(eq(products.id, item.product_id)).for("update");
+            if (!product || !product.is_active) throw new OrderWorkflowError(422, "Produk tidak ditemukan atau tidak aktif");
+            if (product.central_stock < item.qty_requested) {
+              throw new OrderWorkflowError(409, `Stok pusat ${product.name} tersisa ${product.central_stock} pcs. Kurangi jumlah pengajuan dan coba lagi.`);
+            }
+            await tx.update(products).set({ central_stock: sql`${products.central_stock} - ${item.qty_requested}` }).where(eq(products.id, item.product_id));
+          }
+          const [ord] = await tx
           .insert(orders)
           .values({
             order_no: orderNo,
@@ -210,6 +232,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           product_id: item.product_id,
           qty_requested: item.qty_requested,
           qty_approved: null,
+          qty_reserved: item.qty_requested,
         }));
 
         const insertedItems = await tx
@@ -222,7 +245,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           type: "new_order",
           partner_id: partnerId,
           title: `Mitra ${partner.name} mau restok barang nih`,
-          body: `${partner.name} mengajukan restock untuk ${body.items.length} jenis produk. Pesanan menunggu persetujuan pusat.`,
+          body: `${partner.name} mengajukan restock untuk ${body.items.length} jenis produk (${ord.order_no}). Pesanan menunggu persetujuan pusat.`,
         });
 
         return {
@@ -230,12 +253,17 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           status_label: ORDER_STATUS_LABEL["diproses"],
           items: insertedItems,
         };
-      });
+        });
+      } catch (error) {
+        if (error instanceof OrderWorkflowError) { set.status = error.status; return { error: error.message }; }
+        throw error;
+      }
 
       publishInventoryChange({
         partnerId,
         topics: ["orders", "metrics", "notifications"],
       });
+      publishInventoryChange({ partnerId: null, topics: ["products"] });
 
       return { status: "ok" };
     },
@@ -245,12 +273,127 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         items: t.Array(
           t.Object({
             product_id: t.String(),
-            qty_requested: t.Integer({ minimum: 1 }),
+            qty_requested: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
           }),
         ),
       }),
     },
   )
+  .put("/:id", async ({ headers, params, body, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "mitra" || !user.partnerId) { set.status = 403; return { error: "Hanya mitra yang dapat mengedit pesanan" }; }
+    if (new Set(body.items.map((item) => item.product_id)).size !== body.items.length) {
+      set.status = 422; return { error: "Produk tidak boleh duplikat" };
+    }
+    try {
+      await db.transaction(async (tx) => {
+        const [ord] = await tx.select().from(orders).where(eq(orders.id, params.id)).for("update");
+        if (!ord) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
+        if (ord.partner_id !== user.partnerId) throw new OrderWorkflowError(403, "Pesanan bukan milik cabang ini");
+        if (ord.status !== "diproses") throw new OrderWorkflowError(409, "Pesanan hanya dapat diedit sebelum disetujui");
+        const previousItems = await tx.select({ product_id: orderItems.product_id, qty_reserved: orderItems.qty_reserved }).from(orderItems).where(eq(orderItems.order_id, ord.id));
+        const previousByProduct = new Map(previousItems.map((item) => [item.product_id, item.qty_reserved]));
+        const requestedByProduct = new Map(body.items.map((item) => [item.product_id, item.qty_requested]));
+        const productIds = [...new Set([...previousByProduct.keys(), ...requestedByProduct.keys()])].sort();
+        for (const productId of productIds) {
+          const [product] = await tx.select({ name: products.name, central_stock: products.central_stock, is_active: products.is_active })
+            .from(products).where(eq(products.id, productId)).for("update");
+          if (!product || (requestedByProduct.has(productId) && !product.is_active)) throw new OrderWorkflowError(422, "Produk tidak ditemukan atau tidak aktif");
+          const delta = (requestedByProduct.get(productId) ?? 0) - (previousByProduct.get(productId) ?? 0);
+          if (delta > product.central_stock) throw new OrderWorkflowError(409, `Stok pusat ${product.name} tersisa ${product.central_stock} pcs. Kurangi jumlah pengajuan dan coba lagi.`);
+          if (delta !== 0) await tx.update(products).set({ central_stock: sql`${products.central_stock} - ${delta}` }).where(eq(products.id, productId));
+        }
+        await tx.delete(orderItems).where(eq(orderItems.order_id, ord.id));
+        await tx.insert(orderItems).values(body.items.map((item) => ({ order_id: ord.id, product_id: item.product_id, qty_requested: item.qty_requested, qty_reserved: item.qty_requested })));
+        await tx.update(orders).set({ note: body.note?.trim() || null }).where(eq(orders.id, ord.id));
+        await tx.insert(auditLogs).values({ actor_id: user.userId, action: "order.edit", target_type: "order", target_id: ord.id });
+      });
+    } catch (error) {
+      if (error instanceof OrderWorkflowError) { set.status = error.status; return { error: error.message }; }
+      throw error;
+    }
+    publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "notifications"] });
+    publishInventoryChange({ partnerId: null, topics: ["products"] });
+    return { status: "ok" };
+  }, { body: t.Object({ note: t.Optional(t.String({ maxLength: 1000 })), items: t.Array(t.Object({ product_id: t.String(), qty_requested: t.Integer({ minimum: 1, maximum: 2_147_483_647 }) }), { minItems: 1 }) }) })
+  .patch("/:id/cancel", async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "mitra" || !user.partnerId) { set.status = 403; return { error: "Hanya mitra yang dapat membatalkan pesanan" }; }
+    try {
+      await db.transaction(async (tx) => {
+        const [ord] = await tx.select().from(orders).where(eq(orders.id, params.id)).for("update");
+        if (!ord) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
+        if (ord.partner_id !== user.partnerId) throw new OrderWorkflowError(403, "Pesanan bukan milik cabang ini");
+        if (ord.status !== "diproses" && ord.status !== "disetujui") throw new OrderWorkflowError(409, "Pesanan sudah dikirim atau selesai");
+        const items = await tx.select({ product_id: orderItems.product_id, qty_reserved: orderItems.qty_reserved }).from(orderItems).where(eq(orderItems.order_id, ord.id));
+        for (const item of [...items].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
+          if (item.qty_reserved === 0) continue;
+          await tx.update(products).set({ central_stock: sql`${products.central_stock} + ${item.qty_reserved}` }).where(eq(products.id, item.product_id));
+        }
+        await tx.update(orderItems).set({ qty_reserved: 0 }).where(eq(orderItems.order_id, ord.id));
+        await tx.update(orders).set({ status: "dibatalkan" }).where(eq(orders.id, ord.id));
+        await tx.insert(auditLogs).values({ actor_id: user.userId, action: "order.cancel", target_type: "order", target_id: ord.id });
+        await tx.insert(notifications).values({ audience: "admin", type: "order_update", partner_id: ord.partner_id, title: `Pesanan ${ord.order_no} dibatalkan`, body: "Mitra membatalkan pesanan sebelum pengiriman." });
+      });
+    } catch (error) {
+      if (error instanceof OrderWorkflowError) { set.status = error.status; return { error: error.message }; }
+      throw error;
+    }
+    publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "metrics", "notifications"] });
+    publishInventoryChange({ partnerId: null, topics: ["products"] });
+    return { status: "ok" };
+  })
+  .post("/:id/verify-delivery", async ({ headers, params, body, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "mitra" || !user.partnerId) { set.status = 403; return { error: "Hanya mitra penerima yang dapat memverifikasi resi" }; }
+    try {
+      await db.transaction(async (tx) => {
+        const [ord] = await tx.select().from(orders).where(eq(orders.id, params.id)).for("update");
+        if (!ord) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
+        if (ord.partner_id !== user.partnerId) throw new OrderWorkflowError(403, "Resi bukan milik cabang ini");
+        if (ord.status !== "dalam_pengiriman" || ord.delivery_code_claimed_at) throw new OrderWorkflowError(409, "Resi sudah digunakan atau pesanan belum dikirim");
+        const scanned = body.code.trim();
+        if (!scanned || (scanned !== ord.delivery_qr_token && scanned.toUpperCase() !== ord.delivery_code)) {
+          throw new OrderWorkflowError(422, "Kode resi tidak cocok dengan pesanan ini");
+        }
+        const items = await tx.select().from(orderItems).where(eq(orderItems.order_id, ord.id));
+        for (const item of items) {
+          const qty = item.qty_approved;
+          if (qty === null) throw new OrderWorkflowError(409, "Kuantitas persetujuan belum tersedia");
+          if (qty === 0) continue;
+          await tx.insert(partnerStocks).values({ partner_id: ord.partner_id, product_id: item.product_id, current_qty: 0, par_level: Math.max(1, qty) }).onConflictDoNothing();
+          const [stock] = await tx.select().from(partnerStocks).where(and(eq(partnerStocks.partner_id, ord.partner_id), eq(partnerStocks.product_id, item.product_id))).for("update");
+          if (!stock) throw new OrderWorkflowError(409, "Stok cabang belum tersedia");
+          const before = stock.current_qty;
+          const after = before + qty;
+          await tx.update(partnerStocks).set({ current_qty: after, updated_at: new Date(), updated_by: user.userId }).where(and(eq(partnerStocks.partner_id, ord.partner_id), eq(partnerStocks.product_id, item.product_id)));
+          await tx.insert(stockLogs).values({ partner_id: ord.partner_id, product_id: item.product_id, qty_before: before, qty_after: after, source: "order_received", created_by: user.userId });
+        }
+        await tx.update(orders).set({ status: "selesai", completed_at: new Date(), delivery_code_claimed_at: new Date() }).where(eq(orders.id, ord.id));
+        const [receivingPartner] = await tx
+          .select({ name: partners.name })
+          .from(partners)
+          .where(eq(partners.id, ord.partner_id))
+          .limit(1);
+
+        await tx.insert(notifications).values({
+          audience: "admin",
+          type: "order_received",
+          partner_id: ord.partner_id,
+          title: `Mitra ${receivingPartner?.name ?? 'mitra'} sudah menerima barang ${ord.order_no}`,
+          body: `Mitra memindai resi ${ord.order_no}. Barang telah diterima dan stok cabang telah diperbarui.`,
+        });
+      });
+    } catch (error) {
+      if (error instanceof OrderWorkflowError) { set.status = error.status; return { error: error.message }; }
+      throw error;
+    }
+    publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "stocks", "logs", "metrics", "notifications"] });
+    return { status: "ok" };
+  }, { body: t.Object({ code: t.String({ minLength: 1, maxLength: 256 }) }) })
   .patch(
     "/:id/approval",
     async ({ headers, params, body, set }) => {
@@ -289,7 +432,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               product_unit: products.unit,
               qty_requested: orderItems.qty_requested,
               qty_approved: orderItems.qty_approved,
-              central_stock: products.central_stock,
+              qty_reserved: orderItems.qty_reserved,
             })
             .from(orderItems)
             .innerJoin(products, eq(orderItems.product_id, products.id))
@@ -326,14 +469,6 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
                 `Jumlah disetujui untuk ${item.product_name} tidak boleh melebihi jumlah yang diminta`,
               );
             }
-            const previousQty = ord.status === "disetujui" ? (item.qty_approved ?? 0) : 0;
-            if (approvedQty > item.central_stock + previousQty) {
-              throw new OrderWorkflowError(
-                409,
-                `Stok pusat ${item.product_name} hanya tersedia ${item.central_stock + previousQty} ${item.product_unit} untuk pesanan ini`,
-              );
-            }
-
             totalApproved += approvedQty;
             hasAdjustment ||= approvedQty !== item.qty_requested;
             approvalSummary.push(
@@ -357,29 +492,19 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
 
           for (const item of [...requestedItems].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
             const approvedQty = approvalByProduct.get(item.product_id)!;
-            const previousQty = ord.status === "disetujui" ? (item.qty_approved ?? 0) : 0;
-            const delta = approvedQty - previousQty;
+            const delta = approvedQty - item.qty_reserved;
             if (delta === 0) continue;
-
-            const [updatedProduct] = await tx
-              .update(products)
-              .set({ central_stock: sql`${products.central_stock} - ${delta}` })
-              .where(delta > 0
-                ? and(eq(products.id, item.product_id), gte(products.central_stock, delta))
-                : eq(products.id, item.product_id))
-              .returning({ id: products.id });
-            if (!updatedProduct) {
-              throw new OrderWorkflowError(
-                409,
-                `Stok pusat ${item.product_name} telah berubah. Muat ulang data lalu sesuaikan persetujuan`,
-              );
+            const [product] = await tx.select({ central_stock: products.central_stock }).from(products).where(eq(products.id, item.product_id)).for("update");
+            if (!product || (delta > 0 && product.central_stock < delta)) {
+              throw new OrderWorkflowError(409, `Stok pusat ${item.product_name} tidak cukup untuk revisi persetujuan`);
             }
+            await tx.update(products).set({ central_stock: sql`${products.central_stock} - ${delta}` }).where(eq(products.id, item.product_id));
           }
 
           for (const item of body.items) {
             await tx
               .update(orderItems)
-              .set({ qty_approved: item.qty_approved })
+              .set({ qty_approved: item.qty_approved, qty_reserved: item.qty_approved })
               .where(
                 and(
                   eq(orderItems.order_id, params.id),
@@ -419,10 +544,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           partnerId: result.partner_id,
           topics: ["orders", "metrics", "notifications"],
         });
-        publishInventoryChange({
-          partnerId: null,
-          topics: ["products"],
-        });
+        publishInventoryChange({ partnerId: null, topics: ["products"] });
 
         return { status: "ok" };
       } catch (error) {
@@ -615,19 +737,10 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           set.status = 403;
           return { error: "Tidak memiliki akses ke pesanan cabang lain" };
         }
-        if (!(
-          (ord.status === "dalam_pengiriman" && targetStatus === "selesai") ||
-          (ord.status === "diproses" && targetStatus === "dibatalkan")
-        )) {
-          set.status = 403;
-          return {
-            error: `Mitra tidak diizinkan mengubah status dari '${ord.status}' menjadi '${targetStatus}'`,
-          };
-        }
+        set.status = 403;
+        return { error: "Gunakan pemindaian resi untuk menerima barang atau endpoint pembatalan untuk membatalkan pesanan" };
       } else {
-        const adminTransitionAllowed =
-          (ord.status === "diproses" && targetStatus === "ditolak") ||
-          (ord.status === "disetujui" && targetStatus === "dalam_pengiriman");
+        const adminTransitionAllowed = canAdminChangeStatus(ord.status, targetStatus);
 
         if (!adminTransitionAllowed) {
           set.status = 403;
@@ -683,19 +796,22 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               .select({
                 product_name: products.name,
                 qty_approved: orderItems.qty_approved,
+                qty_reserved: orderItems.qty_reserved,
               })
               .from(orderItems)
               .innerJoin(products, eq(orderItems.product_id, products.id))
               .where(eq(orderItems.order_id, orderId));
 
             for (const item of shipmentItems) {
-              if (item.qty_approved === null) {
+              if (item.qty_approved === null || item.qty_reserved !== item.qty_approved) {
                 throw new CentralStockConflictError(
-                  `Jumlah persetujuan ${item.product_name} belum tersedia`,
+                  `Reservasi ${item.product_name} belum sesuai dengan persetujuan`,
                 );
               }
             }
             updateData.shipped_at = new Date();
+            updateData.delivery_code = `DSK-${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+            updateData.delivery_qr_token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
           } else if (targetStatus === "selesai") {
             updateData.completed_at = new Date();
             if (body.receipt_photo_data_url) {
@@ -713,6 +829,12 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               updateData.receipt_photo_data_url = null;
             }
           } else if (targetStatus === "ditolak") {
+            const rejectedItems = await tx.select({ product_id: orderItems.product_id, qty_reserved: orderItems.qty_reserved }).from(orderItems).where(eq(orderItems.order_id, orderId));
+            for (const item of [...rejectedItems].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
+              if (item.qty_reserved === 0) continue;
+              await tx.update(products).set({ central_stock: sql`${products.central_stock} + ${item.qty_reserved}` }).where(eq(products.id, item.product_id));
+            }
+            await tx.update(orderItems).set({ qty_reserved: 0 }).where(eq(orderItems.order_id, orderId));
             updateData.rejected_reason = body.rejected_reason?.trim();
           }
 
@@ -782,7 +904,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             const hasReceiptPhoto = Boolean(body.receipt_photo_data_url);
             await tx.insert(notifications).values({
               audience: "admin",
-              type: hasReceiptPhoto ? "order_update" : "receipt_missing_proof",
+              type: hasReceiptPhoto ? "order_received" : "receipt_missing_proof",
               partner_id: ord.partner_id,
               title: hasReceiptPhoto
                 ? `Mitra ${receivingPartner?.name ?? 'mitra'} sudah menerima barang ${ord.order_no}`
@@ -799,7 +921,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
 
             if (targetStatus === "dalam_pengiriman") {
               notifTitle = `Pesanan Dikirim: ${ord.order_no}`;
-              notifBody = `Barang pesanan Anda sedang dalam pengiriman. Mohon klik "Barang Diterima" saat paket tiba.`;
+              notifBody = `Barang pesanan Anda sedang dalam pengiriman. Pindai QR atau barcode resi saat paket tiba.`;
             } else if (targetStatus === "ditolak") {
               notifTitle = `Pesanan Ditolak: ${ord.order_no}`;
               notifBody = `Permintaan restock ditolak. Alasan: ${body.rejected_reason?.trim()}`;
@@ -840,6 +962,9 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             ? ["orders", "stocks", "logs", "metrics", "notifications"]
             : ["orders", "metrics", "notifications"],
       });
+      if (targetStatus === "ditolak") {
+        publishInventoryChange({ partnerId: null, topics: ["products"] });
+      }
       return { status: "ok" };
     },
     {

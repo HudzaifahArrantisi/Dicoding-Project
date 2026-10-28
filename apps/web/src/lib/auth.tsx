@@ -29,6 +29,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<AuthResult>
   refreshUser: () => Promise<User>
   logout: () => Promise<void>
+  clearSession: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -83,14 +84,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const logout = async (): Promise<void> => {
-    const response = await api.auth.logout.post()
-    if (response.error) throw apiError(response.error, 'Gagal keluar. Coba lagi.')
+  const clearSession = () => {
     setCsrfToken(null)
     setUser(null)
   }
 
-  return <AuthContext.Provider value={{ user, isLoading, login, refreshUser, logout }}>{children}</AuthContext.Provider>
+  const logout = async (): Promise<void> => {
+    try {
+      await api.auth.logout.post()
+    } finally {
+      clearSession()
+    }
+  }
+
+  return (
+    <AuthContext.Provider
+      value={{ user, isLoading, login, refreshUser, logout, clearSession }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {

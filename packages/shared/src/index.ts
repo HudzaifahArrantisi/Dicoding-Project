@@ -42,7 +42,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   diproses: ["disetujui", "ditolak", "dibatalkan"],
-  disetujui: ["dalam_pengiriman"],
+  disetujui: ["dalam_pengiriman", "dibatalkan"],
   dalam_pengiriman: ["selesai"],
   selesai: [],
   ditolak: [],

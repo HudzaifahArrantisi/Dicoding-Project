@@ -27,6 +27,7 @@ export interface OrderItem {
   central_stock: number
   qty_requested: number
   qty_approved: number | null
+  qty_reserved: number
   partner_current_stock?: number
   partner_par_level?: number
 }
@@ -47,6 +48,7 @@ export interface Order {
   partner_id: string
   partner_name: string
   partner_type: string
+  partner_address?: string | null
   status: OrderStatus
   status_label: string
   note: string | null
@@ -58,6 +60,10 @@ export interface Order {
   completed_at: string | null
   receipt_photo_present: boolean
   receipt_proof_requested_at: string | null
+  delivery_code?: string | null
+  delivery_qr_token?: string | null
+  delivery_code_claimed_at?: string | null
+  cycle_period?: string
   items: OrderItem[]
 }
 

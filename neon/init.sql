@@ -135,9 +135,9 @@ create table if not exists partner_stocks (
   par_level integer not null check (par_level > 0),
   updated_at timestamptz not null default now(),
   updated_by uuid references users(id) on delete set null,
-  primary key (partner_id, product_id),
-  constraint qty_within_par check (current_qty <= par_level)
+  primary key (partner_id, product_id)
 );
+alter table partner_stocks drop constraint if exists qty_within_par;
 
 -- E. Riwayat Log Perubahan Stok (Stock Logs)
 create table if not exists stock_logs (
@@ -169,10 +169,20 @@ create table if not exists orders (
   shipped_at timestamptz,
   completed_at timestamptz,
   receipt_photo_data_url text,
-  receipt_proof_requested_at timestamptz
+  receipt_proof_requested_at timestamptz,
+  delivery_code varchar(32),
+  delivery_qr_token text,
+  delivery_code_claimed_at timestamptz,
+  cycle_period varchar(20) not null default 'weekly'
 );
 alter table orders add column if not exists receipt_photo_data_url text;
 alter table orders add column if not exists receipt_proof_requested_at timestamptz;
+alter table orders add column if not exists delivery_code varchar(32);
+alter table orders add column if not exists delivery_qr_token text;
+alter table orders add column if not exists delivery_code_claimed_at timestamptz;
+alter table orders add column if not exists cycle_period varchar(20) not null default 'weekly';
+create unique index if not exists idx_orders_delivery_code on orders (delivery_code);
+create unique index if not exists idx_orders_qr_token on orders (delivery_qr_token);
 create index if not exists orders_partner_created_idx on orders (partner_id, created_at desc);
 create index if not exists orders_status_idx on orders (status);
 
@@ -182,8 +192,10 @@ create table if not exists order_items (
   order_id uuid not null references orders(id) on delete cascade,
   product_id uuid not null references products(id) on delete cascade,
   qty_requested integer not null check (qty_requested > 0),
-  qty_approved integer check (qty_approved >= 0)
+  qty_approved integer check (qty_approved >= 0),
+  qty_reserved integer not null default 0 check (qty_reserved >= 0)
 );
+alter table order_items add column if not exists qty_reserved integer not null default 0;
 create index if not exists order_items_order_idx on order_items (order_id);
 
 -- H. Notifikasi & Alert (Notifications)
@@ -214,11 +226,13 @@ create table if not exists restock_recommendations (
   suggested_qty integer not null,
   days_of_cover numeric(5, 1),
   model_version text not null,
+  metadata jsonb,
   generated_at timestamptz not null default now(),
   constraint restock_recommendations_partner_product_key unique (partner_id, product_id)
 );
 create index if not exists restock_rec_partner_idx
   on restock_recommendations (partner_id, generated_at desc);
+alter table restock_recommendations add column if not exists metadata jsonb;
 
 -- 4. ROLES & PERMISSIONS (Data Science & AI Engine)
 do $$
@@ -236,7 +250,7 @@ grant select on partners, products, partner_stocks, stock_logs, orders, order_it
 revoke all on users, auth_sessions, audit_logs from ds_readonly, ai_job;
 grant select, insert on notifications, stock_logs to ai_job;
 grant select, update on partner_stocks to ai_job;
-grant select on partners, products, orders, order_items to ai_job;
+grant select on partners, products, partner_stocks, stock_logs, orders, order_items to ai_job;
 grant select, insert, update, delete on restock_recommendations to ai_job;
 
 -- 5. ROW LEVEL SECURITY (RLS)

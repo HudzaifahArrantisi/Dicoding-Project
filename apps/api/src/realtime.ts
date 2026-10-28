@@ -71,14 +71,14 @@ export const realtimeModule = new Elysia().get(
           },
         };
         subscribers.add(subscriber);
-        controller.enqueue(encoder.encode("event: ready\ndata: {}\n\n"));
+        controller.enqueue(encoder.encode("retry: 10000\nevent: ready\ndata: {}\n\n"));
         heartbeat = setInterval(() => {
           try {
             controller.enqueue(encoder.encode(": heartbeat\n\n"));
           } catch {
             close();
           }
-        }, 25_000);
+        }, 15_000);
         expires = setTimeout(() => {
           close();
           try {

@@ -33,7 +33,7 @@
 - **Laporan Stok Fisik Harian (Mobile Friendly)**: Mitra menginput sisa stok fisik di rak toko dengan cepat melalui perangkat mobile.
 - **Monitoring Stok Gudang Pusat (Realtime)**: Melihat ketersediaan stok gudang pusat Daisuki secara langsung sebelum memesan.
 - **Pengajuan Restock Multi-Item**: Mengajukan restock untuk beberapa atau ke-4 produk sekaligus dalam 1 nomor pesanan (`PO-...`).
-- **Konfirmasi Penerimaan Barang**: Mengonfirmasi saat barang kiriman tiba di cabang (`dalam_pengiriman` ➔ `selesai`). Begitu dikonfirmasi, stok cabang bertambah sebesar jumlah yang disetujui (`qty_approved`). Stok gudang pusat sudah berkurang saat admin menyetujui pesanan.
+- **Konfirmasi Penerimaan Barang**: Memindai QR/Barcode resi saat barang tiba (`dalam_pengiriman` ➔ `selesai`). Stok cabang bertambah sebesar `qty_approved`. Stok gudang pusat telah direservasi saat Mitra mengajukan pesanan.
 
 ---
 
@@ -83,7 +83,9 @@ daisuki-inventory/
    ```
    - Stok cabang **hanya bertambah** saat pesanan berpindah dari `dalam_pengiriman` ke `selesai` melalui konfirmasi penerimaan oleh Mitra.
    - Penambahan stok di cabang menggunakan nilai `qty_approved` (bukan `qty_requested`).
-   - Stok gudang pusat berkurang sebesar `qty_approved` saat admin menyetujui pesanan. Revisi persetujuan menyesuaikan stok sebesar selisih kuantitas; pengiriman dan penerimaan tidak menguranginya lagi.
+   - Stok gudang pusat berkurang sebesar `qty_requested` saat Mitra mengajukan pesanan dalam transaksi dengan kunci baris produk (`FOR UPDATE`). Pesanan bersamaan tidak boleh memesan melebihi stok yang tersisa.
+   - Penolakan atau pembatalan sebelum pengiriman mengembalikan seluruh reservasi. Persetujuan parsial mengembalikan selisih `qty_requested - qty_approved`; revisi persetujuan menyesuaikan selisih terhadap reservasi terakhir. Pengiriman dan penerimaan tidak mengurangi stok pusat lagi.
+   - Mitra dapat mengedit pesanan `diproses` dan membatalkan pesanan `diproses` atau `disetujui` sebelum pengiriman.
 
 3. **Batasan Mutasi Database (Strict Mutation Boundary)**:
    - Frontend **tidak boleh** melakukan mutasi atau query langsung ke database.

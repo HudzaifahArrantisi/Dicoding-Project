@@ -20,6 +20,7 @@ __pycache__/
 .venv/
 data-science/.env
 ai/.env
+ai/market_hotspot_digest.json
 
 # Uploads directory
 apps/api/uploads/*

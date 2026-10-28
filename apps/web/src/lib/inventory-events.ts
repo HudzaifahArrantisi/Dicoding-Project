@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { resolveApiUrl, sessionRequest } from './api'
+import { resolveApiUrl } from './api'
 
 type Role = 'admin' | 'mitra'
 type Topic = 'orders' | 'stocks' | 'logs' | 'products' | 'notifications' | 'metrics' | 'partners'
@@ -43,19 +43,11 @@ const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
   },
 }
 
-function parseTopics(frame: string): Topic[] {
-  if (!frame.split('\n').some((line) => line.trim() === 'event: inventory')) {
-    return []
-  }
-  const data = frame
-    .split('\n')
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).trimStart())
-    .join('\n')
+function parseTopics(raw: string): Topic[] {
   try {
-    const parsed: unknown = JSON.parse(data)
+    const parsed: unknown = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object' || !('topics' in parsed)) return []
-    const values: unknown = parsed.topics
+    const values: unknown = (parsed as { topics?: unknown }).topics
     if (!Array.isArray(values)) return []
     return values.filter(
       (value): value is Topic =>
@@ -68,22 +60,22 @@ function parseTopics(frame: string): Topic[] {
 
 export function useInventoryEvents(enabled: boolean, role: Role): void {
   const queryClient = useQueryClient()
+  const queryClientRef = useRef(queryClient)
+  queryClientRef.current = queryClient
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || typeof window === 'undefined') return
 
     let stopped = false
-    let connectedBefore = false
-    let lastResyncAt = 0
-    let retryDelay = 1_000
-    let controller: AbortController | null = null
+    let eventSource: EventSource | null = null
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let invalidateTimer: ReturnType<typeof setTimeout> | null = null
-    let catchupTimer: ReturnType<typeof setTimeout> | null = null
+    let retryDelay = 3_000
     const pending = new Set<Topic>()
 
     const flush = () => {
       invalidateTimer = null
+      if (pending.size === 0) return
       const keys = new Map<string, string[]>()
       for (const topic of pending) {
         for (const key of queryKeys[role][topic] ?? []) {
@@ -92,108 +84,88 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
       }
       pending.clear()
       for (const key of keys.values()) {
-        void queryClient.invalidateQueries({ queryKey: key })
+        void queryClientRef.current.invalidateQueries({ queryKey: key })
       }
     }
 
     const queue = (changed: Topic[]) => {
       for (const topic of changed) pending.add(topic)
       if (pending.size && !invalidateTimer) {
-        invalidateTimer = setTimeout(flush, 150)
+        invalidateTimer = setTimeout(flush, 250)
       }
     }
 
-    const canConnect = () => !stopped && !document.hidden && navigator.onLine
+    const connect = () => {
+      if (stopped || eventSource) return
 
-    const catchUp = () => {
-      if (!canConnect() || !controller) return
-      const wait = Math.max(0, 30_000 - (Date.now() - lastResyncAt))
-      if (wait > 0) {
-        if (!catchupTimer) {
-          catchupTimer = setTimeout(() => {
-            catchupTimer = null
-            catchUp()
-          }, wait)
-        }
-        return
-      }
-      lastResyncAt = Date.now()
-      queue(topics)
-    }
-
-    const connect = async () => {
-      if (!canConnect() || controller) return
-      controller = new AbortController()
-      const signal = controller.signal
       try {
-        const response = await fetch(`${resolveApiUrl()}/events`, sessionRequest({
-          signal,
-          cache: 'no-store',
-        }))
-        if (response.status === 401 || response.status === 403) {
-          stopped = true
-          return
+        const url = `${resolveApiUrl()}/events`
+        const es = new EventSource(url, { withCredentials: true })
+        eventSource = es
+
+        es.onopen = () => {
+          retryDelay = 3_000
         }
-        if (!response.ok || !response.body) throw new Error('SSE unavailable')
 
-        if (connectedBefore) catchUp()
-        connectedBefore = true
-        const connectedAt = Date.now()
+        es.addEventListener('inventory', (event) => {
+          if (stopped) return
+          const changed = parseTopics(event.data)
+          if (changed.length > 0) {
+            queue(changed)
+          }
+        })
 
-        const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        while (!signal.aborted) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, '\n')
-          if (buffer.length > 65_536) buffer = ''
-          let boundary = buffer.indexOf('\n\n')
-          while (boundary !== -1) {
-            queue(parseTopics(buffer.slice(0, boundary)))
-            buffer = buffer.slice(boundary + 2)
-            boundary = buffer.indexOf('\n\n')
+        es.onerror = () => {
+          if (stopped) return
+          es.close()
+          eventSource = null
+
+          // Exponential backoff to avoid rapid reconnection loops
+          const delay = retryDelay
+          retryDelay = Math.min(retryDelay * 2, 30_000)
+
+          if (!reconnectTimer) {
+            reconnectTimer = setTimeout(() => {
+              reconnectTimer = null
+              connect()
+            }, delay)
           }
         }
-        if (Date.now() - connectedAt > 30_000) retryDelay = 1_000
       } catch {
-        // A dropped stream reconnects below; reconnect refreshes missed changes.
-      } finally {
-        controller = null
-        if (canConnect()) {
-          reconnectTimer = setTimeout(() => {
-            reconnectTimer = null
-            void connect()
-          }, retryDelay)
-          retryDelay = Math.min(retryDelay * 2, 30_000)
+        if (!stopped && !reconnectTimer) {
+          reconnectTimer = setTimeout(connect, 5_000)
         }
       }
     }
 
-    const resume = () => {
-      if (canConnect()) {
-        if (reconnectTimer) clearTimeout(reconnectTimer)
-        reconnectTimer = null
-        void connect()
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (eventSource) {
+          eventSource.close()
+          eventSource = null
+        }
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer)
+          reconnectTimer = null
+        }
       } else {
-        controller?.abort()
+        retryDelay = 3_000
+        connect()
       }
     }
 
-    document.addEventListener('visibilitychange', resume)
-    window.addEventListener('online', resume)
-    window.addEventListener('offline', resume)
-    void connect()
+    document.addEventListener('visibilitychange', handleVisibility)
+    connect()
 
     return () => {
       stopped = true
-      controller?.abort()
+      document.removeEventListener('visibilitychange', handleVisibility)
       if (reconnectTimer) clearTimeout(reconnectTimer)
       if (invalidateTimer) clearTimeout(invalidateTimer)
-      if (catchupTimer) clearTimeout(catchupTimer)
-      document.removeEventListener('visibilitychange', resume)
-      window.removeEventListener('online', resume)
-      window.removeEventListener('offline', resume)
+      if (eventSource) {
+        eventSource.close()
+        eventSource = null
+      }
     }
-  }, [enabled, role, queryClient])
+  }, [enabled, role])
 }

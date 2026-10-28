@@ -15,6 +15,7 @@ import { notificationsModule } from "./modules/notifications";
 import { adminModule } from "./modules/admin";
 import { regionModule } from "./modules/regions";
 import { realtimeModule } from "./realtime";
+import { runWeeklyPipeline } from "./lib/weekly-pipeline";
 
 function isAllowedOrigin(origin?: string | null): boolean {
   if (!origin) return false;
@@ -78,7 +79,9 @@ export const app = new Elysia()
     (request as unknown as { _startTime?: number })._startTime = performance.now();
     set.headers["X-Content-Type-Options"] = "nosniff";
     set.headers["Referrer-Policy"] = "no-referrer";
-    set.headers["Cache-Control"] = "no-store";
+    if (!request.url.includes("/events")) {
+      set.headers["Cache-Control"] = "no-store";
+    }
   })
   .onAfterResponse(({ request, set }) => {
     const start = (request as unknown as { _startTime?: number })._startTime;
@@ -200,20 +203,11 @@ export const app = new Elysia()
   .use(regionModule)
   .use(
     cron({
-      name: "ai-company-analytics",
-      pattern: "0 */2 * * *", // Evaluasi otonom berkala setiap 2 jam
+      name: "weekly-demand-and-restock",
+      pattern: "0 5 * * 1",
+      timezone: "Asia/Jakarta",
       run() {
-        console.log(
-          `[${new Date().toLocaleTimeString()}] 🤖 [AI CRON] Menjalankan evaluasi berkala perkembangan mitra & perusahaan...`,
-        );
-        try {
-          Bun.spawn(["python", "ai/jobs/company_analytics.py"], {
-            stdout: "ignore",
-            stderr: "ignore",
-          });
-        } catch {
-          // background execution fallback
-        }
+        return runWeeklyPipeline().catch((error) => console.error("[WEEKLY AI]", error));
       },
     }),
   )
