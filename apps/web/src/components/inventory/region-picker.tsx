@@ -1,6 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api'
-import { unwrapData } from '@/lib/api-response'
+import {
+  getProvinces,
+  getRegencies,
+  getDistricts,
+  getVillages,
+  type RegionOption,
+} from '@/lib/api'
 
 export interface RegionCodes {
   province_code: string
@@ -16,7 +21,7 @@ export const emptyRegion: RegionCodes = {
   village_code: '',
 }
 
-type RegionOption = { code: string; name: string }
+export type { RegionOption }
 
 export function RegionPicker({
   value,
@@ -31,24 +36,24 @@ export function RegionPicker({
 }) {
   const provinces = useQuery<RegionOption[]>({
     queryKey: ['regions', 'provinces'],
-    queryFn: async () => unwrapData<RegionOption[]>(await api.regions.provinces.get(), 'Provinsi belum dapat dimuat'),
+    queryFn: () => getProvinces(),
     staleTime: 24 * 60 * 60 * 1000,
   })
   const regencies = useQuery<RegionOption[]>({
     queryKey: ['regions', 'regencies', value.province_code],
-    queryFn: async () => unwrapData<RegionOption[]>(await api.regions.regencies({ code: value.province_code }).get(), 'Kabupaten/kota belum dapat dimuat'),
+    queryFn: () => getRegencies(value.province_code),
     enabled: !!value.province_code,
     staleTime: 24 * 60 * 60 * 1000,
   })
   const districts = useQuery<RegionOption[]>({
     queryKey: ['regions', 'districts', value.regency_code],
-    queryFn: async () => unwrapData<RegionOption[]>(await api.regions.districts({ code: value.regency_code }).get(), 'Kecamatan belum dapat dimuat'),
+    queryFn: () => getDistricts(value.regency_code),
     enabled: !!value.regency_code,
     staleTime: 24 * 60 * 60 * 1000,
   })
   const villages = useQuery<RegionOption[]>({
     queryKey: ['regions', 'villages', value.district_code],
-    queryFn: async () => unwrapData<RegionOption[]>(await api.regions.villages({ code: value.district_code }).get(), 'Kelurahan/desa belum dapat dimuat'),
+    queryFn: () => getVillages(value.district_code),
     enabled: !!value.district_code,
     staleTime: 24 * 60 * 60 * 1000,
   })

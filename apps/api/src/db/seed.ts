@@ -161,6 +161,7 @@ export async function runSeed() {
   const productBySku = new Map(
     productRows.map((product) => [product.sku, product]),
   );
+  const parLevelByType = { hotel: 100, restoran: 80, kafe: 60, minimarket: 120, lainnya: 60 } as const;
 
   await db
     .insert(partnerStocks)
@@ -170,7 +171,7 @@ export async function runSeed() {
           partner_id: partner.id,
           product_id: product.id,
           current_qty: 0,
-          par_level: 40,
+          par_level: parLevelByType[partner.type],
         })),
       ),
     )
@@ -197,7 +198,7 @@ export async function runSeed() {
         partner_id: kafeSejuk.id,
         product_id: product.id,
         current_qty: scenario.currentQty,
-        par_level: 40,
+        par_level: parLevelByType[kafeSejuk.type],
         updated_at: new Date(),
         updated_by: mitraKafe.id,
       })
@@ -205,7 +206,7 @@ export async function runSeed() {
         target: [partnerStocks.partner_id, partnerStocks.product_id],
         set: {
           current_qty: scenario.currentQty,
-          par_level: 40,
+          par_level: parLevelByType[kafeSejuk.type],
           updated_at: new Date(),
           updated_by: mitraKafe.id,
         },
@@ -235,7 +236,7 @@ export async function runSeed() {
       type: "low_stock",
       partner_id: kafeSejuk.id,
       title: alertTitle,
-      body: "Seblak Jadul Instan di Kafe Sejuk BSD tersisa 10 dari 40 pcs (25%). Periksa kebutuhan restock cabang.",
+      body: `Seblak Jadul Instan di Kafe Sejuk BSD tersisa 10 pcs (patokan ${parLevelByType[kafeSejuk.type]} pcs). Periksa kebutuhan restock cabang.`,
     });
   }
 

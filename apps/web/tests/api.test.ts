@@ -179,6 +179,33 @@ describe('Centralized API client routing architecture', () => {
         globalThis.fetch = originalFetch
       }
     })
+
+    test('apiClient.post serializes JSON body and preserves Content-Type: application/json header', async () => {
+      let interceptedHeaders: Record<string, string> | undefined
+      let interceptedBody: string | undefined
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        interceptedHeaders = init?.headers as Record<string, string>
+        interceptedBody = String(init?.body)
+        return new Response(JSON.stringify({ status: 'ok' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }) as typeof fetch
+
+      try {
+        await apiClient.post('/auth/login', {
+          email: 'admin@daisuki.test',
+          password: 'password123',
+        })
+        expect(interceptedHeaders?.['content-type']).toBe('application/json')
+        expect(interceptedBody).toBe(
+          JSON.stringify({ email: 'admin@daisuki.test', password: 'password123' }),
+        )
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
   })
 
   describe('Treaty client routing through /api', () => {

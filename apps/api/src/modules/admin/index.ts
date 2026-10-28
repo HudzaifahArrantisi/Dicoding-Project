@@ -1,4 +1,4 @@
-import { runWeeklyPipeline } from "../../lib/weekly-pipeline";
+import { getWeeklyPipelineStatus, startWeeklyPipeline } from "../../lib/weekly-pipeline";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Elysia, t } from "elysia";
@@ -729,6 +729,18 @@ export const adminModule = new Elysia({ prefix: "/admin" })
     const analytics = await computeCompanyAiAnalytics();
     return { data: analytics };
   })
+  .get("/ai-insights/run", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    if (user.role !== "admin") {
+      set.status = 403;
+      return { error: "Forbidden: Admin only" };
+    }
+    return getWeeklyPipelineStatus();
+  })
   .post("/ai-insights/run", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) {
@@ -740,14 +752,8 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       return { error: "Forbidden: Admin only" };
     }
 
-    try {
-      await runWeeklyPipeline();
-      return { status: "ok" };
-    } catch (error) {
-      console.error("[WEEKLY AI]", error);
-      set.status = 503;
-      return { error: "Analisis mingguan gagal dijalankan. Periksa log server dan konfigurasi Python." };
-    }
+    set.status = 202;
+    return startWeeklyPipeline();
   });
 
 type RegionalModel = {
@@ -794,6 +800,7 @@ async function getRegionalActivity() {
       critical_logs: number;
       stockout_logs: number;
       restock_requests: number;
+      weekly_units: number;
     }>`
       WITH stockout AS (
         SELECT sl.partner_id,
@@ -808,16 +815,26 @@ async function getRegionalActivity() {
         FROM orders
         WHERE status <> 'dibatalkan' AND created_at >= NOW() - INTERVAL '60 days'
         GROUP BY partner_id
+      ), sales AS (
+        SELECT partner_id,
+          SUM(qty_before - qty_after)::int AS weekly_units
+        FROM stock_logs
+        WHERE source = 'manual_update'
+          AND qty_before > qty_after
+          AND created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY partner_id
       )
       SELECT p.id::text AS partner_id, p.name AS partner_name,
         COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
         COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
         COALESCE(s.critical_logs, 0)::int AS critical_logs,
         COALESCE(s.stockout_logs, 0)::int AS stockout_logs,
-        COALESCE(r.restock_requests, 0)::int AS restock_requests
+        COALESCE(r.restock_requests, 0)::int AS restock_requests,
+        COALESCE(sa.weekly_units, 0)::int AS weekly_units
       FROM partners p
       LEFT JOIN stockout s ON s.partner_id = p.id
       LEFT JOIN restock r ON r.partner_id = p.id
+      LEFT JOIN sales sa ON sa.partner_id = p.id
       WHERE p.is_active = true
     `),
   ]);
@@ -838,6 +855,7 @@ async function getRegionalActivity() {
       critical_logs: number;
       stockout_logs: number;
       restock_requests: number;
+      weekly_units: number;
       zone: string;
       suggested_products: Array<{ product_name: string; suggested_par_level: number }>;
     }>;
@@ -875,6 +893,7 @@ async function getRegionalActivity() {
       critical_logs: Number(row.critical_logs),
       stockout_logs: Number(row.stockout_logs),
       restock_requests: Number(row.restock_requests),
+      weekly_units: Number(row.weekly_units),
       zone: modelPartner?.zone ?? "BELUM_DIANALISIS",
       suggested_products: modelPartner?.fast_moving_products ?? [],
     });
@@ -1062,12 +1081,9 @@ async function computeCompanyAiAnalytics() {
     const turnoverRate = parLevel > 0 ? Number(((weeklyConsumption / parLevel) * 100).toFixed(1)) : 0;
     const daysOfCover = dailyVelocity > 0 ? Number((currentQty / dailyVelocity).toFixed(1)) : (currentQty > 0 ? 99 : 0);
 
-    // Hitung Par Level Dinamis AI (Lead Time 6 hari + 3 hari buffer + safety stock)
+    // Hitung Par Level Dinamis AI dari lead time dan safety stock.
     const safetyStock = Math.max(5, Math.round(dailyVelocity * 2));
-    let suggestedPar = Math.max(parLevel, Math.round(dailyVelocity * 9 + safetyStock));
-    if (suggestedPar > 20) {
-      suggestedPar = Math.ceil(suggestedPar / 5) * 5;
-    }
+    const suggestedPar = Math.max(1, Math.ceil(dailyVelocity * 6 + safetyStock));
     const parDelta = suggestedPar - parLevel;
 
     // Deteksi Fast Moving (Kritis = Laris)
@@ -1089,8 +1105,8 @@ async function computeCompanyAiAnalytics() {
         suggested_par_level: suggestedPar,
         par_delta: parDelta,
         reason: parDelta > 0
-          ? `Barang sangat laku (terjual ${weeklyConsumption} pcs/minggu). Kapasitas rak saat ini (${parLevel} pcs) terlalu kecil sehingga ${critFreq}x berstatus kritis. Disarankan naikkan ke ${suggestedPar} pcs.`
-          : `Perputaran barang cepat (omzet ${turnoverRate}% dari kapasitas rak per minggu).`,
+          ? `Barang sangat laku (terjual ${weeklyConsumption} pcs/minggu). Buffer minimal saat ini (${parLevel} pcs) perlu disesuaikan karena ${critFreq}x berstatus kritis. Saran buffer: ${suggestedPar} pcs.`
+          : `Perputaran barang cepat (terjual ${weeklyConsumption} pcs/minggu).`,
       });
     }
 
@@ -1103,8 +1119,8 @@ async function computeCompanyAiAnalytics() {
 
       if (parLevel < Math.round(dailyVelocity * 6)) {
         rootCause = 'UNDER_CAPACITY';
-        rootCauseLabel = 'Kapasitas Rak Kurang (Under-Capacity)';
-        actionRec = `Kapasitas rak tidak menampung kebutuhan 6 hari pengiriman. Naikkan par level ke ${suggestedPar} pcs.`;
+        rootCauseLabel = 'Laju Penjualan Cepat (Tingkat Konsumsi Tinggi)';
+        actionRec = `Laju penjualan sangat cepat (~${dailyVelocity} pcs/hari). Tambahkan suplai pesanan restok hingga minimal ${suggestedPar} pcs.`;
       } else if (!row.has_active_order && daysOfCover < 3) {
         rootCause = 'LATE_REORDER';
         rootCauseLabel = 'Keterlambatan Pesan Restok';
@@ -1207,7 +1223,7 @@ async function computeCompanyAiAnalytics() {
   const aiDigest = {
     headline: `Perkembangan Bisnis: ${totalSales7d} pcs Terjual Minggu Ini (${salesGrowthPct >= 0 ? '+' : ''}${salesGrowthPct}%)`,
     sales_insight: topFast
-      ? `Produk berstatus sering kritis terbukti merupakan produk paling laris. Contoh: ${topFast.product_name} di ${topFast.partner_name} mencatatkan penjualan ${topFast.weekly_consumption} pcs/minggu. Disarankan menaikkan kapasitas rak.`
+      ? `Produk berstatus sering kritis terbukti merupakan produk paling laris. Contoh: ${topFast.product_name} di ${topFast.partner_name} mencatatkan penjualan ${topFast.weekly_consumption} pcs/minggu. Tinjau kembali buffer minimal dan jadwal pasokannya.`
       : `Konsumsi produk di seluruh mitra terpantau stabil.`,
     restock_insight: `Tingkat pemenuhan pesanan restok jaringan mencapai ${fulfillmentRate}% dari seluruh permohonan cabang.`,
     procurement_insight: procurementText,

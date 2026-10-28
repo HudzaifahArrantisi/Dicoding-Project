@@ -17,6 +17,7 @@ import psycopg
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_JSON = ROOT / "ai" / "data" / "regional_stockout_insights.json"
 DATA_DIR = ROOT / "ai" / "data"
+LEAD_TIME_DAYS = 6
 
 
 def get_database_url() -> str:
@@ -114,6 +115,10 @@ def fetch_database_records(database_url: str) -> list[dict]:
         pr.sku AS product_sku,
         ps.current_qty,
         ps.par_level,
+        COALESCE(SUM(CASE WHEN sl.source = 'manual_update' AND sl.qty_before >= sl.qty_after
+                          THEN sl.qty_before - sl.qty_after ELSE 0 END), 0)::float / 60 AS adu,
+        COALESCE(STDDEV_POP(CASE WHEN sl.source = 'manual_update' AND sl.qty_before >= sl.qty_after
+                                  THEN sl.qty_before - sl.qty_after END), 0) AS usage_deviation,
         COUNT(CASE WHEN sl.qty_after <= (ps.par_level * 0.20) THEN 1 END) AS critical_events,
         COUNT(CASE WHEN sl.qty_after = 0 THEN 1 END) AS zero_stock_events,
         COUNT(sl.id) AS total_logs
@@ -162,6 +167,9 @@ def train_naive_bayes_model(records: list[dict]) -> tuple[list[dict], list[dict]
         cur = int(r["current_qty"])
         crit = int(r["critical_events"] or 0)
         zeros = int(r["zero_stock_events"] or 0)
+        adu = float(r["adu"] or 0)
+        safety_stock = math.ceil(1.65 * float(r["usage_deviation"] or 0) * math.sqrt(LEAD_TIME_DAYS))
+        suggested_par_level = max(1, math.ceil(adu * LEAD_TIME_DAYS + safety_stock))
 
         partner_map[pid]["total_items"] += 1
         partner_map[pid]["total_critical_events"] += crit
@@ -175,7 +183,7 @@ def train_naive_bayes_model(records: list[dict]) -> tuple[list[dict], list[dict]
                 "current_qty": cur,
                 "par_level": par,
                 "critical_frequency": crit,
-                "suggested_par_level": int(round(par * 1.5)) if crit >= 3 else par + 10,
+                "suggested_par_level": suggested_par_level,
             })
 
     partner_rows = list(partner_map.values())

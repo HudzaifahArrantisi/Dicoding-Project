@@ -22,7 +22,7 @@ create unique index if not exists restock_recommendations_partner_product_key
   on restock_recommendations (partner_id, product_id);
 grant select on partner_stocks, stock_logs to ai_job;
 
--- Approval under the previous workflow reserved stock. Return unshipped reservations once.
+
 create table if not exists inventory_migrations (
   name text primary key,
   applied_at timestamptz not null default now()

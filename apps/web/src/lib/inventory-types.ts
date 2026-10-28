@@ -1,5 +1,7 @@
 import type { OrderStatus, StockStatus } from '@daisuki/shared'
 
+export type { OrderStatus, StockStatus }
+
 export interface StockItem {
   partner_id: string
   partner_name: string

@@ -338,7 +338,13 @@ select
     when pr.sku = 'DSK-MK-003' then 15
     else 25
   end as current_qty,
-  40 as par_level
+  case p.type
+    when 'hotel' then 100
+    when 'restoran' then 80
+    when 'kafe' then 60
+    when 'minimarket' then 120
+    else 60
+  end as par_level
 from partners p
 cross join products pr
 where pr.is_active = true

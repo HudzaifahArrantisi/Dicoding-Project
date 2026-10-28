@@ -37,7 +37,7 @@ export function publishInventoryChange(event: InventoryEvent): void {
 
 export const realtimeModule = new Elysia().get(
   "/events",
-  async ({ headers, request }) => {
+  async ({ headers, request, server }) => {
     const user = await getAuthUser(headers);
     if (!user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -45,6 +45,8 @@ export const realtimeModule = new Elysia().get(
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    server?.timeout(request, 0);
 
     let subscriber: Subscriber;
     let heartbeat: ReturnType<typeof setInterval> | undefined;

@@ -24,7 +24,7 @@ Status pesanan berjalan dari `diproses` → `disetujui` → `dalam_pengiriman` �
 
 Data yang diserahkan ke tim lain adalah riwayat `stock_logs`. Admin sudah memiliki tombol ekspor `raw_stock_logs.csv` di tab **Log & Data**. API juga menyediakan data rekomendasi dari tabel `restock_recommendations`.
 
-Contoh: Mitra melaporkan Seblak tersisa 30 dari 40 pcs. API menyimpan stok terbaru dan log perubahan. Log itu dapat dipakai untuk menghitung laju pemakaian Seblak di cabang tersebut.
+Contoh: Mitra melaporkan Seblak tersisa 30 pcs. API menyimpan stok terbaru dan log perubahan. Log itu dapat dipakai untuk menghitung laju pemakaian Seblak di cabang tersebut.
 
 ## 2. Data Science: mengubah log menjadi ukuran kebutuhan stok
 

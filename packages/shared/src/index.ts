@@ -7,10 +7,9 @@ export function stockPercent(qty: number, parLevel: number): number {
 }
 
 export function getStockStatus(qty: number, parLevel: number): StockStatus {
-  if (qty <= 10) return "kritis";
   const pct = stockPercent(qty, parLevel);
   if (pct > STOCK_THRESHOLDS.aman) return "aman";
-  if (pct >= STOCK_THRESHOLDS.kritis) return "waspada";
+  if (pct > STOCK_THRESHOLDS.kritis) return "waspada";
   return "kritis";
 }
 

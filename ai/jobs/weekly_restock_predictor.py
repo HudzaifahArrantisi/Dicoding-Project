@@ -25,11 +25,12 @@ def predict(weekly_units: list[int], current_qty: int, par_level: int) -> dict:
         forecast = 0
     safety = math.ceil(1.65 * volatility / 7 * math.sqrt(LEAD_DAYS))
     rop = math.ceil(forecast / 7 * LEAD_DAYS + safety)
-    recommended = max(0, forecast + safety - current_qty)
+    suggested_par_level = max(1, rop)
+    recommended = max(0, suggested_par_level - current_qty)
     cover = round(current_qty / (forecast / 7), 1) if forecast else (99.0 if current_qty else 0.0)
     urgency = "CRITICAL" if current_qty <= 10 or cover < 2 else "WARNING" if current_qty < rop or cover < LEAD_DAYS else "NORMAL"
     fast_moving = forecast >= 10 and (current_qty < par_level * .2 or current_qty <= 10)
-    return {"predicted_demand_units": forecast, "recommended_qty": recommended, "urgency": urgency,
+    return {"predicted_demand_units": forecast, "recommended_qty": recommended, "suggested_par_level": suggested_par_level, "urgency": urgency,
             "reasoning": f"Konsumsi diproyeksikan {forecast} pcs per minggu; stok {current_qty} pcs, cadangan {safety} pcs. " + ("Stok kritis sejalan dengan perputaran cepat." if fast_moving else "Prioritas mengikuti estimasi hari cakupan."),
             "safety_stock": safety, "reorder_point": rop, "days_of_cover": min(999.0, cover), "critical_fast_moving": fast_moving}
 

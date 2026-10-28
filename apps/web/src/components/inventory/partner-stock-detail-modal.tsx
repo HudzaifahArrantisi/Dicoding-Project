@@ -1,7 +1,6 @@
 import { Dialog } from 'radix-ui'
 import { Building2, Clock, X } from 'lucide-react'
 import type { StockStatus } from '@daisuki/shared'
-import { RakBar } from './rak-bar'
 import { StaleBadge, StockStatusBadge } from './status-badge'
 import type { StockItem } from '@/lib/inventory-types'
 
@@ -161,25 +160,11 @@ export function PartnerStockDetailModal({
                       <StockStatusBadge status={stock.status} />
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <RakBar
-                          percentage={stock.percentage}
-                          status={stock.status}
-                          label={`${stock.product_name}: ${stock.percentage} persen`}
-                        />
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <span className="font-display text-sm font-bold tabular-nums text-ink-900">
-                          {stock.current_qty}
-                        </span>
-                        <span className="text-xs text-muted">
-                          /{stock.par_level}
-                        </span>
-                        <span className="ml-1 text-[11px] font-semibold tabular-nums text-muted">
-                          ({Math.round(stock.percentage)}%)
-                        </span>
-                      </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-xs text-muted">Sisa stok cabang</span>
+                      <span className="font-display text-sm font-bold tabular-nums text-ink-900">
+                        {stock.current_qty.toLocaleString('id-ID')} pcs
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -188,10 +173,9 @@ export function PartnerStockDetailModal({
               {/* Tampilan Desktop: Tabel Grid Presisi */}
               <div className="hidden sm:block">
                 {/* Header Kolom Tabel */}
-                <div className="grid grid-cols-[minmax(0,1fr)_130px_60px_90px] items-center gap-4 border-b border-line bg-paper/70 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                <div className="grid grid-cols-[minmax(0,1fr)_100px_90px] items-center gap-4 border-b border-line bg-paper/70 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
                   <span>Produk</span>
-                  <span className="text-center">Kapasitas Rak</span>
-                  <span className="text-right">Sisa / Par</span>
+                  <span className="text-right">Sisa Stok</span>
                   <span className="text-right">Status</span>
                 </div>
 
@@ -200,7 +184,7 @@ export function PartnerStockDetailModal({
                   {group.items.map((stock) => (
                     <div
                       key={stock.product_id}
-                      className="grid grid-cols-[minmax(0,1fr)_130px_60px_90px] items-center gap-4 px-4 py-3 transition-colors hover:bg-paper/40"
+                      className="grid grid-cols-[minmax(0,1fr)_100px_90px] items-center gap-4 px-4 py-3 transition-colors hover:bg-paper/40"
                     >
                       {/* 1. Nama Produk */}
                       <div className="min-w-0 pr-1">
@@ -212,26 +196,14 @@ export function PartnerStockDetailModal({
                         </p>
                       </div>
 
-                      {/* 2. Visual Petak Rak */}
-                      <div className="w-full">
-                        <RakBar
-                          percentage={stock.percentage}
-                          status={stock.status}
-                          label={`${stock.product_name}: ${stock.percentage} persen`}
-                        />
-                      </div>
-
-                      {/* 3. Angka Stok Tabular */}
+                      {/* 2. Angka Stok Tabular */}
                       <div className="text-right whitespace-nowrap">
                         <span className="font-display text-sm font-semibold tabular-nums text-ink-900">
-                          {stock.current_qty}
-                        </span>
-                        <span className="text-xs text-muted">
-                          /{stock.par_level}
+                          {stock.current_qty.toLocaleString('id-ID')} pcs
                         </span>
                       </div>
 
-                      {/* 4. Status Badge */}
+                      {/* 3. Status Badge */}
                       <div className="flex justify-end">
                         <StockStatusBadge status={stock.status} />
                       </div>

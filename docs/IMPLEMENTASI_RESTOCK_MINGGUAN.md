@@ -7,7 +7,7 @@
 3. Jalankan API dan web versi baru bersama. Kamera memerlukan HTTPS atau localhost. Input kode manual tetap tersedia.
 4. Atur `PYTHON_EXECUTABLE` pada proses API bila executable Python bukan `python`. Kedua workspace Python memakai `DATABASE_URL`; proses API juga perlu menyediakan variabel ini untuk job.
 
-Cron Elysia menjalankan `weekly_demand.py`, `weekly_restock_predictor.py`, dan `market_hotspot_analytics.py` setiap Senin pukul 05.00 WIB. Admin dapat menjalankannya lewat tombol **Jalankan Analisis AI Sekarang** di AI Insights. Endpoint manual mengembalikan error bila salah satu tahap gagal; tahap berikutnya tidak dijalankan.
+Cron Elysia menjalankan pipeline mingguan setiap Senin pukul 05.00 WIB. Admin dapat memulainya lewat tombol **Perbarui saran** di tab AI. `POST /admin/ai-insights/run` segera mengembalikan status berjalan (HTTP 202); `GET /admin/ai-insights/run` menampilkan status akhir. Halaman admin memeriksa status secara berkala dan memuat ulang hasil setelah semua tahap berhasil. Jika satu tahap gagal, tahap berikutnya tidak dijalankan dan status menjadi `failed`; periksa log API untuk penyebabnya.
 
 Resi hanya tersedia setelah pesanan dikirim. Token QR tidak dikirim ke akun Mitra melalui API. Pemindaian atau input kode resi yang benar menyelesaikan pesanan dan mencatat stok cabang dalam satu transaksi.
 

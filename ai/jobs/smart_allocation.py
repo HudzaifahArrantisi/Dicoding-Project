@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import csv
+import math
 import os
 from pathlib import Path
 
@@ -21,6 +22,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[2]
 DATA_PATH = ROOT / "data-science" / "data" / "cleaned_inventory_summary.csv"
 MODEL_VERSION = "v1.0-ai-allocation"
+LEAD_TIME_DAYS = 6
 
 
 def read_rows() -> list[dict[str, str]]:
@@ -54,9 +56,10 @@ def allocate_recommendations() -> int:
             for row in ranked:
                 product_id = row["product_id"]
                 current = int(float(row["current_qty"]))
-                par = int(float(row["par_level"]))
                 safety = int(float(row["safety_stock"]))
-                demand = max(0, par - current + safety)
+                adu = float(row["adu"])
+                suggested_par_level = max(1, math.ceil(adu * LEAD_TIME_DAYS + safety))
+                demand = max(0, suggested_par_level - current)
                 available = remaining_stock.get(product_id, 0)
                 suggested = min(demand, available)
                 remaining_stock[product_id] = available - suggested
@@ -70,7 +73,7 @@ def allocate_recommendations() -> int:
                         days_of_cover = EXCLUDED.days_of_cover,
                         model_version = EXCLUDED.model_version,
                         generated_at = NOW()
-                """, (row["partner_id"], product_id, round(float(row["adu"]) * 6), suggested, float(row["days_of_cover"]), MODEL_VERSION))
+                """, (row["partner_id"], product_id, round(adu * LEAD_TIME_DAYS), suggested, float(row["days_of_cover"]), MODEL_VERSION))
                 generated += 1
                 if risk_for(row) == "HIGH_STOCKOUT_RISK" and suggested > 0:
                     cursor.execute("""

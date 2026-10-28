@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, gte, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
   auditLogs,
@@ -208,13 +208,16 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       try {
         await db.transaction(async (tx) => {
           for (const item of [...body.items].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
-            const [product] = await tx.select({ id: products.id, name: products.name, central_stock: products.central_stock, is_active: products.is_active })
-              .from(products).where(eq(products.id, item.product_id)).for("update");
-            if (!product || !product.is_active) throw new OrderWorkflowError(422, "Produk tidak ditemukan atau tidak aktif");
-            if (product.central_stock < item.qty_requested) {
+            const [reserved] = await tx.update(products)
+              .set({ central_stock: sql`${products.central_stock} - ${item.qty_requested}` })
+              .where(and(eq(products.id, item.product_id), eq(products.is_active, true), gte(products.central_stock, item.qty_requested)))
+              .returning({ id: products.id });
+            if (!reserved) {
+              const [product] = await tx.select({ name: products.name, central_stock: products.central_stock, is_active: products.is_active })
+                .from(products).where(eq(products.id, item.product_id));
+              if (!product || !product.is_active) throw new OrderWorkflowError(422, "Produk tidak ditemukan atau tidak aktif");
               throw new OrderWorkflowError(409, `Stok pusat ${product.name} tersisa ${product.central_stock} pcs. Kurangi jumlah pengajuan dan coba lagi.`);
             }
-            await tx.update(products).set({ central_stock: sql`${products.central_stock} - ${item.qty_requested}` }).where(eq(products.id, item.product_id));
           }
           const [ord] = await tx
           .insert(orders)
@@ -769,6 +772,8 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         return { error: "Bukti penerimaan harus berupa foto JPEG maksimal 500 KB" };
       }
 
+      const transactionStartedAt = performance.now();
+      let lockAcquiredAt: number | null = null;
       try {
         await db.transaction(async (tx) => {
           const [lockedOrder] = await tx
@@ -776,6 +781,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             .from(orders)
             .where(eq(orders.id, orderId))
             .for("update");
+          lockAcquiredAt = performance.now();
 
           if (!lockedOrder) {
             throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
@@ -825,7 +831,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
               } else {
                 updateData.receipt_photo_data_url = body.receipt_photo_data_url;
               }
-            } else {
+            } else if (body.receipt_photo_data_url === null) {
               updateData.receipt_photo_data_url = null;
             }
           } else if (targetStatus === "ditolak") {
@@ -953,6 +959,16 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           return { error: error.message };
         }
         throw error;
+      } finally {
+        const elapsed = performance.now() - transactionStartedAt;
+        if (elapsed > 5_000) {
+          console.warn("[SLOW ORDER STATUS]", {
+            orderId,
+            targetStatus,
+            transactionMs: Math.round(elapsed),
+            lockWaitMs: lockAcquiredAt === null ? null : Math.round(lockAcquiredAt - transactionStartedAt),
+          });
+        }
       }
 
       publishInventoryChange({

@@ -26,14 +26,13 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
-import { getStockStatus, stockPercent } from '@daisuki/shared'
+import { getStockStatus } from '@daisuki/shared'
 import { toast } from 'sonner'
 import {
   EmptyState,
   ErrorState,
   LoadingState,
 } from '@/components/inventory/query-state'
-import { RakBar } from '@/components/inventory/rak-bar'
 import { RegionPicker, emptyRegion } from '@/components/inventory/region-picker'
 import { DeliveryScannerModal } from '@/components/inventory/delivery-scanner-modal'
 import {
@@ -45,9 +44,21 @@ import {
   StaleBadge,
   StockStatusBadge,
 } from '@/components/inventory/status-badge'
-import { api, resolveImageUrl } from '@/lib/api'
+import {
+  getStocks,
+  getOrders,
+  getProducts,
+  getStockLogs,
+  reportDailyStock,
+  createOrder as apiCreateOrder,
+  confirmOrderReceipt,
+  updateOrder as apiUpdateOrder,
+  cancelOrder as apiCancelOrder,
+  uploadReceiptProof as apiUploadReceiptProof,
+  updateProfile,
+  resolveImageUrl,
+} from '@/lib/api'
 import { useInventoryEvents } from '@/lib/inventory-events'
-import { apiError, unwrapData } from '@/lib/api-response'
 import { useAuth, type User } from '@/lib/auth'
 import type { Order, Product, StockItem, StockLog } from '@/lib/inventory-types'
 
@@ -111,40 +122,25 @@ function MitraPortal() {
 
   const stocksQuery = useQuery<StockItem[]>({
     queryKey: ['mitra-stocks'],
-    queryFn: async () => {
-      const response = await api.stocks.get({ query: {} })
-      return unwrapData<StockItem[]>(response, 'Stok cabang belum dapat dimuat')
-    },
+    queryFn: () => getStocks(),
     enabled: user?.role === 'mitra',
   })
 
   const ordersQuery = useQuery<Order[]>({
     queryKey: ['mitra-orders'],
-    queryFn: async () => {
-      const response = await api.orders.get({ query: {} })
-      return unwrapData<Order[]>(response, 'Pesanan belum dapat dimuat')
-    },
+    queryFn: () => getOrders(),
     enabled: user?.role === 'mitra',
   })
 
   const centralProductsQuery = useQuery<Product[]>({
     queryKey: ['central-products'],
-    queryFn: async () => {
-      const response = await api.products.get()
-      return unwrapData<Product[]>(
-        response,
-        'Stok gudang pusat belum dapat dimuat',
-      )
-    },
+    queryFn: () => getProducts(),
     enabled: user?.role === 'mitra',
   })
 
   const logsQuery = useQuery<StockLog[]>({
     queryKey: ['mitra-stock-logs'],
-    queryFn: async () => {
-      const response = await api.stocks.logs.get({ query: {} })
-      return unwrapData<StockLog[]>(response, 'Log stok belum dapat dimuat')
-    },
+    queryFn: () => getStockLogs(),
     enabled: user?.role === 'mitra',
   })
 
@@ -191,14 +187,12 @@ function MitraPortal() {
 
   const updateStocks = useMutation({
     mutationFn: async () => {
-      const response = await api.stocks.put({
+      return reportDailyStock({
         items: changedStocks.map((stock) => ({
           product_id: stock.product_id,
           current_qty: editedStocks[stock.product_id],
         })),
       })
-      if (response.error) throw apiError(response.error, 'Stok belum tersimpan')
-      return response.data
     },
     onSuccess: async () => {
       await Promise.all([
@@ -212,17 +206,13 @@ function MitraPortal() {
 
   const createOrder = useMutation({
     mutationFn: async () => {
-      const response = await api.orders.post({
+      return apiCreateOrder({
         note: orderNote.trim() || undefined,
         items: orderItems.map((item) => ({
           product_id: item.product_id,
           qty_requested: Number(item.qty),
         })),
       })
-      if (response.error) {
-        throw apiError(response.error, 'Pesanan belum dapat diajukan')
-      }
-      return response.data
     },
     onSuccess: async () => {
       toast.success('Restock diajukan')
@@ -243,11 +233,7 @@ function MitraPortal() {
 
   const verifyDelivery = useMutation({
     mutationFn: async ({ orderId, code }: { orderId: string; code: string }) => {
-      const response = await api.orders({ id: orderId })['verify-delivery'].post({ code })
-      if (response.error) {
-        throw apiError(response.error, 'Penerimaan barang belum tercatat')
-      }
-      return response.data
+      return confirmOrderReceipt(orderId, code)
     },
     onSuccess: async () => {
       toast.success('Barang diterima dan stok ditambahkan')
@@ -262,8 +248,7 @@ function MitraPortal() {
 
   const editOrder = useMutation({
     mutationFn: async ({ orderId, note, items }: { orderId: string; note: string; items: Array<{ product_id: string; qty_requested: number }> }) => {
-      const response = await api.orders({ id: orderId }).put({ note, items })
-      if (response.error) throw apiError(response.error, 'Perubahan pesanan belum tersimpan')
+      return apiUpdateOrder(orderId, { note, items })
     },
     onSuccess: async () => { toast.success('Pesanan diperbarui'); await Promise.all([queryClient.invalidateQueries({ queryKey: ['mitra-orders'] }), queryClient.invalidateQueries({ queryKey: ['central-products'] })]) },
     onError: (error: unknown) => toast.error(errorMessage(error)),
@@ -271,8 +256,7 @@ function MitraPortal() {
 
   const cancelOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      const response = await api.orders({ id: orderId }).cancel.patch()
-      if (response.error) throw apiError(response.error, 'Pesanan belum dapat dibatalkan')
+      return apiCancelOrder(orderId)
     },
     onSuccess: async () => { toast.success('Pesanan dibatalkan'); await Promise.all([queryClient.invalidateQueries({ queryKey: ['mitra-orders'] }), queryClient.invalidateQueries({ queryKey: ['central-products'] })]) },
     onError: (error: unknown) => toast.error(errorMessage(error)),
@@ -280,8 +264,7 @@ function MitraPortal() {
 
   const uploadReceiptProof = useMutation({
     mutationFn: async ({ orderId, photo }: { orderId: string; photo: string }) => {
-      const response = await api.orders({ id: orderId })['receipt-proof'].patch({ photo_data_url: photo })
-      if (response.error) throw apiError(response.error, 'Foto bukti belum tersimpan')
+      return apiUploadReceiptProof(orderId, photo)
     },
     onSuccess: async () => {
       toast.success('Foto bukti berhasil dikirim ke admin pusat')
@@ -697,7 +680,6 @@ function StocksPanel({
         <div className="divide-y divide-line bg-white">
           {query.data?.map((stock) => {
             const qty = editedStocks[stock.product_id] ?? stock.current_qty
-            const percentage = stockPercent(qty, stock.par_level)
             const status = getStockStatus(qty, stock.par_level)
             const changed = changedIds.has(stock.product_id)
             return (
@@ -725,15 +707,9 @@ function StocksPanel({
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-3">
-                  <RakBar
-                    percentage={percentage}
-                    status={status}
-                    label={`${stock.product_name}, stok ${qty}, patokan status ${stock.par_level}, status ${status}`}
-                  />
-                  <span className="w-12 text-right text-sm font-semibold tabular-nums text-ink-900">
-                    {Math.round(percentage)}%
-                  </span>
+                <div className="mt-4 flex items-baseline gap-2" aria-live="polite">
+                  <span className="font-display text-2xl font-bold tabular-nums text-ink-900">{qty.toLocaleString('id-ID')}</span>
+                  <span className="text-sm text-muted">pcs fisik di toko</span>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between gap-3 border-t border-line/80 pt-3">
@@ -850,10 +826,11 @@ function OrderForm({
   onSubmit,
   isSubmitting,
 }: OrderFormProps) {
-  const products = [...(stocksQuery.data ?? [])].sort(
-    (a, b) =>
-      stockPercent(a.current_qty, a.par_level) -
-      stockPercent(b.current_qty, b.par_level),
+  const statusPriority = { kritis: 0, waspada: 1, aman: 2 }
+  const products = [...(stocksQuery.data ?? [])].sort((a, b) =>
+    statusPriority[getStockStatus(a.current_qty, a.par_level)] -
+      statusPriority[getStockStatus(b.current_qty, b.par_level)] ||
+    a.current_qty - b.current_qty,
   )
   const skippedCount = products.filter((stock) =>
     skippedProductIds.has(stock.product_id),
@@ -1831,7 +1808,7 @@ function ProfilePanel({ user }: { user: User }) {
 
   const saveProfile = useMutation({
     mutationFn: async () => {
-      const response = await api.me.profile.patch({
+      await updateProfile({
         name: name.trim(),
         pic_name: picName.trim(),
         phone: phone.trim(),
@@ -1839,9 +1816,6 @@ function ProfilePanel({ user }: { user: User }) {
         ...region,
         photo_data_url: photo,
       })
-      if (response.error) {
-        throw apiError(response.error, 'Profil belum tersimpan')
-      }
       await refreshUser()
     },
     onSuccess: () => toast.success('Profil mitra tersimpan'),

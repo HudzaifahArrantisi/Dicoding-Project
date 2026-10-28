@@ -227,6 +227,12 @@ export function ThreeDPieChart({
                       onMouseEnter={() => setHoveredId(slice.id)}
                       onMouseLeave={() => setHoveredId(null)}
                       onClick={() => onSelectSlice?.(slice.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          onSelectSlice?.(slice.id)
+                        }
+                      }}
                       role="button"
                       tabIndex={0}
                       aria-label={`${slice.label}: 100%`}
@@ -317,6 +323,12 @@ export function ThreeDPieChart({
                     onMouseEnter={() => setHoveredId(slice.id)}
                     onMouseLeave={() => setHoveredId(null)}
                     onClick={() => onSelectSlice?.(slice.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onSelectSlice?.(slice.id)
+                      }
+                    }}
                     role="button"
                     tabIndex={0}
                     aria-label={`${slice.label}: ${slice.percentage.toFixed(1)}%`}
@@ -397,7 +409,7 @@ export function ThreeDPieChart({
         {/* Right: Interactive Legend & Slice Breakdown */}
         <div className="space-y-2.5">
           <p className="text-xs font-bold uppercase tracking-wider text-muted">
-            Rincian & Filter Berdasarkan Daerah:
+            Pilih daerah untuk melihat rincian:
           </p>
           <div className="divide-y divide-line/70 max-h-64 overflow-y-auto pr-1">
             {allProcessedSlices.map((slice) => {
