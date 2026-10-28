@@ -9,7 +9,7 @@ export const env = createEnv({
   clientPrefix: 'VITE_',
 
   client: {
-    VITE_API_URL: z.string().url(),
+    VITE_API_URL: z.string().url().default('http://localhost:3001'),
   },
 
   runtimeEnv: import.meta.env,

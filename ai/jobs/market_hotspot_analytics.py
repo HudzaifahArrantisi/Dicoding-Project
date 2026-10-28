@@ -32,12 +32,13 @@ def run() -> dict:
             cursor.execute("""
                 SELECT pr.name, COALESCE(d.demand, 0), pr.central_stock
                 FROM products pr
-                LEFT JOIN (SELECT product_id, SUM(GREATEST(0, suggested_qty))::int AS demand
+                LEFT JOIN (SELECT product_id, SUM(GREATEST(0, forecast_qty))::int AS demand
                            FROM restock_recommendations GROUP BY product_id) d ON d.product_id=pr.id
                 WHERE pr.is_active ORDER BY pr.name
             """)
             production = [{"product": name, "recommended_batch": max(0, demand - central), "demand_units": demand, "central_stock": central} for name, demand, central in cursor.fetchall()]
     digest = {"top_performers": performers, "hotspot_regions": regions, "production_batches": production}
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(digest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(digest, ensure_ascii=False))
     return digest

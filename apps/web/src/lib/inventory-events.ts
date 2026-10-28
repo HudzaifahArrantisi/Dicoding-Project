@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { resolveApiUrl } from './api'
+import { resolveApiPath } from './api'
 
 type Role = 'admin' | 'mitra'
 type Topic = 'orders' | 'stocks' | 'logs' | 'products' | 'notifications' | 'metrics' | 'partners'
@@ -99,7 +99,7 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
       if (stopped || eventSource) return
 
       try {
-        const url = `${resolveApiUrl()}/events`
+        const url = resolveApiPath('/events')
         const es = new EventSource(url, { withCredentials: true })
         eventSource = es
 
@@ -132,7 +132,7 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
           }
         }
       } catch {
-        if (!stopped && !reconnectTimer) {
+        if (!reconnectTimer) {
           reconnectTimer = setTimeout(connect, 5_000)
         }
       }

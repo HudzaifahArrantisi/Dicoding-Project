@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 from collections import defaultdict
+from datetime import timedelta
 from statistics import pstdev
 
 import psycopg
@@ -25,7 +26,7 @@ def predict(weekly_units: list[int], current_qty: int, par_level: int) -> dict:
     safety = math.ceil(1.65 * volatility / 7 * math.sqrt(LEAD_DAYS))
     rop = math.ceil(forecast / 7 * LEAD_DAYS + safety)
     recommended = max(0, forecast + safety - current_qty)
-    cover = round(current_qty / (forecast / 7), 1) if forecast else 99.0
+    cover = round(current_qty / (forecast / 7), 1) if forecast else (99.0 if current_qty else 0.0)
     urgency = "CRITICAL" if current_qty <= 10 or cover < 2 else "WARNING" if current_qty < rop or cover < LEAD_DAYS else "NORMAL"
     fast_moving = forecast >= 10 and (current_qty < par_level * .2 or current_qty <= 10)
     return {"predicted_demand_units": forecast, "recommended_qty": recommended, "urgency": urgency,
@@ -50,19 +51,26 @@ def run() -> int:
                        SUM(qty_before - qty_after)::int
                 FROM stock_logs
                 WHERE source = 'manual_update' AND qty_before >= qty_after
-                  AND created_at >= now() - interval '56 days'
+                  AND created_at >= date_trunc('week', now() AT TIME ZONE 'Asia/Jakarta') AT TIME ZONE 'Asia/Jakarta' - interval '8 weeks'
                 GROUP BY 1, 2, 3 ORDER BY 3
             """)
-            history = defaultdict(list)
-            for partner_id, product_id, _, units in cursor.fetchall():
-                history[(partner_id, product_id)].append(units)
-            cursor.execute("SELECT product_id::text, SUM(qty_approved)::int FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.status IN ('disetujui','dalam_pengiriman') GROUP BY product_id")
-            pending = {product_id: qty for product_id, qty in cursor.fetchall()}
+            history = defaultdict(dict)
+            for partner_id, product_id, week, units in cursor.fetchall():
+                history[(partner_id, product_id)][week] = units
+            cursor.execute("SELECT (date_trunc('week', now() AT TIME ZONE 'Asia/Jakarta')::date - interval '7 weeks')::date")
+            first_week = cursor.fetchone()[0]
+            weeks = [first_week + timedelta(weeks=index) for index in range(8)]
+            cursor.execute("SELECT o.partner_id::text, oi.product_id::text, SUM(oi.qty_approved)::int FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.status IN ('disetujui','dalam_pengiriman') GROUP BY o.partner_id, oi.product_id")
+            pending = {(partner_id, product_id): qty for partner_id, product_id, qty in cursor.fetchall()}
             generated = 0
-            for partner_id, product_id, qty, par, partner_name, product_name, central in stocks:
-                result = predict(history[(partner_id, product_id)], qty, par)
+            remaining_stock = {product_id: max(0, central) for _, product_id, _, _, _, _, central in stocks}
+            for partner_id, product_id, qty, par, partner_name, product_name, _central in stocks:
+                weekly_units = [history[(partner_id, product_id)].get(week, 0) for week in weeks]
+                result = predict(weekly_units, qty, par)
                 result["reasoning"] = f"{product_name} di {partner_name}: {result['reasoning']}"
-                result["pending_units"] = pending.get(product_id, 0)
+                result["pending_units"] = pending.get((partner_id, product_id), 0)
+                result["recommended_qty"] = min(remaining_stock[product_id], max(0, result["recommended_qty"] - result["pending_units"]))
+                remaining_stock[product_id] -= result["recommended_qty"]
                 cursor.execute("""
                     INSERT INTO restock_recommendations
                         (partner_id, product_id, forecast_qty, suggested_qty, days_of_cover, model_version, metadata, generated_at)

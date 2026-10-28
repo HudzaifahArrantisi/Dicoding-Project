@@ -1,4 +1,6 @@
 import { runWeeklyPipeline } from "../../lib/weekly-pipeline";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { Elysia, t } from "elysia";
 import { desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, sql as postgres } from "../../db/client";
@@ -748,6 +750,146 @@ export const adminModule = new Elysia({ prefix: "/admin" })
     }
   });
 
+type RegionalModel = {
+  generated_at: string;
+  regional_rankings: Array<{
+    province_name: string;
+    regency_name: string;
+    regional_zone: "ZONA_MERAH" | "ZONA_KUNING" | "ZONA_HIJAU";
+    recommended_action: string;
+    partners: Array<{
+      partner_id: string;
+      zone: "ZONA_MERAH" | "ZONA_KUNING" | "ZONA_HIJAU";
+      fast_moving_products: Array<{
+        product_name: string;
+        suggested_par_level: number;
+      }>;
+    }>;
+  }>;
+};
+
+async function loadRegionalModel(): Promise<RegionalModel | null> {
+  const path = resolve(import.meta.dir, "../../../../../ai/data/regional_stockout_insights.json");
+  try {
+    const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (!parsed || typeof parsed !== "object" || !("regional_rankings" in parsed) ||
+        !Array.isArray(parsed.regional_rankings)) {
+      throw new Error("Format hasil model wilayah tidak valid");
+    }
+    return parsed as RegionalModel;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function getRegionalActivity() {
+  const [model, rows] = await Promise.all([
+    loadRegionalModel(),
+    db.execute(sql<{
+      partner_id: string;
+      partner_name: string;
+      province_name: string;
+      regency_name: string;
+      critical_logs: number;
+      stockout_logs: number;
+      restock_requests: number;
+    }>`
+      WITH stockout AS (
+        SELECT sl.partner_id,
+          COUNT(*) FILTER (WHERE sl.qty_after <= GREATEST(10, ps.par_level * 0.2))::int AS critical_logs,
+          COUNT(*) FILTER (WHERE sl.qty_after = 0)::int AS stockout_logs
+        FROM stock_logs sl
+        JOIN partner_stocks ps ON ps.partner_id = sl.partner_id AND ps.product_id = sl.product_id
+        WHERE sl.created_at >= NOW() - INTERVAL '60 days'
+        GROUP BY sl.partner_id
+      ), restock AS (
+        SELECT partner_id, COUNT(*)::int AS restock_requests
+        FROM orders
+        WHERE status <> 'dibatalkan' AND created_at >= NOW() - INTERVAL '60 days'
+        GROUP BY partner_id
+      )
+      SELECT p.id::text AS partner_id, p.name AS partner_name,
+        COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
+        COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
+        COALESCE(s.critical_logs, 0)::int AS critical_logs,
+        COALESCE(s.stockout_logs, 0)::int AS stockout_logs,
+        COALESCE(r.restock_requests, 0)::int AS restock_requests
+      FROM partners p
+      LEFT JOIN stockout s ON s.partner_id = p.id
+      LEFT JOIN restock r ON r.partner_id = p.id
+      WHERE p.is_active = true
+    `),
+  ]);
+
+  const modelRegions = new Map<string, RegionalModel["regional_rankings"][number]>(model?.regional_rankings.map((region) =>
+    [`${region.province_name}\u0000${region.regency_name}`, region] as const) ?? []);
+  const regions = new Map<string, {
+    province_name: string;
+    regency_name: string;
+    regional_zone: string;
+    recommended_action: string | null;
+    critical_logs: number;
+    stockout_logs: number;
+    restock_requests: number;
+    partners: Array<{
+      partner_id: string;
+      partner_name: string;
+      critical_logs: number;
+      stockout_logs: number;
+      restock_requests: number;
+      zone: string;
+      suggested_products: Array<{ product_name: string; suggested_par_level: number }>;
+    }>;
+  }>();
+
+  for (const row of rows) {
+    const provinceName = String(row.province_name);
+    const regencyName = String(row.regency_name);
+    const key = `${provinceName}\u0000${regencyName}`;
+    const modelRegion = modelRegions.get(key);
+    let region = regions.get(key);
+    if (!region) {
+      region = {
+        province_name: provinceName,
+        regency_name: regencyName,
+        regional_zone: regencyName === "Tidak diketahui" ? "PERLU_LOKASI" : modelRegion?.regional_zone ?? "BELUM_DIANALISIS",
+        recommended_action: regencyName === "Tidak diketahui"
+          ? "Lengkapi kabupaten/kota pada profil mitra sebelum menentukan alokasi per wilayah. Prioritaskan cabang dengan log stok kritis terbanyak."
+          : modelRegion?.recommended_action ?? null,
+        critical_logs: 0,
+        stockout_logs: 0,
+        restock_requests: 0,
+        partners: [],
+      };
+      regions.set(key, region);
+    }
+    const currentRegion = region;
+    const modelPartner = modelRegion?.partners.find((partner) => partner.partner_id === row.partner_id);
+    currentRegion.critical_logs += Number(row.critical_logs);
+    currentRegion.stockout_logs += Number(row.stockout_logs);
+    currentRegion.restock_requests += Number(row.restock_requests);
+    currentRegion.partners.push({
+      partner_id: String(row.partner_id),
+      partner_name: String(row.partner_name),
+      critical_logs: Number(row.critical_logs),
+      stockout_logs: Number(row.stockout_logs),
+      restock_requests: Number(row.restock_requests),
+      zone: modelPartner?.zone ?? "BELUM_DIANALISIS",
+      suggested_products: modelPartner?.fast_moving_products ?? [],
+    });
+  }
+
+  return {
+    period_days: 60,
+    model_generated_at: model?.generated_at ?? null,
+    regions: [...regions.values()].map((region) => ({
+      ...region,
+      partners: region.partners.sort((a, b) => b.critical_logs - a.critical_logs || b.restock_requests - a.restock_requests),
+    })).sort((a, b) => b.critical_logs - a.critical_logs || b.restock_requests - a.restock_requests),
+  };
+}
+
 async function computeCompanyAiAnalytics() {
   // 1. Existing frequentStockouts for backwards-compatibility
   const frequentStockouts = await db.execute(sql`
@@ -1087,6 +1229,8 @@ async function computeCompanyAiAnalytics() {
     GROUP BY region ORDER BY deficit_units DESC LIMIT 3
   `);
 
+  const regionalActivity = await getRegionalActivity();
+
   return {
     engine_status: {
       is_active: true,
@@ -1107,6 +1251,7 @@ async function computeCompanyAiAnalytics() {
     frequent_stockouts: frequentStockouts,
     recommendations,
     market_hotspots: { top_performers: topPerformers, regions: hotspotRegions },
+    regional_activity: regionalActivity,
     ai_digest: aiDigest,
   };
 }

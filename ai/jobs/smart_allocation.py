@@ -31,7 +31,7 @@ def read_rows() -> list[dict[str, str]]:
 def risk_for(row: dict[str, str]) -> str:
     cover = float(row.get("days_of_cover") or 0)
     qty, par = int(float(row["current_qty"])), int(float(row["par_level"]))
-    return "HIGH_STOCKOUT_RISK" if cover < 2 or (par and qty < par * 0.2) else "MODERATE_RISK" if cover <= 4 else "SAFE"
+    return "HIGH_STOCKOUT_RISK" if cover < 2 or qty <= 10 or (par and qty < par * 0.2) else "MODERATE_RISK" if cover <= 4 else "SAFE"
 
 
 def allocate_recommendations() -> int:
@@ -47,7 +47,7 @@ def allocate_recommendations() -> int:
     with psycopg.connect(database_url) as connection:
         with connection.cursor() as cursor:
             product_ids = {row["product_id"] for row in rows}
-            cursor.execute("SELECT id::text, central_stock FROM products WHERE id::text = ANY(%s)", (list(product_ids),))
+            cursor.execute("SELECT id::text, central_stock FROM products WHERE id::text = ANY(%s) AND is_active = true", (list(product_ids),))
             remaining_stock = {product_id: int(stock) for product_id, stock in cursor.fetchall()}
             ranked = sorted(rows, key=lambda row: (0 if risk_for(row) == "HIGH_STOCKOUT_RISK" else 1 if risk_for(row) == "MODERATE_RISK" else 2, float(row["days_of_cover"] or 0)))
             generated = 0

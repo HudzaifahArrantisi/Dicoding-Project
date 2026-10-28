@@ -1,0 +1,2171 @@
+{
+  "generated_at": "2026-10-28T10:50:53.526602+00:00",
+  "algorithm": "GaussianNaiveBayes",
+  "model_version": "v1.0-regional-naive-bayes",
+  "summary": {
+    "total_regions_analyzed": 3,
+    "red_zone_regions_count": 2,
+    "yellow_zone_regions_count": 1,
+    "green_zone_regions_count": 0
+  },
+  "regional_rankings": [
+    {
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "total_partners": 104,
+      "critical_partners_count": 2,
+      "warning_partners_count": 98,
+      "total_critical_events": 4,
+      "average_vulnerability_score": 1.9,
+      "peak_vulnerability_score": 100.0,
+      "regional_zone": "ZONA_MERAH",
+      "recommended_action": "Tingkatkan alokasi pengiriman regional dan naikkan Par Level rak mitra.",
+      "partners": [
+        {
+          "partner_id": "101b8697-9c73-49af-89f0-bdc770d4d74c",
+          "partner_name": "Hotel Aruna Jakarta",
+          "zone": "ZONA_HIJAU",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": []
+        },
+        {
+          "partner_id": "e10bd675-d69e-5c21-8bb8-8ab9a515a31a",
+          "partner_name": "Restoran Akasia Balikpapan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "c686b683-60a6-5615-8d97-cb46e6119df2",
+          "partner_name": "Minimarket Mentari Solo",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "6aadc8a1-8624-5c1a-8e64-a729fba865d0",
+          "partner_name": "Restoran Arunika Jakarta Selatan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "6a824478-029e-5f14-8db2-2fd81c0c7bd7",
+          "partner_name": "Hotel Purnama Cirebon",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "06140801-1db4-57c1-8c29-3d35e1fb5b9f",
+          "partner_name": "Kafe Lestari Semarang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "2ac901c3-975c-532c-86ed-c23abcc46de3",
+          "partner_name": "Kafe Akasia Balikpapan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "13198b74-656c-58df-8b8d-0c2811feaeee",
+          "partner_name": "Minimarket Mahoni Surabaya",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "5b895531-dbb4-58c3-8b66-aa409faeb4a3",
+          "partner_name": "Restoran Teratai Malang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "8ddb19b8-5aa4-5e7f-81ab-e9588c561521",
+          "partner_name": "Kafe Beringin Mataram",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "2e3f698e-607a-5228-8d94-690c28324d78",
+          "partner_name": "Hotel Sembada Tangerang Selatan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "95f8a788-c7ff-57b8-80e6-850b86f57b93",
+          "partner_name": "Kafe Kirana Denpasar",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "6034a435-2b9f-5a5c-8a32-9ca7d715b7f8",
+          "partner_name": "Kafe Mentari Solo",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "c60b7ae0-a935-5cc1-8332-f90910283b14",
+          "partner_name": "Hotel Melati Bogor",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "f581365e-c8a1-5b59-8840-7ba62a0bd49c",
+          "partner_name": "Hotel Taman Sari Padang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "b9d8f9d6-bf42-5b4f-8f59-ce44a481b0eb",
+          "partner_name": "Hotel Arunika Jakarta Selatan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "3f78969d-8a94-50e3-8b75-b7d3814961b6",
+          "partner_name": "Kafe Arunika Jakarta Selatan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "3d9c0e9c-b325-532d-8121-a28a6803ffa7",
+          "partner_name": "Restoran Bumi Raya Palembang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "0bc41213-91cc-5ebd-883c-8564987671bd",
+          "partner_name": "Kafe Kencana Bekasi",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "9f377745-e76a-525d-85ca-e0cfcfe05754",
+          "partner_name": "Minimarket Cakrawala Sidoarjo",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "d635364a-f2bb-5097-882f-5fd7461bd147",
+          "partner_name": "Restoran Kemuning Medan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "c1f5c516-98dd-5c59-8371-e64a13b1dc6a",
+          "partner_name": "Hotel Kencana Bekasi",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "d95a17c3-4cca-5bc6-8ed2-9fc7eb05a5a7",
+          "partner_name": "Kafe Cendana Jakarta Barat",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "8b4fe8d2-a2a7-5352-8656-2ddc3870e803",
+          "partner_name": "Hotel Cakrawala Sidoarjo",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "65dbba67-20f2-5883-8086-af77cd7864a3",
+          "partner_name": "Kafe Bumi Raya Palembang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "1be3c6e0-0ad6-53ba-805c-1552ff4c0dd1",
+          "partner_name": "Kafe Senja Serang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "6dc51077-01b2-59ec-813d-db35eab33e2a",
+          "partner_name": "Restoran Kirana Denpasar",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "fead5a98-bccd-5a32-88c0-f0a68ba1f270",
+          "partner_name": "Kafe Seruni Depok",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "0650befe-00af-5a8a-87e6-339a2740e4f3",
+          "partner_name": "Minimarket Arunika Jakarta Selatan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "33333333-3333-3333-3333-333333333333",
+          "partner_name": "Resto Bento Serpong",
+          "zone": "ZONA_HIJAU",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": []
+        },
+        {
+          "partner_id": "2a9cbe41-fdef-5dfc-82d4-e1b71333c62a",
+          "partner_name": "Hotel Lestari Semarang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "c0e59da7-be5d-50d1-8d39-11783a79a564",
+          "partner_name": "Minimarket Akasia Balikpapan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "d64374a6-dd2b-5706-8738-b3991ae0118e",
+          "partner_name": "Hotel Kirana Denpasar",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "2955d767-c520-59ef-8518-b077c4ca8b3c",
+          "partner_name": "Kafe Nirwana Jakarta Utara",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "1001becd-2e6f-538e-8518-923967dfc6d3",
+          "partner_name": "Hotel Nirwana Jakarta Utara",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "5b0d4249-71c5-5b8c-8cef-2e42521129b7",
+          "partner_name": "Kafe Kemuning Medan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "1538e4b3-a980-51a3-870c-70b5f38012ab",
+          "partner_name": "Minimarket Purnama Cirebon",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "3fb42323-f4c7-5b82-81be-b6479aa0b465",
+          "partner_name": "Restoran Cendana Jakarta Barat",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "ef4ff8eb-4284-50ed-8e99-43375d57d9c4",
+          "partner_name": "Kafe Samudra Bandung",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "3d320c6d-99ed-5d5f-86dd-94027b8f3b92",
+          "partner_name": "Restoran Angkasa Yogyakarta",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "e8b8201e-4310-5ad7-84a7-b43703466047",
+          "partner_name": "Minimarket Kencana Bekasi",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "32776baf-0281-5a48-8401-3c73881034db",
+          "partner_name": "Restoran Samudra Bandung",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "ed67e209-504b-5874-832e-f5436a79a438",
+          "partner_name": "Restoran Purnama Cirebon",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "9c688543-56cd-5836-8bcd-490234119f6e",
+          "partner_name": "Hotel Beringin Mataram",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "003c2623-d955-5f1b-890f-3ce784e077c1",
+          "partner_name": "Kafe Teratai Malang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "fd1e7b58-ce4b-5a72-8948-a52f6ac9851d",
+          "partner_name": "Restoran Nirwana Jakarta Utara",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "4c3aab8f-c24f-53ea-8e8e-f95071b151cf",
+          "partner_name": "Restoran Taman Sari Padang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
+          "partner_name": "Resto Bento Serpong",
+          "zone": "ZONA_MERAH",
+          "vulnerability_score": 100.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 0,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            },
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 0,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            },
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 0,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "4c982659-dab0-51fc-8748-dfdc2e835fa9",
+          "partner_name": "Kafe Cakrawala Sidoarjo",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "6bab6ede-8da5-5716-808b-729d183ba992",
+          "partner_name": "Hotel Seruni Depok",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "55d3baa8-c2f1-5c7b-8d43-2220ca438b4e",
+          "partner_name": "Hotel Teratai Malang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "7379e14c-2b36-5c04-800e-0898502e4c6b",
+          "partner_name": "Minimarket Bumi Raya Palembang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "8191af47-bbff-5f2a-840d-579d057d1c30",
+          "partner_name": "Minimarket Samudra Bandung",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "90dba241-7ecc-50c2-8105-1dd813066909",
+          "partner_name": "Hotel Samudra Bandung",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "9e577601-f63f-5cb6-8524-cd6f7be32a43",
+          "partner_name": "Hotel Senja Serang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "372ce392-cf3c-4119-8b47-ce94e47052d8",
+          "partner_name": "kopken duta",
+          "zone": "ZONA_MERAH",
+          "vulnerability_score": 100.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 40,
+              "par_level": 40,
+              "critical_frequency": 2,
+              "suggested_par_level": 50
+            },
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 34,
+              "par_level": 40,
+              "critical_frequency": 1,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "cd94b0ca-1bc4-5a10-8982-8c05fa4d21cf",
+          "partner_name": "Minimarket Puspa Jakarta Timur",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "4f65708d-71af-5820-8a83-afdc6fb002ef",
+          "partner_name": "Kafe Mahoni Surabaya",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "f4da417a-b92a-5f37-8565-501cf9ade882",
+          "partner_name": "Restoran Sembada Tangerang Selatan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "6d74da17-a39f-59c3-8a4a-4c7aa8cea6e6",
+          "partner_name": "Hotel Bumi Raya Palembang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "1753e4ed-242e-5c84-892e-38cf8b9b4c50",
+          "partner_name": "Hotel Mahoni Surabaya",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "5d8937d5-6385-5e8f-8d28-635493ed48be",
+          "partner_name": "Hotel Puspa Jakarta Timur",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "19c4a9c8-a54c-5175-8957-5db53e68281a",
+          "partner_name": "Kafe Sembada Tangerang Selatan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "5304d24b-a09c-50bc-85c6-e2a0062ff351",
+          "partner_name": "Minimarket Taman Sari Padang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "bdf23aab-45bc-58b4-8429-af7abd288a20",
+          "partner_name": "Hotel Langit Tangerang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "04b7777d-2d8b-5079-8207-a1d7cba66197",
+          "partner_name": "Minimarket Kemuning Medan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "e4550762-ab0c-5293-8425-f5fe7ee48395",
+          "partner_name": "Restoran Puspa Jakarta Timur",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "1140f98e-2218-54e2-8709-2245238baa90",
+          "partner_name": "Hotel Mentari Solo",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 20,
+              "par_level": 80,
+              "critical_frequency": 1,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "df365492-b7b9-5512-86f1-d9e69629a635",
+          "partner_name": "Minimarket Teratai Malang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "ec31b176-7ce3-562b-81b1-aedff1e1b3c8",
+          "partner_name": "Restoran Seruni Depok",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "bf95978a-6654-59f9-8771-87bb846a37bb",
+          "partner_name": "Kafe Pelangi Makassar",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "76cd6155-f5eb-5a9a-8bc6-dafada7ea6ab",
+          "partner_name": "Minimarket Senja Serang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "a133e989-1f05-5fea-8ba0-018bdf3b7a74",
+          "partner_name": "Restoran Cakrawala Sidoarjo",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "7f4fe65b-3d39-53f1-8080-1db1b327bda5",
+          "partner_name": "Minimarket Nirwana Jakarta Utara",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "9a534cf3-81d2-5eb7-8770-8b5a76d91d19",
+          "partner_name": "Minimarket Cendana Jakarta Barat",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "ef8c3074-2ba0-500e-8a05-dc009673ba14",
+          "partner_name": "Minimarket Lestari Semarang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "4a1838c8-000f-5806-825a-5b455b5060cc",
+          "partner_name": "Hotel Angkasa Yogyakarta",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "c65c4b3f-5af8-5cf3-8845-9f700374b9b5",
+          "partner_name": "Restoran Senja Serang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "6bc88fd2-895a-5f8f-8240-c87ca54a04bc",
+          "partner_name": "Minimarket Seruni Depok",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "3b1c0a4d-0362-5a3d-8890-c281a9f07ddc",
+          "partner_name": "Kafe Melati Bogor",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "f4923649-13ed-5424-81cc-5adc6b35854b",
+          "partner_name": "Kafe Purnama Cirebon",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "56369c2a-e6bd-582f-8245-41c6b4100cfa",
+          "partner_name": "Restoran Kencana Bekasi",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "dc515681-721c-5984-8074-b9121d65dd66",
+          "partner_name": "Minimarket Beringin Mataram",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "dcb9374b-5f28-5325-81c7-a93bdf346cae",
+          "partner_name": "Kafe Puspa Jakarta Timur",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "bc3b156d-eca5-5b0b-8e9b-5bbd9ee99e2d",
+          "partner_name": "Restoran Langit Tangerang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "e2ed6045-8651-5bf0-8cc4-967e3778e7a3",
+          "partner_name": "Restoran Mahoni Surabaya",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "5cfc5af4-ca6a-50e3-8d95-45ddecf0ef05",
+          "partner_name": "Minimarket Langit Tangerang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "4474a4a5-d0f5-5188-85c3-2d0a54224036",
+          "partner_name": "Kafe Langit Tangerang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "dbf12742-22fa-5540-85f1-945bb1a23232",
+          "partner_name": "Hotel Pelangi Makassar",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "3c3b0fff-f377-55c5-812b-2d09c49fa54f",
+          "partner_name": "Kafe Taman Sari Padang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "7f8112c6-b6b5-5b34-8770-f5dd5657d66d",
+          "partner_name": "Restoran Mentari Solo",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "ad172be7-1be8-5acd-8500-077e68aae671",
+          "partner_name": "Restoran Melati Bogor",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "c5361a91-488e-5ae0-83c7-a55b2d3bc64e",
+          "partner_name": "Minimarket Pelangi Makassar",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "2691a63d-f1f6-5981-875d-058f473c2c9a",
+          "partner_name": "Restoran Beringin Mataram",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "0294b8e1-2bfe-5552-82b6-1553dd33c77e",
+          "partner_name": "Minimarket Sembada Tangerang Selatan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "sku": "DSK-SB-001",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "11111111-1111-1111-1111-111111111111",
+          "partner_name": "Kafe Sejuk BSD",
+          "zone": "ZONA_HIJAU",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": []
+        },
+        {
+          "partner_id": "a6c7c5db-831c-52f5-8d50-1011431b22f7",
+          "partner_name": "Minimarket Kirana Denpasar",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "b6e19069-1a83-5d81-8198-e44808e4c5c8",
+          "partner_name": "Minimarket Melati Bogor",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 0,
+              "suggested_par_level": 110
+            }
+          ]
+        },
+        {
+          "partner_id": "22222222-2222-2222-2222-222222222222",
+          "partner_name": "Hotel Aruna Jakarta",
+          "zone": "ZONA_HIJAU",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": []
+        },
+        {
+          "partner_id": "701610c7-661c-5c46-80d9-0a96e7e498cc",
+          "partner_name": "Restoran Lestari Semarang",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "6d2a79fb-9299-5fa2-8e85-d656e71d7c58",
+          "partner_name": "Hotel Cendana Jakarta Barat",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        },
+        {
+          "partner_id": "ffc0cef1-7b38-5b0f-8e46-3b5eefec6006",
+          "partner_name": "Kafe Angkasa Yogyakarta",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 4,
+              "par_level": 40,
+              "critical_frequency": 0,
+              "suggested_par_level": 50
+            }
+          ]
+        },
+        {
+          "partner_id": "bccf5f0c-8d12-5b42-8db2-2770d47fb951",
+          "partner_name": "Restoran Pelangi Makassar",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 6,
+              "par_level": 60,
+              "critical_frequency": 0,
+              "suggested_par_level": 70
+            }
+          ]
+        },
+        {
+          "partner_id": "94b5d2b9-0ae4-5b2e-8f63-f50812730f90",
+          "partner_name": "Hotel Kemuning Medan",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "province_name": "Daerah Istimewa Yogyakarta",
+      "regency_name": "Kabupaten Bantul",
+      "total_partners": 1,
+      "critical_partners_count": 1,
+      "warning_partners_count": 0,
+      "total_critical_events": 4,
+      "average_vulnerability_score": 100.0,
+      "peak_vulnerability_score": 100.0,
+      "regional_zone": "ZONA_MERAH",
+      "recommended_action": "Tingkatkan alokasi pengiriman regional dan naikkan Par Level rak mitra.",
+      "partners": [
+        {
+          "partner_id": "45782e10-f602-5f7c-8479-73eb9af143ee",
+          "partner_name": "Minimarket Angkasa Yogyakarta",
+          "zone": "ZONA_MERAH",
+          "vulnerability_score": 100.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 10,
+              "par_level": 100,
+              "critical_frequency": 1,
+              "suggested_par_level": 110
+            },
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "sku": "DSK-KP-004",
+              "current_qty": 12,
+              "par_level": 100,
+              "critical_frequency": 1,
+              "suggested_par_level": 110
+            },
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "sku": "DSK-BR-002",
+              "current_qty": 14,
+              "par_level": 100,
+              "critical_frequency": 1,
+              "suggested_par_level": 110
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "province_name": "DKI Jakarta",
+      "regency_name": "Kota Administrasi Jakarta Selatan",
+      "total_partners": 1,
+      "critical_partners_count": 0,
+      "warning_partners_count": 1,
+      "total_critical_events": 0,
+      "average_vulnerability_score": 0.0,
+      "peak_vulnerability_score": 0.0,
+      "regional_zone": "ZONA_KUNING",
+      "recommended_action": "Kirim reminder pengajuan restok lebih awal untuk mencegah stockout.",
+      "partners": [
+        {
+          "partner_id": "86d0892a-6f7a-58f4-88c6-0b1830ca7d19",
+          "partner_name": "jaksel hotel",
+          "zone": "ZONA_KUNING",
+          "vulnerability_score": 0.0,
+          "fast_moving_products": [
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "sku": "DSK-MK-003",
+              "current_qty": 8,
+              "par_level": 80,
+              "critical_frequency": 0,
+              "suggested_par_level": 90
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "vulnerable_partners": [
+    {
+      "partner_id": "45782e10-f602-5f7c-8479-73eb9af143ee",
+      "partner_name": "Minimarket Angkasa Yogyakarta",
+      "partner_type": "minimarket",
+      "province_name": "Daerah Istimewa Yogyakarta",
+      "regency_name": "Kabupaten Bantul",
+      "district_name": "Sedayu",
+      "total_items": 4,
+      "total_critical_events": 4,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 0.45999999999999996,
+      "fast_moving_products": [
+        {
+          "product_name": "Makaroni Daun Jeruk",
+          "sku": "DSK-MK-003",
+          "current_qty": 10,
+          "par_level": 100,
+          "critical_frequency": 1,
+          "suggested_par_level": 110
+        },
+        {
+          "product_name": "Keripik Pisang Rasa Coklat",
+          "sku": "DSK-KP-004",
+          "current_qty": 12,
+          "par_level": 100,
+          "critical_frequency": 1,
+          "suggested_par_level": 110
+        },
+        {
+          "product_name": "Basreng Daun Jeruk",
+          "sku": "DSK-BR-002",
+          "current_qty": 14,
+          "par_level": 100,
+          "critical_frequency": 1,
+          "suggested_par_level": 110
+        },
+        {
+          "product_name": "Seblak Jadul Instan",
+          "sku": "DSK-SB-001",
+          "current_qty": 10,
+          "par_level": 100,
+          "critical_frequency": 1,
+          "suggested_par_level": 110
+        }
+      ],
+      "avg_stock_ratio": 0.115,
+      "predicted_zone": "ZONA_MERAH",
+      "vulnerability_score": 100.0
+    },
+    {
+      "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
+      "partner_name": "Resto Bento Serpong",
+      "partner_type": "restoran",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 0.75,
+      "fast_moving_products": [
+        {
+          "product_name": "Keripik Pisang Rasa Coklat",
+          "sku": "DSK-KP-004",
+          "current_qty": 0,
+          "par_level": 40,
+          "critical_frequency": 0,
+          "suggested_par_level": 50
+        },
+        {
+          "product_name": "Makaroni Daun Jeruk",
+          "sku": "DSK-MK-003",
+          "current_qty": 0,
+          "par_level": 40,
+          "critical_frequency": 0,
+          "suggested_par_level": 50
+        },
+        {
+          "product_name": "Seblak Jadul Instan",
+          "sku": "DSK-SB-001",
+          "current_qty": 0,
+          "par_level": 40,
+          "critical_frequency": 0,
+          "suggested_par_level": 50
+        }
+      ],
+      "avg_stock_ratio": 0.188,
+      "predicted_zone": "ZONA_MERAH",
+      "vulnerability_score": 100.0
+    },
+    {
+      "partner_id": "372ce392-cf3c-4119-8b47-ce94e47052d8",
+      "partner_name": "kopken duta",
+      "partner_type": "kafe",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 3,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 3.725,
+      "fast_moving_products": [
+        {
+          "product_name": "Keripik Pisang Rasa Coklat",
+          "sku": "DSK-KP-004",
+          "current_qty": 40,
+          "par_level": 40,
+          "critical_frequency": 2,
+          "suggested_par_level": 50
+        },
+        {
+          "product_name": "Seblak Jadul Instan",
+          "sku": "DSK-SB-001",
+          "current_qty": 34,
+          "par_level": 40,
+          "critical_frequency": 1,
+          "suggested_par_level": 50
+        }
+      ],
+      "avg_stock_ratio": 0.931,
+      "predicted_zone": "ZONA_MERAH",
+      "vulnerability_score": 100.0
+    },
+    {
+      "partner_id": "101b8697-9c73-49af-89f0-bdc770d4d74c",
+      "partner_name": "Hotel Aruna Jakarta",
+      "partner_type": "hotel",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 2.45,
+      "fast_moving_products": [],
+      "avg_stock_ratio": 0.613,
+      "predicted_zone": "ZONA_HIJAU",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "e10bd675-d69e-5c21-8bb8-8ab9a515a31a",
+      "partner_name": "Restoran Akasia Balikpapan",
+      "partner_type": "restoran",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Keripik Pisang Rasa Coklat",
+          "sku": "DSK-KP-004",
+          "current_qty": 6,
+          "par_level": 60,
+          "critical_frequency": 0,
+          "suggested_par_level": 70
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "c686b683-60a6-5615-8d97-cb46e6119df2",
+      "partner_name": "Minimarket Mentari Solo",
+      "partner_type": "minimarket",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9499999999999997,
+      "fast_moving_products": [
+        {
+          "product_name": "Makaroni Daun Jeruk",
+          "sku": "DSK-MK-003",
+          "current_qty": 10,
+          "par_level": 100,
+          "critical_frequency": 0,
+          "suggested_par_level": 110
+        }
+      ],
+      "avg_stock_ratio": 0.487,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "6aadc8a1-8624-5c1a-8e64-a729fba865d0",
+      "partner_name": "Restoran Arunika Jakarta Selatan",
+      "partner_type": "restoran",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Keripik Pisang Rasa Coklat",
+          "sku": "DSK-KP-004",
+          "current_qty": 6,
+          "par_level": 60,
+          "critical_frequency": 0,
+          "suggested_par_level": 70
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "6a824478-029e-5f14-8db2-2fd81c0c7bd7",
+      "partner_name": "Hotel Purnama Cirebon",
+      "partner_type": "hotel",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Seblak Jadul Instan",
+          "sku": "DSK-SB-001",
+          "current_qty": 8,
+          "par_level": 80,
+          "critical_frequency": 0,
+          "suggested_par_level": 90
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "06140801-1db4-57c1-8c29-3d35e1fb5b9f",
+      "partner_name": "Kafe Lestari Semarang",
+      "partner_type": "kafe",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Basreng Daun Jeruk",
+          "sku": "DSK-BR-002",
+          "current_qty": 4,
+          "par_level": 40,
+          "critical_frequency": 0,
+          "suggested_par_level": 50
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "2ac901c3-975c-532c-86ed-c23abcc46de3",
+      "partner_name": "Kafe Akasia Balikpapan",
+      "partner_type": "kafe",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Basreng Daun Jeruk",
+          "sku": "DSK-BR-002",
+          "current_qty": 4,
+          "par_level": 40,
+          "critical_frequency": 0,
+          "suggested_par_level": 50
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "13198b74-656c-58df-8b8d-0c2811feaeee",
+      "partner_name": "Minimarket Mahoni Surabaya",
+      "partner_type": "minimarket",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Basreng Daun Jeruk",
+          "sku": "DSK-BR-002",
+          "current_qty": 10,
+          "par_level": 100,
+          "critical_frequency": 0,
+          "suggested_par_level": 110
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "5b895531-dbb4-58c3-8b66-aa409faeb4a3",
+      "partner_name": "Restoran Teratai Malang",
+      "partner_type": "restoran",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Keripik Pisang Rasa Coklat",
+          "sku": "DSK-KP-004",
+          "current_qty": 6,
+          "par_level": 60,
+          "critical_frequency": 0,
+          "suggested_par_level": 70
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "8ddb19b8-5aa4-5e7f-81ab-e9588c561521",
+      "partner_name": "Kafe Beringin Mataram",
+      "partner_type": "kafe",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Keripik Pisang Rasa Coklat",
+          "sku": "DSK-KP-004",
+          "current_qty": 4,
+          "par_level": 40,
+          "critical_frequency": 0,
+          "suggested_par_level": 50
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "2e3f698e-607a-5228-8d94-690c28324d78",
+      "partner_name": "Hotel Sembada Tangerang Selatan",
+      "partner_type": "hotel",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Makaroni Daun Jeruk",
+          "sku": "DSK-MK-003",
+          "current_qty": 8,
+          "par_level": 80,
+          "critical_frequency": 0,
+          "suggested_par_level": 90
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    },
+    {
+      "partner_id": "95f8a788-c7ff-57b8-80e6-850b86f57b93",
+      "partner_name": "Kafe Kirana Denpasar",
+      "partner_type": "kafe",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "district_name": "Tidak diketahui",
+      "total_items": 4,
+      "total_critical_events": 0,
+      "total_zero_events": 0,
+      "sum_stock_ratio": 1.9500000000000002,
+      "fast_moving_products": [
+        {
+          "product_name": "Makaroni Daun Jeruk",
+          "sku": "DSK-MK-003",
+          "current_qty": 4,
+          "par_level": 40,
+          "critical_frequency": 0,
+          "suggested_par_level": 50
+        }
+      ],
+      "avg_stock_ratio": 0.488,
+      "predicted_zone": "ZONA_KUNING",
+      "vulnerability_score": 0.0
+    }
+  ]
+}

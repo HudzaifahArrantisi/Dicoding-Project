@@ -4,10 +4,11 @@ import os
 
 import psycopg
 from dotenv import load_dotenv
+from pathlib import Path
 
 
 def create_emergency_alerts() -> int:
-    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     database_url = os.environ["DATABASE_URL"]
 
     with psycopg.connect(database_url) as connection:
@@ -27,12 +28,12 @@ def create_emergency_alerts() -> int:
                     JOIN products pr ON pr.id = ps.product_id
                     WHERE p.is_active = true
                       AND pr.is_active = true
-                      AND ps.current_qty <= 10
+                      AND (ps.current_qty <= 10 OR ps.current_qty < ps.par_level * 0.2)
                 )
                 INSERT INTO notifications (audience, type, partner_id, title, body)
                 SELECT
                     'admin',
-                    'emergency_restock',
+                    'low_stock',
                     critical.partner_id,
                     'Restock darurat: ' || critical.product_name,
                     critical.product_name || ' di ' || critical.partner_name ||
@@ -42,10 +43,12 @@ def create_emergency_alerts() -> int:
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM notifications existing
-                    WHERE existing.type = 'emergency_restock'
+                    WHERE existing.audience = 'admin'
+                      AND existing.type = 'low_stock'
                       AND existing.partner_id = critical.partner_id
                       AND existing.title = 'Restock darurat: ' || critical.product_name
                       AND existing.resolved_at IS NULL
+                      AND existing.created_at >= NOW() - INTERVAL '24 hours'
                 )
                 RETURNING id
                 """

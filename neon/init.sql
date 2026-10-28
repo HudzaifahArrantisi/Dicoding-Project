@@ -203,7 +203,7 @@ create table if not exists notifications (
   id uuid primary key default gen_random_uuid(),
   audience text not null check (audience in ('admin', 'mitra')),
   type text not null check (type in (
-    'low_stock', 'stale_update', 'new_order', 'order_update',
+    'low_stock', 'stale_update', 'new_order', 'order_update', 'order_received',
     'receipt_missing_proof', 'receipt_proof_requested', 'receipt_proof_uploaded'
   )),
   partner_id uuid references partners(id) on delete cascade,

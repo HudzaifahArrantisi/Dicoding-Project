@@ -63,12 +63,13 @@ import {
   type PartnerStockGroup,
 } from '@/components/inventory/partner-stock-detail-modal'
 import { PartnerDetailModal } from '@/components/inventory/partner-detail-modal'
+import { RegionalAnalysis, type RegionalActivity } from '@/components/inventory/regional-analysis'
 import {
   OrderStatusBadge,
   StaleBadge,
   StockStatusBadge,
 } from '@/components/inventory/status-badge'
-import { api, resolveApiUrl, resolveImageUrl, sessionRequest } from '@/lib/api'
+import { api, apiFetch, resolveImageUrl } from '@/lib/api'
 import { useInventoryEvents } from '@/lib/inventory-events'
 import { RegionPicker, emptyRegion } from '@/components/inventory/region-picker'
 import { DeliveryReceiptModal } from '@/components/inventory/delivery-receipt-modal'
@@ -120,7 +121,27 @@ const adminNavTabs: Array<{
   { id: 'ai-insights', label: 'AI Insights', shortLabel: 'AI', Icon: BrainCircuit },
 ]
 
-const EMPTY_ORDERS: Order[] = []
+interface AlertOrder {
+  id: string
+  order_no: string
+  partner_id: string
+  status: OrderStatus
+  created_at: string
+  rejected_reason: string | null
+  items: Array<{
+    product_name: string
+    product_unit: string
+    qty_requested: number
+    qty_approved: number | null
+  }>
+}
+
+const EMPTY_ALERT_ORDERS: AlertOrder[] = []
+
+interface NotificationFeed {
+  data: NotificationItem[]
+  orders: AlertOrder[]
+}
 
 interface WeeklySummary {
   total_logs_this_week: number
@@ -170,6 +191,7 @@ interface ShipmentLogPage {
 }
 
 interface AIInsights {
+  regional_activity?: RegionalActivity
   engine_status?: {
     is_active: boolean
     last_run_at: string
@@ -265,14 +287,14 @@ interface AIInsights {
 }
 
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const apiUrl = resolveApiUrl()
-  const response = await fetch(`${apiUrl}/admin/${path}`, sessionRequest({
+  const cleanSubPath = path.startsWith('/') ? path.slice(1) : path
+  const response = await apiFetch(`/admin/${cleanSubPath}`, {
     ...init,
     headers: {
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
       ...init?.headers,
     },
-  }))
+  })
   if (!response.ok) {
     if (response.status === 401) {
       if (typeof window !== 'undefined') window.location.href = '/login'
@@ -1245,6 +1267,7 @@ function AIInsightsPanel({
   onRetry: () => void
 }) {
   const [runningAi, setRunningAi] = useState(false)
+  const [subTab, setSubTab] = useState<'wilayah' | 'laris' | 'defisit' | 'pabrik'>('wilayah')
   const kpi = data?.kpi_summary
   const fastMoving = data?.fast_moving_products ?? []
   const deficitAnalysis = data?.stockout_deficit_analysis ?? []
@@ -1274,22 +1297,10 @@ function AIInsightsPanel({
       {/* Header & Autonomous Trigger Bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <p className="dashboard-eyebrow">Enterprise Intelligence</p>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-ok-fg/20 bg-ok-bg px-2.5 py-0.5 text-xs font-semibold text-ok-fg">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok-fg opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-ok-fg"></span>
-              </span>
-              Mesin AI Aktif (Otonom)
-            </span>
-          </div>
+          <p className="dashboard-eyebrow">Pusat Analisis & Optimasi Pasokan</p>
           <h1 id="ai-insights-title" className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl">
-            AI Insights & Analisis Rantai Pasok
+            AI Insights
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            Analisis terintegrasi 3 pilar: Penjualan mitra, Restok pemenuhan pesanan, dan Proyeksi pembelian pabrik.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -1312,8 +1323,8 @@ function AIInsightsPanel({
               </>
             ) : (
               <>
-                <Zap className="h-4 w-4 text-white" />
-                <span>Jalankan Analisis AI Sekarang</span>
+                <Zap className="h-4 w-4 text-amber-300" />
+                <span>Perbarui Analisis</span>
               </>
             )}
           </button>
@@ -1323,71 +1334,61 @@ function AIInsightsPanel({
       {error ? <ErrorState message={getErrorMessage(error)} onRetry={onRetry} /> : null}
 
       {loading ? (
-        <LoadingState label="Memproses evaluasi data perusahaan & mitra..." />
-      ) : (
+        <LoadingState label="Memuat analisis wilayah dan mitra..." />
+      ) : error ? null : (
         <>
-          {/* Executive AI Digest */}
-          {digest ? (
-            <div className="rounded-xl border border-line bg-gradient-to-br from-white via-white to-amber-50/40 p-5 shadow-xs">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-ume/10 p-2 text-ume">
-                  <BrainCircuit className="h-5 w-5" />
+          {/* Quick Guide Card untuk Admin Baru (Sekali Baca Langsung Paham) */}
+          <div className="rounded-xl border border-line bg-gradient-to-r from-ink-50/70 via-white to-ink-50/40 p-4 sm:p-5 shadow-xs">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-ume/10 p-2 text-ume shrink-0">
+                <BrainCircuit className="h-5 w-5" />
+              </div>
+              <div className="flex-1 space-y-2.5">
+                <div>
+                  <h2 className="font-display text-sm font-semibold text-ink-900 sm:text-base">
+                    Panduan Cepat Analisis AI
+                  </h2>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Fitur ini memetakan 3 pilar operasional agar admin dapat mengambil keputusan pasokan yang tepat sasaran:
+                  </p>
                 </div>
-                <div className="flex-1 space-y-3">
-                  <div>
-                    <span className="text-xs font-semibold tracking-wider text-muted uppercase">
-                      Catatan Eksekutif AI
-                    </span>
-                    <h3 className="font-display text-base font-semibold text-ink-900 sm:text-lg">
-                      {digest.headline}
-                    </h3>
+
+                <div className="grid gap-2.5 sm:grid-cols-3">
+                  <div className="rounded-lg border border-line/70 bg-white p-3 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-ink-900">
+                      <Building2 className="h-3.5 w-3.5 text-ink-700" />
+                      1. Wilayah Rawan
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                      Mengetahui daerah dengan frekuensi kritis tertinggi untuk memprioritaskan alokasi armada kirim.
+                    </p>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-lg border border-line/60 bg-white/80 p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-ink-900">
-                        <TrendingUp className="h-3.5 w-3.5 text-ok-fg" />
-                        Dinamika Penjualan
-                      </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">
-                        {digest.sales_insight}
-                      </p>
+                  <div className="rounded-lg border border-line/70 bg-white p-3 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700">
+                      <Flame className="h-3.5 w-3.5 text-amber-500" />
+                      2. Kritis = Laris
                     </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                      Cabang sering kehabisan karena barangnya <strong>laku keras</strong>. Solusi: naikkan kapasitas rak (Par Level).
+                    </p>
+                  </div>
 
-                    <div className="rounded-lg border border-line/60 bg-white/80 p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-ink-900">
-                        <Truck className="h-3.5 w-3.5 text-blue-600" />
-                        Pemenuhan Restok
-                      </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">
-                        {digest.restock_insight}
-                      </p>
+                  <div className="rounded-lg border border-line/70 bg-white p-3 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700">
+                      <Factory className="h-3.5 w-3.5 text-blue-600" />
+                      3. Pengadaan Pabrik
                     </div>
-
-                    <div className="rounded-lg border border-line/60 bg-white/80 p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-ink-900">
-                        <Factory className="h-3.5 w-3.5 text-amber-600" />
-                        Pengadaan Pabrik
-                      </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">
-                        {digest.procurement_insight}
-                      </p>
-                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                      Estimasi sisa hari gudang pusat agar pesanan pabrik dapat disiapkan sebelum lead time 5–7 hari habis.
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
-          ) : null}
+          </div>
 
-          {hotspots ? <section className="dashboard-surface p-5" aria-label="Hotspot pasar mingguan">
-            <h3 className="font-display text-lg font-semibold text-ink-900">Hotspot pasar mingguan</h3>
-            <div className="mt-4 grid gap-5 sm:grid-cols-2">
-              <div><h4 className="text-sm font-semibold text-ink-900">5 mitra terlaris</h4><ol className="mt-2 divide-y divide-line">{hotspots.top_performers.map((item, index) => <li key={`${item.partner_name}-${index}`} className="flex justify-between gap-3 py-2 text-sm"><span>{item.partner_name}<span className="block text-xs text-muted">{item.region}</span></span><strong className="tabular-nums">{item.weekly_units} pcs</strong></li>)}</ol>{hotspots.top_performers.length === 0 ? <p className="mt-2 text-sm text-muted">Belum ada laporan konsumsi pekan ini.</p> : null}</div>
-              <div><h4 className="text-sm font-semibold text-ink-900">3 wilayah defisit tertinggi</h4><ol className="mt-2 divide-y divide-line">{hotspots.regions.map(item => <li key={item.region} className="flex justify-between gap-3 py-2 text-sm"><span>{item.region}<span className="block text-xs text-muted">{item.partner_count} mitra</span></span><strong className="tabular-nums">{item.deficit_units} pcs</strong></li>)}</ol>{hotspots.regions.length === 0 ? <p className="mt-2 text-sm text-muted">Belum ada rekomendasi wilayah.</p> : null}</div>
-            </div>
-          </section> : null}
-
-          {/* 3-Pillar KPI Metrics Strip */}
+          {/* 4-KPI Metric Cards Strip */}
           {kpi ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="dashboard-surface p-4">
@@ -1453,320 +1454,472 @@ function AIInsightsPanel({
             </div>
           ) : null}
 
-          {/* Section 1: Produk Laris (Kritis = Laris) & Rekomendasi Par Level */}
-          <div className="dashboard-surface overflow-hidden">
-            <div className="border-b border-line px-5 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Flame className="h-5 w-5 text-amber-500" />
-                    <h3 className="font-semibold text-ink-900">
-                      Mitra & Produk Paling Laku (Kritis = Laris)
-                    </h3>
-                  </div>
-                  <p className="mt-1 text-sm text-muted">
-                    Produk yang sering menyentuh ambang kritis (&lt;20%) karena tingginya laju penjualan. AI merekomendasikan kenaikan Par Level (kapasitas rak) agar cabang tidak kehabisan barang.
-                  </p>
-                </div>
-                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-500/20">
-                  {fastMoving.length} Item Terdeteksi
-                </span>
-              </div>
-            </div>
+          {/* Sub-Tab Navigation Bar */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-line pb-2">
+            <button
+              type="button"
+              onClick={() => setSubTab('wilayah')}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
+                subTab === 'wilayah'
+                  ? 'bg-ink-900 text-white shadow-xs'
+                  : 'bg-ink-50 text-ink-700 hover:bg-ink-100 hover:text-ink-900'
+              }`}
+            >
+              <span>1. Peta Wilayah Rawan</span>
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                subTab === 'wilayah' ? 'bg-white/20 text-white' : 'bg-ink-200/80 text-ink-800'
+              }`}>
+                {data?.regional_activity?.regions.length ?? 0}
+              </span>
+            </button>
 
-            {fastMoving.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-ink-50/70 text-xs text-muted">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
-                      <th className="px-5 py-3 font-semibold">Produk</th>
-                      <th className="px-5 py-3 text-right font-semibold">Laku (7 Hari)</th>
-                      <th className="px-5 py-3 text-right font-semibold">Par Saat Ini</th>
-                      <th className="px-5 py-3 text-right font-semibold">Saran Par Baru</th>
-                      <th className="px-5 py-3 text-center font-semibold">Turnover</th>
-                      <th className="px-5 py-3 font-semibold">Analisis Kebutuhan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {fastMoving.map((item) => (
-                      <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.partner_name}</p>
-                          <p className="text-xs text-muted capitalize">{item.partner_type}</p>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.product_name}</p>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right tabular-nums">
-                          <p className="font-semibold text-ink-900">{item.weekly_consumption} pcs</p>
-                          <p className="text-xs text-muted">~{item.daily_velocity} pcs/hari</p>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-medium text-muted tabular-nums">
-                          {item.par_level} pcs
-                        </td>
-                        <td className="num px-5 py-3.5 text-right tabular-nums">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-ok-bg px-2.5 py-1 text-xs font-bold text-ok-fg">
-                            <ArrowUpRight className="h-3 w-3" />
-                            {item.suggested_par_level} pcs
-                          </span>
-                          {item.par_delta > 0 ? (
-                            <p className="mt-0.5 text-[11px] font-semibold text-ok-fg">
-                              +{item.par_delta} pcs
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-5 py-3.5 text-center">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                            <Flame className="h-3 w-3 text-amber-600" />
-                            {item.turnover_rate}%
-                          </span>
-                          <p className="mt-0.5 text-[11px] text-muted">{item.critical_frequency}x kritis</p>
-                        </td>
-                        <td className="px-5 py-3.5 text-xs text-muted max-w-[240px]">
-                          {item.reason}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                title="Semua Par Level Optimal"
-                description="Belum ada cabang yang membutuhkan penyesuaian kapasitas rak berdasarkan laju penjualan saat ini."
-              />
-            )}
+            <button
+              type="button"
+              onClick={() => setSubTab('laris')}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
+                subTab === 'laris'
+                  ? 'bg-ink-900 text-white shadow-xs'
+                  : 'bg-ink-50 text-ink-700 hover:bg-ink-100 hover:text-ink-900'
+              }`}
+            >
+              <span>2. Produk Laris & Saran Rak</span>
+              {fastMoving.length > 0 && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  subTab === 'laris' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {fastMoving.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSubTab('defisit')}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
+                subTab === 'defisit'
+                  ? 'bg-ink-900 text-white shadow-xs'
+                  : 'bg-ink-50 text-ink-700 hover:bg-ink-100 hover:text-ink-900'
+              }`}
+            >
+              <AlertTriangle className="h-3.5 w-3.5 text-crit-fg" />
+              <span>3. Diagnosa Defisit Cabang</span>
+              {deficitAnalysis.length > 0 && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  subTab === 'defisit' ? 'bg-white/20 text-white' : 'bg-crit-bg text-crit-fg'
+                }`}>
+                  {deficitAnalysis.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSubTab('pabrik')}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
+                subTab === 'pabrik'
+                  ? 'bg-ink-900 text-white shadow-xs'
+                  : 'bg-ink-50 text-ink-700 hover:bg-ink-100 hover:text-ink-900'
+              }`}
+            >
+              <span>4. Pengadaan Pabrik & Alokasi</span>
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                subTab === 'pabrik' ? 'bg-white/20 text-white' : 'bg-ink-200/80 text-ink-800'
+              }`}>
+                {factoryForecast.length}
+              </span>
+            </button>
           </div>
 
-          {/* Section 2: Analisis Defisit & Mitra Rawan Kehabisan Stok */}
-          <div className="dashboard-surface overflow-hidden">
-            <div className="border-b border-line px-5 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-crit-fg" />
-                    <h3 className="font-semibold text-ink-900">
-                      Analisis Defisit & Cabang Rawan Kehabisan Stok
-                    </h3>
-                  </div>
-                  <p className="mt-1 text-sm text-muted">
-                    Diagnosa akar masalah kekosongan stok di cabang (kapasitas rak kurang vs terlambat order restok vs pasokan pusat terpangkas).
-                  </p>
-                </div>
-                <span className="rounded-full bg-crit-bg px-3 py-1 text-xs font-semibold text-crit-fg">
-                  {deficitAnalysis.length} Cabang Berisiko
-                </span>
-              </div>
-            </div>
-
-            {deficitAnalysis.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-ink-50/70 text-xs text-muted">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
-                      <th className="px-5 py-3 font-semibold">Produk</th>
-                      <th className="px-5 py-3 text-right font-semibold">Sisa Stok / Par</th>
-                      <th className="px-5 py-3 text-right font-semibold">Cakupan Stok</th>
-                      <th className="px-5 py-3 font-semibold">Akar Masalah</th>
-                      <th className="px-5 py-3 font-semibold">Tindakan AI</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {deficitAnalysis.map((item) => (
-                      <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.partner_name}</p>
-                          <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
-                            item.risk_level === 'DARURAT' ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'
-                          }`}>
-                            {item.risk_level}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.product_name}</p>
-                          <span className="text-xs text-muted">{item.critical_frequency}x fase kritis</span>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                          <span className="text-crit-fg">{item.current_qty}</span>
-                          <span className="text-muted"> / {item.par_level} pcs</span>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                          <span className={item.days_of_cover < 2 ? 'text-crit-fg' : 'text-warn-fg'}>
-                            {item.days_of_cover} hari
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
-                            item.root_cause === 'UNDER_CAPACITY'
-                              ? 'bg-amber-100 text-amber-800'
-                              : item.root_cause === 'LATE_REORDER'
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {item.root_cause_label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-xs text-muted max-w-[280px]">
-                          {item.action_recommendation}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                title="Stok Cabang Aman Terkendali"
-                description="Tidak ada cabang mitra yang mengalami defisit kritis atau risiko stockout saat ini."
+          {/* TAB 1: PETA WILAYAH RAWAN */}
+          {subTab === 'wilayah' && (
+            <div className="space-y-6">
+              <RegionalAnalysis
+                activity={data?.regional_activity}
+                fastMovingProducts={fastMoving}
+                deficitAnalysis={deficitAnalysis}
               />
-            )}
-          </div>
 
-          {/* Section 3: Proyeksi Pembelian & Produksi Pabrik */}
-          <div className="dashboard-surface overflow-hidden">
-            <div className="border-b border-line px-5 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Factory className="h-5 w-5 text-ink-900" />
-                    <h3 className="font-semibold text-ink-900">
-                      Proyeksi Pengadaan & Produksi Pabrik
-                    </h3>
-                  </div>
-                  <p className="mt-1 text-sm text-muted">
-                    Kebutuhan pasokan gudang pusat berdasarkan agregasi konsumsi 100 mitra dan lead time produksi pabrik (5–7 hari).
-                  </p>
-                </div>
-                <span className="rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700">
-                  Buffer Target: 21 Hari
-                </span>
-              </div>
-            </div>
-
-            {factoryForecast.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-ink-50/70 text-xs text-muted">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Produk</th>
-                      <th className="px-5 py-3 text-right font-semibold">Stok Pusat</th>
-                      <th className="px-5 py-3 text-right font-semibold">Total Konsumsi Mitra / Minggu</th>
-                      <th className="px-5 py-3 text-right font-semibold">Ketahanan Stok</th>
-                      <th className="px-5 py-3 text-right font-semibold">Saran Pesanan Pabrik</th>
-                      <th className="px-5 py-3 text-center font-semibold">Status Kesiapan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {factoryForecast.map((item) => (
-                      <tr key={item.product_id} className="hover:bg-ink-50/30">
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.product_name}</p>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
-                          {item.central_stock.toLocaleString('id-ID')} pcs
-                        </td>
-                        <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
-                          {item.total_partner_demand_weekly.toLocaleString('id-ID')} pcs/mgg
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                          <span className={item.urgency === 'CRITICAL' ? 'text-crit-fg' : item.urgency === 'WARNING' ? 'text-warn-fg' : 'text-ok-fg'}>
-                            {item.estimated_runout_days} hari
-                          </span>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right tabular-nums">
-                          {item.suggested_factory_batch_order > 0 ? (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-600/20">
-                              +{item.suggested_factory_batch_order.toLocaleString('id-ID')} pcs
+              {hotspots ? (
+                <section className="dashboard-surface p-5" aria-label="Hotspot pasar mingguan">
+                  <h3 className="font-display text-base font-semibold text-ink-900">
+                    Hotspot Pasar Mingguan
+                  </h3>
+                  <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-muted uppercase">5 Mitra Konsumsi Terlaris</h4>
+                      <ol className="mt-2 divide-y divide-line">
+                        {hotspots.top_performers.map((item, index) => (
+                          <li key={`${item.partner_name}-${index}`} className="flex justify-between gap-3 py-2 text-sm">
+                            <span>
+                              <span className="font-medium text-ink-900">{item.partner_name}</span>
+                              <span className="block text-xs text-muted">{item.region}</span>
                             </span>
-                          ) : (
-                            <span className="text-xs text-muted">Stok Cukup</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5 text-center">
-                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                            item.urgency === 'CRITICAL'
-                              ? 'bg-crit-bg text-crit-fg'
-                              : item.urgency === 'WARNING'
-                                ? 'bg-warn-bg text-warn-fg'
-                                : 'bg-ok-bg text-ok-fg'
-                          }`}>
-                            {item.urgency === 'CRITICAL' ? 'Order Segera' : item.urgency === 'WARNING' ? 'Siapkan PO' : 'Aman'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </div>
+                            <strong className="num font-semibold text-ink-900 tabular-nums">
+                              {item.weekly_units} pcs
+                            </strong>
+                          </li>
+                        ))}
+                      </ol>
+                      {hotspots.top_performers.length === 0 && (
+                        <p className="mt-2 text-xs text-muted">Belum ada laporan konsumsi pekan ini.</p>
+                      )}
+                    </div>
 
-          {/* Section 4: Rekomendasi Alokasi Pengiriman Cabang */}
-          <div className="dashboard-surface overflow-hidden">
-            <div className="border-b border-line px-5 py-4">
-              <h3 className="font-semibold text-ink-900">Rekomendasi Alokasi Pengiriman Cabang</h3>
-              <p className="mt-1 text-sm text-muted">
-                Prediksi kebutuhan tujuh hari berdasarkan laporan konsumsi cabang. Persetujuan tetap mengikuti stok pusat saat pengiriman.
-              </p>
+                    <div>
+                      <h4 className="text-xs font-bold text-muted uppercase">3 Wilayah Defisit Tertinggi</h4>
+                      <ol className="mt-2 divide-y divide-line">
+                        {hotspots.regions.map((item) => (
+                          <li key={item.region} className="flex justify-between gap-3 py-2 text-sm">
+                            <span>
+                              <span className="font-medium text-ink-900">{item.region}</span>
+                              <span className="block text-xs text-muted">{item.partner_count} mitra</span>
+                            </span>
+                            <strong className="num font-semibold text-crit-fg tabular-nums">
+                              {item.deficit_units} pcs
+                            </strong>
+                          </li>
+                        ))}
+                      </ol>
+                      {hotspots.regions.length === 0 && (
+                        <p className="mt-2 text-xs text-muted">Belum ada defisit wilayah.</p>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
             </div>
-            {recommendations.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] text-left text-sm">
-                  <thead className="bg-ink-50/70 text-xs text-muted">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Cabang</th>
-                      <th className="px-5 py-3 font-semibold">Produk</th>
-                      <th className="px-5 py-3 text-right font-semibold">Disarankan</th>
-                      <th className="px-5 py-3 text-right font-semibold">Prediksi 7 hari</th>
-                      <th className="px-5 py-3 text-right font-semibold">Cakupan</th>
-                      <th className="px-5 py-3 font-semibold">Prioritas</th>
-                      <th className="px-5 py-3 font-semibold">Alasan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {recommendations.map((row, index) => {
-                      const urgency = row.metadata?.urgency ?? (Number(row.days_of_cover ?? 0) < 2 ? 'CRITICAL' : 'NORMAL')
-                      return (
-                        <tr
-                          key={`${row.partner_id}-${row.product_id}-${row.generated_at}-${index}`}
-                          className="hover:bg-ink-50/30"
-                        >
-                          <td className="px-5 py-3.5 font-medium text-ink-900">{row.partner_name}</td>
-                          <td className="px-5 py-3.5">{row.product_name}</td>
-                          <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
-                            {row.suggested_qty} pcs
+          )}
+
+          {/* TAB 2: PRODUK LARIS & SARAN RAK (KRITIS = LARIS) */}
+          {subTab === 'laris' && (
+            <div className="dashboard-surface overflow-hidden">
+              <div className="border-b border-line px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Flame className="h-5 w-5 text-amber-500" />
+                      <h3 className="font-semibold text-ink-900">
+                        Mitra & Produk Paling Laku (Kritis = Laris)
+                      </h3>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Produk sering kritis karena tingginya laju penjualan. AI merekomendasikan kenaikan Par Level agar toko tidak kehabisan barang di jam sibuk.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-500/20">
+                    {fastMoving.length} Item Terdeteksi
+                  </span>
+                </div>
+              </div>
+
+              {fastMoving.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="bg-ink-50/70 text-xs text-muted">
+                      <tr>
+                        <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
+                        <th className="px-5 py-3 font-semibold">Produk</th>
+                        <th className="px-5 py-3 text-right font-semibold">Laku (7 Hari)</th>
+                        <th className="px-5 py-3 text-right font-semibold">Par Saat Ini</th>
+                        <th className="px-5 py-3 text-right font-semibold">Saran Par Baru</th>
+                        <th className="px-5 py-3 text-center font-semibold">Turnover</th>
+                        <th className="px-5 py-3 font-semibold">Rekomendasi Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {fastMoving.map((item) => (
+                        <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
+                          <td className="px-5 py-3.5">
+                            <p className="font-medium text-ink-900">{item.partner_name}</p>
+                            <p className="text-xs text-muted capitalize">{item.partner_type}</p>
                           </td>
-                          <td className="num px-5 py-3.5 text-right tabular-nums">{row.forecast_qty} pcs</td>
-                          <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
-                            {row.days_of_cover ?? '—'} hari
+                          <td className="px-5 py-3.5 font-medium text-ink-900">
+                            {item.product_name}
+                          </td>
+                          <td className="num px-5 py-3.5 text-right tabular-nums">
+                            <p className="font-semibold text-ink-900">{item.weekly_consumption} pcs</p>
+                            <p className="text-xs text-muted">~{item.daily_velocity} pcs/hari</p>
+                          </td>
+                          <td className="num px-5 py-3.5 text-right font-medium text-muted tabular-nums">
+                            {item.par_level} pcs
+                          </td>
+                          <td className="num px-5 py-3.5 text-right tabular-nums">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-ok-bg px-2.5 py-1 text-xs font-bold text-ok-fg">
+                              <ArrowUpRight className="h-3 w-3" />
+                              {item.suggested_par_level} pcs
+                            </span>
+                            {item.par_delta > 0 && (
+                              <p className="mt-0.5 text-[11px] font-semibold text-ok-fg">
+                                +{item.par_delta} pcs
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-center">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                              <Flame className="h-3 w-3 text-amber-600" />
+                              {item.turnover_rate}%
+                            </span>
+                            <p className="mt-0.5 text-[11px] text-muted">{item.critical_frequency}x fase kritis</p>
                           </td>
                           <td className="px-5 py-3.5">
-                            <span
-                              className={`rounded-sm px-2 py-1 text-xs font-semibold ${
-                                urgency === 'CRITICAL' ? 'bg-crit-bg text-crit-fg' : urgency === 'WARNING' ? 'bg-warn-bg text-warn-fg' : 'bg-ok-bg text-ok-fg'
-                              }`}
-                            >
-                              {urgency === 'CRITICAL' ? 'Darurat' : urgency === 'WARNING' ? 'Waspada' : 'Normal'}
-                            </span>
-                          </td>
-                          <td className="max-w-64 px-5 py-3.5 text-xs leading-5 text-muted">
-                            {row.metadata?.reasoning || 'Rekomendasi berdasarkan cakupan stok cabang.'}
+                            <div className="flex flex-col gap-0.5">
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-ok-fg">
+                                Naikkan Kapasitas Rak
+                              </span>
+                              <span className="text-[11px] text-muted">
+                                Terjual {item.weekly_consumption} pcs/minggu ({item.critical_frequency}x kritis)
+                              </span>
+                            </div>
                           </td>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState
+                  title="Semua Par Level Optimal"
+                  description="Belum ada cabang yang membutuhkan penyesuaian kapasitas rak berdasarkan laju penjualan saat ini."
+                />
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: DIAGNOSA DEFISIT CABANG */}
+          {subTab === 'defisit' && (
+            <div className="dashboard-surface overflow-hidden">
+              <div className="border-b border-line px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-crit-fg" />
+                      <h3 className="font-semibold text-ink-900">
+                        Diagnosa Defisit & Cabang Rawan Kehabisan Stok
+                      </h3>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Identifikasi akar masalah kekosongan stok cabang: kapasitas rak kurang, pesanan restok terlambat, atau pasokan pusat yang dipotong.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-crit-bg px-3 py-1 text-xs font-semibold text-crit-fg">
+                    {deficitAnalysis.length} Cabang Berisiko
+                  </span>
+                </div>
               </div>
-            ) : (
-              <EmptyState
-                title="Belum Ada Rekomendasi"
-                description="Klik tombol 'Evaluasi Data AI Sekarang' di bagian atas untuk menghasilkan rekomendasi alokasi terbaru."
-              />
-            )}
-          </div>
+
+              {deficitAnalysis.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="bg-ink-50/70 text-xs text-muted">
+                      <tr>
+                        <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
+                        <th className="px-5 py-3 font-semibold">Produk</th>
+                        <th className="px-5 py-3 text-right font-semibold">Sisa Stok / Par</th>
+                        <th className="px-5 py-3 text-right font-semibold">Cakupan Stok</th>
+                        <th className="px-5 py-3 font-semibold">Akar Masalah</th>
+                        <th className="px-5 py-3 font-semibold">Tindakan Solusi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {deficitAnalysis.map((item) => (
+                        <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
+                          <td className="px-5 py-3.5">
+                            <p className="font-medium text-ink-900">{item.partner_name}</p>
+                            <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+                              item.risk_level === 'DARURAT' ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'
+                            }`}>
+                              {item.risk_level}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <p className="font-medium text-ink-900">{item.product_name}</p>
+                            <span className="text-xs text-muted">{item.critical_frequency}x fase kritis</span>
+                          </td>
+                          <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
+                            <span className="text-crit-fg">{item.current_qty}</span>
+                            <span className="text-muted"> / {item.par_level} pcs</span>
+                          </td>
+                          <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
+                            <span className={item.days_of_cover < 2 ? 'text-crit-fg' : 'text-warn-fg'}>
+                              {item.days_of_cover} hari
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
+                              item.root_cause === 'UNDER_CAPACITY'
+                                ? 'bg-amber-100 text-amber-800'
+                                : item.root_cause === 'LATE_REORDER'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {item.root_cause_label}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-xs font-medium text-ink-800">
+                            {item.action_recommendation}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState
+                  title="Stok Cabang Aman Terkendali"
+                  description="Tidak ada cabang mitra yang mengalami defisit kritis atau risiko stockout saat ini."
+                />
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: PENGADAAN PABRIK & REKOMENDASI ALOKASI */}
+          {subTab === 'pabrik' && (
+            <div className="space-y-6">
+              {/* Proyeksi Pabrik */}
+              <div className="dashboard-surface overflow-hidden">
+                <div className="border-b border-line px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Factory className="h-5 w-5 text-ink-900" />
+                        <h3 className="font-semibold text-ink-900">
+                          Proyeksi Pengadaan & Produksi Pabrik
+                        </h3>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted">
+                        Kebutuhan pasokan gudang pusat berdasarkan konsumsi seluruh mitra dan estimasi lead time pabrik (5–7 hari).
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700">
+                      Target Buffer: 21 Hari
+                    </span>
+                  </div>
+                </div>
+
+                {factoryForecast.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] text-left text-sm">
+                      <thead className="bg-ink-50/70 text-xs text-muted">
+                        <tr>
+                          <th className="px-5 py-3 font-semibold">Produk</th>
+                          <th className="px-5 py-3 text-right font-semibold">Stok Pusat</th>
+                          <th className="px-5 py-3 text-right font-semibold">Konsumsi Mitra / Minggu</th>
+                          <th className="px-5 py-3 text-right font-semibold">Ketahanan Stok</th>
+                          <th className="px-5 py-3 text-right font-semibold">Saran Pesanan Pabrik</th>
+                          <th className="px-5 py-3 text-center font-semibold">Status Kesiapan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {factoryForecast.map((item) => (
+                          <tr key={item.product_id} className="hover:bg-ink-50/30">
+                            <td className="px-5 py-3.5 font-medium text-ink-900">
+                              {item.product_name}
+                            </td>
+                            <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
+                              {item.central_stock.toLocaleString('id-ID')} pcs
+                            </td>
+                            <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
+                              {item.total_partner_demand_weekly.toLocaleString('id-ID')} pcs/mgg
+                            </td>
+                            <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
+                              <span className={item.urgency === 'CRITICAL' ? 'text-crit-fg' : item.urgency === 'WARNING' ? 'text-warn-fg' : 'text-ok-fg'}>
+                                {item.estimated_runout_days} hari
+                              </span>
+                            </td>
+                            <td className="num px-5 py-3.5 text-right tabular-nums">
+                              {item.suggested_factory_batch_order > 0 ? (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-600/20">
+                                  +{item.suggested_factory_batch_order.toLocaleString('id-ID')} pcs
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted">Stok Cukup</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-center">
+                              <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                item.urgency === 'CRITICAL'
+                                  ? 'bg-crit-bg text-crit-fg'
+                                  : item.urgency === 'WARNING'
+                                    ? 'bg-warn-bg text-warn-fg'
+                                    : 'bg-ok-bg text-ok-fg'
+                              }`}>
+                                {item.urgency === 'CRITICAL' ? 'Order Segera' : item.urgency === 'WARNING' ? 'Siapkan PO' : 'Aman'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Rekomendasi Alokasi Cabang */}
+              <div className="dashboard-surface overflow-hidden">
+                <div className="border-b border-line px-5 py-4">
+                  <h3 className="font-semibold text-ink-900">Rekomendasi Alokasi Pengiriman Cabang</h3>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Prediksi kebutuhan tujuh hari berdasarkan konsumsi cabang. Persetujuan tetap mengikuti ketersediaan stok pusat.
+                  </p>
+                </div>
+                {recommendations.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[700px] text-left text-sm">
+                      <thead className="bg-ink-50/70 text-xs text-muted">
+                        <tr>
+                          <th className="px-5 py-3 font-semibold">Cabang</th>
+                          <th className="px-5 py-3 font-semibold">Produk</th>
+                          <th className="px-5 py-3 text-right font-semibold">Disarankan</th>
+                          <th className="px-5 py-3 text-right font-semibold">Prediksi 7 hari</th>
+                          <th className="px-5 py-3 text-right font-semibold">Cakupan</th>
+                          <th className="px-5 py-3 font-semibold">Prioritas</th>
+                          <th className="px-5 py-3 font-semibold">Alasan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {recommendations.map((row, index) => {
+                          const urgency = row.metadata?.urgency ?? (Number(row.days_of_cover ?? 0) < 2 ? 'CRITICAL' : 'NORMAL')
+                          return (
+                            <tr
+                              key={`${row.partner_id}-${row.product_id}-${row.generated_at}-${index}`}
+                              className="hover:bg-ink-50/30"
+                            >
+                              <td className="px-5 py-3.5 font-medium text-ink-900">{row.partner_name}</td>
+                              <td className="px-5 py-3.5">{row.product_name}</td>
+                              <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
+                                {row.suggested_qty} pcs
+                              </td>
+                              <td className="num px-5 py-3.5 text-right tabular-nums">{row.forecast_qty} pcs</td>
+                              <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
+                                {row.days_of_cover ?? '—'} hari
+                              </td>
+                              <td className="px-5 py-3.5">
+                                <span
+                                  className={`rounded-sm px-2 py-1 text-xs font-semibold ${
+                                    urgency === 'CRITICAL' ? 'bg-crit-bg text-crit-fg' : urgency === 'WARNING' ? 'bg-warn-bg text-warn-fg' : 'bg-ok-bg text-ok-fg'
+                                  }`}
+                                >
+                                  {urgency === 'CRITICAL' ? 'Darurat' : urgency === 'WARNING' ? 'Waspada' : 'Normal'}
+                                </span>
+                              </td>
+                              <td className="max-w-64 px-5 py-3.5 text-xs leading-5 text-muted">
+                                {row.metadata?.reasoning || 'Rekomendasi berdasarkan cakupan stok cabang.'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="Belum Ada Rekomendasi"
+                    description="Klik tombol 'Perbarui Analisis' untuk memperbarui saran alokasi pengiriman."
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
     </section>
@@ -1777,8 +1930,8 @@ function AdminDashboard() {
   const { user, logout, clearSession, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  useInventoryEvents(user?.role === 'admin', 'admin')
   const [tab, setTab] = useState<AdminTab>('stocks')
+  useInventoryEvents(user?.role === 'admin' && tab !== 'alerts', 'admin')
   const [shipmentPage, setShipmentPage] = useState(1)
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
@@ -1831,7 +1984,7 @@ function AdminDashboard() {
       }
       return response.data
     },
-    enabled: user?.role === 'admin',
+    enabled: user?.role === 'admin' && (tab === 'stocks' || tab === 'data-science'),
     staleTime: 30_000,
   })
   const stocks = useQuery<StockItem[]>({
@@ -1855,7 +2008,7 @@ function AdminDashboard() {
     queryKey: ['admin-orders'],
     queryFn: async () =>
       unwrapData(await api.orders.get({ query: {} }), 'Pesanan belum dimuat'),
-    enabled: user?.role === 'admin' && (tab === 'orders' || tab === 'alerts'),
+    enabled: user?.role === 'admin' && tab === 'orders',
     staleTime: 30_000,
   })
   const shipmentLogs = useQuery<ShipmentLogPage>({
@@ -1864,13 +2017,30 @@ function AdminDashboard() {
     enabled: user?.role === 'admin' && tab === 'shipments',
     staleTime: 30_000,
   })
-  const notifications = useQuery<NotificationItem[]>({
+  const notifications = useQuery<NotificationFeed>({
     queryKey: ['admin-notifications'],
-    queryFn: async () =>
-      unwrapData(await api.notifications.get(), 'Notifikasi belum dimuat'),
-    enabled: user?.role === 'admin',
+    queryFn: async () => {
+      const response = await api.notification.get()
+      const payload = response.data
+      if (response.error || !payload || !('data' in payload) || !Array.isArray(payload.data)) {
+        const errorMsg = payload && 'error' in payload ? String(payload.error) : undefined
+        throw apiError(response.error ?? errorMsg, 'Notifikasi belum dimuat')
+      }
+      return {
+        data: payload.data.map((item) => ({
+          ...item,
+          read_at: item.read_at ? new Date(item.read_at).toISOString() : null,
+          created_at: new Date(item.created_at).toISOString(),
+        })),
+        orders: (payload.orders ?? []).map((order) => ({
+          ...order,
+          created_at: new Date(order.created_at).toISOString(),
+        })),
+      }
+    },
+    enabled: user?.role === 'admin' && tab === 'alerts',
     refetchInterval: 60_000,
-    staleTime: 30_000,
+    staleTime: 0,
   })
 
   useEffect(() => {
@@ -1910,10 +2080,7 @@ function AdminDashboard() {
 
   const exportRawLogs = async () => {
     try {
-      const apiUrl = resolveApiUrl()
-      const response = await fetch(`${apiUrl}/admin/stock-logs/export`, {
-        credentials: 'include',
-      })
+      const response = await apiFetch('/admin/stock-logs/export')
       if (!response.ok) throw new Error('Ekspor log belum berhasil.')
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
@@ -2009,26 +2176,39 @@ function AdminDashboard() {
   })
 
   const markRead = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await api.notifications({ id }).read.patch()
-      if (response.error)
+    mutationFn: async (id: string): Promise<{ read_at: string }> => {
+      const response = await api.notification.patch({ id })
+      const payload = response.data
+      if (response.error || !payload || !('read_at' in payload) || typeof payload.read_at !== 'string') {
         throw apiError(response.error, 'Notifikasi belum ditandai')
+      }
+      return { read_at: payload.read_at }
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin-notifications'] })
-      await queryClient.invalidateQueries({ queryKey: ['admin-metrics'] })
+    onSuccess: (result, id) => {
+      const readAt = result.read_at
+      queryClient.setQueryData<NotificationFeed>(['admin-notifications'], (current) => current && ({
+        ...current,
+        data: current.data.map((item) => item.id === id ? { ...item, read_at: readAt } : item),
+      }))
     },
+    onError: (error: unknown) => toast.error(getErrorMessage(error)),
   })
 
   const markAllRead = useMutation({
-    mutationFn: async (ids: string[]) => {
-      await Promise.all(
-        ids.map((id) => api.notifications({ id }).read.patch()),
-      )
+    mutationFn: async (): Promise<{ read_at: string }> => {
+      const response = await api.notification.patch({ all: true })
+      const payload = response.data
+      if (response.error || !payload || !('read_at' in payload) || typeof payload.read_at !== 'string') {
+        throw apiError(response.error, 'Notifikasi belum ditandai')
+      }
+      return { read_at: payload.read_at }
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin-notifications'] })
-      await queryClient.invalidateQueries({ queryKey: ['admin-metrics'] })
+    onSuccess: (result) => {
+      const readAt = result.read_at
+      queryClient.setQueryData<NotificationFeed>(['admin-notifications'], (current) => current && ({
+        ...current,
+        data: current.data.map((item) => item.read_at ? item : { ...item, read_at: readAt }),
+      }))
       toast.success('Semua alert berhasil ditandai sudah dibaca')
     },
     onError: (error: unknown) => toast.error(getErrorMessage(error)),
@@ -2059,7 +2239,7 @@ function AdminDashboard() {
     })
   }, [partner, deferredSearch, status, stocks.data])
   const unread = useMemo(
-    () => (notifications.data ?? []).reduce((count, item) => count + Number(!item.read_at), 0),
+    () => (notifications.data?.data ?? []).reduce((count, item) => count + Number(!item.read_at), 0),
     [notifications.data],
   )
 
@@ -2223,11 +2403,10 @@ function AdminDashboard() {
           {tab === 'alerts' ? (
             <AlertPanel
               query={notifications}
-              orders={orders.data ?? EMPTY_ORDERS}
               marking={markRead.isPending}
               isMarkingAll={markAllRead.isPending}
               onRead={(id) => markRead.mutate(id)}
-              onReadAll={(ids) => markAllRead.mutate(ids)}
+              onReadAll={() => markAllRead.mutate()}
               onViewOrderDetail={handleViewOrderDetail}
               onNavigateToStock={handleNavigateToStock}
             />
@@ -4383,9 +4562,6 @@ function ApprovalDialog({
                 <h3 className="font-display text-base font-bold text-ink-900">
                   Rincian Permintaan Restock ({order.items.length} Produk)
                 </h3>
-                <span className="text-xs text-muted">
-                  Bandingkan stok cabang & gudang pusat untuk persetujuan alokasi
-                </span>
               </div>
 
               <div className="space-y-3">
@@ -4449,7 +4625,7 @@ function ApprovalDialog({
                                 {currentQty}
                               </span>
                               <span className="text-xs text-muted">
-                                / {parLevel} {item.product_unit}
+                                {item.product_unit}
                               </span>
                               <span className="ml-auto text-xs font-semibold tabular-nums text-muted">
                                 ({stockPercentage}%)
@@ -4966,7 +5142,7 @@ interface ParsedAlertInfo {
   typeLabel: string
   typeBadgeColor: string
   relatedOrderId: string | null
-  matchedOrder: Order | null
+  matchedOrder: AlertOrder | null
 }
 
 function formatSelectedDate(dateStr: string): string {
@@ -4985,9 +5161,9 @@ function formatSelectedDate(dateStr: string): string {
 }
 
 interface AlertOrderLookup {
-  byNumber: Map<string, Order>
-  byPartner: Map<string, Order>
-  byPartnerList: Map<string, Order[]>
+  byNumber: Map<string, AlertOrder>
+  byPartner: Map<string, AlertOrder>
+  byPartnerList: Map<string, AlertOrder[]>
 }
 
 function parseAndFormatAlert(
@@ -5002,7 +5178,7 @@ function parseAndFormatAlert(
   const poMatch = `${rawTitle} ${rawBody}`.match(/PO-[A-Za-z0-9-]+/i)
   const poCode = poMatch ? poMatch[0].toUpperCase() : null
 
-  let matchedOrder: Order | null = null
+  let matchedOrder: AlertOrder | null = null
   if (poCode) {
     matchedOrder = orderLookup.byNumber.get(poCode) ?? null
   }
@@ -5267,7 +5443,6 @@ const EMPTY_NOTIFICATIONS: NotificationItem[] = []
 
 function AlertPanel({
   query,
-  orders,
   marking,
   isMarkingAll,
   onRead,
@@ -5275,12 +5450,11 @@ function AlertPanel({
   onViewOrderDetail,
   onNavigateToStock,
 }: {
-  query: UseQueryResult<NotificationItem[]>
-  orders: Order[]
+  query: UseQueryResult<NotificationFeed>
   marking: boolean
   isMarkingAll?: boolean
   onRead: (id: string) => void
-  onReadAll?: (ids: string[]) => void
+  onReadAll?: () => void
   onViewOrderDetail: (orderId: string, category?: OrderCategoryTab) => void
   onNavigateToStock: (partnerName?: string) => void
 }) {
@@ -5298,11 +5472,12 @@ function AlertPanel({
     'semua',
   )
 
-  const allAlerts = query.data ?? EMPTY_NOTIFICATIONS
+  const allAlerts = query.data?.data ?? EMPTY_NOTIFICATIONS
+  const orders = query.data?.orders ?? EMPTY_ALERT_ORDERS
   const orderLookup = useMemo<AlertOrderLookup>(() => {
-    const byNumber = new Map<string, Order>()
-    const byPartner = new Map<string, Order>()
-    const byPartnerList = new Map<string, Order[]>()
+    const byNumber = new Map<string, AlertOrder>()
+    const byPartner = new Map<string, AlertOrder>()
+    const byPartnerList = new Map<string, AlertOrder[]>()
     for (const order of orders) {
       byNumber.set(order.order_no.toUpperCase(), order)
       if (!byPartner.has(order.partner_id)) byPartner.set(order.partner_id, order)
@@ -5602,10 +5777,7 @@ function AlertPanel({
                 type="button"
                 disabled={isMarkingAll || marking}
                 onClick={() => {
-                  const unreadIds = allAlerts
-                    .filter((a) => !a.read_at)
-                    .map((a) => a.id)
-                  if (unreadIds.length > 0) onReadAll(unreadIds)
+                  onReadAll()
                 }}
                 className="inline-flex min-h-10 sm:min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
                 title="Tandai semua alert yang belum dibaca menjadi sudah dibaca"

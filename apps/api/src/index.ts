@@ -12,6 +12,7 @@ import { authModule, meModule } from "./modules/auth";
 import { stocksModule, productsModule } from "./modules/stocks";
 import { ordersModule } from "./modules/orders";
 import { notificationsModule } from "./modules/notifications";
+import { adminNotificationModule } from "./modules/notifications/admin";
 import { adminModule } from "./modules/admin";
 import { regionModule } from "./modules/regions";
 import { realtimeModule } from "./realtime";
@@ -103,7 +104,7 @@ export const app = new Elysia()
   })
   .onError(({ request, error, code, set }) => {
     const url = new URL(request.url);
-    console.error(`[ERROR] ${request.method} ${url.pathname} [${code}]`, error instanceof Error ? error.name : "Error");
+    console.error(`[ERROR] ${request.method} ${url.pathname} [${code}]`, error instanceof Error ? `${error.name}: ${error.message}` : error);
     if (code === "VALIDATION" || code === "PARSE") {
       set.status = code === "VALIDATION" ? 422 : 400;
       return { error: "Data permintaan tidak valid" };
@@ -132,7 +133,8 @@ export const app = new Elysia()
       set.status = 403;
       return { error: "Origin tidak diizinkan" };
     }
-    if (new URL(request.url).pathname === "/auth/login") return;
+    const requestPath = new URL(request.url).pathname;
+    if (requestPath === "/auth/login" || requestPath === "/api/auth/login") return;
     const user = await getAuthUser(headers);
     if (!user) {
       set.status = 401;
@@ -199,6 +201,7 @@ export const app = new Elysia()
   .use(productsModule)
   .use(ordersModule)
   .use(notificationsModule)
+  .use(adminNotificationModule)
   .use(adminModule)
   .use(regionModule)
   .use(
