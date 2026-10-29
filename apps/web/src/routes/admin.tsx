@@ -12,7 +12,6 @@ import { Dialog } from 'radix-ui'
 import {
   AlertOctagon,
   AlertTriangle,
-  ArrowUpRight,
   Bell,
   Boxes,
   BrainCircuit,
@@ -61,6 +60,10 @@ import {
   PartnerStockDetailModal,
   type PartnerStockGroup,
 } from '@/components/inventory/partner-stock-detail-modal'
+import {
+  PartnerFastMovingModal,
+  type PartnerFastMovingGroup,
+} from '@/components/inventory/partner-fast-moving-modal'
 import { PartnerDetailModal } from '@/components/inventory/partner-detail-modal'
 import { RegionalAnalysis } from '@/components/inventory/regional-analysis'
 import {
@@ -1127,8 +1130,49 @@ function AIInsightsPanel({
     refetchInterval: (query) => query.state.data?.status === 'running' ? 2_000 : false,
   })
   const [subTab, setSubTab] = useState<'wilayah' | 'laris' | 'defisit' | 'pabrik'>('defisit')
+  const [selectedPartnerGroup, setSelectedPartnerGroup] = useState<PartnerFastMovingGroup | null>(null)
   const kpi = data?.kpi_summary
   const fastMoving = data?.fast_moving_products ?? []
+  const partnerFastMovingGroups = useMemo<PartnerFastMovingGroup[]>(() => {
+    const map = new Map<string, PartnerFastMovingGroup>()
+    for (const item of fastMoving) {
+      const existing = map.get(item.partner_id)
+      if (!existing) {
+        map.set(item.partner_id, {
+          partner_id: item.partner_id,
+          partner_name: item.partner_name,
+          partner_type: item.partner_type,
+          total_weekly_units: item.weekly_consumption,
+          total_daily_velocity: item.daily_velocity,
+          avg_turnover_rate: item.turnover_rate,
+          total_critical_frequency: item.critical_frequency,
+          top_product: item,
+          products: [item],
+        })
+      } else {
+        existing.products.push(item)
+        existing.total_weekly_units += item.weekly_consumption
+        existing.total_daily_velocity = Number(
+          (existing.total_daily_velocity + item.daily_velocity).toFixed(2),
+        )
+        existing.total_critical_frequency += item.critical_frequency
+      }
+    }
+
+    const groups = Array.from(map.values())
+    for (const group of groups) {
+      group.products.sort((a, b) => b.weekly_consumption - a.weekly_consumption)
+      group.top_product = group.products[0]
+      const totalTurnover = group.products.reduce((acc, p) => acc + p.turnover_rate, 0)
+      group.avg_turnover_rate = Number(
+        (totalTurnover / group.products.length).toFixed(1),
+      )
+    }
+
+    groups.sort((a, b) => b.total_weekly_units - a.total_weekly_units)
+    return groups
+  }, [fastMoving])
+
   const deficitAnalysis = data?.stockout_deficit_analysis ?? []
   const factoryForecast = data?.factory_procurement_forecast ?? []
   const recommendations = data?.recommendations ?? []
@@ -1139,7 +1183,7 @@ function AIInsightsPanel({
   const sections: Array<{ id: typeof subTab; label: string; count: number }> = [
     { id: 'wilayah', label: 'Wilayah', count: data?.regional_activity?.regions.length ?? 0 },
     { id: 'defisit', label: 'Risiko cabang', count: deficitAnalysis.length },
-    { id: 'laris', label: 'Produk terlaris', count: fastMoving.length },
+    { id: 'laris', label: 'Produk terlaris', count: partnerFastMovingGroups.length },
     { id: 'pabrik', label: 'Pasokan pusat', count: factoryForecast.length },
   ]
 
@@ -1357,7 +1401,7 @@ function AIInsightsPanel({
             </div>
           )}
 
-          {/* TAB 2: PRODUK LARIS (PENJUALAN TINGGI) */}
+          {/* TAB 2: PRODUK LARIS (PENJUALAN TINGGI) TERAGREGASI PER MITRA */}
           {subTab === 'laris' && (
             <div className="dashboard-surface overflow-hidden">
               <div className="border-b border-line px-5 py-4">
@@ -1370,78 +1414,212 @@ function AIInsightsPanel({
                       </h3>
                     </div>
                     <p className="mt-0.5 text-xs text-muted">
-                      Produk sering menipis karena tingginya laju penjualan. AI merekomendasikan jumlah pasokan lebih banyak agar pasokan cabang tetap aman tanpa batas stok maksimal.
+                      Daftar performa penjualan teragregasi per cabang mitra. Klik baris mitra untuk melihat rincian barang paling laku dan rekomendasi buffer AI.
                     </p>
                   </div>
-                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-500/20">
-                    {fastMoving.length} Item Terdeteksi
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-500/20">
+                      {partnerFastMovingGroups.length} Cabang Mitra Terdeteksi ({fastMoving.length} Item)
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {fastMoving.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left text-sm">
-                    <thead className="bg-ink-50/70 text-xs text-muted">
-                      <tr>
-                        <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
-                        <th className="px-5 py-3 font-semibold">Produk</th>
-                        <th className="px-5 py-3 text-right font-semibold">Laku (7 Hari)</th>
-                        <th className="px-5 py-3 text-right font-semibold">Stok Minimal</th>
-                        <th className="px-5 py-3 text-right font-semibold">Saran Pasokan</th>
-                        <th className="px-5 py-3 text-center font-semibold">Turnover</th>
-                        <th className="px-5 py-3 font-semibold">Rekomendasi Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-line">
-                      {fastMoving.map((item) => (
-                        <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
-                          <td className="px-5 py-3.5">
-                            <p className="font-medium text-ink-900">{item.partner_name}</p>
-                            <p className="text-xs text-muted capitalize">{item.partner_type}</p>
-                          </td>
-                          <td className="px-5 py-3.5 font-medium text-ink-900">
-                            {item.product_name}
-                          </td>
-                          <td className="num px-5 py-3.5 text-right tabular-nums">
-                            <p className="font-semibold text-ink-900">{item.weekly_consumption} pcs</p>
-                            <p className="text-xs text-muted">~{item.daily_velocity} pcs/hari</p>
-                          </td>
-                          <td className="num px-5 py-3.5 text-right font-medium text-muted tabular-nums">
-                            {item.par_level} pcs
-                          </td>
-                          <td className="num px-5 py-3.5 text-right tabular-nums">
-                            <span className="inline-flex items-center gap-1 rounded-md bg-ok-bg px-2.5 py-1 text-xs font-bold text-ok-fg">
-                              <ArrowUpRight className="h-3 w-3" />
-                              {item.suggested_par_level} pcs
+              {partnerFastMovingGroups.length > 0 ? (
+                <div>
+                  {/* Tampilan Mobile: Kartu per Mitra */}
+                  <div className="divide-y divide-line sm:hidden">
+                    {partnerFastMovingGroups.map((group, index) => (
+                      <article
+                        key={group.partner_id}
+                        className="space-y-3 p-4 transition-colors hover:bg-ink-50/40"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                                index === 0
+                                  ? 'bg-amber-500 text-white shadow-xs'
+                                  : index === 1
+                                    ? 'bg-ink-200 text-ink-900'
+                                    : 'bg-ink-100 text-ink-700'
+                              }`}
+                            >
+                              #{index + 1}
                             </span>
-                            {item.par_delta > 0 && (
-                              <p className="mt-0.5 text-[11px] font-semibold text-ok-fg">
-                                +{item.par_delta} pcs
+                            <div>
+                              <h4 className="font-semibold text-ink-900">
+                                {group.partner_name}
+                              </h4>
+                              <p className="text-xs capitalize text-muted">
+                                {group.partner_type}
                               </p>
-                            )}
-                          </td>
-                          <td className="px-5 py-3.5 text-center">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                              <Flame className="h-3 w-3 text-amber-600" />
-                              {item.turnover_rate}%
-                            </span>
-                            <p className="mt-0.5 text-[11px] text-muted">{item.critical_frequency}x fase kritis</p>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-ok-fg">
-                                Prioritas Pasokan Restok
-                              </span>
-                              <span className="text-[11px] text-muted">
-                                Terjual {item.weekly_consumption} pcs/minggu ({item.critical_frequency}x kritis)
-                              </span>
                             </div>
-                          </td>
+                          </div>
+                          <span className="rounded-md bg-ink-100 px-2 py-0.5 text-xs font-semibold text-ink-700">
+                            {group.products.length} dari 4 produk
+                          </span>
+                        </div>
+
+                        <dl className="grid grid-cols-2 gap-2 rounded-xl bg-ink-50/70 p-3 text-xs">
+                          <div>
+                            <dt className="text-muted">Total Laku (7 Hari)</dt>
+                            <dd className="num mt-1 font-bold text-ink-900 tabular-nums">
+                              {group.total_weekly_units.toLocaleString('id-ID')} pcs
+                            </dd>
+                            <p className="text-[11px] text-muted">
+                              ~{group.total_daily_velocity} pcs/hari
+                            </p>
+                          </div>
+                          <div>
+                            <dt className="text-muted">Rata-rata Turnover</dt>
+                            <dd className="num mt-1 font-bold text-amber-600 tabular-nums">
+                              {group.avg_turnover_rate}%
+                            </dd>
+                            <p className="text-[11px] text-muted">
+                              {group.total_critical_frequency}x fase kritis
+                            </p>
+                          </div>
+                        </dl>
+
+                        <div className="rounded-lg border border-line bg-white p-2.5 text-xs">
+                          <p className="text-[11px] font-medium text-muted">
+                            Produk Paling Dominan:
+                          </p>
+                          <p className="font-semibold text-ink-900">
+                            {group.top_product.product_name}
+                          </p>
+                          <p className="text-[11px] text-muted">
+                            Terjual {group.top_product.weekly_consumption} pcs (
+                            {Math.round(
+                              (group.top_product.weekly_consumption /
+                                group.total_weekly_units) *
+                                100,
+                            )}
+                            % dari total mitra ini)
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPartnerGroup(group)}
+                          className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink-800 shadow-2xs transition hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                        >
+                          Lihat Rincian ({group.products.length} Produk)
+                          <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+
+                  {/* Tampilan Desktop: Tabel per Mitra */}
+                  <div className="hidden overflow-x-auto sm:block">
+                    <table className="w-full min-w-[760px] text-left text-sm">
+                      <thead className="bg-ink-50/70 text-xs text-muted">
+                        <tr>
+                          <th className="px-5 py-3 font-semibold">Peringkat & Cabang Mitra</th>
+                          <th className="px-5 py-3 text-right font-semibold">Total Laku (7 Hari)</th>
+                          <th className="px-5 py-3 font-semibold">Produk Paling Dominan</th>
+                          <th className="px-5 py-3 text-center font-semibold">Cakupan Item Laris</th>
+                          <th className="px-5 py-3 text-center font-semibold">Rata-rata Turnover</th>
+                          <th className="px-5 py-3 text-right font-semibold">Aksi</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {partnerFastMovingGroups.map((group, index) => (
+                          <tr
+                            key={group.partner_id}
+                            onClick={() => setSelectedPartnerGroup(group)}
+                            className="cursor-pointer transition-colors hover:bg-ink-50/40"
+                          >
+                            {/* 1. Peringkat & Mitra */}
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                                    index === 0
+                                      ? 'bg-amber-500 text-white shadow-xs'
+                                      : index === 1
+                                        ? 'bg-ink-200 text-ink-900'
+                                        : 'bg-ink-100 text-ink-700'
+                                  }`}
+                                >
+                                  #{index + 1}
+                                </span>
+                                <div>
+                                  <p className="font-semibold text-ink-900 hover:text-ume">
+                                    {group.partner_name}
+                                  </p>
+                                  <p className="text-xs capitalize text-muted">
+                                    {group.partner_type}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 2. Total Laku 7 Hari */}
+                            <td className="num px-5 py-3.5 text-right tabular-nums">
+                              <p className="font-bold text-ink-900">
+                                {group.total_weekly_units.toLocaleString('id-ID')} pcs
+                              </p>
+                              <p className="text-xs text-muted">
+                                ~{group.total_daily_velocity} pcs/hari
+                              </p>
+                            </td>
+
+                            {/* 3. Produk Paling Dominan */}
+                            <td className="px-5 py-3.5">
+                              <p className="font-semibold text-ink-900">
+                                {group.top_product.product_name}
+                              </p>
+                              <p className="text-xs text-muted">
+                                {group.top_product.weekly_consumption} pcs (
+                                {Math.round(
+                                  (group.top_product.weekly_consumption /
+                                    group.total_weekly_units) *
+                                    100,
+                                )}
+                                % dari total)
+                              </p>
+                            </td>
+
+                            {/* 4. Cakupan Item Laris */}
+                            <td className="px-5 py-3.5 text-center">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-ink-50 px-2.5 py-1 text-xs font-semibold text-ink-800 ring-1 ring-line">
+                                {group.products.length} dari 4 produk
+                              </span>
+                            </td>
+
+                            {/* 5. Turnover & Fase Kritis */}
+                            <td className="px-5 py-3.5 text-center">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                <Flame className="h-3 w-3 text-amber-600" />
+                                {group.avg_turnover_rate}%
+                              </span>
+                              <p className="mt-0.5 text-[11px] text-muted">
+                                {group.total_critical_frequency}x fase kritis
+                              </p>
+                            </td>
+
+                            {/* 6. Aksi */}
+                            <td className="px-5 py-3.5 text-right">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedPartnerGroup(group)
+                                }}
+                                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-700 shadow-2xs transition hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                              >
+                                Lihat Rincian
+                                <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
                 <EmptyState
@@ -1449,6 +1627,15 @@ function AIInsightsPanel({
                   description="Belum ada cabang yang membutuhkan penyesuaian buffer minimal berdasarkan laju penjualan saat ini."
                 />
               )}
+
+              {/* Modal Detail Barang Paling Laku per Mitra */}
+              <PartnerFastMovingModal
+                group={selectedPartnerGroup}
+                open={selectedPartnerGroup !== null}
+                onOpenChange={(open) => {
+                  if (!open) setSelectedPartnerGroup(null)
+                }}
+              />
             </div>
           )}
 
@@ -4249,9 +4436,7 @@ function ApprovalDialog({
                       <ErrorState message={getErrorMessage(receiptProof.error)} onRetry={() => void receiptProof.refetch()} />
                     ) : null}
                     {(() => {
-                      const proofUrl =
-                        receiptProof.data?.photo_data_url ||
-                        (receiptProof.data as unknown as { data?: { photo_data_url?: string } })?.data?.photo_data_url
+                      const proofUrl = receiptProof.data?.photo_data_url
                       if (!proofUrl) return null
                       const resolved = resolveImageUrl(proofUrl) ?? ''
                       return (

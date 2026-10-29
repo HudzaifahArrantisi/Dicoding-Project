@@ -138,10 +138,10 @@ export async function confirmOrderReceipt(orderId: string, code: string): Promis
  */
 export async function getOrderReceiptProof(orderId: string): Promise<ReceiptProofData> {
   const response = await apiClient.get<{ data: ReceiptProofData } | ReceiptProofData>(`/orders/${orderId}/receipt-proof`)
-  if (response && typeof response === 'object' && 'data' in response && response.data && typeof response.data === 'object') {
-    return response.data as ReceiptProofData
+  if ('data' in response) {
+    return response.data
   }
-  return response as ReceiptProofData
+  return response
 }
 
 /**

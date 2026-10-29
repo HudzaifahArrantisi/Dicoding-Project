@@ -13,7 +13,7 @@ export const adminNotificationModule = new Elysia({ prefix: "/notification" })
     }
     if (user.role !== "admin") {
       set.status = 403;
-      return { error: "Akses admin diperlukan" };
+      return { error: "Harus ada akses addmin" };
     }
 
     const data = await db

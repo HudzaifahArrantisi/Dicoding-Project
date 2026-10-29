@@ -2,12 +2,9 @@ import { useMemo, useState } from 'react'
 import { Dialog } from 'radix-ui'
 import {
   ArrowUpRight,
-  BarChart3,
   Building2,
   CheckCircle2,
-  Flame,
   PieChart,
-  Sparkles,
   X,
 } from 'lucide-react'
 import { ThreeDPieChart, type ThreeDPieSlice } from './three-d-pie-chart'
@@ -423,17 +420,6 @@ export function RegionalAnalysis({
               ) : null}
             </section>
 
-            <div className="rounded-lg border border-line bg-ink-50 p-4">
-              <div className="flex items-start gap-3">
-                <Sparkles className="mt-0.5 size-4 shrink-0 text-ume" aria-hidden="true" />
-                <div>
-                  <h3 className="text-sm font-semibold text-ink-900">Saran AI untuk wilayah ini</h3>
-                  <p className="mt-1 text-sm leading-6 text-ink-800">
-                    {selectedRegion.recommended_action ?? 'Belum ada saran khusus untuk wilayah ini.'}
-                  </p>
-                </div>
-              </div>
-            </div>
 
             {/* Sub-Tab Diagram Selector */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
@@ -448,7 +434,6 @@ export function RegionalAnalysis({
                       : 'bg-ink-50 text-ink-700 hover:bg-ink-100'
                   }`}
                 >
-                  <PieChart className="h-3.5 w-3.5 text-blue-400" />
                   <span>Proporsi aktivitas cabang</span>
                   <span
                     className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
@@ -469,7 +454,6 @@ export function RegionalAnalysis({
                       : 'bg-ink-50 text-ink-700 hover:bg-ink-100'
                   }`}
                 >
-                  <BarChart3 className="h-3.5 w-3.5" />
                   <span>Riwayat stok cabang</span>
                 </button>
 
@@ -483,7 +467,6 @@ export function RegionalAnalysis({
                       : 'bg-ink-50 text-ink-700 hover:bg-ink-100'
                   }`}
                 >
-                  <Flame className="h-3.5 w-3.5 text-amber-500" />
                   <span>Saran pasokan</span>
                   {regionFastMoving.length > 0 && (
                     <span
