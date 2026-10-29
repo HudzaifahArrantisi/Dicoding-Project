@@ -1,13 +1,18 @@
 import { useMemo, useState } from 'react'
 import { Dialog } from 'radix-ui'
 import {
+  AlertTriangle,
   ArrowUpRight,
+  BrainCircuit,
   Building2,
   CheckCircle2,
+  Flame,
   PieChart,
+  ShieldAlert,
   X,
 } from 'lucide-react'
 import { ThreeDPieChart, type ThreeDPieSlice } from './three-d-pie-chart'
+import type { AIInsights } from '@/lib/api/admin'
 
 type Zone = 'ZONA_MERAH' | 'ZONA_KUNING' | 'ZONA_HIJAU' | 'BELUM_DIANALISIS' | 'PERLU_LOKASI'
 
@@ -19,6 +24,9 @@ export interface RegionalPartner {
   restock_requests: number
   weekly_units: number
   zone: Zone
+  max_stockout_probability?: number
+  average_stockout_probability?: number
+  urgent_items?: Array<{ product_name: string; stockout_probability: number }>
   suggested_products: Array<{ product_name: string; suggested_par_level: number }>
 }
 
@@ -30,6 +38,9 @@ export interface RegionalActivity {
     regency_name: string
     regional_zone: Zone
     recommended_action: string | null
+    primary_risk_driver?: string | null
+    peak_stockout_probability?: number
+    average_stockout_probability?: number
     critical_logs: number
     stockout_logs: number
     restock_requests: number
@@ -61,6 +72,7 @@ export interface RegionalAnalysisProps {
     risk_level: string
     action_recommendation: string
   }>
+  naiveBayesAnalysis?: AIInsights['naive_bayes_analysis']
 }
 
 const zoneLabel: Record<Zone, string> = {
@@ -84,12 +96,13 @@ const number = (value: number) => value.toLocaleString('id-ID')
 export function RegionalAnalysis({
   activity,
   fastMovingProducts = [],
+  naiveBayesAnalysis,
 }: RegionalAnalysisProps) {
   const [zone, setZone] = useState<Zone | 'semua'>('semua')
   const [regionKey, setRegionKey] = useState('semua')
   const [detailRegionKey, setDetailRegionKey] = useState<string | null>(null)
   const [partnerId, setPartnerId] = useState('semua')
-  const [detailChartTab, setDetailChartTab] = useState<'3d_pie' | 'events' | 'par_capacity'>('3d_pie')
+  const [detailChartTab, setDetailChartTab] = useState<'3d_pie' | 'events' | 'par_capacity' | 'naive_bayes'>('3d_pie')
   const [pieMetric, setPieMetric] = useState<'critical' | 'stockout' | 'restock' | 'total'>('critical')
 
   const regions = activity?.regions ?? []
@@ -162,43 +175,46 @@ export function RegionalAnalysis({
     ...regionFastMoving.flatMap((item) => [item.par_level, item.suggested_par_level])
   )
 
-  // Slices for Overview 3D Pie Chart (Semua Wilayah)
   const regionalPieSlices: ThreeDPieSlice[] = useMemo(() => {
-    return visibleRegions.map((region) => {
-      const key = `${region.province_name}\u0000${region.regency_name}`
-      let val = 0
-      if (pieMetric === 'critical') val = region.critical_logs
-      else if (pieMetric === 'stockout') val = region.stockout_logs
-      else if (pieMetric === 'restock') val = region.restock_requests
-      else val = region.critical_logs + region.stockout_logs + region.restock_requests
+    return visibleRegions
+      .map((region) => {
+        const key = `${region.province_name}\u0000${region.regency_name}`
+        let val = 0
+        if (pieMetric === 'critical') val = region.critical_logs
+        else if (pieMetric === 'stockout') val = region.stockout_logs
+        else if (pieMetric === 'restock') val = region.restock_requests
+        else val = region.critical_logs + region.stockout_logs + region.restock_requests
 
-      return {
-        id: key,
-        label: region.regency_name,
-        sublabel: `${region.province_name} · ${region.partners.length} mitra`,
-        value: val,
-        badge: zoneLabel[region.regional_zone],
-      }
-    })
+        return {
+          id: key,
+          label: region.regency_name,
+          sublabel: `${region.province_name} · ${region.partners.length} mitra`,
+          value: val,
+          badge: zoneLabel[region.regional_zone],
+        }
+      })
+      .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'id-ID'))
   }, [visibleRegions, pieMetric])
 
   // Slices for Selected Region's Partners 3D Pie Chart
   const partnerPieSlices: ThreeDPieSlice[] = useMemo(() => {
     if (!selectedRegion) return []
-    return selectedRegion.partners.map((partner) => {
-      let val = 0
-      if (pieMetric === 'critical') val = partner.critical_logs
-      else if (pieMetric === 'stockout') val = partner.stockout_logs
-      else if (pieMetric === 'restock') val = partner.restock_requests
-      else val = partner.critical_logs + partner.stockout_logs + partner.restock_requests
+    return selectedRegion.partners
+      .map((partner) => {
+        let val = 0
+        if (pieMetric === 'critical') val = partner.critical_logs
+        else if (pieMetric === 'stockout') val = partner.stockout_logs
+        else if (pieMetric === 'restock') val = partner.restock_requests
+        else val = partner.critical_logs + partner.stockout_logs + partner.restock_requests
 
-      return {
-        id: partner.partner_id,
-        label: partner.partner_name,
-        sublabel: zoneLabel[partner.zone],
-        value: val,
-      }
-    })
+        return {
+          id: partner.partner_id,
+          label: partner.partner_name,
+          sublabel: zoneLabel[partner.zone],
+          value: val,
+        }
+      })
+      .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'id-ID'))
   }, [selectedRegion, pieMetric])
 
   const pieMetricLabel =
@@ -269,6 +285,53 @@ export function RegionalAnalysis({
             </p>
           </div>
         </div>
+
+        {/* Naive Bayes Multi-Factor Intelligence Panel */}
+        {naiveBayesAnalysis ? (
+          <div className="rounded-xl border border-line bg-gradient-to-r from-purple-50/70 via-white to-pink-50/40 p-4 sm:p-5 shadow-2xs">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3.5">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-purple-600/10 text-purple-700 ring-1 ring-purple-600/20">
+                  <BrainCircuit className="size-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-display text-base font-bold text-ink-900">
+                      Model Prediksi Risiko Kehabisan Stok Naive Bayes
+                    </h3>
+                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800">
+                      Multi-Factor Gaussian & Categorical
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted max-w-xl">
+                    Menganalisis probabilitas stok habis sebelum pasokan tiba dengan membaca ketahanan hari (Days of Cover), percepatan konsumsi harian, indeks stres lead time pabrik 6 hari, dan probabilitas tipe mitra.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5 shrink-0">
+                <div className="rounded-lg border border-crit-fg/20 bg-crit-bg/50 px-3 py-2 text-center">
+                  <p className="text-[11px] font-semibold text-crit-fg">Item Risiko Tinggi</p>
+                  <p className="num font-display text-lg font-bold tabular-nums text-crit-fg">
+                    {naiveBayesAnalysis.summary.high_risk_items_count}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-warn-fg/20 bg-warn-bg/50 px-3 py-2 text-center">
+                  <p className="text-[11px] font-semibold text-warn-fg">Lonjakan Konsumsi</p>
+                  <p className="num font-display text-lg font-bold tabular-nums text-warn-fg">
+                    {naiveBayesAnalysis.summary.surge_detected_count}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-purple-200 bg-purple-50/70 px-3 py-2 text-center">
+                  <p className="text-[11px] font-semibold text-purple-900">Wilayah Merah</p>
+                  <p className="num font-display text-lg font-bold tabular-nums text-purple-900">
+                    {naiveBayesAnalysis.summary.red_zone_regions_count}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* Filter Controls Bar */}
         <div className="grid gap-3 sm:grid-cols-3">
@@ -356,6 +419,18 @@ export function RegionalAnalysis({
                   >
                     {zoneLabel[selectedRegion.regional_zone]}
                   </span>
+                  {selectedRegion.peak_stockout_probability !== undefined && selectedRegion.peak_stockout_probability > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 border border-purple-200 px-2.5 py-0.5 text-xs font-bold text-purple-900">
+                      <BrainCircuit className="size-3 text-purple-600" />
+                      Probabilitas Habis Puncak: {selectedRegion.peak_stockout_probability}%
+                    </span>
+                  )}
+                  {selectedRegion.primary_risk_driver && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-medium text-amber-900">
+                      <Flame className="size-3 text-amber-600" />
+                      {selectedRegion.primary_risk_driver}
+                    </span>
+                  )}
                 </div>
                 <Dialog.Title className="font-display text-xl font-bold text-ink-900 sm:text-2xl">
                   {selectedRegion.regency_name}
@@ -477,6 +552,29 @@ export function RegionalAnalysis({
                       }`}
                     >
                       {regionFastMoving.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDetailChartTab('naive_bayes')}
+                  aria-pressed={detailChartTab === 'naive_bayes'}
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                    detailChartTab === 'naive_bayes'
+                      ? 'bg-purple-900 text-white shadow-xs'
+                      : 'bg-purple-50 text-purple-900 hover:bg-purple-100'
+                  }`}
+                >
+                  <BrainCircuit className="size-3.5 text-purple-400" />
+                  <span>Prediksi Naive Bayes</span>
+                  {selectedRegion.peak_stockout_probability !== undefined && selectedRegion.peak_stockout_probability > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                        detailChartTab === 'naive_bayes' ? 'bg-white/20 text-white' : 'bg-purple-200 text-purple-900'
+                      }`}
+                    >
+                      {selectedRegion.peak_stockout_probability}%
                     </span>
                   )}
                 </button>
@@ -706,6 +804,136 @@ export function RegionalAnalysis({
                 )}
               </div>
             )}
+
+            {/* TAB DETAIL 4: PREDIKSI NAIVE BAYES */}
+            {detailChartTab === 'naive_bayes' && (
+              <div className="space-y-4">
+                {/* Header Kartu Penjelasan */}
+                <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-4 sm:p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <BrainCircuit className="size-5 text-purple-700" />
+                        <h4 className="font-semibold text-purple-950 text-sm sm:text-base">
+                          Hasil Penilaian Model Naive Bayes untuk {selectedRegion.regency_name}
+                        </h4>
+                      </div>
+                      <p className="mt-1 text-xs text-purple-900/80">
+                        {selectedRegion.recommended_action || 'Pasokan wilayah stabil, pertahankan alokasi restok reguler.'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="rounded-lg bg-white/80 border border-purple-200 px-3 py-1.5 text-center">
+                        <p className="text-[10px] font-semibold text-purple-700 uppercase">Probabilitas Rata-Rata</p>
+                        <p className="num font-display text-base font-bold text-purple-950 tabular-nums">
+                          {selectedRegion.average_stockout_probability ?? 0}%
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-white/80 border border-purple-200 px-3 py-1.5 text-center">
+                        <p className="text-[10px] font-semibold text-purple-700 uppercase">Probabilitas Puncak</p>
+                        <p className="num font-display text-base font-bold text-crit-fg tabular-nums">
+                          {selectedRegion.peak_stockout_probability ?? 0}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedRegion.primary_risk_driver && (
+                    <div className="mt-3 flex items-center gap-2 rounded-lg bg-white/90 border border-purple-200/60 px-3 py-2 text-xs text-purple-900">
+                      <Flame className="size-4 text-amber-600 shrink-0" />
+                      <span><strong>Pemicu Risiko Dominan:</strong> {selectedRegion.primary_risk_driver}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* List Cabang dengan Meter Probabilitas */}
+                <div className="rounded-xl border border-line bg-white p-4 sm:p-5">
+                  <h4 className="font-semibold text-ink-900 text-sm sm:text-base border-b border-line pb-3">
+                    Tingkat Kerentanan Tiap Cabang di {selectedRegion.regency_name}
+                  </h4>
+
+                  <div className="mt-4 space-y-4">
+                    {selectedRegion.partners.map((partner) => {
+                      const prob = partner.max_stockout_probability ?? 0
+                      const isHigh = prob >= 65
+                      const isMed = prob >= 30 && prob < 65
+
+                      return (
+                        <div
+                          key={partner.partner_id}
+                          className="rounded-xl border border-line/80 bg-ink-50/20 p-4 transition hover:bg-ink-50/50"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h5 className="font-semibold text-ink-900 text-sm">{partner.partner_name}</h5>
+                                <span className={`rounded-sm px-2 py-0.5 text-[11px] font-bold ${zoneStyle[partner.zone]}`}>
+                                  {zoneLabel[partner.zone]}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-xs text-muted">
+                                Riwayat: {partner.critical_logs}x kritis · {partner.stockout_logs}x habis · {partner.restock_requests}x restok
+                              </p>
+                            </div>
+
+                            <div className="text-right">
+                              <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${
+                                isHigh
+                                  ? 'bg-crit-bg text-crit-fg border border-crit-fg/20'
+                                  : isMed
+                                    ? 'bg-warn-bg text-warn-fg border border-warn-fg/20'
+                                    : 'bg-ok-bg text-ok-fg border border-ok-fg/20'
+                              }`}>
+                                <ShieldAlert className="size-3.5" />
+                                {prob}% Risiko Kehabisan Stok
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Probability Gauge Bar */}
+                          <div className="mt-3">
+                            <div className="flex justify-between text-[11px] font-medium text-muted mb-1">
+                              <span>P(Kehabisan Stok | Riwayat Konsumsi & Lead Time)</span>
+                              <span className="tabular-nums font-bold text-ink-900">{prob}%</span>
+                            </div>
+                            <div className="h-2.5 w-full rounded-full bg-ink-100 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  isHigh ? 'bg-crit-fg' : isMed ? 'bg-amber-500' : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${Math.min(100, Math.max(4, prob))}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Urgent Items Breakdown */}
+                          {partner.urgent_items && partner.urgent_items.length > 0 && (
+                            <div className="mt-3 rounded-lg bg-crit-bg/30 border border-crit-fg/10 p-2.5">
+                              <p className="text-[11px] font-bold text-crit-fg mb-1.5 flex items-center gap-1">
+                                <AlertTriangle className="size-3" />
+                                Produk Paling Rawan Kehabisan Stok Sebelum Restok Tiba:
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {partner.urgent_items.map((item) => (
+                                  <span
+                                    key={item.product_name}
+                                    className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-xs font-semibold text-crit-fg border border-crit-fg/20 shadow-2xs"
+                                  >
+                                    <span>{item.product_name}</span>
+                                    <span className="font-bold tabular-nums">({item.stockout_probability}%)</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
               </Dialog.Content>
             ) : null}
           </Dialog.Portal>
@@ -808,12 +1036,43 @@ export function RegionalAnalysis({
                   className="grid gap-2 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start hover:bg-ink-50/30 px-2 rounded-md"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink-900">
-                      {partner.partner_name}{' '}
-                      <span className="font-normal text-muted">
-                        · {partner.region_name}, {partner.province_name}
-                      </span>
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-ink-900">
+                        {partner.partner_name}{' '}
+                        <span className="font-normal text-muted">
+                          · {partner.region_name}, {partner.province_name}
+                        </span>
+                      </p>
+                      {partner.max_stockout_probability !== undefined && partner.max_stockout_probability > 0 && (
+                        <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${
+                          partner.max_stockout_probability >= 65
+                            ? 'bg-crit-bg text-crit-fg'
+                            : partner.max_stockout_probability >= 30
+                              ? 'bg-warn-bg text-warn-fg'
+                              : 'bg-ok-bg text-ok-fg'
+                        }`}>
+                          {partner.max_stockout_probability}% risiko habis
+                        </span>
+                      )}
+                    </div>
+
+                    {partner.urgent_items && partner.urgent_items.length > 0 && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-crit-fg">
+                          Produk rawan:
+                        </span>
+                        {partner.urgent_items.map((item) => (
+                          <span
+                            key={item.product_name}
+                            className="inline-flex items-center gap-1 rounded bg-crit-bg/50 px-2 py-0.2 text-[11px] font-medium text-crit-fg"
+                          >
+                            <span>{item.product_name}</span>
+                            <span className="font-bold tabular-nums">({item.stockout_probability}%)</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
                     {partner.suggested_products.length > 0 ? (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <span className="text-[11px] font-medium text-muted">

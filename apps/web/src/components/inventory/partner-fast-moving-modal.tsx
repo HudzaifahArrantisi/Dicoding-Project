@@ -149,7 +149,6 @@ export function PartnerFastMovingModal({
                     <tr>
                       <th className="px-4 py-3">Peringkat & Nama Produk</th>
                       <th className="px-4 py-3 text-right">Terjual (7 Hari)</th>
-                      <th className="px-4 py-3 text-right">Stok Minimal</th>
                       <th className="px-4 py-3 text-right">Saran Pasokan AI</th>
                       <th className="px-4 py-3 text-center">Turnover</th>
                       <th className="px-4 py-3">Rekomendasi Aksi</th>
@@ -177,12 +176,7 @@ export function PartnerFastMovingModal({
                           <p className="text-xs text-muted">~{item.daily_velocity} pcs/hari</p>
                         </td>
 
-                        {/* 3. Stok Minimal (Par Level saat ini) */}
-                        <td className="num px-4 py-3.5 text-right font-medium text-muted tabular-nums">
-                          {item.par_level} pcs
-                        </td>
-
-                        {/* 4. Saran Pasokan AI (Suggested Par Level) */}
+                        {/* 3. Saran Pasokan AI (Suggested Par Level) */}
                         <td className="num px-4 py-3.5 text-right tabular-nums">
                           <span className="inline-flex items-center gap-1 rounded-md bg-ok-bg px-2.5 py-1 text-xs font-bold text-ok-fg">
                             <ArrowUpRight className="size-3" aria-hidden="true" />

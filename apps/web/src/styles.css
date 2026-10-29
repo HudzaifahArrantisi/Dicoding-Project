@@ -343,8 +343,18 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
+  .log-chart-bar {
+    animation: log-chart-bar-enter 180ms ease-out both;
+  }
+
+  @keyframes log-chart-bar-enter {
+    from { opacity: 0.55; transform: scaleX(0); }
+    to { opacity: 1; transform: scaleX(1); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .dashboard-panel-enter { animation: none; }
+    .log-chart-bar { animation: none; }
   }
 }
 @media print {

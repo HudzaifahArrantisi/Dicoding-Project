@@ -13,6 +13,12 @@ export interface WeeklySummary {
   active_partners_count: number
   total_units_consumed: number
   daily_update_breakdown: Array<{ day: string; active_partners: number; log_count: number }>
+  partner_daily_log_breakdown: Array<{
+    day: string
+    partner_id: string
+    partner_name: string
+    log_count: number
+  }>
 }
 
 export interface AIInsights {
@@ -101,6 +107,60 @@ export interface AIInsights {
   market_hotspots?: {
     top_performers: Array<{ partner_name: string; region: string; weekly_units: number }>
     regions: Array<{ region: string; deficit_units: number; partner_count: number }>
+  }
+  naive_bayes_analysis?: {
+    model_version: string
+    algorithm: string
+    features_evaluated: string[]
+    summary: {
+      total_items_analyzed: number
+      high_risk_items_count: number
+      surge_detected_count: number
+      red_zone_regions_count: number
+      yellow_zone_regions_count: number
+      green_zone_regions_count: number
+    }
+    high_risk_items: Array<{
+      partner_id: string
+      partner_name: string
+      partner_type: string
+      province_name: string
+      regency_name: string
+      product_id: string
+      product_name: string
+      product_sku: string
+      current_qty: number
+      daily_velocity: number
+      days_of_cover: number
+      sales_surge_ratio: number
+      stockout_probability: number
+      risk_level: 'TINGGI' | 'SEDANG' | 'RENDAH'
+      dominant_factor: string
+      suggested_restock_units: number
+    }>
+    regional_hotspots: Array<{
+      province_name: string
+      regency_name: string
+      total_partners: number
+      critical_partners_count: number
+      warning_partners_count: number
+      average_stockout_probability: number
+      peak_stockout_probability: number
+      zone: 'ZONA_MERAH' | 'ZONA_KUNING' | 'ZONA_HIJAU'
+      primary_risk_driver: string
+      recommended_action: string
+      partners: Array<{
+        partner_id: string
+        partner_name: string
+        max_stockout_probability: number
+        average_stockout_probability: number
+        zone: 'ZONA_MERAH' | 'ZONA_KUNING' | 'ZONA_HIJAU'
+        urgent_items: Array<{
+          product_name: string
+          stockout_probability: number
+        }>
+      }>
+    }>
   }
   ai_digest?: {
     headline: string

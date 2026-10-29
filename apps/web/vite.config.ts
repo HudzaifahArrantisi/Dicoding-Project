@@ -22,6 +22,9 @@ const config = defineConfig({
     strictPort: true,
     allowedHosts: true,
     proxy: apiProxy,
+    fs: {
+      allow: ['../..'],
+    },
   },
   preview: {
     host: '0.0.0.0',

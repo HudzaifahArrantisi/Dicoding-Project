@@ -38,6 +38,8 @@ export interface ShipmentLogItem {
   partner_name: string
   status: OrderStatus
   shipped_at: string
+  receipt_photo_data_url?: string | null
+  receipt_photo_present?: boolean
   items: Array<{
     order_id: string
     product_name: string

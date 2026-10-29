@@ -1,5 +1,5 @@
 """
-Model Analisis Spasial Kehabisan Stok Daerah Berbasis Naive Bayes
+Model Analisis Spasial Kehabisan Stok Daerah Berbasis Multi-Factor Naive Bayes
 Daisuki B2B Inventory & Order Management System
 Workspace: ai/jobs/regional_stockout_naive_bayes.py
 """
@@ -36,36 +36,52 @@ def get_database_url() -> str:
     return os.getenv("DATABASE_URL", "")
 
 
-class PureGaussianNaiveBayes:
-    """Implementasi Gaussian Naive Bayes bawaan tanpa ketergantungan library eksternal.
+class MultiFactorNaiveBayes:
+    """Hybrid Naive Bayes:
 
-    P(C | X) ∝ P(C) * ∏ P(x_i | C)
-    di mana P(x_i | C) dihitung dari distribusi normal N(μ, σ²).
+    Menggabungkan Gaussian Naive Bayes (fitur kontinu) dan Categorical Naive Bayes
+    (tipe mitra dengan Laplace smoothing) untuk memprediksi risiko kehabisan stok:
+    P(C | X, Type) ∝ P(C) * P(Type | C) * ∏ P(x_i | C)
     """
 
+    FEATURE_NAMES = [
+        "days_of_cover",
+        "daily_velocity",
+        "sales_surge_ratio",
+        "lead_time_stress",
+        "critical_events",
+        "zero_events",
+    ]
+
     def __init__(self) -> None:
-        self.classes: list[str] = []
+        self.classes: list[str] = ["RISIKO_TINGGI", "RISIKO_SEDANG", "RISIKO_RENDAH"]
         self.class_priors: dict[str, float] = {}
         self.stats: dict[str, list[tuple[float, float]]] = {}  # class -> [(mean, var), ...]
+        self.type_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self.type_totals: dict[str, int] = defaultdict(int)
+        self.all_types: set[str] = set()
 
-    def fit(self, X: list[list[float]], y: list[str]) -> None:
+    def fit(self, X: list[list[float]], types: list[str], y: list[str]) -> None:
         self.classes = sorted(list(set(y)))
         total_samples = len(y)
         by_class: dict[str, list[list[float]]] = defaultdict(list)
+        self.all_types = set(types)
 
-        for features, label in zip(X, y):
+        for features, ptype, label in zip(X, types, y):
             by_class[label].append(features)
+            self.type_counts[label][ptype] += 1
+            self.type_totals[label] += 1
 
         num_features = len(X[0]) if X else 0
         for label in self.classes:
             samples = by_class[label]
-            self.class_priors[label] = len(samples) / total_samples
+            self.class_priors[label] = len(samples) / max(1, total_samples)
             feature_stats = []
             for j in range(num_features):
-                vals = [s[j] for s in samples]
+                vals = [s[j] for s in samples] if samples else [0.0]
                 m = sum(vals) / len(vals)
                 variance = sum((v - m) ** 2 for v in vals) / max(1, len(vals) - 1)
-                variance = max(variance, 1e-6)  # smoothing agar tidak 0
+                variance = max(variance, 1e-4)  # variance floor
                 feature_stats.append((m, variance))
             self.stats[label] = feature_stats
 
@@ -74,35 +90,92 @@ class PureGaussianNaiveBayes:
         exponent = math.exp(-((x - mean) ** 2) / (2.0 * var))
         return (1.0 / denom) * exponent
 
-    def predict_proba(self, X: list[list[float]]) -> list[dict[str, float]]:
-        probabilities = []
-        for features in X:
-            posteriors = {}
-            for label in self.classes:
-                prior = self.class_priors[label]
-                log_prob = math.log(max(prior, 1e-9))
-                for j, x_val in enumerate(features):
-                    mean, var = self.stats[label][j]
-                    pdf = max(self._gaussian_pdf(x_val, mean, var), 1e-12)
-                    log_prob += math.log(pdf)
-                posteriors[label] = log_prob
+    def predict_item(self, features: list[float], ptype: str) -> tuple[dict[str, float], str, str]:
+        """Menghitung probabilitas posterior dan mengidentifikasi pemicu risiko utama."""
+        log_posteriors: dict[str, float] = {}
+        feature_contributions: dict[str, float] = {}
 
-            # Softmax normalisasi dari log-probabilities
-            max_log = max(posteriors.values())
-            exp_probs = {c: math.exp(v - max_log) for c, v in posteriors.items()}
-            sum_exp = sum(exp_probs.values())
-            normalized = {c: exp_probs[c] / sum_exp for c in self.classes}
-            probabilities.append(normalized)
-        return probabilities
+        for label in self.classes:
+            prior = self.class_priors.get(label, 1.0 / len(self.classes))
+            log_prob = math.log(max(prior, 1e-6))
 
-    def predict(self, X: list[list[float]]) -> list[str]:
-        prob_list = self.predict_proba(X)
-        return [max(p.items(), key=lambda item: item[1])[0] for p in prob_list]
+            # Categorical likelihood dengan Laplace smoothing
+            count = self.type_counts[label].get(ptype, 0)
+            total = self.type_totals[label]
+            type_prob = (count + 1) / (total + len(self.all_types) + 1)
+            log_prob += math.log(type_prob)
+
+            # Gaussian likelihood per fitur
+            for j, x_val in enumerate(features):
+                mean, var = self.stats[label][j]
+                pdf = max(self._gaussian_pdf(x_val, mean, var), 1e-9)
+                term = math.log(pdf)
+                log_prob += term
+                if label == "RISIKO_TINGGI":
+                    norm_mean = self.stats.get("RISIKO_RENDAH", self.stats[label])[j][0]
+                    feature_contributions[self.FEATURE_NAMES[j]] = abs(x_val - norm_mean)
+
+            log_posteriors[label] = log_prob
+
+        # Softmax normalisasi
+        max_log = max(log_posteriors.values())
+        exp_probs = {c: math.exp(v - max_log) for c, v in log_posteriors.items()}
+        sum_exp = sum(exp_probs.values())
+        normalized = {c: round(exp_probs[c] / sum_exp, 4) for c in self.classes}
+
+        predicted_class = max(normalized.items(), key=lambda item: item[1])[0]
+
+        # Tentukan faktor pemicu dominan
+        doc = features[0]
+        surge = features[2]
+        lead_stress = features[3]
+        crit_freq = features[4]
+
+        if doc < 2.0:
+            dominant_driver = f"Sisa stok menipis (hanya bertahan ~{doc:.1f} hari)"
+        elif surge > 1.3:
+            dominant_driver = f"Lonjakan konsumsi tajam (+{round((surge - 1.0) * 100)}% dibanding tren biasa)"
+        elif lead_stress > 1.2:
+            dominant_driver = f"Risiko lead time pengiriman ({LEAD_TIME_DAYS} hari) melebihi cakupan stok"
+        elif crit_freq >= 3:
+            dominant_driver = f"Frekuensi stok kritis tinggi ({int(crit_freq)}x dalam 30 hari)"
+        else:
+            dominant_driver = "Keseimbangan stok dan pola konsumsi normal"
+
+        return normalized, predicted_class, dominant_driver
 
 
-def fetch_database_records(database_url: str) -> list[dict]:
-    """Mengambil histori stok per mitra dan wilayah dari PostgreSQL."""
+def fetch_comprehensive_records(database_url: str) -> list[dict]:
+    """Mengambil riwayat transaksi multi-dimensi per mitra dan produk."""
     query = """
+    WITH recent_7d AS (
+        SELECT partner_id, product_id,
+            COALESCE(SUM(qty_before - qty_after), 0)::float / 7.0 AS adu_7d,
+            COALESCE(SUM(qty_before - qty_after), 0)::float AS units_7d
+        FROM stock_logs
+        WHERE source = 'manual_update'
+          AND qty_before > qty_after
+          AND created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY partner_id, product_id
+    ),
+    historical_30d AS (
+        SELECT partner_id, product_id,
+            COALESCE(SUM(qty_before - qty_after), 0)::float / 23.0 AS adu_prev,
+            COUNT(CASE WHEN qty_after <= 10 THEN 1 END) AS crit_count,
+            COUNT(CASE WHEN qty_after = 0 THEN 1 END) AS zero_count
+        FROM stock_logs
+        WHERE source = 'manual_update'
+          AND qty_before > qty_after
+          AND created_at >= NOW() - INTERVAL '30 days'
+          AND created_at < NOW() - INTERVAL '7 days'
+        GROUP BY partner_id, product_id
+    ),
+    active_orders AS (
+        SELECT DISTINCT o.partner_id, oi.product_id
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        WHERE o.status IN ('diproses', 'disetujui', 'dalam_pengiriman')
+    )
     SELECT
         p.id::text AS partner_id,
         p.name AS partner_name,
@@ -114,23 +187,19 @@ def fetch_database_records(database_url: str) -> list[dict]:
         pr.name AS product_name,
         pr.sku AS product_sku,
         ps.current_qty,
-        ps.par_level,
-        COALESCE(SUM(CASE WHEN sl.source = 'manual_update' AND sl.qty_before >= sl.qty_after
-                          THEN sl.qty_before - sl.qty_after ELSE 0 END), 0)::float / 60 AS adu,
-        COALESCE(STDDEV_POP(CASE WHEN sl.source = 'manual_update' AND sl.qty_before >= sl.qty_after
-                                  THEN sl.qty_before - sl.qty_after END), 0) AS usage_deviation,
-        COUNT(CASE WHEN sl.qty_after <= (ps.par_level * 0.20) THEN 1 END) AS critical_events,
-        COUNT(CASE WHEN sl.qty_after = 0 THEN 1 END) AS zero_stock_events,
-        COUNT(sl.id) AS total_logs
+        COALESCE(r7.adu_7d, 0.0) AS daily_velocity,
+        COALESCE(r7.units_7d, 0.0) AS units_7d,
+        COALESCE(h30.adu_prev, 0.0) AS prev_velocity,
+        COALESCE(h30.crit_count, 0) AS critical_events,
+        COALESCE(h30.zero_count, 0) AS zero_stock_events,
+        CASE WHEN ao.product_id IS NOT NULL THEN 1 ELSE 0 END AS has_active_order
     FROM partners p
     JOIN partner_stocks ps ON ps.partner_id = p.id
     JOIN products pr ON pr.id = ps.product_id
-    LEFT JOIN stock_logs sl ON sl.partner_id = p.id
-         AND sl.product_id = ps.product_id
-         AND sl.created_at >= NOW() - INTERVAL '60 days'
-    WHERE p.is_active = TRUE
-    GROUP BY p.id, p.name, p.type, p.province_name, p.regency_name, p.district_name,
-             pr.id, pr.name, pr.sku, ps.current_qty, ps.par_level;
+    LEFT JOIN recent_7d r7 ON r7.partner_id = p.id AND r7.product_id = ps.product_id
+    LEFT JOIN historical_30d h30 ON h30.partner_id = p.id AND h30.product_id = ps.product_id
+    LEFT JOIN active_orders ao ON ao.partner_id = p.id AND ao.product_id = ps.product_id
+    WHERE p.is_active = TRUE;
     """
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
@@ -139,141 +208,174 @@ def fetch_database_records(database_url: str) -> list[dict]:
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
-def train_naive_bayes_model(records: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Mengekstraksi fitur, melatih Gaussian Naive Bayes, dan mengklasifikasikan wilayah."""
+def train_deep_naive_bayes(records: list[dict]) -> tuple[list[dict], list[dict], dict]:
+    """Mengekstraksi fitur multi-faktor, melatih model Naive Bayes, dan menyusun wawasan cerdas."""
     if not records:
-        return [], []
+        return [], [], {}
 
-    # 1. Agregasi data per (Wilayah + Mitra)
-    partner_map: dict[str, dict] = {}
+    prepared_items: list[dict] = []
+    X: list[list[float]] = []
+    types: list[str] = []
+    labels: list[str] = []
+
     for r in records:
+        cur_qty = max(0, int(r["current_qty"]))
+        velocity = max(0.05, float(r["daily_velocity"] or 0.0))
+        prev_velocity = max(0.05, float(r["prev_velocity"] or 0.0))
+        crit_events = float(r["critical_events"] or 0)
+        zero_events = float(r["zero_stock_events"] or 0)
+        has_order = int(r["has_active_order"] or 0)
+
+        days_of_cover = round(cur_qty / velocity, 1)
+        sales_surge = round(velocity / prev_velocity, 2)
+        lead_stress = round(LEAD_TIME_DAYS / max(days_of_cover, 0.5), 2)
+
+        # Baseline label untuk ground truth supervised Bayesian learning
+        if (days_of_cover < 2.0 or cur_qty <= 5) and has_order == 0:
+            ground_truth = "RISIKO_TINGGI"
+        elif days_of_cover < 4.0 or crit_events >= 2 or sales_surge > 1.35:
+            ground_truth = "RISIKO_SEDANG"
+        else:
+            ground_truth = "RISIKO_RENDAH"
+
+        features = [
+            days_of_cover,
+            velocity,
+            sales_surge,
+            lead_stress,
+            crit_events,
+            zero_events,
+        ]
+
+        X.append(features)
+        types.append(r["partner_type"])
+        labels.append(ground_truth)
+
+        prepared_items.append({
+            "raw": r,
+            "features": features,
+            "days_of_cover": days_of_cover,
+            "sales_surge": sales_surge,
+            "lead_stress": lead_stress,
+            "velocity": velocity,
+        })
+
+    # Melatih Model Multi-Factor Naive Bayes
+    nb = MultiFactorNaiveBayes()
+    nb.fit(X, types, labels)
+
+    # Inferensi & Scoring per Item
+    item_results: list[dict] = []
+    partner_agg: dict[str, dict] = {}
+
+    for item in prepared_items:
+        r = item["raw"]
+        probs, pred_class, driver = nb.predict_item(item["features"], r["partner_type"])
+        stockout_prob = round(probs.get("RISIKO_TINGGI", 0.0) * 100.0, 1)
+
+        # Rekomendasi kuantitas restok preskriptif
+        needed_qty = math.ceil(item["velocity"] * (LEAD_TIME_DAYS + 3))  # 9 hari coverage buffer
+        suggested_restock = max(0, needed_qty - int(r["current_qty"]))
+
+        result_item = {
+            "partner_id": r["partner_id"],
+            "partner_name": r["partner_name"],
+            "partner_type": r["partner_type"],
+            "province_name": r["province_name"],
+            "regency_name": r["regency_name"],
+            "product_id": r["product_id"],
+            "product_name": r["product_name"],
+            "product_sku": r["product_sku"],
+            "current_qty": int(r["current_qty"]),
+            "daily_velocity": round(item["velocity"], 1),
+            "days_of_cover": item["days_of_cover"],
+            "sales_surge_ratio": item["sales_surge"],
+            "stockout_probability": stockout_prob,
+            "risk_level": "TINGGI" if stockout_prob >= 65.0 else ("SEDANG" if stockout_prob >= 30.0 else "RENDAH"),
+            "dominant_factor": driver,
+            "suggested_restock_units": suggested_restock,
+        }
+        item_results.append(result_item)
+
         pid = r["partner_id"]
-        if pid not in partner_map:
-            partner_map[pid] = {
+        if pid not in partner_agg:
+            partner_agg[pid] = {
                 "partner_id": pid,
                 "partner_name": r["partner_name"],
                 "partner_type": r["partner_type"],
                 "province_name": r["province_name"],
                 "regency_name": r["regency_name"],
-                "district_name": r["district_name"],
-                "total_items": 0,
-                "total_critical_events": 0,
-                "total_zero_events": 0,
-                "sum_stock_ratio": 0.0,
-                "fast_moving_products": [],
+                "items": [],
+                "max_prob": 0.0,
+                "sum_prob": 0.0,
             }
+        partner_agg[pid]["items"].append(result_item)
+        partner_agg[pid]["max_prob"] = max(partner_agg[pid]["max_prob"], stockout_prob)
+        partner_agg[pid]["sum_prob"] += stockout_prob
 
-        par = max(1, int(r["par_level"]))
-        cur = int(r["current_qty"])
-        crit = int(r["critical_events"] or 0)
-        zeros = int(r["zero_stock_events"] or 0)
-        adu = float(r["adu"] or 0)
-        safety_stock = math.ceil(1.65 * float(r["usage_deviation"] or 0) * math.sqrt(LEAD_TIME_DAYS))
-        suggested_par_level = max(1, math.ceil(adu * LEAD_TIME_DAYS + safety_stock))
-
-        partner_map[pid]["total_items"] += 1
-        partner_map[pid]["total_critical_events"] += crit
-        partner_map[pid]["total_zero_events"] += zeros
-        partner_map[pid]["sum_stock_ratio"] += (cur / par)
-
-        if crit > 0 or cur < (par * 0.2):
-            partner_map[pid]["fast_moving_products"].append({
-                "product_name": r["product_name"],
-                "sku": r["product_sku"],
-                "current_qty": cur,
-                "par_level": par,
-                "critical_frequency": crit,
-                "suggested_par_level": suggested_par_level,
-            })
-
-    partner_rows = list(partner_map.values())
-    for p in partner_rows:
-        count = max(1, p["total_items"])
-        p["avg_stock_ratio"] = round(p["sum_stock_ratio"] / count, 3)
-
-    # 2. Bootstrapping Baseline Ground-Truth untuk melatih Naive Bayes
-    def rule_label(row: dict) -> str:
-        crit = row["total_critical_events"]
-        zeros = row["total_zero_events"]
-        ratio = row["avg_stock_ratio"]
-        if crit >= 5 or zeros >= 2 or ratio < 0.25:
-            return "ZONA_MERAH"
-        if crit >= 2 or zeros >= 1 or ratio < 0.50:
-            return "ZONA_KUNING"
-        return "ZONA_HIJAU"
-
-    labels = [rule_label(p) for p in partner_rows]
-
-    # Fitur: [total_critical_events, total_zero_events, avg_stock_ratio, total_items]
-    X = [
-        [
-            float(p["total_critical_events"]),
-            float(p["total_zero_events"]),
-            float(p["avg_stock_ratio"]),
-            float(p["total_items"]),
-        ]
-        for p in partner_rows
-    ]
-
-    # 3. Latih Model Gaussian Naive Bayes
-    nb = PureGaussianNaiveBayes()
-    nb.fit(X, labels)
-
-    predictions = nb.predict(X)
-    probabilities = nb.predict_proba(X)
-
-    for p, pred, proba in zip(partner_rows, predictions, probabilities):
-        p["predicted_zone"] = pred
-        # Probabilitas risiko zona merah
-        red_prob = proba.get("ZONA_MERAH", 0.0)
-        p["vulnerability_score"] = round(red_prob * 100.0, 1)
-
-    # 4. Agregasi Ranking Tingkat Wilayah (Kabupaten/Kota)
+    # Agregasi Tingkat Kabupaten/Kota (Regional Hotspots)
     regency_agg: dict[tuple[str, str], dict] = {}
-    for p in partner_rows:
-        key = (p["province_name"], p["regency_name"])
+    for pid, pdata in partner_agg.items():
+        key = (pdata["province_name"], pdata["regency_name"])
         if key not in regency_agg:
             regency_agg[key] = {
-                "province_name": p["province_name"],
-                "regency_name": p["regency_name"],
+                "province_name": pdata["province_name"],
+                "regency_name": pdata["regency_name"],
                 "total_partners": 0,
                 "critical_partners_count": 0,
                 "warning_partners_count": 0,
-                "total_critical_events": 0,
-                "vulnerability_scores": [],
+                "stockout_probabilities": [],
                 "partners_list": [],
+                "top_drivers": defaultdict(int),
             }
         regency_agg[key]["total_partners"] += 1
-        regency_agg[key]["total_critical_events"] += p["total_critical_events"]
-        if p["predicted_zone"] == "ZONA_MERAH":
+        avg_partner_prob = round(pdata["sum_prob"] / len(pdata["items"]), 1)
+        regency_agg[key]["stockout_probabilities"].append(avg_partner_prob)
+
+        is_critical = pdata["max_prob"] >= 65.0
+        is_warning = 30.0 <= pdata["max_prob"] < 65.0
+
+        if is_critical:
             regency_agg[key]["critical_partners_count"] += 1
-        elif p["predicted_zone"] == "ZONA_KUNING":
+        elif is_warning:
             regency_agg[key]["warning_partners_count"] += 1
-        regency_agg[key]["vulnerability_scores"].append(p["vulnerability_score"])
+
+        # Kumpulkan pemicu risiko
+        for itm in pdata["items"]:
+            if itm["stockout_probability"] >= 50.0:
+                regency_agg[key]["top_drivers"][itm["dominant_factor"]] += 1
+
         regency_agg[key]["partners_list"].append({
-            "partner_id": p["partner_id"],
-            "partner_name": p["partner_name"],
-            "zone": p["predicted_zone"],
-            "vulnerability_score": p["vulnerability_score"],
-            "fast_moving_products": p["fast_moving_products"][:3],
+            "partner_id": pid,
+            "partner_name": pdata["partner_name"],
+            "max_stockout_probability": pdata["max_prob"],
+            "average_stockout_probability": avg_partner_prob,
+            "zone": "ZONA_MERAH" if is_critical else ("ZONA_KUNING" if is_warning else "ZONA_HIJAU"),
+            "urgent_items": [
+                {"product_name": i["product_name"], "stockout_probability": i["stockout_probability"]}
+                for i in sorted(pdata["items"], key=lambda x: x["stockout_probability"], reverse=True)
+                if i["stockout_probability"] >= 50.0
+            ][:3],
         })
 
     regional_rankings = []
     for (prov, reg), data in regency_agg.items():
-        scores = data["vulnerability_scores"]
-        avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
-        max_score = round(max(scores), 1) if scores else 0.0
+        probs = data["stockout_probabilities"]
+        avg_prob = round(sum(probs) / len(probs), 1) if probs else 0.0
+        peak_prob = round(max(probs), 1) if probs else 0.0
 
-        # Status zona daerah
-        if data["critical_partners_count"] >= 2 or avg_score >= 60.0:
+        if data["critical_partners_count"] >= 1 or avg_prob >= 50.0:
             zone_status = "ZONA_MERAH"
-            action_plan = "Tingkatkan alokasi pengiriman regional dan naikkan Par Level rak mitra."
-        elif data["warning_partners_count"] >= 1 or avg_score >= 30.0:
+            action_plan = "Prioritaskan suplai pengiriman darurat ke cabang berisiko tinggi dan amankan buffer stok."
+        elif data["warning_partners_count"] >= 1 or avg_prob >= 25.0:
             zone_status = "ZONA_KUNING"
-            action_plan = "Kirim reminder pengajuan restok lebih awal untuk mencegah stockout."
+            action_plan = "Tinjau pengajuan restok cabang dan pantau lonjakan penjualan mingguan."
         else:
             zone_status = "ZONA_HIJAU"
-            action_plan = "Pasokan wilayah stabil, pertahankan jadwal restok reguler."
+            action_plan = "Pasokan wilayah stabil, pertahankan alokasi restok reguler."
+
+        # Driver utama daerah
+        primary_driver = max(data["top_drivers"].items(), key=lambda x: x[1])[0] if data["top_drivers"] else "Pola konsumsi stabil"
 
         regional_rankings.append({
             "province_name": prov,
@@ -281,66 +383,75 @@ def train_naive_bayes_model(records: list[dict]) -> tuple[list[dict], list[dict]
             "total_partners": data["total_partners"],
             "critical_partners_count": data["critical_partners_count"],
             "warning_partners_count": data["warning_partners_count"],
-            "total_critical_events": data["total_critical_events"],
-            "average_vulnerability_score": avg_score,
-            "peak_vulnerability_score": max_score,
+            "average_stockout_probability": avg_prob,
+            "peak_stockout_probability": peak_prob,
             "regional_zone": zone_status,
+            "primary_risk_driver": primary_driver,
             "recommended_action": action_plan,
-            "partners": data["partners_list"],
+            "partners": sorted(data["partners_list"], key=lambda p: p["max_stockout_probability"], reverse=True),
         })
 
-    # Urutkan berdasarkan kasus kritis dan skor kerentanan tertinggi
     regional_rankings.sort(
-        key=lambda x: (x["critical_partners_count"], x["total_critical_events"], x["average_vulnerability_score"]),
+        key=lambda x: (x["critical_partners_count"], x["peak_stockout_probability"], x["average_stockout_probability"]),
         reverse=True,
     )
-    partner_rows.sort(key=lambda x: x["vulnerability_score"], reverse=True)
+    item_results.sort(key=lambda x: x["stockout_probability"], reverse=True)
 
-    return regional_rankings, partner_rows
+    high_risk_items = [i for i in item_results if i["stockout_probability"] >= 50.0]
+    surge_items = [i for i in item_results if i["sales_surge_ratio"] >= 1.25]
+
+    summary = {
+        "total_items_analyzed": len(item_results),
+        "high_risk_items_count": len(high_risk_items),
+        "surge_detected_count": len(surge_items),
+        "red_zone_regions_count": sum(1 for r in regional_rankings if r["regional_zone"] == "ZONA_MERAH"),
+        "yellow_zone_regions_count": sum(1 for r in regional_rankings if r["regional_zone"] == "ZONA_KUNING"),
+        "green_zone_regions_count": sum(1 for r in regional_rankings if r["regional_zone"] == "ZONA_HIJAU"),
+    }
+
+    return regional_rankings, item_results, summary
 
 
 def run_pipeline() -> dict:
-    """Fungsi utama menjalankan pipeline analisis Naive Bayes daerah."""
+    """Fungsi utama mengeksekusi pipeline Naive Bayes."""
     print("=================================================================")
-    print("DAISUKI AI: REGIONAL STOCKOUT ANALYSIS (NAIVE BAYES CLASSIFIER)")
+    print("DAISUKI AI: DEEP MULTI-FACTOR NAIVE BAYES STOCKOUT ANALYTICS")
     print("=================================================================")
 
     db_url = get_database_url()
     if not db_url:
         raise RuntimeError("DATABASE_URL tidak ditemukan di .env")
 
-    print("Mengambil data histori transaksi stok mitra dari Neon DB...")
-    records = fetch_database_records(db_url)
+    print("Mengambil data histori transaksi multi-dimensi dari Neon DB...")
+    records = fetch_comprehensive_records(db_url)
     print(f"Berhasil memuat {len(records)} baris data inventaris cabang.")
 
-    print("Melatih model Naive Bayes dan mengklasifikasikan wilayah...")
-    regional_rankings, partner_details = train_naive_bayes_model(records)
+    print("Melatih model Multi-Factor Naive Bayes dan mengkalkulasi probabilitas...")
+    regional_rankings, item_results, summary = train_deep_naive_bayes(records)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "algorithm": "GaussianNaiveBayes",
-        "model_version": "v1.0-regional-naive-bayes",
-        "summary": {
-            "total_regions_analyzed": len(regional_rankings),
-            "red_zone_regions_count": sum(1 for r in regional_rankings if r["regional_zone"] == "ZONA_MERAH"),
-            "yellow_zone_regions_count": sum(1 for r in regional_rankings if r["regional_zone"] == "ZONA_KUNING"),
-            "green_zone_regions_count": sum(1 for r in regional_rankings if r["regional_zone"] == "ZONA_HIJAU"),
-        },
+        "algorithm": "MultiFactorGaussianAndCategoricalNaiveBayes",
+        "model_version": "v2.0-deep-naive-bayes",
+        "features_evaluated": MultiFactorNaiveBayes.FEATURE_NAMES,
+        "summary": summary,
         "regional_rankings": regional_rankings,
-        "vulnerable_partners": partner_details[:15],
+        "high_risk_items": item_results[:25],
     }
 
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
 
-    print(f"\n[SUKSES] Analisis selesai. Hasil diekspor ke:")
-    print(f" -> {OUTPUT_JSON}")
+    print(f"\n[SUKSES] Analisis selesai. Hasil diekspor ke: {OUTPUT_JSON}")
+    print(f"Total Item Dianalisis: {summary['total_items_analyzed']}")
+    print(f"Item Risiko Tinggi (Probabilitas >= 50%): {summary['high_risk_items_count']}")
+    print(f"Item Lonjakan Konsumsi (Surge >= 25%): {summary['surge_detected_count']}")
     print("\nTop 3 Wilayah Paling Rawan Kehabisan Stok:")
     for i, reg in enumerate(regional_rankings[:3], start=1):
         print(f" {i}. {reg['regency_name']}, {reg['province_name']} [{reg['regional_zone']}]")
-        print(f"    - Mitra Kritis: {reg['critical_partners_count']}/{reg['total_partners']}")
-        print(f"    - Total Kejadian Kritis: {reg['total_critical_events']}")
+        print(f"    - Probabilitas Puncak: {reg['peak_stockout_probability']}%")
+        print(f"    - Pemicu Dominan: {reg['primary_risk_driver']}")
         print(f"    - Rekomendasi: {reg['recommended_action']}")
 
     return payload

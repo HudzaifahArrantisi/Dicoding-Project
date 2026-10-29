@@ -246,8 +246,8 @@ def run_company_analytics() -> dict[str, Any]:
                 "suggested_par_level": recommended_par_level,
                 "par_delta": recommended_par_level - par_level,
                 "reason": (
-                    f"Barang sangat laku (terjual {sold_7d} pcs/minggu). Buffer minimal saat ini ({par_level} pcs) "
-                    f"perlu disesuaikan karena {crit_count}x berstatus kritis. Saran buffer: {recommended_par_level} pcs."
+                    f"Barang sangat laku (terjual {sold_7d} pcs/minggu). Tingkatkan pasokan restok "
+                    f"karena {crit_count}x berstatus kritis. Saran pasokan: {recommended_par_level} pcs."
                     if par_expansion_needed else
                     f"Perputaran barang cepat (terjual {sold_7d} pcs/minggu)."
                 ),

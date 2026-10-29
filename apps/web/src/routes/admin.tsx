@@ -12,6 +12,8 @@ import { Dialog } from 'radix-ui'
 import {
   AlertOctagon,
   AlertTriangle,
+  Award,
+  BarChart3,
   Bell,
   Boxes,
   BrainCircuit,
@@ -42,6 +44,7 @@ import {
   Search,
   Store,
   Trash2,
+  TrendingUp,
   Truck,
   X,
   XCircle,
@@ -240,10 +243,40 @@ function ShipmentLogPanel({
                       <h3 className="font-display text-lg font-semibold text-ink-900">{entry.partner_name}</h3>
                       <p className="mt-1 text-sm text-muted">Dikirim {sentAt} WIB</p>
                     </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${entry.status === 'selesai' ? 'bg-ok-bg text-ok-fg' : 'bg-ink-50 text-ink-700'}`}>
-                        {entry.status === 'selesai' ? 'Sudah diterima' : 'Dalam pengiriman'}
-                      </span>
+                    <div className="flex shrink-0 items-start gap-2">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${entry.status === 'selesai' ? 'bg-ok-bg text-ok-fg' : 'bg-ink-50 text-ink-700'}`}>
+                          {entry.status === 'selesai' ? 'Sudah diterima' : 'Dalam pengiriman'}
+                        </span>
+                        {entry.status === 'selesai' && entry.receipt_photo_data_url ? (() => {
+                          const resolvedProofUrl = resolveImageUrl(entry.receipt_photo_data_url) ?? ''
+                          if (!resolvedProofUrl) return null
+                          return (
+                            <a
+                              href={resolvedProofUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                if (resolvedProofUrl.startsWith('data:')) {
+                                  e.preventDefault()
+                                  const win = window.open('')
+                                  if (win) {
+                                    win.document.write(
+                                      `<!DOCTYPE html><html><head><title>Bukti Foto Penerimaan Pesanan ${entry.order_no}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body{margin:0;background:#0f172a;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.5);}</style></head><body><img src="${resolvedProofUrl}" alt="Bukti Penerimaan" /></body></html>`
+                                    )
+                                    win.document.close()
+                                  }
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700 hover:underline transition-colors"
+                              title={`Buka foto bukti penerimaan ${entry.order_no} di tab baru`}
+                            >
+                              <ExternalLink className="size-3 text-blue-500" aria-hidden="true" />
+                              <span>Bukti</span>
+                            </a>
+                          )
+                        })() : null}
+                      </div>
                       <button
                         type="button"
                         onClick={() => onViewOrder(entry.id)}
@@ -326,29 +359,18 @@ function DataSciencePanel({
         </button>
       </div>
 
-      {summaryError ? <ErrorState message={getErrorMessage(summaryError)} onRetry={onRetry} /> : null}
       <div className="grid gap-3 sm:grid-cols-3">
-        <InsightMetric label="Total Log Minggu Ini" value={summaryLoading ? '…' : summary?.total_logs_this_week ?? 0} />
-        <InsightMetric label="Mitra Aktif Melapor" value={summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`} detail="Mitra aktif yang mengirim log dalam 7 hari" />
-        <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
+        <InsightMetric label="Total Log Minggu Ini" value={summaryError ? '—' : summaryLoading ? '…' : summary?.total_logs_this_week ?? 0} />
+        <InsightMetric label="Mitra Aktif Melapor" value={summaryError ? '—' : summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`} detail="Mitra aktif yang mengirim log dalam 7 hari" />
+        <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
       </div>
 
-      {summary?.daily_update_breakdown.length ? (
-        <div className="dashboard-surface px-4 py-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink-900">Laporan harian</h3>
-            <span className="text-xs text-muted">Mitra unik</span>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-1">
-            {summary.daily_update_breakdown.map((day) => (
-              <div key={day.day} className="min-w-14 flex-1">
-                <p className="text-xs text-muted">{new Date(`${day.day}T12:00:00`).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' })}</p>
-                <p className="mt-1 font-display text-lg font-semibold tabular-nums text-ink-900">{day.active_partners}<span className="ml-1 text-[10px] font-normal text-muted">/ {totalPartners}</span></p>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <PartnerDailyLogChart
+        summary={summary}
+        loading={summaryLoading}
+        error={summaryError}
+        onRetry={onRetry}
+      />
 
       <div className="dashboard-surface overflow-hidden">
         <div className="border-b border-line px-4 py-3">
@@ -393,6 +415,809 @@ function DataSciencePanel({
         }}
         query={partnerLogs}
       />
+    </section>
+  )
+}
+
+function PartnerDailyLogChart({
+  summary,
+  loading,
+  error,
+  onRetry,
+}: {
+  summary?: WeeklySummary
+  loading: boolean
+  error: Error | null
+  onRetry: () => void
+}) {
+  const [viewMode, setViewMode] = useState<'both' | 'bar' | 'line'>('both')
+  const [hoveredPartnerId, setHoveredPartnerId] = useState<string | null>(null)
+  const [hoveredDayIndex, setHoveredDayIndex] = useState<number | null>(null)
+
+  const days = summary?.daily_update_breakdown ?? []
+
+  // Agregasi mutasi stok per mitra selama 1 minggu penuh
+  const partnerWeeklyStats = useMemo(() => {
+    if (!summary) return []
+
+    const map = new Map<
+      string,
+      {
+        partner_id: string
+        partner_name: string
+        total_logs: number
+        active_days: number
+        peak_day: string
+        peak_day_logs: number
+        daily_breakdown: Record<string, number>
+      }
+    >()
+
+    for (const entry of summary.partner_daily_log_breakdown) {
+      if (!map.has(entry.partner_id)) {
+        map.set(entry.partner_id, {
+          partner_id: entry.partner_id,
+          partner_name: entry.partner_name,
+          total_logs: 0,
+          active_days: 0,
+          peak_day: entry.day,
+          peak_day_logs: 0,
+          daily_breakdown: {},
+        })
+      }
+      const stat = map.get(entry.partner_id)!
+      stat.daily_breakdown[entry.day] = (stat.daily_breakdown[entry.day] ?? 0) + entry.log_count
+      stat.total_logs += entry.log_count
+      if (entry.log_count > 0) {
+        stat.active_days += 1
+      }
+      if (entry.log_count > stat.peak_day_logs) {
+        stat.peak_day_logs = entry.log_count
+        stat.peak_day = entry.day
+      }
+    }
+
+    const totalLogsNetwork = summary.total_logs_this_week || 1
+    return Array.from(map.values())
+      .filter((p) => p.total_logs > 0)
+      .map((p) => ({
+        ...p,
+        percentage_of_total: Math.round((p.total_logs / totalLogsNetwork) * 1000) / 10,
+      }))
+      .sort(
+        (a, b) =>
+          b.total_logs - a.total_logs || a.partner_name.localeCompare(b.partner_name, 'id-ID'),
+      )
+  }, [summary])
+
+  const topPartner = partnerWeeklyStats.length > 0 ? partnerWeeklyStats[0] : undefined
+  const maxWeeklyLogs = partnerWeeklyStats.reduce((max, p) => Math.max(max, p.total_logs), 0)
+
+  // Hari terpadat dalam 7 hari
+  const peakDayEntry = useMemo(() => {
+    if (days.length === 0) return null
+    return [...days].sort((a, b) => b.log_count - a.log_count)[0]
+  }, [days])
+
+  const peakDayLabel = peakDayEntry
+    ? new Date(`${peakDayEntry.day}T12:00:00`).toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short',
+      })
+    : '-'
+
+  // Konfigurasi Geometri SVG Line Chart
+  const lineW = 680
+  const lineH = 240
+  const linePadding = { top: 25, right: 30, bottom: 42, left: 45 }
+  const linePlotW = lineW - linePadding.left - linePadding.right
+  const linePlotH = lineH - linePadding.top - linePadding.bottom
+
+  const maxDailyLog = Math.max(...days.map((d) => d.log_count), 5)
+  const lineYMax = Math.max(10, Math.ceil(maxDailyLog / 5) * 5)
+
+  const getLineX = (i: number) => {
+    if (days.length <= 1) return linePadding.left + linePlotW / 2
+    return linePadding.left + (i / (days.length - 1)) * linePlotW
+  }
+
+  const getLineY = (val: number) => {
+    return linePadding.top + linePlotH - (Math.min(val, lineYMax) / lineYMax) * linePlotH
+  }
+
+  const totalPoints = days.map((d, i) => ({
+    x: getLineX(i),
+    y: getLineY(d.log_count),
+    log_count: d.log_count,
+    active_partners: d.active_partners,
+    day: d.day,
+  }))
+
+  const totalLinePath = totalPoints
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ')
+
+  const totalAreaPath =
+    totalPoints.length > 0
+      ? `${totalLinePath} L ${totalPoints[totalPoints.length - 1].x.toFixed(1)} ${(linePadding.top + linePlotH).toFixed(1)} L ${totalPoints[0].x.toFixed(1)} ${(linePadding.top + linePlotH).toFixed(1)} Z`
+      : ''
+
+  // Trend line untuk top 1 & top 2 partner
+  const top1 = partnerWeeklyStats.length > 0 ? partnerWeeklyStats[0] : undefined
+  const top1Points = top1
+    ? days.map((d, i) => ({
+        x: getLineX(i),
+        y: getLineY(top1.daily_breakdown[d.day] ?? 0),
+        val: top1.daily_breakdown[d.day] ?? 0,
+      }))
+    : []
+  const top1LinePath = top1Points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ')
+
+  const top2 = partnerWeeklyStats.length > 1 ? partnerWeeklyStats[1] : undefined
+  const top2Points = top2
+    ? days.map((d, i) => ({
+        x: getLineX(i),
+        y: getLineY(top2.daily_breakdown[d.day] ?? 0),
+        val: top2.daily_breakdown[d.day] ?? 0,
+      }))
+    : []
+  const top2LinePath = top2Points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ')
+
+  // Konfigurasi Geometri SVG Bar Chart (Top 7 Mitra)
+  const topPartnersForBar = partnerWeeklyStats.slice(0, 7)
+  const barSvgW = 640
+  const barSvgH = 240
+  const barPadding = { top: 32, right: 25, bottom: 56, left: 45 }
+  const barPlotW = barSvgW - barPadding.left - barPadding.right
+  const barPlotH = barSvgH - barPadding.top - barPadding.bottom
+
+  const barYMax = Math.max(10, Math.ceil(maxWeeklyLogs / 5) * 5)
+  const barCount = topPartnersForBar.length
+  const barSlotW = barCount > 0 ? barPlotW / barCount : barPlotW
+  const barWidth = Math.min(48, Math.max(26, barSlotW * 0.58))
+
+  return (
+    <section className="dashboard-surface overflow-hidden" aria-labelledby="partner-weekly-log-title">
+      {/* Header dengan Title dan View Switcher */}
+      <div className="flex flex-col gap-3 border-b border-line p-3.5 sm:p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-ink-900 text-white">
+              <BarChart3 className="size-3.5" aria-hidden="true" />
+            </span>
+            <h2 id="partner-weekly-log-title" className="font-semibold text-ink-900 truncate">
+              Analisis Perubahan Stok Mingguan per Mitra
+            </h2>
+          </div>
+          <p className="mt-1 text-xs text-muted leading-relaxed">
+            Rekap agregat 1 minggu: volume mutasi stok per mitra dan tren aktivitas 7 hari terakhir.
+          </p>
+        </div>
+
+        {/* View Switcher Toggle - Touch-Friendly 44px on Mobile */}
+        <div
+          className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-ink-50/70 p-1 text-xs w-full sm:w-auto shrink-0"
+          role="tablist"
+          aria-label="Tampilan diagram log mingguan"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'both'}
+            onClick={() => setViewMode('both')}
+            className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
+              viewMode === 'both'
+                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                : 'text-muted hover:text-ink-900'
+            }`}
+          >
+            Semua
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'bar'}
+            onClick={() => setViewMode('bar')}
+            className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
+              viewMode === 'bar'
+                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                : 'text-muted hover:text-ink-900'
+            }`}
+          >
+            Peringkat
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'line'}
+            onClick={() => setViewMode('line')}
+            className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
+              viewMode === 'line'
+                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                : 'text-muted hover:text-ink-900'
+            }`}
+          >
+            Tren 7 Hari
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="p-6 sm:p-8">
+          <LoadingState label="Memuat rekap analisis log mingguan..." />
+        </div>
+      ) : error ? (
+        <div className="p-4 sm:p-5">
+          <ErrorState message={getErrorMessage(error)} onRetry={onRetry} />
+        </div>
+      ) : partnerWeeklyStats.length === 0 ? (
+        <div className="p-4 sm:p-5">
+          <EmptyState
+            title="Belum ada aktivitas log minggu ini"
+            description="Diagram akan otomatis terisi setelah mitra mencatat perubahan atau mutasi stok."
+          />
+        </div>
+      ) : (
+        <div className="p-3.5 sm:p-5 space-y-4 sm:space-y-5">
+          {/* Executive Highlight Cards (1 Minggu Penuh) */}
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
+            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <Award className="size-3.5 text-ume shrink-0" aria-hidden="true" />
+                <span>Mitra Terbanyak Update</span>
+              </div>
+              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900 truncate">
+                {topPartner ? topPartner.partner_name : '-'}
+              </p>
+              <p className="mt-0.5 text-xs text-muted tabular-nums">
+                <span className="font-semibold text-ume">{topPartner?.total_logs ?? 0} log</span> ({topPartner?.percentage_of_total ?? 0}% dari seluruh jaringan)
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <TrendingUp className="size-3.5 text-ink-900 shrink-0" aria-hidden="true" />
+                <span>Hari Aktivitas Puncak</span>
+              </div>
+              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900">
+                {peakDayLabel}
+              </p>
+              <p className="mt-0.5 text-xs text-muted tabular-nums">
+                <span className="font-semibold text-ink-900">{peakDayEntry?.log_count ?? 0} log</span> tercatat dari {peakDayEntry?.active_partners ?? 0} cabang
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <BarChart3 className="size-3.5 text-teal-700 shrink-0" aria-hidden="true" />
+                <span>Konsentrasi Perubahan</span>
+              </div>
+              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900 tabular-nums">
+                {summary && summary.total_logs_this_week > 0 && partnerWeeklyStats.length > 0
+                  ? `${Math.round(
+                      (partnerWeeklyStats.slice(0, 3).reduce((sum, p) => sum + p.total_logs, 0) /
+                        summary.total_logs_this_week) *
+                        100,
+                    )}%`
+                  : '0%'}
+              </p>
+              <p className="mt-0.5 text-xs text-muted">
+                Dihasilkan oleh Top 3 mitra paling aktif minggu ini
+              </p>
+            </div>
+          </div>
+
+          {/* Container Charts (Bisa Both, Hanya Bar, atau Hanya Line) */}
+          <div className={`grid gap-4 sm:gap-5 ${viewMode === 'both' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+            {/* 1. BAR CHART: Peringkat Volume Perubahan Stok per Mitra */}
+            {(viewMode === 'both' || viewMode === 'bar') && (
+              <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4 shadow-2xs">
+                <div className="flex items-center justify-between pb-3 border-b border-line">
+                  <div>
+                    <h3 className="text-sm font-semibold text-ink-900">
+                      Peringkat Perubahan Stok
+                    </h3>
+                    <p className="text-[11px] text-muted">
+                      Total frekuensi log perubahan stok per mitra dalam 1 minggu
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-semibold text-ink-900 tabular-nums">
+                    {partnerWeeklyStats.length} Mitra
+                  </span>
+                </div>
+
+                {/* SVG Bar Chart Visualization */}
+                <div className="relative mt-3 w-full overflow-hidden">
+                  <svg
+                    viewBox={`0 0 ${barSvgW} ${barSvgH}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    className="w-full h-auto max-w-full overflow-visible"
+                    aria-label="Diagram batang peringkat perubahan stok mitra"
+                  >
+                    {/* Grid horizontal */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
+                      const y = barPadding.top + barPlotH * (1 - pct)
+                      const val = Math.round(barYMax * pct)
+                      return (
+                        <g key={idx}>
+                          <line
+                            x1={barPadding.left}
+                            y1={y}
+                            x2={barPadding.left + barPlotW}
+                            y2={y}
+                            stroke="#e2e8f0"
+                            strokeDasharray={pct === 0 ? 'none' : '3 3'}
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={barPadding.left - 6}
+                            y={y + 3.5}
+                            textAnchor="end"
+                            className="text-[10px] fill-slate-400 font-sans tabular-nums"
+                          >
+                            {val}
+                          </text>
+                        </g>
+                      )
+                    })}
+
+                    {/* Bars */}
+                    {topPartnersForBar.map((entry, idx) => {
+                      const slotX = barPadding.left + idx * barSlotW
+                      const barX = slotX + (barSlotW - barWidth) / 2
+                      const barH = (entry.total_logs / barYMax) * barPlotH
+                      const barY = barPadding.top + barPlotH - barH
+                      const isTop = idx === 0
+                      const isHovered = hoveredPartnerId === entry.partner_id
+
+                      const shortName =
+                        entry.partner_name.length > 9
+                          ? `${entry.partner_name.slice(0, 8)}…`
+                          : entry.partner_name
+
+                      return (
+                        <g
+                          key={entry.partner_id}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${entry.partner_name}: ${entry.total_logs} log`}
+                          className="cursor-pointer transition-opacity outline-hidden focus:outline-hidden"
+                          onClick={() =>
+                            setHoveredPartnerId((prev) =>
+                              prev === entry.partner_id ? null : entry.partner_id,
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setHoveredPartnerId((prev) =>
+                                prev === entry.partner_id ? null : entry.partner_id,
+                              )
+                            }
+                          }}
+                          onMouseEnter={() => setHoveredPartnerId(entry.partner_id)}
+                          onMouseLeave={() => setHoveredPartnerId(null)}
+                        >
+                          {/* Hit area lebih besar untuk sentuhan tap mobile */}
+                          <rect
+                            x={slotX}
+                            y={barPadding.top}
+                            width={barSlotW}
+                            height={barPlotH + barPadding.bottom}
+                            fill="transparent"
+                          />
+
+                          {/* Highlight background saat hover/tap */}
+                          {isHovered && (
+                            <rect
+                              x={slotX + 2}
+                              y={barPadding.top}
+                              width={barSlotW - 4}
+                              height={barPlotH}
+                              fill="#f1f5f9"
+                              rx="4"
+                              opacity="0.8"
+                            />
+                          )}
+
+                          {/* Batang Bar */}
+                          <rect
+                            x={barX}
+                            y={barY}
+                            width={barWidth}
+                            height={Math.max(barH, 3)}
+                            rx="4"
+                            fill={
+                              isTop
+                                ? '#b83a6a'
+                                : idx === 1
+                                ? '#334155'
+                                : idx === 2
+                                ? '#0d9488'
+                                : '#64748b'
+                            }
+                            className={`transition-all duration-150 ${
+                              isHovered ? 'brightness-110 filter' : ''
+                            }`}
+                          />
+
+                          {/* Angka nilai di atas bar */}
+                          <text
+                            x={barX + barWidth / 2}
+                            y={Math.max(barY - 6, barPadding.top - 2)}
+                            textAnchor="middle"
+                            className={`text-[11px] font-semibold tabular-nums ${
+                              isTop ? 'fill-rose-700' : 'fill-slate-700'
+                            }`}
+                          >
+                            {entry.total_logs}
+                          </text>
+
+                          {/* Label nama mitra di sumbu X */}
+                          <text
+                            x={barX + barWidth / 2}
+                            y={barPadding.top + barPlotH + 16}
+                            textAnchor="middle"
+                            className={`text-[10px] font-medium transition-colors ${
+                              isHovered ? 'fill-slate-900 font-semibold' : 'fill-slate-600'
+                            }`}
+                          >
+                            {shortName}
+                          </text>
+
+                          {/* Label persentase di bawah nama */}
+                          <text
+                            x={barX + barWidth / 2}
+                            y={barPadding.top + barPlotH + 28}
+                            textAnchor="middle"
+                            className="text-[9px] fill-slate-400 tabular-nums"
+                          >
+                            {entry.percentage_of_total}%
+                          </text>
+                        </g>
+                      )
+                    })}
+                  </svg>
+                </div>
+
+                {/* Companion Ranked List - Touch-Friendly Buttons */}
+                <div className="mt-3 border-t border-line pt-3">
+                  <div className="flex items-center justify-between text-[11px] font-medium text-muted mb-2 px-1">
+                    <span>Daftar Peringkat Aktivitas</span>
+                    <span>Total 1 Minggu</span>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                    {partnerWeeklyStats.map((p, idx) => {
+                      const isHovered = hoveredPartnerId === p.partner_id
+                      const barPercent = maxWeeklyLogs > 0 ? (p.total_logs / maxWeeklyLogs) * 100 : 0
+                      return (
+                        <button
+                          key={p.partner_id}
+                          type="button"
+                          onClick={() =>
+                            setHoveredPartnerId((prev) =>
+                              prev === p.partner_id ? null : p.partner_id,
+                            )
+                          }
+                          onMouseEnter={() => setHoveredPartnerId(p.partner_id)}
+                          onMouseLeave={() => setHoveredPartnerId(null)}
+                          className={`w-full text-left rounded-lg p-2.5 min-h-[44px] transition-all active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ink-900 ${
+                            isHovered
+                              ? 'bg-ink-100 ring-1 ring-ink-300'
+                              : idx === 0
+                              ? 'bg-rose-50/60'
+                              : 'bg-ink-50/40 hover:bg-ink-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums ${
+                                  idx === 0
+                                    ? 'bg-ume text-white'
+                                    : idx === 1
+                                    ? 'bg-slate-800 text-white'
+                                    : idx === 2
+                                    ? 'bg-teal-700 text-white'
+                                    : 'bg-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {idx + 1}
+                              </span>
+                              <span className="font-semibold text-ink-900 truncate">
+                                {p.partner_name}
+                              </span>
+                              {idx === 0 && (
+                                <span className="shrink-0 rounded-xs bg-rose-100 px-1.5 py-0.2 text-[9px] font-bold text-rose-700 uppercase tracking-wider">
+                                  Terbanyak
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                              <span className="font-semibold tabular-nums text-ink-900">
+                                {p.total_logs} log
+                              </span>
+                              <span className="ml-1 text-[11px] text-muted tabular-nums">
+                                ({p.percentage_of_total}%)
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Progress bar visualizer */}
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className={`h-full rounded-full ${
+                                  idx === 0 ? 'bg-ume' : 'bg-slate-500'
+                                }`}
+                                style={{ width: `${barPercent}%` }}
+                              />
+                            </div>
+                            <span className="shrink-0 text-[10px] text-muted tabular-nums">
+                              Aktif {p.active_days}/7 hari
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. LINE CHART: Tren Waktu Perubahan Stok 7 Hari */}
+            {(viewMode === 'both' || viewMode === 'line') && (
+              <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4 shadow-2xs">
+                <div className="flex items-center justify-between pb-3 border-b border-line">
+                  <div>
+                    <h3 className="text-sm font-semibold text-ink-900">
+                      Tren Perubahan Stok 7 Hari
+                    </h3>
+                    <p className="text-[11px] text-muted">
+                      Dinamika fluktuasi perubahan log per hari sepanjang minggu
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-800">
+                    7 Hari Terakhir
+                  </span>
+                </div>
+
+                {/* SVG Line Chart */}
+                <div className="relative mt-3 w-full overflow-hidden">
+                  <svg
+                    viewBox={`0 0 ${lineW} ${lineH}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    className="w-full h-auto max-w-full overflow-visible"
+                    aria-label="Grafik garis tren perubahan stok mingguan"
+                  >
+                    <defs>
+                      <linearGradient id="totalLogsAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0f172a" stopOpacity="0.08" />
+                        <stop offset="100%" stopColor="#0f172a" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Grid horizontal */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
+                      const y = linePadding.top + linePlotH * (1 - pct)
+                      const val = Math.round(lineYMax * pct)
+                      return (
+                        <g key={idx}>
+                          <line
+                            x1={linePadding.left}
+                            y1={y}
+                            x2={linePadding.left + linePlotW}
+                            y2={y}
+                            stroke="#e2e8f0"
+                            strokeDasharray={pct === 0 ? 'none' : '3 3'}
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={linePadding.left - 6}
+                            y={y + 3.5}
+                            textAnchor="end"
+                            className="text-[10px] fill-slate-400 font-sans tabular-nums"
+                          >
+                            {val}
+                          </text>
+                        </g>
+                      )
+                    })}
+
+                    {/* Area fill di bawah garis total */}
+                    {totalAreaPath && (
+                      <path d={totalAreaPath} fill="url(#totalLogsAreaGrad)" />
+                    )}
+
+                    {/* Polyline Top 2 Partner (Teal) */}
+                    {top2LinePath && (
+                      <path
+                        d={top2LinePath}
+                        fill="none"
+                        stroke="#0d9488"
+                        strokeWidth="1.75"
+                        strokeDasharray="4 3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+
+                    {/* Polyline Top 1 Partner (Rose Ume) */}
+                    {top1LinePath && (
+                      <path
+                        d={top1LinePath}
+                        fill="none"
+                        stroke="#b83a6a"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+
+                    {/* Polyline Total Seluruh Jaringan (Slate Ink Utama) */}
+                    {totalLinePath && (
+                      <path
+                        d={totalLinePath}
+                        fill="none"
+                        stroke="#0f172a"
+                        strokeWidth="2.75"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+
+                    {/* Vertical guideline saat hover/tap hari tertentu */}
+                    {hoveredDayIndex !== null && totalPoints[hoveredDayIndex] && (
+                      <line
+                        x1={totalPoints[hoveredDayIndex].x}
+                        y1={linePadding.top}
+                        x2={totalPoints[hoveredDayIndex].x}
+                        y2={linePadding.top + linePlotH}
+                        stroke="#0f172a"
+                        strokeWidth="1.5"
+                        strokeDasharray="3 3"
+                      />
+                    )}
+
+                    {/* Data Points lingkaran untuk Total Network */}
+                    {totalPoints.map((pt, idx) => {
+                      const isHovered = hoveredDayIndex === idx
+                      const dayLabel = new Date(`${pt.day}T12:00:00`).toLocaleDateString('id-ID', {
+                        weekday: 'short',
+                        day: 'numeric',
+                      })
+
+                      return (
+                        <g
+                          key={pt.day}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${dayLabel}: ${pt.log_count} log dari ${pt.active_partners} mitra`}
+                          className="cursor-pointer outline-hidden focus:outline-hidden"
+                          onClick={() =>
+                            setHoveredDayIndex((prev) => (prev === idx ? null : idx))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setHoveredDayIndex((prev) => (prev === idx ? null : idx))
+                            }
+                          }}
+                          onMouseEnter={() => setHoveredDayIndex(idx)}
+                          onMouseLeave={() => setHoveredDayIndex(null)}
+                        >
+                          {/* Hit area transparan luas untuk mobile touch (min 44px lebar) */}
+                          <rect
+                            x={pt.x - 22}
+                            y={linePadding.top}
+                            width={44}
+                            height={linePlotH + linePadding.bottom}
+                            fill="transparent"
+                          />
+
+                          {/* Node lingkaran */}
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r={isHovered ? 6 : 4}
+                            fill="#ffffff"
+                            stroke="#0f172a"
+                            strokeWidth={isHovered ? 3 : 2}
+                            className="transition-all"
+                          />
+
+                          {/* Titik kecil Top 1 partner */}
+                          {top1Points[idx] && (
+                            <circle
+                              cx={top1Points[idx].x}
+                              cy={top1Points[idx].y}
+                              r={3}
+                              fill="#b83a6a"
+                            />
+                          )}
+
+                          {/* Label Hari di Sumbu X */}
+                          <text
+                            x={pt.x}
+                            y={linePadding.top + linePlotH + 18}
+                            textAnchor="middle"
+                            className={`text-[10px] font-medium transition-colors ${
+                              isHovered ? 'fill-slate-900 font-bold' : 'fill-slate-600'
+                            }`}
+                          >
+                            {dayLabel}
+                          </text>
+
+                          {/* Angka nilai saat hover atau tap */}
+                          {isHovered && (
+                            <text
+                              x={pt.x}
+                              y={Math.max(pt.y - 10, linePadding.top - 2)}
+                              textAnchor="middle"
+                              className="text-[11px] font-bold fill-slate-900 tabular-nums"
+                            >
+                              {pt.log_count}
+                            </text>
+                          )}
+                        </g>
+                      )
+                    })}
+                  </svg>
+                </div>
+
+                {/* Legend & Detail Box Line Chart */}
+                <div className="mt-3 border-t border-line pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="size-2.5 rounded-full bg-[#0f172a]" />
+                        <span className="font-medium text-slate-700">Total Semua Mitra</span>
+                      </div>
+                      {top1 && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2.5 rounded-full bg-[#b83a6a]" />
+                          <span className="font-medium text-slate-700 truncate max-w-[130px]">
+                            {top1.partner_name} (#1)
+                          </span>
+                        </div>
+                      )}
+                      {top2 && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2.5 rounded-full bg-[#0d9488]" />
+                          <span className="font-medium text-slate-700 truncate max-w-[130px]">
+                            {top2.partner_name} (#2)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Summary interaktif saat titik hari dihover/tap */}
+                    {hoveredDayIndex !== null && days[hoveredDayIndex] ? (
+                      <div className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-900 tabular-nums">
+                        {new Date(`${days[hoveredDayIndex].day}T12:00:00`).toLocaleDateString('id-ID', {
+                          weekday: 'long',
+                          day: 'numeric',
+                          month: 'short',
+                        })}
+                        : <span className="font-bold">{days[hoveredDayIndex].log_count} log</span> dari {days[hoveredDayIndex].active_partners} mitra
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-muted">
+                        Sentuh atau arahkan kursor ke titik grafik untuk detail
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   )
 }
