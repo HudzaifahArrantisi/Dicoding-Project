@@ -19,6 +19,7 @@ interface ThreeDPieChartProps {
   title?: string
   subtitle?: string
   unitLabel?: string
+  legendTitle?: string
   selectedId?: string | null
   onSelectSlice?: (sliceId: string) => void
   pieDepth?: number // 3D extrusion depth, default 34
@@ -42,6 +43,7 @@ export function ThreeDPieChart({
   title,
   subtitle,
   unitLabel = 'kejadian',
+  legendTitle = 'Urutan Wilayah',
   selectedId,
   onSelectSlice,
   pieDepth = 34,
@@ -163,6 +165,7 @@ export function ThreeDPieChart({
           startAngle: -Math.PI / 2,
           endAngle: (3 * Math.PI) / 2,
           midAngle: Math.PI / 2,
+          sweep: 2 * Math.PI,
         },
       ]
     }
@@ -587,7 +590,7 @@ export function ThreeDPieChart({
         <div className="space-y-2.5">
           <div className="flex items-center justify-between pb-1.5 border-b border-line">
             <p className="text-xs font-bold uppercase tracking-wider text-muted">
-              Urutan Wilayah ({allProcessedSlices.length})
+              {legendTitle} ({allProcessedSlices.length})
             </p>
             <span className="text-[11px] text-muted font-medium">Diurutkan terbanyak</span>
           </div>
