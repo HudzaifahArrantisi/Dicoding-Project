@@ -33,16 +33,16 @@ export function DeliveryReceiptModal({
     Promise.all([import('qrcode'), import('jsbarcode')])
       .then(async ([QRCode, JsBarcode]) => {
         const image = await QRCode.toDataURL(order.delivery_qr_token!, {
-          width: 240,
-          margin: 1,
+          width: 320,
+          margin: 4,
           errorCorrectionLevel: 'M',
         })
         if (!alive || !barcodeRef.current) return
         JsBarcode.default(barcodeRef.current, order.delivery_code!, {
           format: 'CODE128',
           width: 1.5,
-          height: 44,
-          margin: 2,
+          height: 52,
+          margin: 16,
           displayValue: true,
           fontSize: 12,
         })
@@ -104,7 +104,7 @@ export function DeliveryReceiptModal({
 
             <div className="mt-2 flex flex-col items-center gap-2 border-t border-ink-900 pt-3 text-center">
               <p className="text-xs font-semibold">Pindai untuk konfirmasi penerimaan</p>
-              {qr ? <img src={qr} alt="QR Code verifikasi pengiriman" className="size-40" /> : <p role="status" className="py-8 text-xs text-muted">Membuat QR Code...</p>}
+              {qr ? <img src={qr} alt="QR Code verifikasi pengiriman" className="size-44" /> : <p role="status" className="py-8 text-xs text-muted">Membuat QR Code...</p>}
               <svg ref={barcodeRef} role="img" aria-label={`Barcode ${order.delivery_code}`} className="max-w-full" />
             </div>
             <p className="mt-3 border-t border-dashed border-ink-400 pt-2 text-center text-[11px] leading-4">Masukkan struk ini ke paket. Mitra memindai kode saat barang diterima.</p>

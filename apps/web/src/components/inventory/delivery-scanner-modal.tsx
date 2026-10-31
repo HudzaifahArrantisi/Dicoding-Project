@@ -50,7 +50,7 @@ export function DeliveryScannerModal({
   const [restartCount, setRestartCount] = useState(0)
 
   const scanLock = useRef(false)
-  const lastScanned = useRef('')
+  const nextScanAt = useRef(0)
   const verifyRef = useRef(onVerify)
   const closeRef = useRef(onOpenChange)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -62,7 +62,7 @@ export function DeliveryScannerModal({
     if (!open) return
 
     scanLock.current = false
-    lastScanned.current = ''
+    nextScanAt.current = 0
     setCameraError('')
     setIsStarting(true)
 
@@ -101,26 +101,9 @@ export function DeliveryScannerModal({
           ],
         })
 
-        // Deteksi daftar kamera yang ada
-        let cameraTarget: string | { facingMode: string } = { facingMode: 'environment' }
-        try {
-          const devices = await QrScanner.getCameras()
-          if (devices.length > 0) {
-            // Prioritaskan kamera belakang jika di smartphone
-            const backCamera = devices.find((d) =>
-              /back|rear|environment|belakang/i.test(d.label),
-            )
-            cameraTarget = backCamera ? backCamera.id : devices[0].id
-          }
-        } catch (camErr) {
-          console.warn('[Scanner] getCameras tidak berhasil, mencoba facingMode...', camErr)
-          cameraTarget = { facingMode: 'environment' }
-        }
-
         const onScanSuccess = (decoded: string) => {
-          if (checkDisposed() || scanLock.current || decoded === lastScanned.current) return
+          if (checkDisposed() || scanLock.current || Date.now() < nextScanAt.current) return
           scanLock.current = true
-          lastScanned.current = decoded
           setCode(decoded)
 
           void verifyRef
@@ -131,31 +114,36 @@ export function DeliveryScannerModal({
             })
             .catch(() => {
               scanLock.current = false
+              nextScanAt.current = Date.now() + 1500
             })
         }
 
         const scanConfig = {
           fps: 10,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const minEdge = Math.min(viewfinderWidth, viewfinderHeight)
-            const boxSize = Math.max(140, Math.floor(minEdge * 0.72))
-            return { width: boxSize, height: boxSize }
+            return {
+              width: Math.floor(viewfinderWidth * 0.88),
+              height: Math.floor(viewfinderHeight * 0.76),
+            }
           },
         }
 
-        // Jalankan scanner dengan kamera target
+        // Utamakan kamera belakang tanpa bergantung pada label perangkat.
         try {
-          await scannerInstance.start(cameraTarget, scanConfig, onScanSuccess, () => undefined)
+          await scannerInstance.start({ facingMode: 'environment' }, scanConfig, onScanSuccess, () => undefined)
         } catch (firstErr) {
-          console.warn('[Scanner] Start pertama gagal, mencoba fallback kamera user...', firstErr)
+          console.warn('[Scanner] Kamera belakang tidak tersedia, mencoba kamera lain...', firstErr)
           if (checkDisposed()) return
-          // Jika gagal (misal Overconstrained di PC yang tidak punya kamera belakang), coba kamera default
-          await scannerInstance.start({ facingMode: 'user' }, scanConfig, onScanSuccess, () => undefined)
+          const devices = await QrScanner.getCameras()
+          if (!devices.length) throw firstErr
+          await scannerInstance.start(devices[0].id, scanConfig, onScanSuccess, () => undefined)
         }
 
-        if (!checkDisposed()) {
-          setIsStarting(false)
+        if (checkDisposed()) {
+          if (scannerInstance.isScanning) await scannerInstance.stop()
+          return
         }
+        setIsStarting(false)
       } catch (err) {
         console.error('[Scanner] Gagal membuka kamera:', err)
         if (!checkDisposed()) {
@@ -195,14 +183,22 @@ export function DeliveryScannerModal({
         ],
       })
 
-      const decoded = await fileScanner.scanFile(file, true)
-      fileScanner.clear()
+      let decoded: string
+      try {
+        decoded = await fileScanner.scanFile(file, true)
+      } finally {
+        fileScanner.clear()
+      }
 
       if (decoded) {
         setCode(decoded)
-        await onVerify(decoded)
-        onOpenChange(false)
-        setCode('')
+        try {
+          await onVerify(decoded)
+          onOpenChange(false)
+          setCode('')
+        } catch {
+          // Pesan verifikasi ditampilkan oleh pemanggil; hasil pindai tetap tersedia.
+        }
       }
     } catch (err) {
       console.warn('[Scanner] scanFile gagal:', err)
@@ -281,7 +277,7 @@ export function DeliveryScannerModal({
                 <button
                   type="button"
                   onClick={() => setRestartCount((c) => c + 1)}
-                  className="inline-flex items-center gap-1.5 rounded border border-line bg-white px-2.5 py-1 text-xs font-semibold text-ink-900 hover:bg-ink-50"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume"
                 >
                   <RefreshCw className="size-3" />
                   Coba buka kamera lagi
@@ -303,9 +299,9 @@ export function DeliveryScannerModal({
             />
             <button
               type="button"
-              disabled={fileScanning || isStarting}
+              disabled={fileScanning || isStarting || pending || submitting}
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-line bg-paper/80 px-3 text-xs font-semibold text-ink-900 transition hover:bg-ink-100 disabled:opacity-50"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-line bg-paper/80 px-3 text-xs font-semibold text-ink-900 transition hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume disabled:opacity-50"
             >
               {fileScanning ? (
                 <Loader2 className="size-4 animate-spin text-ume" />
