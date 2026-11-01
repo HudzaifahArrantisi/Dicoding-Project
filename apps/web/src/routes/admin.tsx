@@ -5235,7 +5235,7 @@ function ApprovalDialog({
             {order.status === 'dalam_pengiriman' ? (
               <div className="rounded-lg border border-order-pengiriman-bg bg-order-pengiriman-bg/40 p-3.5 text-sm text-ink-900">
                 <p className="font-semibold text-order-pengiriman">
-                  🚚 Dalam Pengiriman
+                  <Truck className="mr-1.5 inline size-4" aria-hidden="true" /> Dalam Pengiriman
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
                   Barang kiriman sedang dalam perjalanan. Menunggu konfirmasi penerimaan fisik dari PIC cabang mitra.
@@ -5407,8 +5407,8 @@ function ApprovalDialog({
                                 }`}
                               >
                                 {availableForOrder >= item.qty_requested
-                                  ? '✓ Cukup'
-                                  : '⚠️ Terbatas'}
+                                  ? <><Check className="mr-1 inline size-3.5" aria-hidden="true" />Cukup</>
+                                  : <><AlertTriangle className="mr-1 inline size-3.5" aria-hidden="true" />Terbatas</>}
                               </span>
                             </div>
                             <div className="mt-1 flex items-baseline gap-1">

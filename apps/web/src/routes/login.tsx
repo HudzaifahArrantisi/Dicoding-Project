@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
@@ -96,6 +96,7 @@ function LoginPage() {
             <h2 className="font-display text-2xl font-semibold text-ink-900">
               Masuk ke akun
             </h2>
+            <Link to="/" search={{ tour: true }} className="mt-2 inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-ume underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Lihat Panduan Sistem</Link>
             <p className="mt-2 text-sm leading-6 text-muted">
               Gunakan email atau username dan kata sandi akun Daisuki Anda.
             </p>

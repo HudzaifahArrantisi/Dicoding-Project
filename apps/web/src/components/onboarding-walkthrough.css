@@ -1,0 +1,337 @@
+/* Daisuki Inventory - Onboarding Walkthrough Style System (Anti-Slop UI) */
+
+.tour-shell {
+  --tour-shift: 16px;
+  background-color: #f6f5f2;
+}
+
+.tour-shell[data-direction="previous"] {
+  --tour-shift: -16px;
+}
+
+/* Focus styles for keyboard accessibility */
+.tour-shell button:focus-visible {
+  outline: 2px solid #a9000c;
+  outline-offset: 2px;
+}
+
+/* Artifact Card (Micro-UI) */
+.tour-artifact-card {
+  width: 100%;
+  max-width: 320px;
+  padding: 20px;
+  border: 1px solid #e2dfd7;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px -4px rgba(20, 27, 61, 0.06), 0 1px 3px rgba(20, 27, 61, 0.04);
+}
+
+.tour-stepper-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid #e2dfd7;
+  border-radius: 8px;
+  background: #faf8f5;
+  transition: all 160ms ease;
+}
+
+.tour-stepper-btn:hover {
+  background: #ffffff;
+  border-color: #26336b;
+}
+
+.tour-stepper-btn:active {
+  transform: scale(0.96);
+}
+
+/* Tap indication pulse */
+.tour-pulse-ring {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 2px solid #64748b;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: tour-tap-ring 3s infinite;
+}
+
+/* Numeric Counter Roll */
+.tour-count-before {
+  animation: tour-count-up 3s infinite;
+}
+
+.tour-count-after {
+  animation: tour-count-down 3s infinite;
+}
+
+.tour-stock-bar {
+  width: 90%;
+  animation: tour-bar-shrink 3s infinite;
+}
+
+.tour-saved-badge {
+  animation: tour-badge-fade 3s infinite;
+}
+
+.tour-radar-dot {
+  animation: tour-radar-pulse 2.5s infinite;
+}
+
+/* Smartphone Scanner Viewfinder Frame */
+.tour-phone-frame {
+  width: 100%;
+  max-width: 290px;
+  border: 1px solid #e2dfd7;
+  border-radius: 16px;
+  padding: 16px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px -4px rgba(20, 27, 61, 0.06), 0 1px 3px rgba(20, 27, 61, 0.04);
+}
+
+.tour-viewfinder-box {
+  position: relative;
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #faf9f6;
+  border: 1px solid #ebe8e1;
+}
+
+/* Sweeping Laser Line */
+.tour-laser-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 25%;
+  height: 2px;
+  background: #a9000c;
+  box-shadow: 0 0 8px rgba(169, 0, 12, 0.5);
+  animation: tour-laser-sweep 4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Verified Receipt Pop-up */
+.tour-receipt-modal {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 20%;
+  background: #ffffff;
+  border: 1px solid #e2dfd7;
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 24px -6px rgba(20, 27, 61, 0.12), 0 2px 6px rgba(20, 27, 61, 0.06);
+  animation: tour-receipt-popup 4s infinite ease;
+}
+
+/* Demo Stack Transitions */
+.tour-demo-stack {
+  display: grid;
+  position: relative;
+  width: 100%;
+}
+
+.tour-demo-slide {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(calc(-1 * var(--tour-shift)));
+  transition: opacity 300ms ease, transform 380ms cubic-bezier(0.22, 1, 0.36, 1), visibility 380ms;
+}
+
+.tour-demo-slide[data-active="true"] {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+.tour-demo-slide[data-active="false"] * {
+  animation-play-state: paused;
+}
+
+/* Editorial Copy Transitions */
+.tour-editorial-content {
+  animation: tour-copy-slide 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Keyframes */
+@keyframes tour-tap-ring {
+  0%, 15%, 65%, 100% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  30% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+@keyframes tour-count-up {
+  0%, 25% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  40%, 90% {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tour-count-down {
+  0%, 25%, 100% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  40%, 90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tour-bar-shrink {
+  0%, 25%, 100% {
+    transform: scaleX(1);
+  }
+  40%, 90% {
+    transform: scaleX(0.875);
+  }
+}
+
+@keyframes tour-badge-fade {
+  0%, 30%, 100% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  45%, 90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tour-radar-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.25);
+  }
+}
+
+@keyframes tour-laser-sweep {
+  0%, 100% {
+    transform: translateY(0);
+    background: #a9000c;
+    box-shadow: 0 0 8px rgba(169, 0, 12, 0.5);
+    opacity: 1;
+  }
+  40% {
+    transform: translateY(68px);
+    background: #a9000c;
+    box-shadow: 0 0 8px rgba(169, 0, 12, 0.5);
+  }
+  50% {
+    transform: translateY(35px);
+    background: #059669;
+    box-shadow: 0 0 10px rgba(5, 150, 105, 0.8);
+    opacity: 1;
+  }
+  60%, 90% {
+    transform: translateY(35px);
+    background: #059669;
+    opacity: 0;
+  }
+}
+
+@keyframes tour-receipt-popup {
+  0%, 45%, 100% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  55%, 90% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tour-copy-slide {
+  from {
+    opacity: 0;
+    transform: translateX(var(--tour-shift));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Accessibility: Respect Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .tour-shell *,
+  .tour-shell *::before,
+  .tour-shell *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .tour-count-before,
+  .tour-pulse-ring,
+  .tour-laser-line {
+    display: none;
+  }
+}
+
+/* Responsive Overrides */
+.tour-header { padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: 6px; }
+.tour-main-grid > *, .tour-demo-stack, .tour-demo-slide { min-width: 0; }
+.tour-stage-area > div:first-child { flex-wrap: wrap; gap: 8px; }
+.tour-bottom-controls { padding-bottom: env(safe-area-inset-bottom); }
+.tour-editorial-content h1 { text-wrap: balance; }
+@media (min-width: 640px) and (max-width: 1023px) {
+  .tour-viewport-container { padding: 24px; justify-content: center; }
+  .tour-frame { max-width: 768px; flex: none; }
+  .tour-header-steps { order: 3; flex-basis: 100%; justify-content: center; padding-block: 4px; border-top: 1px solid #e2dfd7; }
+  .tour-copy-area { padding-inline: clamp(32px, 8vw, 80px); }
+}
+@media (min-width: 1024px) {
+  .tour-frame { max-width: 1152px; }
+  .tour-main-grid { min-height: 580px; }
+  .tour-copy-area { justify-content: center; gap: 32px; }
+  .tour-editorial-content { min-height: 240px; }
+  .tour-bottom-controls { margin-top: 0; }
+}
+@media (max-width: 639px) {
+  .tour-viewport-container {
+    padding: 0;
+    min-height: 100dvh;
+  }
+  .tour-frame {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+  .tour-stage-area {
+    padding: 16px 16px 20px;
+    background: #fbfaf8;
+  }
+  .tour-copy-area {
+    padding: 20px 16px max(16px, env(safe-area-inset-bottom));
+  }
+  .tour-artifact-card,
+  .tour-phone-frame {
+    max-width: 290px;
+    padding: 14px;
+  }
+}

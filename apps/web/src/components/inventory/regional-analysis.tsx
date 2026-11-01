@@ -134,7 +134,6 @@ export function RegionalAnalysis({
     ? [...selectedRegion.partners].sort((a, b) => b.weekly_units - a.weekly_units || a.partner_name.localeCompare(b.partner_name, 'id'))
     : []
   const regionWeeklyUnits = rankedPartners.reduce((total, partner) => total + partner.weekly_units, 0)
-  const maxWeeklyUnits = Math.max(1, ...rankedPartners.map((partner) => partner.weekly_units))
 
   // Partners under consideration
   const partners = useMemo(() => {
