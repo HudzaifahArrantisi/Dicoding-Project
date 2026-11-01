@@ -12,10 +12,16 @@ import {
   Plus,
   RotateCcw,
   ScanLine,
+  Sparkles,
 } from 'lucide-react'
 import './onboarding-walkthrough.css'
 
 const steps = [
+  {
+    label: 'Selamat datang',
+    title: '',
+    description: '',
+  },
   {
     label: 'Catat stok',
     title: 'Catat sisa stok rak, tanpa ribet.',
@@ -47,6 +53,26 @@ const steps = [
       'Begitu kiriman fisik dari admin diterima dan dikonfirmasi, sisa stok di rak cabang Anda langsung bertambah otomatis dan siap dijual.',
   },
 ]
+
+/* =========================================================================
+   STEP 0: CLEAN EDITORIAL WELCOME SCREEN (LARGE TYPOGRAPHY, NO IMAGES)
+   ========================================================================= */
+function WelcomeVisual() {
+  return (
+    <div className="intro-welcome-hero">
+
+
+      <h1 className="intro-welcome-title font-display">
+        Selamat Datang di
+        <span className="intro-welcome-brand">Daisuki Inventory</span>
+      </h1>
+
+      <p className="intro-welcome-lead">
+        Platform terpadu untuk mitra cabang, hotel, resto, dan minimarket. Pantau sisa stok rak fisik, ajukan pasokan pabrik pusat, dan terima kiriman barang dalam satu alur cepat.
+      </p>
+    </div>
+  )
+}
 
 /* =========================================================================
    STEP 1: RETAIL SHELF DISPLAY & BASRENG POUCH
@@ -132,60 +158,45 @@ function ShelfVisual() {
           <text x="54" y="70" textAnchor="middle" fill="#1E2337" fontSize="11" fontWeight="800">
             BASRENG
           </text>
-          <text x="54" y="80" textAnchor="middle" fill="#047857" fontSize="7" fontWeight="bold">
+          <text x="54" y="79" textAnchor="middle" fill="#B45309" fontSize="6.5" fontWeight="bold">
             PEDAS DAUN JERUK
-          </text>
-
-          <g transform="translate(54, 91)">
-            <path d="M-8 0 C-4 -6, 4 -6, 8 0 C4 6, -4 6, -8 0 Z" fill="#059669" />
-            <line x1="-7" y1="0" x2="7" y2="0" stroke="#A7F3D0" strokeWidth="0.6" />
-            <circle cx="-12" cy="2" r="1.5" fill="#DC2626" />
-            <circle cx="12" cy="-2" r="1.5" fill="#DC2626" />
-          </g>
-
-          <rect x="36" y="116" width="36" height="12" rx="6" fill="#FFFFFF" opacity="0.9" />
-          <text x="54" y="124.5" textAnchor="middle" fill="#8E1414" fontSize="6.5" fontWeight="bold">
-            Netto 200g
           </text>
         </g>
       </svg>
-
-      {/* Stepper Quantity Action */}
+      {/* Interactive Stepper (Simulasi input stok toko oleh mitra) */}
       <div className="intro-quantity">
         <button
           type="button"
-          className="intro-round"
-          aria-label="Kurangi contoh stok"
           onClick={() => setQuantity((q) => Math.max(0, q - 1))}
-          disabled={quantity === 0}
+          className="intro-round"
+          aria-label="Kurangi 1 pcs"
+          disabled={quantity <= 0}
         >
           <Minus size={16} />
         </button>
 
-        <span className="intro-number" aria-live="polite" aria-atomic="true">
-          <strong key={quantity}>{quantity}</strong>
-          <span>pcs</span>
-        </span>
+        <div className="intro-number">
+          <strong>{quantity}</strong>
+        </div>
 
         <button
           type="button"
-          className="intro-round"
-          aria-label="Tambah contoh stok"
           onClick={() => setQuantity((q) => q + 1)}
+          className="intro-round"
+          aria-label="Tambah 1 pcs"
         >
           <Plus size={16} />
         </button>
       </div>
-
-      <p className="intro-confirm">
-        <Check size={13} /> Tersimpan otomatis ke sistem pusat
+      <p className="intro-confirm" aria-live="polite">
+        {quantity < 35 ? 'Sisa fisik berkurang · Terhubung langsung ke data admin' : 'Sisa stok rak terinput rapi'}
       </p>
     </div>
   )
 }
 
 /* =========================================================================
-   STEP 2: REALISTIC B2B CATALOG & MULTI-ITEM RESTOCK
+   STEP 2: CENTRAL STOCK CATALOG & MULTI-ITEM PO ORDER
    ========================================================================= */
 function CatalogOrderVisual() {
   const [ordered, setOrdered] = useState(false)
@@ -196,12 +207,12 @@ function CatalogOrderVisual() {
         className="intro-drawing"
         viewBox="0 0 380 200"
         role="img"
-        aria-label="Katalog B2B Daisuki: pemesanan restock multi-item dan stok gudang pusat"
+        aria-label="Tampilan Pemesanan Restock Cabang Daisuki"
       >
         <defs>
           <linearGradient id="pouch-mini-red-cat" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#DC2626" />
-            <stop offset="100%" stopColor="#991B1B" />
+            <stop offset="0%" stopColor="#C42828" />
+            <stop offset="100%" stopColor="#8E1414" />
           </linearGradient>
           <linearGradient id="pouch-mini-amber-cat" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#F59E0B" />
@@ -227,15 +238,6 @@ function CatalogOrderVisual() {
         <text x="46" y="35" fill="#1E2337" fontSize="10.5" fontWeight="800">
           Pemesanan Restock Cabang
         </text>
-
-        {/* Central Warehouse Ready Indicator with Pulse */}
-        <g transform="translate(244, 23)">
-          <rect x="0" y="0" width="94" height="20" rx="10" fill="#ECFDF5" stroke="#A7F3D0" strokeWidth="0.8" />
-          <circle cx="10" cy="10" r="3.5" fill="#10B981" className="intro-pulse-dot" />
-          <text x="20" y="13.5" fill="#065F46" fontSize="7" fontWeight="bold">
-            Pusat: 1.000+ Ready
-          </text>
-        </g>
 
         {/* Item 1: Basreng Daun Jeruk (200g) */}
         <g transform="translate(44, 56)">
@@ -352,7 +354,7 @@ function CatalogOrderVisual() {
           className={`intro-example-action ${ordered ? 'intro-example-success' : ''}`}
         >
           {ordered ? <Check size={14} /> : <PackagePlus size={14} />}
-          {ordered ? 'Pesanan PO-2611 Terkirim ke Pusat' : 'Ajukan Pesanan 50 pcs (2 Snack)'}
+          {ordered ? 'Pesanan Terkirim' : 'Ajukan Pesanan'}
         </button>
 
         {ordered && (
@@ -370,7 +372,7 @@ function CatalogOrderVisual() {
 
       <p className="intro-confirm" aria-live="polite">
         {ordered
-          ? 'Notifikasi instan terkirim ke Admin Pusat untuk verifikasi'
+          ? 'Notifikasi instan terkirim'
           : 'Pesan sesuai kapasitas tanpa batasan kaku'}
       </p>
     </div>
@@ -387,18 +389,18 @@ function SupplyVisual() {
     <div className="intro-artifact">
       <svg
         className="intro-drawing"
-        viewBox="0 0 380 200"
+        viewBox="0 0 520 200"
         role="img"
         aria-label="Perjalanan truk logistik pengiriman dari gudang pusat Daisuki ke toko cabang"
       >
         <defs>
           <linearGradient id="headlight-glow" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#FEF08A" stopOpacity="0.8" />
+            <stop offset="0%" stopColor="#FEF08A" stopOpacity="0.85" />
             <stop offset="100%" stopColor="#FEF08A" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="road-surface" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#475569" />
-            <stop offset="100%" stopColor="#334155" />
+            <stop offset="100%" stopColor="#1E2337" />
           </linearGradient>
           <linearGradient id="warehouse-roof" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#2E3A4B" />
@@ -408,102 +410,173 @@ function SupplyVisual() {
             <stop offset="0%" stopColor="#1E2337" stopOpacity="0.14" />
             <stop offset="100%" stopColor="#1E2337" stopOpacity="0" />
           </radialGradient>
+          {/* 3D Isometric / Gradients for Truck */}
+          <linearGradient id="truck-box-top" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#D93847" />
+            <stop offset="100%" stopColor="#B91C1C" />
+          </linearGradient>
+          <linearGradient id="truck-box-side" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#991B1B" />
+            <stop offset="100%" stopColor="#6E0D13" />
+          </linearGradient>
+          <linearGradient id="truck-cab-top" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="100%" stopColor="#E2E8F0" />
+          </linearGradient>
+          <linearGradient id="truck-cab-side" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#F8FAFC" />
+            <stop offset="100%" stopColor="#CBD5E1" />
+          </linearGradient>
+          <linearGradient id="truck-windshield" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#38BDF8" />
+            <stop offset="100%" stopColor="#0284C7" />
+          </linearGradient>
+          <linearGradient id="wheel-rim-3d" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#E2E8F0" />
+            <stop offset="100%" stopColor="#64748B" />
+          </linearGradient>
         </defs>
 
-        <ellipse cx="190" cy="182" rx="175" ry="11" fill="url(#shadow-soft)" />
+        {/* Ambient Floor Shadow */}
+        <ellipse cx="260" cy="182" rx="245" ry="11" fill="url(#shadow-soft)" />
 
-        {/* Asphalt Road */}
-        <rect x="20" y="146" width="340" height="24" rx="4" fill="url(#road-surface)" />
-        <line x1="20" y1="146" x2="360" y2="146" stroke="#94A3B8" strokeWidth="1.5" />
-        <line x1="20" y1="170" x2="360" y2="170" stroke="#64748B" strokeWidth="1.5" />
-        <line
-          x1="28"
-          y1="158"
-          x2="352"
-          y2="158"
-          stroke="#F8FAFC"
-          strokeWidth="2"
-          strokeDasharray="14 10"
-        />
+        {/* Asphalt Highway with Extra Span */}
+        <rect x="15" y="160" width="490" height="22" rx="5" fill="url(#road-surface)" />
+        <line x1="20" y1="171" x2="500" y2="171" stroke="#F8FAFC" strokeWidth="1.5" strokeDasharray="14 10" />
+      
+        {/* LEFT STATION: GUDANG PUSAT DAISUKI */}
+        <g id="station-gudang" transform="translate(18, 62)">
+          <rect x="0" y="24" width="76" height="74" rx="4" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1" />
+          <polygon points="38,0 76,24 0,24" fill="url(#warehouse-roof)" />
+          <rect x="22" y="52" width="32" height="46" rx="2" fill="#E2E8F0" />
+          <line x1="22" y1="62" x2="54" y2="62" stroke="#94A3B8" strokeWidth="1" />
+          <line x1="22" y1="72" x2="54" y2="72" stroke="#94A3B8" strokeWidth="1" />
+          <line x1="22" y1="82" x2="54" y2="82" stroke="#94A3B8" strokeWidth="1" />
 
-        {/* Left: Gudang Pusat */}
-        <g id="gudang-pusat">
-          <polygon points="18,146 18,90 65,65 112,90 112,146" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1" />
-          <polygon points="12,91 65,62 118,91 112,95 65,68 18,95" fill="url(#warehouse-roof)" />
-          <rect x="36" y="84" width="58" height="12" rx="2" fill="#A9000C" />
-          <text x="65" y="93" textAnchor="middle" fill="#FFFFFF" fontSize="6.5" fontWeight="bold">
+          {/* Signboard */}
+          <rect x="10" y="30" width="56" height="13" rx="3" fill="#A9000C" />
+          <text x="38" y="39.5" textAnchor="middle" fill="#FFFFFF" fontSize="6.5" fontWeight="bold">
             GUDANG PUSAT
           </text>
-          <rect x="38" y="100" width="54" height="46" rx="2" fill="#94A3B8" />
-          {Array.from({ length: 6 }, (_, i) => (
-            <line key={i} x1="39" y1={106 + i * 6} x2="91" y2={106 + i * 6} stroke="#64748B" strokeWidth="1" />
-          ))}
-          <rect x="24" y="132" width="12" height="14" rx="1" fill="#D97706" />
         </g>
 
-        {/* Right: Mitra Cabang */}
-        <g id="toko-cabang">
-          <rect x="278" y="84" width="84" height="62" rx="3" fill="#FAF5EF" stroke="#E2DDD5" strokeWidth="1" />
-          <g transform="translate(272, 76)">
-            <polygon points="0,18 8,0 88,0 96,18" fill="#B83A6A" />
-            <polygon points="8,0 18,0 14,18 3,18" fill="#FAF7F2" />
-            <polygon points="28,0 38,0 35,18 24,18" fill="#FAF7F2" />
-            <polygon points="48,0 58,0 56,18 45,18" fill="#FAF7F2" />
-            <polygon points="68,0 78,0 77,18 66,18" fill="#FAF7F2" />
-          </g>
-          <rect x="288" y="97" width="64" height="11" rx="2" fill="#1E2337" />
-          <text x="320" y="105" textAnchor="middle" fill="#FFFFFF" fontSize="6.5" fontWeight="bold">
-            MITRA CABANG
+        {/* RIGHT STATION: TOKO MITRA CABANG */}
+        <g id="station-cabang" transform="translate(425, 62)">
+          <rect x="0" y="24" width="76" height="74" rx="4" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1" />
+          <rect x="0" y="20" width="76" height="8" rx="2" fill="#D97706" />
+          <text x="38" y="26" textAnchor="middle" fill="#FFFFFF" fontSize="5.5" fontWeight="bold">
+            MINIMARKET MITRA
           </text>
-          <rect x="286" y="112" width="30" height="26" rx="2" fill="#BAE6FD" opacity="0.65" stroke="#93C5FD" strokeWidth="0.8" />
-          <circle cx="301" cy="130" r="3.5" fill="#D97706" />
-          <rect x="322" y="112" width="22" height="34" rx="1" fill="#F1F5F9" stroke="#CBD5E1" strokeWidth="1" />
+
+          <rect x="10" y="36" width="24" height="26" rx="2" fill="#E0F2FE" stroke="#7DD3FC" strokeWidth="0.8" />
+          <rect x="42" y="36" width="24" height="62" rx="2" fill="#F1F5F9" stroke="#CBD5E1" strokeWidth="0.8" />
+          <circle cx="48" cy="68" r="1.5" fill="#64748B" />
+
+          <rect x="6" y="80" width="32" height="14" rx="3" fill="#DCFCE7" />
+          <text x="22" y="89.5" textAnchor="middle" fill="#15803D" fontSize="6" fontWeight="bold">
+            TUJUAN
+          </text>
         </g>
 
-        {/* Center: Delivery Truck */}
+        {/* TRUCK VEHICLE GROUP (3D PSEUDO-ISOMETRIC DETAIL) */}
         <g
+          id="daisuki-truck"
           className={`intro-delivery-truck ${requested ? 'intro-truck-moving' : 'intro-truck-idle'}`}
-          transform="translate(108, 116)"
         >
-          <polygon points="86,22 135,12 142,34 86,28" fill="url(#headlight-glow)" opacity={requested ? 0.95 : 0} />
-          <ellipse cx="44" cy="40" rx="42" ry="4" fill="#1E2337" opacity="0.25" />
+          {/* Headlight beam (visible when moving) */}
+          {requested && (
+            <polygon points="56,2 110,-6 110,22 56,12" fill="url(#headlight-glow)" opacity="0.9" />
+          )}
 
-          {/* Van Box */}
-          <rect x="0" y="4" width="58" height="32" rx="3" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1.2" />
-          <rect x="0" y="15" width="58" height="8" fill="#A9000C" />
-          <text x="29" y="21.5" textAnchor="middle" fill="#FFFFFF" fontSize="5.5" fontWeight="900" letterSpacing="0.8">
-            DAISUKI EXPRESS
-          </text>
+          {/* Under-truck dynamic ground shadow */}
+          <ellipse cx="-2" cy="19" rx="54" ry="4" fill="#0F172A" opacity="0.35" />
 
-          {/* Cabin */}
-          <path d="M58 12 L74 12 C78 12, 84 18, 86 24 L86 36 L58 36 Z" fill="#1E2337" />
-          <path d="M62 15 L73 15 C76 15, 80 19, 82 24 L62 24 Z" fill="#BAE6FD" opacity="0.85" />
-          <rect x="83.5" y="25" width="3" height="5" rx="1.5" fill="#FEF08A" />
+          {/* 3D Top Bevel - Cargo Roof */}
+          <polygon points="-58,-39 12,-39 16,-34 -54,-34" fill="url(#truck-box-top)" />
 
-          {/* Rear Wheel (Axle-Separated) */}
-          <g transform="translate(18, 36)">
+          {/* 3D Cargo Box Side */}
+          <rect x="-56" y="-34" width="70" height="44" rx="3" fill="url(#truck-box-side)" stroke="#5B080E" strokeWidth="0.5" />
+
+          {/* 3D Box Ribs / Texture */}
+          <line x1="-38" y1="-32" x2="-38" y2="8" stroke="#450A0A" strokeWidth="0.8" opacity="0.7" />
+          <line x1="-20" y1="-32" x2="-20" y2="8" stroke="#450A0A" strokeWidth="0.8" opacity="0.7" />
+          <line x1="-2" y1="-32" x2="-2" y2="8" stroke="#450A0A" strokeWidth="0.8" opacity="0.7" />
+
+          {/* Daisuki Express Branding on Truck */}
+          <g transform="translate(-50, -28)">
+            <rect x="0" y="0" width="58" height="28" rx="2.5" fill="#450A0A" stroke="#7F1D1D" strokeWidth="0.8" />
+            <text x="29" y="13.5" textAnchor="middle" fill="#FFFFFF" fontSize="7.5" fontWeight="900" letterSpacing="0.8">
+              DAISUKI
+            </text>
+            <text x="29" y="22" textAnchor="middle" fill="#FCA5A5" fontSize="5.5" fontWeight="700">
+              EXPRESS
+            </text>
+          </g>
+
+          {/* 3D Cabin Top Bevel */}
+          <polygon points="14,-29 36,-29 40,-25 18,-25" fill="url(#truck-cab-top)" />
+
+          {/* 3D Truck Cabin Side */}
+          <path d="M16 -25 L38 -25 L52 -9 L54 11 L16 11 Z" fill="url(#truck-cab-side)" stroke="#94A3B8" strokeWidth="0.8" />
+
+          {/* 3D Windshield with Reflection Tint */}
+          <polygon points="34,-22 48,-9 34,-9" fill="url(#truck-windshield)" stroke="#0369A1" strokeWidth="0.5" />
+          <line x1="37" y1="-20" x2="44" y2="-10" stroke="#BAE6FD" strokeWidth="1.2" strokeLinecap="round" opacity="0.9" />
+
+          {/* Cabin Side Door Line & Handle */}
+          <line x1="26" y1="-8" x2="26" y2="10" stroke="#94A3B8" strokeWidth="0.8" />
+          <rect x="22" y="0" width="3" height="1.5" rx="0.5" fill="#475569" />
+
+          {/* Headlight Assembly (Lens 3D) */}
+          <rect x="52" y="1" width="5" height="6" rx="1.5" fill="#F59E0B" stroke="#B45309" strokeWidth="0.5" />
+          <rect x="49" y="7" width="8" height="4" rx="1" fill="#334155" />
+
+          {/* Side Mirror */}
+          <rect x="32" y="-14" width="2" height="4.5" rx="0.5" fill="#1E2337" />
+
+          {/* Chassis Heavy-Duty Frame & Exhaust Tip */}
+          <rect x="-52" y="9" width="102" height="4" fill="#0F172A" />
+          <rect x="-55" y="10" width="4" height="2" fill="#64748B" />
+
+          {/* Back Wheel 1 (3D Depth Rim) */}
+          <g transform="translate(-38, 15)">
+            <circle cx="0" cy="0" r="11" fill="#0F172A" />
+            <circle cx="0" cy="0" r="9" fill="#1E2337" />
+            <circle cx="0" cy="0" r="6" fill="url(#wheel-rim-3d)" />
+            <circle cx="0" cy="0" r="2.5" fill="#0F172A" />
             <g className="intro-wheel-rotor">
-              <circle cx="0" cy="0" r="7" fill="#1E2337" />
-              <circle cx="0" cy="0" r="4.5" fill="#94A3B8" />
-              <circle cx="0" cy="0" r="2" fill="#475569" />
-              <line x1="-3.5" y1="0" x2="3.5" y2="0" stroke="#FFFFFF" strokeWidth="0.8" />
-              <line x1="0" y1="-3.5" x2="0" y2="3.5" stroke="#FFFFFF" strokeWidth="0.8" />
+              <line x1="-5" y1="0" x2="5" y2="0" stroke="#FFFFFF" strokeWidth="1.2" />
+              <line x1="0" y1="-5" x2="0" y2="5" stroke="#FFFFFF" strokeWidth="1.2" />
             </g>
           </g>
 
-          {/* Front Wheel (Axle-Separated) */}
-          <g transform="translate(72, 36)">
+          {/* Back Wheel 2 (3D Depth Rim) */}
+          <g transform="translate(-16, 15)">
+            <circle cx="0" cy="0" r="11" fill="#0F172A" />
+            <circle cx="0" cy="0" r="9" fill="#1E2337" />
+            <circle cx="0" cy="0" r="6" fill="url(#wheel-rim-3d)" />
+            <circle cx="0" cy="0" r="2.5" fill="#0F172A" />
             <g className="intro-wheel-rotor">
-              <circle cx="0" cy="0" r="7" fill="#1E2337" />
-              <circle cx="0" cy="0" r="4.5" fill="#94A3B8" />
-              <circle cx="0" cy="0" r="2" fill="#475569" />
-              <line x1="-3.5" y1="0" x2="3.5" y2="0" stroke="#FFFFFF" strokeWidth="0.8" />
-              <line x1="0" y1="-3.5" x2="0" y2="3.5" stroke="#FFFFFF" strokeWidth="0.8" />
+              <line x1="-5" y1="0" x2="5" y2="0" stroke="#FFFFFF" strokeWidth="1.2" />
+              <line x1="0" y1="-5" x2="0" y2="5" stroke="#FFFFFF" strokeWidth="1.2" />
+            </g>
+          </g>
+
+          {/* Front Wheel (3D Depth Rim) */}
+          <g transform="translate(38, 15)">
+            <circle cx="0" cy="0" r="11" fill="#0F172A" />
+            <circle cx="0" cy="0" r="9" fill="#1E2337" />
+            <circle cx="0" cy="0" r="6" fill="url(#wheel-rim-3d)" />
+            <circle cx="0" cy="0" r="2.5" fill="#0F172A" />
+            <g className="intro-wheel-rotor">
+              <line x1="-5" y1="0" x2="5" y2="0" stroke="#FFFFFF" strokeWidth="1.2" />
+              <line x1="0" y1="-5" x2="0" y2="5" stroke="#FFFFFF" strokeWidth="1.2" />
             </g>
           </g>
         </g>
       </svg>
-   
+
+      {/* Action Simulation Button */}
       <div className="intro-action-container">
         <button
           type="button"
@@ -511,8 +584,8 @@ function SupplyVisual() {
           disabled={requested}
           className={`intro-example-action ${requested ? 'intro-example-success' : ''}`}
         >
-          {requested ? <Check size={14} /> : <PackageCheck size={14} />}
-          {requested ? 'PO Sedang Dalam Pengiriman Kurir' : 'Mulai Pengiriman Daisuki Express'}
+          {requested ? <Check size={14} /> : <Sparkles size={14} />}
+          {requested ? 'Truk sedang dalam perjalanan' : 'Kirim paket'}
         </button>
 
         {requested && (
@@ -520,19 +593,23 @@ function SupplyVisual() {
             type="button"
             onClick={() => setRequested(false)}
             className="intro-reset-btn"
-            aria-label="Ulangi simulasi pengiriman"
-            title="Ulangi simulasi pengiriman"
+            aria-label="Kembalikan truk ke gudang"
+            title="Kembalikan truk ke gudang"
           >
             <RotateCcw size={13} />
           </button>
         )}
       </div>
+
+      <p className="intro-confirm" aria-live="polite">
+        {requested ? 'Dalam Perjalanan' : 'Klik tombol untuk melihat simulasi armada bergerak'}
+      </p>
     </div>
   )
 }
 
 /* =========================================================================
-   STEP 4: HAND HOLDING PHONE + BARCODE CAMERA + CHAT NOTIFICATION ANIMATION
+   STEP 4: HANDHELD PHONE BARCODE SCANNER WITH CHAT NOTIFICATION
    ========================================================================= */
 function ScannerVisual() {
   const [scanned, setScanned] = useState(false)
@@ -543,34 +620,28 @@ function ScannerVisual() {
         className="intro-drawing"
         viewBox="0 0 380 200"
         role="img"
-        aria-label="Tangan memegang ponsel memindai barcode kardus kiriman admin dan menerima notifikasi chat verifikasi"
+        aria-label="Kamera ponsel memindai barcode kardus pengiriman kurir"
       >
         <defs>
-          <linearGradient id="skin-tone" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#F1C2A7" />
-            <stop offset="100%" stopColor="#D99B77" />
+          <linearGradient id="carton-kraft-deep" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#D4A373" />
+            <stop offset="100%" stopColor="#B07D4C" />
           </linearGradient>
-          <linearGradient id="phone-case" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#2D3748" />
-            <stop offset="100%" stopColor="#1A202C" />
+          <linearGradient id="phone-case" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#1E293B" />
+            <stop offset="100%" stopColor="#0F172A" />
           </linearGradient>
           <linearGradient id="laser-glow-red" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#DC2626" stopOpacity="0.1" />
-            <stop offset="50%" stopColor="#EF4444" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#DC2626" stopOpacity="0.1" />
+            <stop offset="0%" stopColor="#EF4444" stopOpacity="0.2" />
+            <stop offset="50%" stopColor="#EF4444" stopOpacity="1" />
+            <stop offset="100%" stopColor="#EF4444" stopOpacity="0.2" />
           </linearGradient>
-          <linearGradient id="laser-glow-green" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#059669" stopOpacity="0.1" />
-            <stop offset="50%" stopColor="#10B981" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#059669" stopOpacity="0.1" />
-          </linearGradient>
-          <linearGradient id="carton-kraft-deep" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#DDB790" />
-            <stop offset="100%" stopColor="#B38656" />
+          <linearGradient id="skin-tone" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#E2A684" />
+            <stop offset="100%" stopColor="#C68B6A" />
           </linearGradient>
         </defs>
 
-        {/* Ambient Floor Shadow */}
         <ellipse cx="200" cy="184" rx="140" ry="8" fill="#1E2337" opacity="0.12" />
 
         {/* RIGHT: SHIPPING CARTON FROM ADMIN */}
@@ -754,16 +825,16 @@ function ScannerVisual() {
         </g>
       </svg>
 
-
-      {/* Action Button: Trigger Scan */}
+      {/* Action Simulation Button */}
       <div className="intro-action-container">
         <button
           type="button"
+          onClick={() => setScanned(true)}
+          disabled={scanned}
           className={`intro-example-action ${scanned ? 'intro-example-success' : ''}`}
-          onClick={() => setScanned((v) => !v)}
         >
-          {scanned ? <CheckCircle2 size={14} /> : <ScanLine size={14} />}
-          {scanned ? 'Barcode Valid & Notifikasi Chat Masuk' : 'Arahkan Kamera ke Barcode Kardus'}
+          {scanned ? <Check size={14} /> : <ScanLine size={14} />}
+          {scanned ? 'Barcode Terverifikasi: #PO-2611' : 'Simulasi: Pindai Barcode Kardus'}
         </button>
 
         {scanned && (
@@ -771,8 +842,8 @@ function ScannerVisual() {
             type="button"
             onClick={() => setScanned(false)}
             className="intro-reset-btn"
-            aria-label="Ulangi simulasi pemindaian"
-            title="Ulangi simulasi pemindaian"
+            aria-label="Ulangi simulasi scan"
+            title="Ulangi simulasi scan"
           >
             <RotateCcw size={13} />
           </button>
@@ -780,14 +851,14 @@ function ScannerVisual() {
       </div>
 
       <p className="intro-confirm" aria-live="polite">
-        {scanned ? 'Notifikasi chat masuk dari Admin Pusat: fisik barang cocok' : 'Simulasi staf memindai kardus kiriman kurir'}
+        {scanned ? 'Status: Kiriman Dikonfirmasi & Sesuai Surat Jalan' : 'Kamera membaca kode batang kardus otomatis'}
       </p>
     </div>
   )
 }
 
 /* =========================================================================
-   STEP 5: SMOOTH STOCK HANDOVER & RETAIL SHELF INFLOW ANIMATION
+   STEP 5: STOCK HANDOVER & REALTIME INCREMENT
    ========================================================================= */
 function StockHandoverVisual() {
   const [confirmed, setConfirmed] = useState(false)
@@ -798,58 +869,46 @@ function StockHandoverVisual() {
         className="intro-drawing"
         viewBox="0 0 380 200"
         role="img"
-        aria-label="Kiriman stok admin diterima dan langsung menambah sisa stok di rak toko mitra cabang"
+        aria-label="Serah terima kiriman dari admin dan penambahan stok di rak toko cabang"
       >
         <defs>
-          <linearGradient id="admin-box-card" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FFFFFF" />
-            <stop offset="100%" stopColor="#F8FAFC" />
-          </linearGradient>
           <linearGradient id="pouch-red-handover" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#DC2626" />
-            <stop offset="100%" stopColor="#991B1B" />
+            <stop offset="0%" stopColor="#C42828" />
+            <stop offset="100%" stopColor="#8E1414" />
           </linearGradient>
           <linearGradient id="pouch-amber-handover" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#F59E0B" />
             <stop offset="100%" stopColor="#B45309" />
           </linearGradient>
-          <radialGradient id="shelf-shadow-base" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#1E2337" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="#1E2337" stopOpacity="0" />
-          </radialGradient>
         </defs>
 
-        {/* Ambient Floor Shadow */}
-        <ellipse cx="190" cy="182" rx="160" ry="10" fill="url(#shelf-shadow-base)" />
+        {/* Ambient Drop Shadow */}
+        <ellipse cx="190" cy="180" rx="160" ry="8" fill="#1E2337" opacity="0.1" />
 
         {/* -------------------------------------------------------------
-            LEFT: KIRIMAN DARI ADMIN DAISUKI PUSAT (50 pcs)
+            LEFT: KARDUS KIRIMAN DARI ADMIN
            ------------------------------------------------------------- */}
-        <g id="kiriman-admin" transform="translate(24, 18)">
-          <rect x="0" y="0" width="132" height="148" rx="12" fill="url(#admin-box-card)" stroke="#E2E8F0" strokeWidth="1" />
+        <g id="kardus-pengirim" transform="translate(24, 24)">
+          <rect x="0" y="0" width="132" height="142" rx="12" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1" />
 
-          {/* Red Header Bar */}
-          <rect x="0" y="0" width="132" height="28" rx="12" fill="#A9000C" />
-          <rect x="0" y="16" width="132" height="12" fill="#A9000C" />
-          <text x="66" y="17.5" textAnchor="middle" fill="#FFFFFF" fontSize="7" fontWeight="bold" letterSpacing="0.4">
-            KIRIMAN DARI ADMIN
+          {/* Admin Header Ribbon */}
+          <rect x="14" y="14" width="104" height="20" rx="4" fill="#A9000C" />
+          <text x="66" y="27" textAnchor="middle" fill="#FFFFFF" fontSize="7" fontWeight="bold">
+            KARDUS KIRIMAN ADMIN
           </text>
 
-          {/* Open Logistics Box Graphic */}
-          <g transform="translate(18, 38)">
-            <rect x="0" y="14" width="96" height="54" rx="4" fill="#DDB790" stroke="#B38656" strokeWidth="1" />
-            <line x1="0" y1="38" x2="96" y2="38" stroke="#B38656" strokeWidth="0.8" />
-            <rect x="36" y="14" width="24" height="54" fill="#CA9E72" opacity="0.35" />
-
-            <rect x="22" y="25" width="52" height="18" rx="2" fill="#FFFFFF" />
-            <text x="48" y="33" textAnchor="middle" fill="#8E1414" fontSize="6" fontWeight="bold">
+          {/* 3D Box Illustration */}
+          <g transform="translate(22, 48)">
+            <polygon points="44,10 88,24 58,40 14,26" fill="#E2BA96" stroke="#946338" strokeWidth="0.8" />
+            <polygon points="14,26 58,40 58,80 14,64" fill="#C69469" stroke="#946338" strokeWidth="0.8" />
+            <polygon points="58,40 88,24 88,64 58,80" fill="#A87548" stroke="#946338" strokeWidth="0.8" />
+            <text x="36" y="56" fill="#451A03" fontSize="6.5" fontWeight="bold" transform="skewY(14)">
               DAISUKI
             </text>
-            <text x="48" y="39.5" textAnchor="middle" fill="#1E2337" fontSize="5.5" fontWeight="bold">
-              +50 pcs Snack
-            </text>
+          </g>
 
-            {/* Pouch Previews Peeking Out */}
+          {/* Inside Snacks Peeking */}
+          <g transform="translate(20, 36)">
             <rect x="20" y="2" width="18" height="18" rx="2" fill="url(#pouch-red-handover)" transform="rotate(-6 20 2)" />
             <rect x="42" y="0" width="18" height="20" rx="2" fill="url(#pouch-amber-handover)" transform="rotate(4 42 0)" />
             <rect x="64" y="3" width="18" height="18" rx="2" fill="url(#pouch-red-handover)" transform="rotate(10 64 3)" />
@@ -972,65 +1031,37 @@ function StockHandoverVisual() {
                     <text x="11" y="19" textAnchor="middle" fill="#8E1414" fontSize="4.8" fontWeight="bold">Basreng</text>
                   </g>
                 </g>
-
                 {/* Pouch 2: Seblak Jadul */}
-                <g transform="translate(34, 6)">
-                  <g className="intro-shelf-drop" style={{ animationDelay: '80ms' }}>
+                <g transform="translate(32, 6)">
+                  <g className="intro-shelf-drop" style={{ animationDelay: '90ms' }}>
                     <rect x="0" y="0" width="22" height="36" rx="3" fill="url(#pouch-amber-handover)" />
                     <rect x="3" y="10" width="16" height="14" rx="1.5" fill="#FFFBEB" />
-                    <text x="11" y="19" textAnchor="middle" fill="#92400E" fontSize="4.8" fontWeight="bold">Seblak</text>
+                    <text x="11" y="19" textAnchor="middle" fill="#B45309" fontSize="4.8" fontWeight="bold">Seblak</text>
                   </g>
                 </g>
-
-                {/* Pouch 3: Basreng Daun Jeruk */}
-                <g transform="translate(62, 6)">
-                  <g className="intro-shelf-drop" style={{ animationDelay: '160ms' }}>
+                {/* Pouch 3: Basreng Pedas Daun Jeruk */}
+                <g transform="translate(58, 6)">
+                  <g className="intro-shelf-drop" style={{ animationDelay: '180ms' }}>
                     <rect x="0" y="0" width="22" height="36" rx="3" fill="url(#pouch-red-handover)" />
                     <rect x="3" y="10" width="16" height="14" rx="1.5" fill="#FFFBEB" />
                     <text x="11" y="19" textAnchor="middle" fill="#8E1414" fontSize="4.8" fontWeight="bold">Basreng</text>
                   </g>
                 </g>
-
-                {/* Pouch 4: Keripik Pisang */}
-                <g transform="translate(90, 6)">
-                  <g className="intro-shelf-drop" style={{ animationDelay: '240ms' }}>
-                    <rect x="0" y="0" width="22" height="36" rx="3" fill="#78350F" />
+                {/* Pouch 4: Seblak Jadul */}
+                <g transform="translate(84, 6)">
+                  <g className="intro-shelf-drop" style={{ animationDelay: '270ms' }}>
+                    <rect x="0" y="0" width="22" height="36" rx="3" fill="url(#pouch-amber-handover)" />
                     <rect x="3" y="10" width="16" height="14" rx="1.5" fill="#FFFBEB" />
-                    <text x="11" y="19" textAnchor="middle" fill="#582407" fontSize="4.8" fontWeight="bold">Pisang</text>
+                    <text x="11" y="19" textAnchor="middle" fill="#B45309" fontSize="4.8" fontWeight="bold">Seblak</text>
                   </g>
                 </g>
               </g>
             )}
           </g>
-
-          {/* Success Notification at Bottom */}
-          <g transform="translate(14, 122)">
-            <rect
-              x="0"
-              y="0"
-              width="122"
-              height="18"
-              rx="4"
-              fill={confirmed ? '#ECFDF5' : '#F8FAFC'}
-              stroke={confirmed ? '#A7F3D0' : '#E2E8F0'}
-              strokeWidth="0.8"
-            />
-            <text
-              x="61"
-              y="12"
-              textAnchor="middle"
-              fill={confirmed ? '#065F46' : '#64748B'}
-              fontSize="6.5"
-              fontWeight="bold"
-            >
-              {confirmed ? '+50 pcs Masuk ke Rak Toko' : 'Menunggu Kiriman Diterima'}
-            </text>
-          </g>
         </g>
       </svg>
 
-
-      {/* Action Button: Confirm Handover */}
+      {/* Action Simulation Button */}
       <div className="intro-action-container">
         <button
           type="button"
@@ -1062,7 +1093,7 @@ function StockHandoverVisual() {
   )
 }
 
-const visuals = [ShelfVisual, CatalogOrderVisual, SupplyVisual, ScannerVisual, StockHandoverVisual]
+const visuals = [WelcomeVisual, ShelfVisual, CatalogOrderVisual, SupplyVisual, ScannerVisual, StockHandoverVisual]
 
 /* =========================================================================
    MAIN ONBOARDING COMPONENT
@@ -1073,21 +1104,39 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
   const [fullscreen, setFullscreen] = useState(false)
   const [supported, setSupported] = useState(false)
   const [fullscreenPending, setFullscreenPending] = useState(false)
+  const [isExiting, setIsExiting] = useState(false)
   const [notice, setNotice] = useState('')
   const touch = useRef<{ x: number; y: number } | null>(null)
   const fullscreenOwned = useRef(false)
   const currentStep = useRef(step)
-  const finishRef = useRef(onFinish)
+  const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleFinish() {
+    if (isExiting) return
+    setIsExiting(true)
+    exitTimeoutRef.current = setTimeout(() => {
+      onFinish()
+    }, 400)
+  }
+
+  const finishRef = useRef(handleFinish)
   currentStep.current = step
-  finishRef.current = onFinish
+  finishRef.current = handleFinish
 
   function goTo(target: number) {
+    if (isExiting) return
     const next = Math.max(0, Math.min(steps.length - 1, target))
     if (next === currentStep.current) return
     setDirection(next > currentStep.current ? 'next' : 'previous')
     currentStep.current = next
     setStep(next)
   }
+
+  useEffect(() => {
+    return () => {
+      if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     let lastFullscreenExit = 0
@@ -1114,63 +1163,73 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
         goTo(currentStep.current - 1)
       }
     }
-    document.addEventListener('fullscreenchange', sync)
     window.addEventListener('keydown', keydown)
+    document.addEventListener('fullscreenchange', sync)
     return () => {
-      document.removeEventListener('fullscreenchange', sync)
       window.removeEventListener('keydown', keydown)
-      if (fullscreenOwned.current && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
+      document.removeEventListener('fullscreenchange', sync)
     }
   }, [])
 
   async function toggleFullscreen() {
-    setNotice('')
+    if (fullscreenPending || !supported) return
     setFullscreenPending(true)
+    setNotice('')
     try {
-      if (document.fullscreenElement) await document.exitFullscreen()
-      else {
+      if (!document.fullscreenElement) {
         await document.documentElement.requestFullscreen()
         fullscreenOwned.current = true
+      } else {
+        await document.exitFullscreen()
+        fullscreenOwned.current = false
       }
     } catch {
-      setNotice('Layar penuh tidak tersedia saat ini. Anda tetap bisa mengikuti panduan.')
+      setNotice('Layar penuh tidak dapat diaktifkan')
     } finally {
       setFullscreenPending(false)
     }
   }
 
   return (
-    <main className="intro-canvas font-sans" data-direction={direction}>
-      {/* Top Header: Fullscreen, Dash Stepper, Skip Button */}
+    <main
+      className={`intro-canvas ${isExiting ? 'intro-canvas-exiting' : ''}`}
+      data-direction={direction}
+      aria-label="Panduan Onboarding Daisuki Inventory"
+    >
+      {/* Top Header Bar */}
       <header className="intro-header">
         <button
           type="button"
-          className="intro-icon-button"
           onClick={() => void toggleFullscreen()}
           disabled={!supported || fullscreenPending}
-          aria-pressed={fullscreen}
-          aria-label={fullscreen ? 'Keluar layar penuh' : 'Buka layar penuh'}
-          title={supported ? 'Layar penuh' : 'Browser ini tidak mendukung layar penuh'}
+          className="intro-icon-button"
+          aria-label={fullscreen ? 'Keluar layar penuh' : 'Masuk layar penuh'}
+          title={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
         >
           {fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
         </button>
 
-        {/* Minimalist Dash Lines Progress Indicator (Dribbble Style) */}
-        <nav className="intro-progress" aria-label="Langkah panduan">
+        {/* Top Progress Segment Indicator */}
+        <div className="intro-progress" role="tablist" aria-label="Langkah panduan">
           {steps.map((item, index) => (
             <button
               type="button"
               key={item.label}
               onClick={() => goTo(index)}
-              aria-label={`Langkah ${index + 1}: ${item.label}`}
-              aria-current={index === step ? 'step' : undefined}
+              aria-label={`Buka langkah ${index + 1}: ${item.label}`}
+              aria-current={step === index ? 'step' : undefined}
             >
               <span />
             </button>
           ))}
-        </nav>
+        </div>
 
-        <button type="button" className="intro-skip" onClick={onFinish}>
+        <button
+          type="button"
+          onClick={handleFinish}
+          className="intro-skip"
+          aria-label="Lewati panduan dan langsung masuk ke login"
+        >
           Lewati
         </button>
       </header>
@@ -1231,14 +1290,14 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
                 key={item.label}
                 aria-hidden={step !== index}
               >
-                <h1 className="font-display">{item.title}</h1>
-                <p>{item.description}</p>
+                {item.title ? <h1 className="font-display">{item.title}</h1> : null}
+                {item.description ? <p>{item.description}</p> : null}
               </div>
             ))}
           </div>
 
           <span className="sr-only" role="status">
-            Langkah {step + 1} dari {steps.length}. {steps[step].title}
+            Langkah {step + 1} dari {steps.length}. {steps[step].title || 'Selamat Datang di Daisuki Inventory'}
           </span>
 
           {/* Icon-Only Navigation Buttons < and > */}
@@ -1247,7 +1306,7 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
               type="button"
               className="intro-nav-btn intro-nav-prev"
               onClick={() => goTo(step - 1)}
-              disabled={step === 0}
+              disabled={step === 0 || isExiting}
               aria-label="Langkah sebelumnya"
               title="Kembali"
             >
@@ -1261,7 +1320,8 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
             <button
               type="button"
               className={`intro-nav-btn intro-nav-next ${step === steps.length - 1 ? 'intro-nav-final' : ''}`}
-              onClick={() => (step === steps.length - 1 ? onFinish() : goTo(step + 1))}
+              onClick={() => (step === steps.length - 1 ? handleFinish() : goTo(step + 1))}
+              disabled={isExiting}
               aria-label={step === steps.length - 1 ? 'Masuk ke Akun Daisuki' : 'Langkah selanjutnya'}
               title={step === steps.length - 1 ? 'Masuk ke Akun Daisuki' : 'Lanjutkan'}
             >
@@ -1270,10 +1330,6 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
           </div>
         </section>
       </div>
-
-      <footer className="intro-brand">
-        Daisuki <span>Inventory</span>
-      </footer>
     </main>
   )
 }

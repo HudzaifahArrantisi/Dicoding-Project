@@ -58,8 +58,8 @@ function LoginPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-paper sm:grid sm:place-items-center sm:px-6 sm:py-10">
-      <section className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col bg-paper sm:block sm:min-h-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:bg-white sm:shadow-[0_20px_55px_-45px_rgba(20,27,61,0.35)] lg:grid lg:grid-cols-[0.9fr_1.1fr]">
+    <main className="min-h-dvh bg-paper sm:grid sm:place-items-center sm:px-6 sm:py-10 animate-in fade-in duration-500">
+      <section className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col bg-paper sm:block sm:min-h-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:bg-white sm:shadow-[0_20px_55px_-45px_rgba(20,27,61,0.35)] lg:grid lg:grid-cols-[0.9fr_1.1fr] animate-in fade-in zoom-in-[0.98] duration-500">
         <div className="relative isolate flex flex-col overflow-hidden bg-[#a9000c] px-6 pb-7 pt-8 text-white sm:px-10 sm:pb-9 sm:pt-10 lg:justify-between lg:px-12 lg:py-12">
           <img
             src="/icons/logo.jpg"
