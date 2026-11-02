@@ -97,10 +97,6 @@ function LoginPage() {
               Masuk
             </h2>
             <Link to="/" search={{ tour: true }} className="mt-2 inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-ume underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Lihat Panduan Sistem</Link>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Gunakan email atau username dan kata sandi akun Daisuki Anda.
-            </p>
-
             <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
               <div>
                 <label
