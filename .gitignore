@@ -10,6 +10,7 @@ dist
 *.log
 .demo-mitra-credentials.txt
 .DS_Store
+.github/CODEOWNERS
 
 data-science/data/*
 !data-science/data/.gitkeep
