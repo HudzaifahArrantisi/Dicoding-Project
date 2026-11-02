@@ -60,15 +60,13 @@ const steps = [
 function WelcomeVisual() {
   return (
     <div className="intro-welcome-hero">
-
-
       <h1 className="intro-welcome-title font-display">
-        Selamat Datang di
-        <span className="intro-welcome-brand">Daisuki Inventory</span>
+        <span className="intro-welcome-greeting">Selamat datang di</span>
+        <span className="intro-welcome-brand">Daisuki<span className="intro-welcome-inventory">Inventory</span></span>
       </h1>
-
+      <p className="intro-welcome-promise">Stok toko terpantau.<br />Pasokan lebih terencana.</p>
       <p className="intro-welcome-lead">
-        Platform terpadu untuk mitra cabang, hotel, resto, dan minimarket. Pantau sisa stok rak fisik, ajukan pasokan pabrik pusat, dan terima kiriman barang dalam satu alur cepat.
+        Satu tempat untuk menghubungkan laporan stok cabang dengan pengiriman dari gudang pusat.
       </p>
     </div>
   )
@@ -584,7 +582,6 @@ function SupplyVisual() {
           disabled={requested}
           className={`intro-example-action ${requested ? 'intro-example-success' : ''}`}
         >
-          {requested ? <Check size={14} /> : <Sparkles size={14} />}
           {requested ? 'Truk sedang dalam perjalanan' : 'Kirim paket'}
         </button>
 
@@ -834,7 +831,7 @@ function ScannerVisual() {
           className={`intro-example-action ${scanned ? 'intro-example-success' : ''}`}
         >
           {scanned ? <Check size={14} /> : <ScanLine size={14} />}
-          {scanned ? 'Barcode Terverifikasi: #PO-2611' : 'Simulasi: Pindai Barcode Kardus'}
+          {scanned ? 'Barcode Terverifikasi' : 'Pindai Barcode Kardus'}
         </button>
 
         {scanned && (
@@ -1194,6 +1191,7 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
     <main
       className={`intro-canvas ${isExiting ? 'intro-canvas-exiting' : ''}`}
       data-direction={direction}
+      data-welcome={step === 0}
       aria-label="Panduan Onboarding Daisuki Inventory"
     >
       {/* Top Header Bar */}
