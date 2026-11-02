@@ -260,11 +260,9 @@ def train_deep_naive_bayes(records: list[dict]) -> tuple[list[dict], list[dict],
             "velocity": velocity,
         })
 
-    # Melatih Model Multi-Factor Naive Bayes
     nb = MultiFactorNaiveBayes()
     nb.fit(X, types, labels)
 
-    # Inferensi & Scoring per Item
     item_results: list[dict] = []
     partner_agg: dict[str, dict] = {}
 
@@ -273,7 +271,6 @@ def train_deep_naive_bayes(records: list[dict]) -> tuple[list[dict], list[dict],
         probs, pred_class, driver = nb.predict_item(item["features"], r["partner_type"])
         stockout_prob = round(probs.get("RISIKO_TINGGI", 0.0) * 100.0, 1)
 
-        # Rekomendasi kuantitas restok preskriptif
         needed_qty = math.ceil(item["velocity"] * (LEAD_TIME_DAYS + 3))  # 9 hari coverage buffer
         suggested_restock = max(0, needed_qty - int(r["current_qty"]))
 
