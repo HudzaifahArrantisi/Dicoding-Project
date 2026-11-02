@@ -4,8 +4,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Maximize,
-  Minimize,
   Minus,
   PackageCheck,
   PackagePlus,
@@ -1098,13 +1096,8 @@ const visuals = [WelcomeVisual, ShelfVisual, CatalogOrderVisual, SupplyVisual, S
 export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
   const [step, setStep] = useState(0)
   const [direction, setDirection] = useState('next')
-  const [fullscreen, setFullscreen] = useState(false)
-  const [supported, setSupported] = useState(false)
-  const [fullscreenPending, setFullscreenPending] = useState(false)
   const [isExiting, setIsExiting] = useState(false)
-  const [notice, setNotice] = useState('')
   const touch = useRef<{ x: number; y: number } | null>(null)
-  const fullscreenOwned = useRef(false)
   const currentStep = useRef(step)
   const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -1136,17 +1129,10 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
   }, [])
 
   useEffect(() => {
-    let lastFullscreenExit = 0
-    const sync = () => {
-      if (!document.fullscreenElement) lastFullscreenExit = Date.now()
-      setFullscreen(Boolean(document.fullscreenElement))
-    }
-    setSupported(Boolean(document.fullscreenEnabled && document.documentElement.requestFullscreen))
-    setFullscreen(Boolean(document.fullscreenElement))
     const keydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || event.altKey || event.metaKey || event.ctrlKey) return
       if (event.key === 'Escape') {
-        if (!document.fullscreenElement && Date.now() - lastFullscreenExit > 250) finishRef.current()
+        finishRef.current()
         return
       }
       if (event.target instanceof Element && event.target.closest('button, a, input, textarea, select, [contenteditable]'))
@@ -1161,31 +1147,10 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
       }
     }
     window.addEventListener('keydown', keydown)
-    document.addEventListener('fullscreenchange', sync)
     return () => {
       window.removeEventListener('keydown', keydown)
-      document.removeEventListener('fullscreenchange', sync)
     }
   }, [])
-
-  async function toggleFullscreen() {
-    if (fullscreenPending || !supported) return
-    setFullscreenPending(true)
-    setNotice('')
-    try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen()
-        fullscreenOwned.current = true
-      } else {
-        await document.exitFullscreen()
-        fullscreenOwned.current = false
-      }
-    } catch {
-      setNotice('Layar penuh tidak dapat diaktifkan')
-    } finally {
-      setFullscreenPending(false)
-    }
-  }
 
   return (
     <main
@@ -1198,32 +1163,6 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
       <header className="intro-header">
         <button
           type="button"
-          onClick={() => void toggleFullscreen()}
-          disabled={!supported || fullscreenPending}
-          className="intro-icon-button"
-          aria-label={fullscreen ? 'Keluar layar penuh' : 'Masuk layar penuh'}
-          title={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
-        >
-          {fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
-        </button>
-
-        {/* Top Progress Segment Indicator */}
-        <div className="intro-progress" role="tablist" aria-label="Langkah panduan">
-          {steps.map((item, index) => (
-            <button
-              type="button"
-              key={item.label}
-              onClick={() => goTo(index)}
-              aria-label={`Buka langkah ${index + 1}: ${item.label}`}
-              aria-current={step === index ? 'step' : undefined}
-            >
-              <span />
-            </button>
-          ))}
-        </div>
-
-        <button
-          type="button"
           onClick={handleFinish}
           className="intro-skip"
           aria-label="Lewati panduan dan langsung masuk ke login"
@@ -1231,12 +1170,6 @@ export function OnboardingWalkthrough({ onFinish }: { onFinish: () => void }) {
           Lewati
         </button>
       </header>
-
-      {notice && (
-        <p className="intro-notice" role="status">
-          {notice}
-        </p>
-      )}
 
       {/* Main Story Content: Seamless Organic Canvas */}
       <div
