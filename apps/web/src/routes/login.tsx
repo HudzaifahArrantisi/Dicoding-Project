@@ -94,7 +94,7 @@ function LoginPage() {
         <div className="flex flex-1 flex-col justify-center px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-8 sm:block sm:bg-white sm:px-10 sm:pb-10 sm:pt-10 lg:px-12 lg:py-12">
           <div className="mx-auto max-w-sm">
             <h2 className="font-display text-2xl font-semibold text-ink-900">
-              Masuk ke akun
+              Masuk
             </h2>
             <Link to="/" search={{ tour: true }} className="mt-2 inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-ume underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Lihat Panduan Sistem</Link>
             <p className="mt-2 text-sm leading-6 text-muted">
