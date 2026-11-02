@@ -21,7 +21,7 @@
 ## 2. Peran Pengguna Sistem (User Roles)
 
 ### A. Admin Daisuki Pusat (`role: "admin"`)
-- **Monitoring Stok Cabang**: Memantau kesehatan stok seluruh cabang mitra dalam tampilan 1 kartu per cabang dengan accordion detail produk dan progress bar kapasitas rak (`RakBar`).
+- **Monitoring Stok Cabang**: Memantau kesehatan stok seluruh cabang mitra dalam tampilan 1 kartu per cabang dengan modal detail produk dan ringkasan kuantitas sisa stok riil.
 - **Monitoring Stok Gudang Pusat**: Memantau ketersediaan ready stock 4 produk di gudang pusat (kapasitas default 1.000 pcs per produk).
 - **Approval & Pengiriman Restock**:
   - Tab **Menunggu Persetujuan**: Menyetujui kuantitas restock per produk (bisa disetujui penuh, parsial, atau 0) dan memberikan catatan penjelasan jika kuantitas disesuaikan.
@@ -33,7 +33,7 @@
 - **Laporan Stok Fisik Harian (Mobile Friendly)**: Mitra menginput sisa stok fisik di rak toko dengan cepat melalui perangkat mobile.
 - **Monitoring Stok Gudang Pusat (Realtime)**: Melihat ketersediaan stok gudang pusat Daisuki secara langsung sebelum memesan.
 - **Pengajuan Restock Multi-Item**: Mengajukan restock untuk beberapa atau ke-4 produk sekaligus dalam 1 nomor pesanan (`PO-...`).
-- **Konfirmasi Penerimaan Barang**: Mengonfirmasi saat barang kiriman tiba di cabang (`dalam_pengiriman` ➔ `selesai`). Begitu dikonfirmasi, stok cabang bertambah sebesar jumlah yang disetujui (`qty_approved`). Stok gudang pusat sudah berkurang saat admin menyetujui pesanan.
+- **Konfirmasi Penerimaan Barang**: Memindai QR/Barcode resi saat barang tiba (`dalam_pengiriman` ➔ `selesai`). Stok cabang bertambah sebesar `qty_approved`. Stok gudang pusat telah direservasi saat Mitra mengajukan pesanan.
 
 ---
 
@@ -71,21 +71,30 @@ daisuki-inventory/
 
 ## 5. Aturan Bisnis & State Machine
 
-1. **Kalkulasi Status Stok Cabang**:
-   - `aman`: Stok > 50% dari kapasitas rak (`par_level`).
-   - `waspada`: Stok antara 20% s.d. 50%.
-   - `kritis`: Stok < 20% (atau sisa ≤ 10 pcs).
+1. **Stok Cabang Tanpa Batas Atas**:
+   - Tidak ada plafon stok per produk, kategori, atau mitra cabang. Angka 40 pcs maupun angka tetap lain tidak boleh menjadi kapasitas maksimum atau batas validasi laporan stok fisik.
+   - Di seluruh UI Admin dan Mitra, tampilkan stok sebagai kuantitas riil (`{current_qty} pcs` atau `Sisa Stok`). Jangan tampilkan pembagi kapasitas seperti `/ 40 pcs`, `/ par`, atau `Sisa Stok / Par`.
+   - Jangan memakai istilah `Kapasitas Rak` atau `Max Stock` untuk stok cabang. Gunakan `Sisa Stok`, `Buffer Minimal`, atau `Saran Pasokan` sesuai konteks.
+   - Form pengajuan restok tidak memiliki plafon tetap. Jumlah yang dapat dipesan dibatasi hanya oleh stok fisik gudang pusat (`products.central_stock`) pada saat transaksi.
+   - `par_level`, safety stock, dan threshold status hanya dipakai sebagai buffer pengaman serta analisis laju pemakaian; nilainya bukan kapasitas maksimum.
+
+2. **Kalkulasi Status Stok Cabang**:
+   - `aman`: Stok > 50% dari buffer acuan dinamis cabang.
+   - `waspada`: Stok > 20% sampai dengan 50% dari buffer acuan dinamis cabang.
+   - `kritis`: Stok ≤ 20% dari buffer acuan dinamis cabang.
    - `is_stale`: Cabang belum memperbarui laporan stok fisik dalam waktu > 24 jam.
 
-2. **Siklus Status Pesanan Restock**:
+3. **Siklus Status Pesanan Restock**:
    ```text
    diproses ➔ disetujui (atau ditolak / dibatalkan) ➔ dalam_pengiriman ➔ selesai
    ```
    - Stok cabang **hanya bertambah** saat pesanan berpindah dari `dalam_pengiriman` ke `selesai` melalui konfirmasi penerimaan oleh Mitra.
    - Penambahan stok di cabang menggunakan nilai `qty_approved` (bukan `qty_requested`).
-   - Stok gudang pusat berkurang sebesar `qty_approved` saat admin menyetujui pesanan. Revisi persetujuan menyesuaikan stok sebesar selisih kuantitas; pengiriman dan penerimaan tidak menguranginya lagi.
+   - Stok gudang pusat berkurang sebesar `qty_requested` saat Mitra mengajukan pesanan dalam transaksi dengan kunci baris produk (`FOR UPDATE`). Pesanan bersamaan tidak boleh memesan melebihi stok yang tersisa.
+   - Penolakan atau pembatalan sebelum pengiriman mengembalikan seluruh reservasi. Persetujuan parsial mengembalikan selisih `qty_requested - qty_approved`; revisi persetujuan menyesuaikan selisih terhadap reservasi terakhir. Pengiriman dan penerimaan tidak mengurangi stok pusat lagi.
+   - Mitra dapat mengedit pesanan `diproses` dan membatalkan pesanan `diproses` atau `disetujui` sebelum pengiriman.
 
-3. **Batasan Mutasi Database (Strict Mutation Boundary)**:
+4. **Batasan Mutasi Database (Strict Mutation Boundary)**:
    - Frontend **tidak boleh** melakukan mutasi atau query langsung ke database.
    - Semua mutasi stok, status pesanan, dan approval **wajib** melalui endpoint Elysia API di `apps/api/`.
    - `partner_id` **selalu ditentukan di sisi server** dari profil JWT pengguna terotentikasi, tidak boleh dipercaya mentah-mentah dari body request client.

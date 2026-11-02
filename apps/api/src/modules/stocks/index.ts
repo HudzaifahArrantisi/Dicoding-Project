@@ -266,12 +266,6 @@ export const stocksModule = new Elysia({ prefix: "/stocks" })
           return { error: "Produk stok cabang tidak ditemukan" };
         }
 
-        if (item.current_qty > stock.par_level) {
-          set.status = 422;
-          return {
-            error: `Jumlah ${stock.product_name} tidak boleh lebih besar dari kapasitas rak (${stock.par_level})`,
-          };
-        }
       }
 
       const results = [];

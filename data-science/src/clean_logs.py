@@ -121,7 +121,7 @@ def clean_and_summarize(raw: list[dict[str, str]], inventory: dict[tuple[str, st
         except (TypeError, ValueError):
             continue
         reference = inventory.get(key)
-        if before < 0 or after < 0 or before < after or (reference and after > int(reference["par_level"])):
+        if before < 0 or after < 0 or before < after:
             continue
         row["_moment"] = moment.isoformat()
         row["_consumption"] = str(before - after)

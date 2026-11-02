@@ -7,14 +7,32 @@ import { env } from "./env";
 import { db } from "./db/client";
 import { orders, partners } from "./db/schema";
 import { getAuthUser, validCsrf } from "./plugins/auth";
+import { isTransientDatabaseError } from "./lib/db-retry";
 import { UPLOADS_DIR } from "./lib/storage";
 import { authModule, meModule } from "./modules/auth";
 import { stocksModule, productsModule } from "./modules/stocks";
 import { ordersModule } from "./modules/orders";
 import { notificationsModule } from "./modules/notifications";
+import { adminNotificationModule } from "./modules/notifications/admin";
 import { adminModule } from "./modules/admin";
 import { regionModule } from "./modules/regions";
 import { realtimeModule } from "./realtime";
+import { runWeeklyPipeline } from "./lib/weekly-pipeline";
+
+function serverErrorDetails(error: unknown): { name: string; code?: string; message: string } {
+  let detail = error;
+  for (let depth = 0; depth < 4 && detail && typeof detail === "object"; depth++) {
+    const cause = (detail as { cause?: unknown }).cause;
+    if (!cause) break;
+    detail = cause;
+  }
+  if (!(detail instanceof Error)) return { name: "UnknownError", message: "Penyebab tidak tersedia" };
+  const code = (detail as Error & { code?: string }).code;
+  const message = detail === error && detail.message.startsWith("Failed query:")
+    ? "Query database gagal tanpa penyebab terlampir"
+    : detail.message.slice(0, 400);
+  return { name: detail.name, code, message };
+}
 
 function isAllowedOrigin(origin?: string | null): boolean {
   if (!origin) return false;
@@ -78,7 +96,9 @@ export const app = new Elysia()
     (request as unknown as { _startTime?: number })._startTime = performance.now();
     set.headers["X-Content-Type-Options"] = "nosniff";
     set.headers["Referrer-Policy"] = "no-referrer";
-    set.headers["Cache-Control"] = "no-store";
+    if (!request.url.includes("/events")) {
+      set.headers["Cache-Control"] = "no-store";
+    }
   })
   .onAfterResponse(({ request, set }) => {
     const start = (request as unknown as { _startTime?: number })._startTime;
@@ -100,14 +120,15 @@ export const app = new Elysia()
   })
   .onError(({ request, error, code, set }) => {
     const url = new URL(request.url);
-    console.error(`[ERROR] ${request.method} ${url.pathname} [${code}]`, error instanceof Error ? error.name : "Error");
+    console.error(`[ERROR] ${request.method} ${url.pathname} [${code}]`, serverErrorDetails(error));
     if (code === "VALIDATION" || code === "PARSE") {
       set.status = code === "VALIDATION" ? 422 : 400;
       return { error: "Data permintaan tidak valid" };
     }
     if (code === "UNKNOWN" || code === "INTERNAL_SERVER_ERROR") {
-      set.status = 500;
-      return { error: "Terjadi gangguan server" };
+      const temporaryDatabaseFailure = isTransientDatabaseError(error);
+      set.status = temporaryDatabaseFailure ? 503 : 500;
+      return { error: temporaryDatabaseFailure ? "Koneksi database sedang terganggu. Coba lagi sebentar." : "Terjadi gangguan server" };
     }
   })
   .use(
@@ -129,7 +150,8 @@ export const app = new Elysia()
       set.status = 403;
       return { error: "Origin tidak diizinkan" };
     }
-    if (new URL(request.url).pathname === "/auth/login") return;
+    const requestPath = new URL(request.url).pathname;
+    if (requestPath === "/auth/login" || requestPath === "/api/auth/login") return;
     const user = await getAuthUser(headers);
     if (!user) {
       set.status = 401;
@@ -196,30 +218,23 @@ export const app = new Elysia()
   .use(productsModule)
   .use(ordersModule)
   .use(notificationsModule)
+  .use(adminNotificationModule)
   .use(adminModule)
   .use(regionModule)
   .use(
     cron({
-      name: "ai-company-analytics",
-      pattern: "0 */2 * * *", // Evaluasi otonom berkala setiap 2 jam
+      name: "weekly-demand-and-restock",
+      pattern: "0 5 * * 1",
+      timezone: "Asia/Jakarta",
       run() {
-        console.log(
-          `[${new Date().toLocaleTimeString()}] 🤖 [AI CRON] Menjalankan evaluasi berkala perkembangan mitra & perusahaan...`,
-        );
-        try {
-          Bun.spawn(["python", "ai/jobs/company_analytics.py"], {
-            stdout: "ignore",
-            stderr: "ignore",
-          });
-        } catch {
-          // background execution fallback
-        }
+        return runWeeklyPipeline().catch((error) => console.error("[WEEKLY AI]", error));
       },
     }),
   )
   .listen({
     port: env.PORT,
     hostname: "0.0.0.0",
+    idleTimeout: 120,
   });
 
 console.log(

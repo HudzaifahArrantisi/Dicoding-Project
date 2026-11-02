@@ -12,7 +12,8 @@ import { Dialog } from 'radix-ui'
 import {
   AlertOctagon,
   AlertTriangle,
-  ArrowUpRight,
+  Award,
+  BarChart3,
   Bell,
   Boxes,
   BrainCircuit,
@@ -28,6 +29,7 @@ import {
   Clock,
   Database,
   Download,
+  ExternalLink,
   Factory,
   Filter,
   Flame,
@@ -46,7 +48,6 @@ import {
   Truck,
   X,
   XCircle,
-  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -62,16 +63,58 @@ import {
   PartnerStockDetailModal,
   type PartnerStockGroup,
 } from '@/components/inventory/partner-stock-detail-modal'
+import {
+  PartnerFastMovingModal,
+  type PartnerFastMovingGroup,
+} from '@/components/inventory/partner-fast-moving-modal'
 import { PartnerDetailModal } from '@/components/inventory/partner-detail-modal'
+import { RegionalAnalysis } from '@/components/inventory/regional-analysis'
 import {
   OrderStatusBadge,
   StaleBadge,
   StockStatusBadge,
 } from '@/components/inventory/status-badge'
-import { api, resolveApiUrl, resolveImageUrl, sessionRequest } from '@/lib/api'
+import {
+  getAdminMetrics,
+  getStocks,
+  getProducts,
+  getOrders,
+  getShipmentLogs,
+  getAdminNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  updateOrderStatus,
+  approveOrder,
+  getOrderReceiptProof,
+  requestReceiptProof as apiRequestReceiptProof,
+  getWeeklySummary,
+  getPartnerStockLogs,
+  getPartnerStockLogsById,
+  exportStockLogs,
+  getAiInsights,
+  getAiRunStatus,
+  triggerAiInsights,
+  getPartners,
+  createPartner as apiCreatePartner,
+  updatePartner as apiUpdatePartner,
+  deletePartner as apiDeletePartner,
+  bulkDeletePartners,
+  updateCentralStock,
+  checkDatabaseHealth,
+  resolveImageUrl,
+  type AlertOrder,
+  type NotificationFeed,
+  type ShipmentLogPage,
+  type WeeklySummary,
+  type AIInsights,
+  type AiRunStatus,
+  type ReceiptProofData,
+  type StockLogPartner,
+  EMPTY_ALERT_ORDERS,
+} from '@/lib/api'
 import { useInventoryEvents } from '@/lib/inventory-events'
 import { RegionPicker, emptyRegion } from '@/components/inventory/region-picker'
-import { apiError, unwrapData } from '@/lib/api-response'
+import { DeliveryReceiptModal } from '@/components/inventory/delivery-receipt-modal'
 import { useAuth } from '@/lib/auth'
 import type {
   ManagedPartner,
@@ -80,6 +123,7 @@ import type {
   PartnerType,
   Product,
   StockItem,
+  StockLog,
 } from '@/lib/inventory-types'
 
 export const Route = createFileRoute('/admin')({ component: AdminDashboard })
@@ -119,159 +163,6 @@ const adminNavTabs: Array<{
   { id: 'ai-insights', label: 'AI Insights', shortLabel: 'AI', Icon: BrainCircuit },
 ]
 
-const EMPTY_ORDERS: Order[] = []
-
-interface WeeklySummary {
-  total_logs_this_week: number
-  active_partners_count: number
-  total_units_consumed: number
-  daily_update_breakdown: Array<{ day: string; active_partners: number; log_count: number }>
-}
-
-interface StockLog {
-  id: number
-  partner_id: string
-  partner_name: string
-  product_name: string
-  qty_before: number
-  qty_after: number
-  delta: number
-  source: string
-  created_at: string
-}
-
-interface StockLogPartner {
-  partner_id: string
-  partner_name: string
-  log_count: number
-  latest_update: string
-}
-
-interface ShipmentLog {
-  id: string
-  order_no: string
-  partner_name: string
-  status: OrderStatus
-  shipped_at: string
-  items: Array<{
-    order_id: string
-    product_name: string
-    product_unit: string
-    qty_approved: number | null
-  }>
-}
-
-interface ShipmentLogPage {
-  data: ShipmentLog[]
-  total: number
-  page: number
-  page_size: number
-}
-
-interface AIInsights {
-  engine_status?: {
-    is_active: boolean
-    last_run_at: string
-    version: string
-  }
-  kpi_summary?: {
-    weekly_sales_units: number
-    sales_growth_percentage: number
-    restock_fulfillment_rate: number
-    central_stock_health_days: number
-    critical_high_turnover_count: number
-    stockout_risk_count: number
-  }
-  fast_moving_products?: Array<{
-    partner_id: string
-    partner_name: string
-    partner_type: string
-    product_id: string
-    product_name: string
-    product_sku: string
-    current_qty: number
-    par_level: number
-    weekly_consumption: number
-    daily_velocity: number
-    critical_frequency: number
-    turnover_rate: number
-    suggested_par_level: number
-    par_delta: number
-    reason: string
-  }>
-  stockout_deficit_analysis?: Array<{
-    partner_id: string
-    partner_name: string
-    partner_type: string
-    product_id: string
-    product_name: string
-    current_qty: number
-    par_level: number
-    days_of_cover: number
-    critical_frequency: number
-    root_cause: 'UNDER_CAPACITY' | 'LATE_REORDER' | 'SUPPLY_DEFICIT'
-    root_cause_label: string
-    risk_level: 'DARURAT' | 'WASPADA'
-    action_recommendation: string
-  }>
-  factory_procurement_forecast?: Array<{
-    product_id: string
-    product_name: string
-    product_sku: string
-    central_stock: number
-    total_partner_demand_weekly: number
-    estimated_runout_days: number
-    suggested_factory_batch_order: number
-    urgency: 'CRITICAL' | 'WARNING' | 'HEALTHY'
-  }>
-  frequent_stockouts: Array<{
-    partner_id: string
-    partner_name: string
-    product_id: string
-    product_name: string
-    current_qty: number
-    par_level: number
-    critical_log_count: number
-  }>
-  recommendations: Array<{
-    partner_id: string
-    partner_name: string
-    product_id: string
-    product_name: string
-    forecast_qty: number
-    suggested_qty: number
-    days_of_cover: string | null
-    model_version: string
-    generated_at: string
-  }>
-  ai_digest?: {
-    headline: string
-    sales_insight: string
-    restock_insight: string
-    procurement_insight: string
-    generated_at: string
-  }
-}
-
-async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const apiUrl = resolveApiUrl()
-  const response = await fetch(`${apiUrl}/admin/${path}`, sessionRequest({
-    ...init,
-    headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init?.headers,
-    },
-  }))
-  if (!response.ok) {
-    if (response.status === 401) {
-      if (typeof window !== 'undefined') window.location.href = '/login'
-      throw new Error('Sesi login telah berakhir.')
-    }
-    const result = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(result?.error ?? 'Permintaan belum berhasil. Coba lagi.')
-  }
-  return response.json() as Promise<T>
-}
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
@@ -352,10 +243,40 @@ function ShipmentLogPanel({
                       <h3 className="font-display text-lg font-semibold text-ink-900">{entry.partner_name}</h3>
                       <p className="mt-1 text-sm text-muted">Dikirim {sentAt} WIB</p>
                     </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${entry.status === 'selesai' ? 'bg-ok-bg text-ok-fg' : 'bg-ink-50 text-ink-700'}`}>
-                        {entry.status === 'selesai' ? 'Sudah diterima' : 'Dalam pengiriman'}
-                      </span>
+                    <div className="flex shrink-0 items-start gap-2">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${entry.status === 'selesai' ? 'bg-ok-bg text-ok-fg' : 'bg-ink-50 text-ink-700'}`}>
+                          {entry.status === 'selesai' ? 'Sudah diterima' : 'Dalam pengiriman'}
+                        </span>
+                        {entry.status === 'selesai' && entry.receipt_photo_data_url ? (() => {
+                          const resolvedProofUrl = resolveImageUrl(entry.receipt_photo_data_url) ?? ''
+                          if (!resolvedProofUrl) return null
+                          return (
+                            <a
+                              href={resolvedProofUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                if (resolvedProofUrl.startsWith('data:')) {
+                                  e.preventDefault()
+                                  const win = window.open('')
+                                  if (win) {
+                                    win.document.write(
+                                      `<!DOCTYPE html><html><head><title>Bukti Foto Penerimaan Pesanan ${entry.order_no}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body{margin:0;background:#0f172a;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.5);}</style></head><body><img src="${resolvedProofUrl}" alt="Bukti Penerimaan" /></body></html>`
+                                    )
+                                    win.document.close()
+                                  }
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700 hover:underline transition-colors"
+                              title={`Buka foto bukti penerimaan ${entry.order_no} di tab baru`}
+                            >
+                              <ExternalLink className="size-3 text-blue-500" aria-hidden="true" />
+                              <span>Bukti</span>
+                            </a>
+                          )
+                        })() : null}
+                      </div>
                       <button
                         type="button"
                         onClick={() => onViewOrder(entry.id)}
@@ -414,9 +335,9 @@ function DataSciencePanel({
   onExport: () => void
 }) {
   const [selectedPartner, setSelectedPartner] = useState<StockLogPartner | null>(null)
-  const partnerLogs = useQuery<{ data: StockLog[] }>({
+  const partnerLogs = useQuery<StockLog[]>({
     queryKey: ['admin-stock-logs-partner', selectedPartner?.partner_id],
-    queryFn: () => adminFetch(`stock-logs/partners/${selectedPartner?.partner_id}`),
+    queryFn: () => getPartnerStockLogsById(selectedPartner!.partner_id),
     enabled: selectedPartner !== null,
   })
 
@@ -438,29 +359,18 @@ function DataSciencePanel({
         </button>
       </div>
 
-      {summaryError ? <ErrorState message={getErrorMessage(summaryError)} onRetry={onRetry} /> : null}
       <div className="grid gap-3 sm:grid-cols-3">
-        <InsightMetric label="Total Log Minggu Ini" value={summaryLoading ? '…' : summary?.total_logs_this_week ?? 0} />
-        <InsightMetric label="Mitra Aktif Melapor" value={summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`} detail="Mitra aktif yang mengirim log dalam 7 hari" />
-        <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
+        <InsightMetric label="Total Log Minggu Ini" value={summaryError ? '—' : summaryLoading ? '…' : summary?.total_logs_this_week ?? 0} />
+        <InsightMetric label="Mitra Aktif Melapor" value={summaryError ? '—' : summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`} detail="Mitra aktif yang mengirim log dalam 7 hari" />
+        <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
       </div>
 
-      {summary?.daily_update_breakdown.length ? (
-        <div className="dashboard-surface px-4 py-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink-900">Laporan harian</h3>
-            <span className="text-xs text-muted">Mitra unik</span>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-1">
-            {summary.daily_update_breakdown.map((day) => (
-              <div key={day.day} className="min-w-14 flex-1">
-                <p className="text-xs text-muted">{new Date(`${day.day}T12:00:00`).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' })}</p>
-                <p className="mt-1 font-display text-lg font-semibold tabular-nums text-ink-900">{day.active_partners}<span className="ml-1 text-[10px] font-normal text-muted">/ {totalPartners}</span></p>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <PartnerDailyLogChart
+        summary={summary}
+        loading={summaryLoading}
+        error={summaryError}
+        onRetry={onRetry}
+      />
 
       <div className="dashboard-surface overflow-hidden">
         <div className="border-b border-line px-4 py-3">
@@ -505,6 +415,809 @@ function DataSciencePanel({
         }}
         query={partnerLogs}
       />
+    </section>
+  )
+}
+
+function PartnerDailyLogChart({
+  summary,
+  loading,
+  error,
+  onRetry,
+}: {
+  summary?: WeeklySummary
+  loading: boolean
+  error: Error | null
+  onRetry: () => void
+}) {
+  const [viewMode, setViewMode] = useState<'both' | 'bar' | 'line'>('both')
+  const [hoveredPartnerId, setHoveredPartnerId] = useState<string | null>(null)
+  const [hoveredDayIndex, setHoveredDayIndex] = useState<number | null>(null)
+
+  const days = summary?.daily_update_breakdown ?? []
+
+  // Agregasi mutasi stok per mitra selama 1 minggu penuh
+  const partnerWeeklyStats = useMemo(() => {
+    if (!summary) return []
+
+    const map = new Map<
+      string,
+      {
+        partner_id: string
+        partner_name: string
+        total_logs: number
+        active_days: number
+        peak_day: string
+        peak_day_logs: number
+        daily_breakdown: Record<string, number>
+      }
+    >()
+
+    for (const entry of summary.partner_daily_log_breakdown) {
+      if (!map.has(entry.partner_id)) {
+        map.set(entry.partner_id, {
+          partner_id: entry.partner_id,
+          partner_name: entry.partner_name,
+          total_logs: 0,
+          active_days: 0,
+          peak_day: entry.day,
+          peak_day_logs: 0,
+          daily_breakdown: {},
+        })
+      }
+      const stat = map.get(entry.partner_id)!
+      stat.daily_breakdown[entry.day] = (stat.daily_breakdown[entry.day] ?? 0) + entry.log_count
+      stat.total_logs += entry.log_count
+      if (entry.log_count > 0) {
+        stat.active_days += 1
+      }
+      if (entry.log_count > stat.peak_day_logs) {
+        stat.peak_day_logs = entry.log_count
+        stat.peak_day = entry.day
+      }
+    }
+
+    const totalLogsNetwork = summary.total_logs_this_week || 1
+    return Array.from(map.values())
+      .filter((p) => p.total_logs > 0)
+      .map((p) => ({
+        ...p,
+        percentage_of_total: Math.round((p.total_logs / totalLogsNetwork) * 1000) / 10,
+      }))
+      .sort(
+        (a, b) =>
+          b.total_logs - a.total_logs || a.partner_name.localeCompare(b.partner_name, 'id-ID'),
+      )
+  }, [summary])
+
+  const topPartner = partnerWeeklyStats.length > 0 ? partnerWeeklyStats[0] : undefined
+  const maxWeeklyLogs = partnerWeeklyStats.reduce((max, p) => Math.max(max, p.total_logs), 0)
+
+  // Hari terpadat dalam 7 hari
+  const peakDayEntry = useMemo(() => {
+    if (days.length === 0) return null
+    return [...days].sort((a, b) => b.log_count - a.log_count)[0]
+  }, [days])
+
+  const peakDayLabel = peakDayEntry
+    ? new Date(`${peakDayEntry.day}T12:00:00`).toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short',
+      })
+    : '-'
+
+  // Konfigurasi Geometri SVG Line Chart
+  const lineW = 680
+  const lineH = 240
+  const linePadding = { top: 25, right: 30, bottom: 42, left: 45 }
+  const linePlotW = lineW - linePadding.left - linePadding.right
+  const linePlotH = lineH - linePadding.top - linePadding.bottom
+
+  const maxDailyLog = Math.max(...days.map((d) => d.log_count), 5)
+  const lineYMax = Math.max(10, Math.ceil(maxDailyLog / 5) * 5)
+
+  const getLineX = (i: number) => {
+    if (days.length <= 1) return linePadding.left + linePlotW / 2
+    return linePadding.left + (i / (days.length - 1)) * linePlotW
+  }
+
+  const getLineY = (val: number) => {
+    return linePadding.top + linePlotH - (Math.min(val, lineYMax) / lineYMax) * linePlotH
+  }
+
+  const totalPoints = days.map((d, i) => ({
+    x: getLineX(i),
+    y: getLineY(d.log_count),
+    log_count: d.log_count,
+    active_partners: d.active_partners,
+    day: d.day,
+  }))
+
+  const totalLinePath = totalPoints
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ')
+
+  const totalAreaPath =
+    totalPoints.length > 0
+      ? `${totalLinePath} L ${totalPoints[totalPoints.length - 1].x.toFixed(1)} ${(linePadding.top + linePlotH).toFixed(1)} L ${totalPoints[0].x.toFixed(1)} ${(linePadding.top + linePlotH).toFixed(1)} Z`
+      : ''
+
+  // Trend line untuk top 1 & top 2 partner
+  const top1 = partnerWeeklyStats.length > 0 ? partnerWeeklyStats[0] : undefined
+  const top1Points = top1
+    ? days.map((d, i) => ({
+        x: getLineX(i),
+        y: getLineY(top1.daily_breakdown[d.day] ?? 0),
+        val: top1.daily_breakdown[d.day] ?? 0,
+      }))
+    : []
+  const top1LinePath = top1Points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ')
+
+  const top2 = partnerWeeklyStats.length > 1 ? partnerWeeklyStats[1] : undefined
+  const top2Points = top2
+    ? days.map((d, i) => ({
+        x: getLineX(i),
+        y: getLineY(top2.daily_breakdown[d.day] ?? 0),
+        val: top2.daily_breakdown[d.day] ?? 0,
+      }))
+    : []
+  const top2LinePath = top2Points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(' ')
+
+  // Konfigurasi Geometri SVG Bar Chart (Top 7 Mitra)
+  const topPartnersForBar = partnerWeeklyStats.slice(0, 7)
+  const barSvgW = 640
+  const barSvgH = 240
+  const barPadding = { top: 32, right: 25, bottom: 56, left: 45 }
+  const barPlotW = barSvgW - barPadding.left - barPadding.right
+  const barPlotH = barSvgH - barPadding.top - barPadding.bottom
+
+  const barYMax = Math.max(10, Math.ceil(maxWeeklyLogs / 5) * 5)
+  const barCount = topPartnersForBar.length
+  const barSlotW = barCount > 0 ? barPlotW / barCount : barPlotW
+  const barWidth = Math.min(48, Math.max(26, barSlotW * 0.58))
+
+  return (
+    <section className="dashboard-surface overflow-hidden" aria-labelledby="partner-weekly-log-title">
+      {/* Header dengan Title dan View Switcher */}
+      <div className="flex flex-col gap-3 border-b border-line p-3.5 sm:p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-ink-900 text-white">
+              <BarChart3 className="size-3.5" aria-hidden="true" />
+            </span>
+            <h2 id="partner-weekly-log-title" className="font-semibold text-ink-900 truncate">
+              Analisis Perubahan Stok Mingguan per Mitra
+            </h2>
+          </div>
+          <p className="mt-1 text-xs text-muted leading-relaxed">
+            Rekap agregat 1 minggu: volume mutasi stok per mitra dan tren aktivitas 7 hari terakhir.
+          </p>
+        </div>
+
+        {/* View Switcher Toggle - Touch-Friendly 44px on Mobile */}
+        <div
+          className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-ink-50/70 p-1 text-xs w-full sm:w-auto shrink-0"
+          role="tablist"
+          aria-label="Tampilan diagram log mingguan"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'both'}
+            onClick={() => setViewMode('both')}
+            className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
+              viewMode === 'both'
+                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                : 'text-muted hover:text-ink-900'
+            }`}
+          >
+            Semua
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'bar'}
+            onClick={() => setViewMode('bar')}
+            className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
+              viewMode === 'bar'
+                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                : 'text-muted hover:text-ink-900'
+            }`}
+          >
+            Peringkat
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'line'}
+            onClick={() => setViewMode('line')}
+            className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
+              viewMode === 'line'
+                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                : 'text-muted hover:text-ink-900'
+            }`}
+          >
+            Tren 7 Hari
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="p-6 sm:p-8">
+          <LoadingState label="Memuat rekap analisis log mingguan..." />
+        </div>
+      ) : error ? (
+        <div className="p-4 sm:p-5">
+          <ErrorState message={getErrorMessage(error)} onRetry={onRetry} />
+        </div>
+      ) : partnerWeeklyStats.length === 0 ? (
+        <div className="p-4 sm:p-5">
+          <EmptyState
+            title="Belum ada aktivitas log minggu ini"
+            description="Diagram akan otomatis terisi setelah mitra mencatat perubahan atau mutasi stok."
+          />
+        </div>
+      ) : (
+        <div className="p-3.5 sm:p-5 space-y-4 sm:space-y-5">
+          {/* Executive Highlight Cards (1 Minggu Penuh) */}
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
+            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <Award className="size-3.5 text-ume shrink-0" aria-hidden="true" />
+                <span>Mitra Terbanyak Update</span>
+              </div>
+              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900 truncate">
+                {topPartner ? topPartner.partner_name : '-'}
+              </p>
+              <p className="mt-0.5 text-xs text-muted tabular-nums">
+                <span className="font-semibold text-ume">{topPartner?.total_logs ?? 0} log</span> ({topPartner?.percentage_of_total ?? 0}% dari seluruh jaringan)
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <TrendingUp className="size-3.5 text-ink-900 shrink-0" aria-hidden="true" />
+                <span>Hari Aktivitas Puncak</span>
+              </div>
+              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900">
+                {peakDayLabel}
+              </p>
+              <p className="mt-0.5 text-xs text-muted tabular-nums">
+                <span className="font-semibold text-ink-900">{peakDayEntry?.log_count ?? 0} log</span> tercatat dari {peakDayEntry?.active_partners ?? 0} cabang
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
+                <BarChart3 className="size-3.5 text-teal-700 shrink-0" aria-hidden="true" />
+                <span>Konsentrasi Perubahan</span>
+              </div>
+              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900 tabular-nums">
+                {summary && summary.total_logs_this_week > 0 && partnerWeeklyStats.length > 0
+                  ? `${Math.round(
+                      (partnerWeeklyStats.slice(0, 3).reduce((sum, p) => sum + p.total_logs, 0) /
+                        summary.total_logs_this_week) *
+                        100,
+                    )}%`
+                  : '0%'}
+              </p>
+              <p className="mt-0.5 text-xs text-muted">
+                Dihasilkan oleh Top 3 mitra paling aktif minggu ini
+              </p>
+            </div>
+          </div>
+
+          {/* Container Charts (Bisa Both, Hanya Bar, atau Hanya Line) */}
+          <div className={`grid gap-4 sm:gap-5 ${viewMode === 'both' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+            {/* 1. BAR CHART: Peringkat Volume Perubahan Stok per Mitra */}
+            {(viewMode === 'both' || viewMode === 'bar') && (
+              <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4 shadow-2xs">
+                <div className="flex items-center justify-between pb-3 border-b border-line">
+                  <div>
+                    <h3 className="text-sm font-semibold text-ink-900">
+                      Peringkat Perubahan Stok
+                    </h3>
+                    <p className="text-[11px] text-muted">
+                      Total frekuensi log perubahan stok per mitra dalam 1 minggu
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-semibold text-ink-900 tabular-nums">
+                    {partnerWeeklyStats.length} Mitra
+                  </span>
+                </div>
+
+                {/* SVG Bar Chart Visualization */}
+                <div className="relative mt-3 w-full overflow-hidden">
+                  <svg
+                    viewBox={`0 0 ${barSvgW} ${barSvgH}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    className="w-full h-auto max-w-full overflow-visible"
+                    aria-label="Diagram batang peringkat perubahan stok mitra"
+                  >
+                    {/* Grid horizontal */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
+                      const y = barPadding.top + barPlotH * (1 - pct)
+                      const val = Math.round(barYMax * pct)
+                      return (
+                        <g key={idx}>
+                          <line
+                            x1={barPadding.left}
+                            y1={y}
+                            x2={barPadding.left + barPlotW}
+                            y2={y}
+                            stroke="#e2e8f0"
+                            strokeDasharray={pct === 0 ? 'none' : '3 3'}
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={barPadding.left - 6}
+                            y={y + 3.5}
+                            textAnchor="end"
+                            className="text-[10px] fill-slate-400 font-sans tabular-nums"
+                          >
+                            {val}
+                          </text>
+                        </g>
+                      )
+                    })}
+
+                    {/* Bars */}
+                    {topPartnersForBar.map((entry, idx) => {
+                      const slotX = barPadding.left + idx * barSlotW
+                      const barX = slotX + (barSlotW - barWidth) / 2
+                      const barH = (entry.total_logs / barYMax) * barPlotH
+                      const barY = barPadding.top + barPlotH - barH
+                      const isTop = idx === 0
+                      const isHovered = hoveredPartnerId === entry.partner_id
+
+                      const shortName =
+                        entry.partner_name.length > 9
+                          ? `${entry.partner_name.slice(0, 8)}…`
+                          : entry.partner_name
+
+                      return (
+                        <g
+                          key={entry.partner_id}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${entry.partner_name}: ${entry.total_logs} log`}
+                          className="cursor-pointer transition-opacity outline-hidden focus:outline-hidden"
+                          onClick={() =>
+                            setHoveredPartnerId((prev) =>
+                              prev === entry.partner_id ? null : entry.partner_id,
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setHoveredPartnerId((prev) =>
+                                prev === entry.partner_id ? null : entry.partner_id,
+                              )
+                            }
+                          }}
+                          onMouseEnter={() => setHoveredPartnerId(entry.partner_id)}
+                          onMouseLeave={() => setHoveredPartnerId(null)}
+                        >
+                          {/* Hit area lebih besar untuk sentuhan tap mobile */}
+                          <rect
+                            x={slotX}
+                            y={barPadding.top}
+                            width={barSlotW}
+                            height={barPlotH + barPadding.bottom}
+                            fill="transparent"
+                          />
+
+                          {/* Highlight background saat hover/tap */}
+                          {isHovered && (
+                            <rect
+                              x={slotX + 2}
+                              y={barPadding.top}
+                              width={barSlotW - 4}
+                              height={barPlotH}
+                              fill="#f1f5f9"
+                              rx="4"
+                              opacity="0.8"
+                            />
+                          )}
+
+                          {/* Batang Bar */}
+                          <rect
+                            x={barX}
+                            y={barY}
+                            width={barWidth}
+                            height={Math.max(barH, 3)}
+                            rx="4"
+                            fill={
+                              isTop
+                                ? '#b83a6a'
+                                : idx === 1
+                                ? '#334155'
+                                : idx === 2
+                                ? '#0d9488'
+                                : '#64748b'
+                            }
+                            className={`transition-all duration-150 ${
+                              isHovered ? 'brightness-110 filter' : ''
+                            }`}
+                          />
+
+                          {/* Angka nilai di atas bar */}
+                          <text
+                            x={barX + barWidth / 2}
+                            y={Math.max(barY - 6, barPadding.top - 2)}
+                            textAnchor="middle"
+                            className={`text-[11px] font-semibold tabular-nums ${
+                              isTop ? 'fill-rose-700' : 'fill-slate-700'
+                            }`}
+                          >
+                            {entry.total_logs}
+                          </text>
+
+                          {/* Label nama mitra di sumbu X */}
+                          <text
+                            x={barX + barWidth / 2}
+                            y={barPadding.top + barPlotH + 16}
+                            textAnchor="middle"
+                            className={`text-[10px] font-medium transition-colors ${
+                              isHovered ? 'fill-slate-900 font-semibold' : 'fill-slate-600'
+                            }`}
+                          >
+                            {shortName}
+                          </text>
+
+                          {/* Label persentase di bawah nama */}
+                          <text
+                            x={barX + barWidth / 2}
+                            y={barPadding.top + barPlotH + 28}
+                            textAnchor="middle"
+                            className="text-[9px] fill-slate-400 tabular-nums"
+                          >
+                            {entry.percentage_of_total}%
+                          </text>
+                        </g>
+                      )
+                    })}
+                  </svg>
+                </div>
+
+                {/* Companion Ranked List - Touch-Friendly Buttons */}
+                <div className="mt-3 border-t border-line pt-3">
+                  <div className="flex items-center justify-between text-[11px] font-medium text-muted mb-2 px-1">
+                    <span>Daftar Peringkat Aktivitas</span>
+                    <span>Total 1 Minggu</span>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                    {partnerWeeklyStats.map((p, idx) => {
+                      const isHovered = hoveredPartnerId === p.partner_id
+                      const barPercent = maxWeeklyLogs > 0 ? (p.total_logs / maxWeeklyLogs) * 100 : 0
+                      return (
+                        <button
+                          key={p.partner_id}
+                          type="button"
+                          onClick={() =>
+                            setHoveredPartnerId((prev) =>
+                              prev === p.partner_id ? null : p.partner_id,
+                            )
+                          }
+                          onMouseEnter={() => setHoveredPartnerId(p.partner_id)}
+                          onMouseLeave={() => setHoveredPartnerId(null)}
+                          className={`w-full text-left rounded-lg p-2.5 min-h-[44px] transition-all active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-ink-900 ${
+                            isHovered
+                              ? 'bg-ink-100 ring-1 ring-ink-300'
+                              : idx === 0
+                              ? 'bg-rose-50/60'
+                              : 'bg-ink-50/40 hover:bg-ink-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums ${
+                                  idx === 0
+                                    ? 'bg-ume text-white'
+                                    : idx === 1
+                                    ? 'bg-slate-800 text-white'
+                                    : idx === 2
+                                    ? 'bg-teal-700 text-white'
+                                    : 'bg-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {idx + 1}
+                              </span>
+                              <span className="font-semibold text-ink-900 truncate">
+                                {p.partner_name}
+                              </span>
+                              {idx === 0 && (
+                                <span className="shrink-0 rounded-xs bg-rose-100 px-1.5 py-0.2 text-[9px] font-bold text-rose-700 uppercase tracking-wider">
+                                  Terbanyak
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                              <span className="font-semibold tabular-nums text-ink-900">
+                                {p.total_logs} log
+                              </span>
+                              <span className="ml-1 text-[11px] text-muted tabular-nums">
+                                ({p.percentage_of_total}%)
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Progress bar visualizer */}
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className={`h-full rounded-full ${
+                                  idx === 0 ? 'bg-ume' : 'bg-slate-500'
+                                }`}
+                                style={{ width: `${barPercent}%` }}
+                              />
+                            </div>
+                            <span className="shrink-0 text-[10px] text-muted tabular-nums">
+                              Aktif {p.active_days}/7 hari
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. LINE CHART: Tren Waktu Perubahan Stok 7 Hari */}
+            {(viewMode === 'both' || viewMode === 'line') && (
+              <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4 shadow-2xs">
+                <div className="flex items-center justify-between pb-3 border-b border-line">
+                  <div>
+                    <h3 className="text-sm font-semibold text-ink-900">
+                      Tren Perubahan Stok 7 Hari
+                    </h3>
+                    <p className="text-[11px] text-muted">
+                      Dinamika fluktuasi perubahan log per hari sepanjang minggu
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-800">
+                    7 Hari Terakhir
+                  </span>
+                </div>
+
+                {/* SVG Line Chart */}
+                <div className="relative mt-3 w-full overflow-hidden">
+                  <svg
+                    viewBox={`0 0 ${lineW} ${lineH}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    className="w-full h-auto max-w-full overflow-visible"
+                    aria-label="Grafik garis tren perubahan stok mingguan"
+                  >
+                    <defs>
+                      <linearGradient id="totalLogsAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0f172a" stopOpacity="0.08" />
+                        <stop offset="100%" stopColor="#0f172a" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Grid horizontal */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
+                      const y = linePadding.top + linePlotH * (1 - pct)
+                      const val = Math.round(lineYMax * pct)
+                      return (
+                        <g key={idx}>
+                          <line
+                            x1={linePadding.left}
+                            y1={y}
+                            x2={linePadding.left + linePlotW}
+                            y2={y}
+                            stroke="#e2e8f0"
+                            strokeDasharray={pct === 0 ? 'none' : '3 3'}
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={linePadding.left - 6}
+                            y={y + 3.5}
+                            textAnchor="end"
+                            className="text-[10px] fill-slate-400 font-sans tabular-nums"
+                          >
+                            {val}
+                          </text>
+                        </g>
+                      )
+                    })}
+
+                    {/* Area fill di bawah garis total */}
+                    {totalAreaPath && (
+                      <path d={totalAreaPath} fill="url(#totalLogsAreaGrad)" />
+                    )}
+
+                    {/* Polyline Top 2 Partner (Teal) */}
+                    {top2LinePath && (
+                      <path
+                        d={top2LinePath}
+                        fill="none"
+                        stroke="#0d9488"
+                        strokeWidth="1.75"
+                        strokeDasharray="4 3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+
+                    {/* Polyline Top 1 Partner (Rose Ume) */}
+                    {top1LinePath && (
+                      <path
+                        d={top1LinePath}
+                        fill="none"
+                        stroke="#b83a6a"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+
+                    {/* Polyline Total Seluruh Jaringan (Slate Ink Utama) */}
+                    {totalLinePath && (
+                      <path
+                        d={totalLinePath}
+                        fill="none"
+                        stroke="#0f172a"
+                        strokeWidth="2.75"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+
+                    {/* Vertical guideline saat hover/tap hari tertentu */}
+                    {hoveredDayIndex !== null && totalPoints[hoveredDayIndex] && (
+                      <line
+                        x1={totalPoints[hoveredDayIndex].x}
+                        y1={linePadding.top}
+                        x2={totalPoints[hoveredDayIndex].x}
+                        y2={linePadding.top + linePlotH}
+                        stroke="#0f172a"
+                        strokeWidth="1.5"
+                        strokeDasharray="3 3"
+                      />
+                    )}
+
+                    {/* Data Points lingkaran untuk Total Network */}
+                    {totalPoints.map((pt, idx) => {
+                      const isHovered = hoveredDayIndex === idx
+                      const dayLabel = new Date(`${pt.day}T12:00:00`).toLocaleDateString('id-ID', {
+                        weekday: 'short',
+                        day: 'numeric',
+                      })
+
+                      return (
+                        <g
+                          key={pt.day}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${dayLabel}: ${pt.log_count} log dari ${pt.active_partners} mitra`}
+                          className="cursor-pointer outline-hidden focus:outline-hidden"
+                          onClick={() =>
+                            setHoveredDayIndex((prev) => (prev === idx ? null : idx))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setHoveredDayIndex((prev) => (prev === idx ? null : idx))
+                            }
+                          }}
+                          onMouseEnter={() => setHoveredDayIndex(idx)}
+                          onMouseLeave={() => setHoveredDayIndex(null)}
+                        >
+                          {/* Hit area transparan luas untuk mobile touch (min 44px lebar) */}
+                          <rect
+                            x={pt.x - 22}
+                            y={linePadding.top}
+                            width={44}
+                            height={linePlotH + linePadding.bottom}
+                            fill="transparent"
+                          />
+
+                          {/* Node lingkaran */}
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r={isHovered ? 6 : 4}
+                            fill="#ffffff"
+                            stroke="#0f172a"
+                            strokeWidth={isHovered ? 3 : 2}
+                            className="transition-all"
+                          />
+
+                          {/* Titik kecil Top 1 partner */}
+                          {top1Points[idx] && (
+                            <circle
+                              cx={top1Points[idx].x}
+                              cy={top1Points[idx].y}
+                              r={3}
+                              fill="#b83a6a"
+                            />
+                          )}
+
+                          {/* Label Hari di Sumbu X */}
+                          <text
+                            x={pt.x}
+                            y={linePadding.top + linePlotH + 18}
+                            textAnchor="middle"
+                            className={`text-[10px] font-medium transition-colors ${
+                              isHovered ? 'fill-slate-900 font-bold' : 'fill-slate-600'
+                            }`}
+                          >
+                            {dayLabel}
+                          </text>
+
+                          {/* Angka nilai saat hover atau tap */}
+                          {isHovered && (
+                            <text
+                              x={pt.x}
+                              y={Math.max(pt.y - 10, linePadding.top - 2)}
+                              textAnchor="middle"
+                              className="text-[11px] font-bold fill-slate-900 tabular-nums"
+                            >
+                              {pt.log_count}
+                            </text>
+                          )}
+                        </g>
+                      )
+                    })}
+                  </svg>
+                </div>
+
+                {/* Legend & Detail Box Line Chart */}
+                <div className="mt-3 border-t border-line pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="size-2.5 rounded-full bg-[#0f172a]" />
+                        <span className="font-medium text-slate-700">Total Semua Mitra</span>
+                      </div>
+                      {top1 && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2.5 rounded-full bg-[#b83a6a]" />
+                          <span className="font-medium text-slate-700 truncate max-w-[130px]">
+                            {top1.partner_name} (#1)
+                          </span>
+                        </div>
+                      )}
+                      {top2 && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-2.5 rounded-full bg-[#0d9488]" />
+                          <span className="font-medium text-slate-700 truncate max-w-[130px]">
+                            {top2.partner_name} (#2)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Summary interaktif saat titik hari dihover/tap */}
+                    {hoveredDayIndex !== null && days[hoveredDayIndex] ? (
+                      <div className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-900 tabular-nums">
+                        {new Date(`${days[hoveredDayIndex].day}T12:00:00`).toLocaleDateString('id-ID', {
+                          weekday: 'long',
+                          day: 'numeric',
+                          month: 'short',
+                        })}
+                        : <span className="font-bold">{days[hoveredDayIndex].log_count} log</span> dari {days[hoveredDayIndex].active_partners} mitra
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-muted">
+                        Sentuh atau arahkan kursor ke titik grafik untuk detail
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -647,15 +1360,14 @@ function PartnerStockLogDialog({
   partner: StockLogPartner | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  query: UseQueryResult<{ data: StockLog[] }>
+  query: UseQueryResult<StockLog[]>
 }) {
   const dbHealthQuery = useQuery({
     queryKey: ['health-db'],
     queryFn: async () => {
       try {
-        const response = await api.health.db.get()
-        if (response.error) return false
-        return 'status' in response.data && response.data.status === 'ok'
+        const response = await checkDatabaseHealth()
+        return response.status === 'ok'
       } catch {
         return false
       }
@@ -679,7 +1391,7 @@ function PartnerStockLogDialog({
     }
   }, [open, partner?.partner_id])
 
-  const allLogs = useMemo(() => query.data?.data ?? [], [query.data])
+  const allLogs = useMemo(() => query.data ?? [], [query.data])
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
 
@@ -1227,528 +1939,785 @@ function AIInsightsPanel({
   loading,
   error,
   onRetry,
+  onReviewOrders,
 }: {
   data?: AIInsights
   loading: boolean
   error: Error | null
   onRetry: () => void
+  onReviewOrders: () => void
 }) {
-  const [runningAi, setRunningAi] = useState(false)
+  const [startingAi, setStartingAi] = useState(false)
+  const activeRun = useRef<string | null>(null)
+  const runStatus = useQuery<AiRunStatus>({
+    queryKey: ['admin-ai-run'],
+    queryFn: getAiRunStatus,
+    refetchInterval: (query) => query.state.data?.status === 'running' ? 2_000 : false,
+  })
+  const [subTab, setSubTab] = useState<'wilayah' | 'laris' | 'defisit' | 'pabrik'>('defisit')
+  const [selectedPartnerGroup, setSelectedPartnerGroup] = useState<PartnerFastMovingGroup | null>(null)
   const kpi = data?.kpi_summary
   const fastMoving = data?.fast_moving_products ?? []
+  const partnerFastMovingGroups = useMemo<PartnerFastMovingGroup[]>(() => {
+    const map = new Map<string, PartnerFastMovingGroup>()
+    for (const item of fastMoving) {
+      const existing = map.get(item.partner_id)
+      if (!existing) {
+        map.set(item.partner_id, {
+          partner_id: item.partner_id,
+          partner_name: item.partner_name,
+          partner_type: item.partner_type,
+          total_weekly_units: item.weekly_consumption,
+          total_daily_velocity: item.daily_velocity,
+          avg_turnover_rate: item.turnover_rate,
+          total_critical_frequency: item.critical_frequency,
+          top_product: item,
+          products: [item],
+        })
+      } else {
+        existing.products.push(item)
+        existing.total_weekly_units += item.weekly_consumption
+        existing.total_daily_velocity = Number(
+          (existing.total_daily_velocity + item.daily_velocity).toFixed(2),
+        )
+        existing.total_critical_frequency += item.critical_frequency
+      }
+    }
+
+    const groups = Array.from(map.values())
+    for (const group of groups) {
+      group.products.sort((a, b) => b.weekly_consumption - a.weekly_consumption)
+      group.top_product = group.products[0]
+      const totalTurnover = group.products.reduce((acc, p) => acc + p.turnover_rate, 0)
+      group.avg_turnover_rate = Number(
+        (totalTurnover / group.products.length).toFixed(1),
+      )
+    }
+
+    groups.sort((a, b) => b.total_weekly_units - a.total_weekly_units)
+    return groups
+  }, [fastMoving])
+
   const deficitAnalysis = data?.stockout_deficit_analysis ?? []
   const factoryForecast = data?.factory_procurement_forecast ?? []
   const recommendations = data?.recommendations ?? []
-  const digest = data?.ai_digest
-  const engine = data?.engine_status
+  const hotspots = data?.market_hotspots
+  const urgentBranches = new Set(deficitAnalysis.filter((item) => item.risk_level === 'DARURAT').map((item) => item.partner_id)).size
+  const urgentProducts = factoryForecast.filter((item) => item.urgency === 'CRITICAL').length
+  const lastAnalysis = recommendations[0]?.generated_at ?? data?.regional_activity?.model_generated_at
+  const sections: Array<{ id: typeof subTab; label: string; count: number }> = [
+    { id: 'wilayah', label: 'Wilayah', count: data?.regional_activity?.regions.length ?? 0 },
+    { id: 'defisit', label: 'Risiko cabang', count: deficitAnalysis.length },
+    { id: 'laris', label: 'Produk terlaris', count: partnerFastMovingGroups.length },
+    { id: 'pabrik', label: 'Pasokan pusat', count: factoryForecast.length },
+  ]
+
+  useEffect(() => {
+    const result = runStatus.data
+    if (!result) return
+    if (result.status === 'running') {
+      activeRun.current = result.started_at
+      return
+    }
+    if (!activeRun.current || result.started_at !== activeRun.current) return
+    activeRun.current = null
+    if (result.status === 'succeeded') {
+      toast.success('Saran AI sudah diperbarui.')
+      onRetry()
+    } else if (result.status === 'failed') {
+      toast.error('Analisis AI gagal. Periksa log server dan konfigurasi Python.')
+    } else {
+      toast.error('Analisis AI terhenti. Jalankan kembali bila diperlukan.')
+    }
+  }, [runStatus.data, onRetry])
 
   const handleRunAiAnalysis = async () => {
-    setRunningAi(true)
+    setStartingAi(true)
     try {
-      await adminFetch<{ status: 'ok' }>('ai-insights/run', {
-        method: 'POST',
-      })
-      toast.success('Analisis AI berhasil dijalankan.')
-      onRetry()
+      const started = await triggerAiInsights()
+      activeRun.current = started.started_at
+      await runStatus.refetch()
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
-      setRunningAi(false)
+      setStartingAi(false)
     }
   }
 
   return (
     <section className="dashboard-panel-enter space-y-6" aria-labelledby="ai-insights-title">
-      {/* Header & Autonomous Trigger Bar */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <p className="dashboard-eyebrow">Enterprise Intelligence</p>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-ok-fg/20 bg-ok-bg px-2.5 py-0.5 text-xs font-semibold text-ok-fg">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok-fg opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-ok-fg"></span>
-              </span>
-              Mesin AI Aktif (Otonom)
-            </span>
-          </div>
+          <p className="dashboard-eyebrow">Perencanaan pasokan</p>
           <h1 id="ai-insights-title" className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl">
-            AI Insights & Analisis Rantai Pasok
+            Saran AI untuk admin
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            Analisis terintegrasi 3 pilar: Penjualan mitra, Restok pemenuhan pesanan, dan Proyeksi pembelian pabrik.
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+            Lihat cabang yang perlu dibantu, tinjau buffer minimal, lalu rencanakan pasokan pusat. Keputusan pesanan tetap dilakukan admin.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs text-muted">
-            Evaluasi terakhir:{' '}
-            <span className="font-medium text-ink-900">
-              {formatDetailedDateTime(engine?.last_run_at || digest?.generated_at)}
-            </span>
-          </span>
+        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
           <button
             type="button"
             onClick={() => void handleRunAiAnalysis()}
-            disabled={runningAi || loading}
-            className="inline-flex items-center gap-2 rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-ink-800 disabled:opacity-50"
+            disabled={startingAi || runStatus.data?.status === 'running' || loading}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-50"
           >
-            {runningAi ? (
+            {startingAi || runStatus.data?.status === 'running' ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin text-white" />
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 <span>Menganalisis...</span>
               </>
             ) : (
               <>
-                <Zap className="h-4 w-4 text-amber-300" />
-                <span>Evaluasi Data AI Sekarang</span>
+                <RotateCcw className="size-4" aria-hidden="true" />
+                <span>Perbarui saran</span>
               </>
             )}
           </button>
+          {runStatus.data?.status === 'running' ? <span role="status" className="text-xs text-muted">Analisis berjalan di server. Halaman ini akan diperbarui saat selesai.</span> : null}
+          {runStatus.data?.status === 'failed' ? <span role="status" className="text-xs text-crit-fg">Analisis terakhir gagal. Periksa log API sebelum mencoba lagi.</span> : null}
+          <span className="text-xs text-muted">
+            Analisis terakhir: {lastAnalysis
+              ? formatDetailedDateTime(lastAnalysis)
+              : 'Belum tersedia'}
+          </span>
         </div>
       </div>
 
       {error ? <ErrorState message={getErrorMessage(error)} onRetry={onRetry} /> : null}
 
       {loading ? (
-        <LoadingState label="Memproses evaluasi data perusahaan & mitra..." />
-      ) : (
+        <LoadingState label="Memuat analisis wilayah dan mitra..." />
+      ) : error ? null : (
         <>
-          {/* Executive AI Digest */}
-          {digest ? (
-            <div className="rounded-xl border border-line bg-gradient-to-br from-white via-white to-amber-50/40 p-5 shadow-xs">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-ink-900 p-2 text-white">
-                  <BrainCircuit className="h-5 w-5 text-amber-300" />
-                </div>
-                <div className="flex-1 space-y-3">
-                  <div>
-                    <span className="text-xs font-semibold tracking-wider text-muted uppercase">
-                      Catatan Eksekutif AI
-                    </span>
-                    <h3 className="font-display text-base font-semibold text-ink-900 sm:text-lg">
-                      {digest.headline}
-                    </h3>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-lg border border-line/60 bg-white/80 p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-ink-900">
-                        <TrendingUp className="h-3.5 w-3.5 text-ok-fg" />
-                        Dinamika Penjualan
-                      </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">
-                        {digest.sales_insight}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-line/60 bg-white/80 p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-ink-900">
-                        <Truck className="h-3.5 w-3.5 text-blue-600" />
-                        Pemenuhan Restok
-                      </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">
-                        {digest.restock_insight}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-line/60 bg-white/80 p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-ink-900">
-                        <Factory className="h-3.5 w-3.5 text-amber-600" />
-                        Pengadaan Pabrik
-                      </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">
-                        {digest.procurement_insight}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+            <div className="dashboard-surface overflow-hidden">
+              <div className="border-b border-line px-4 py-4 sm:px-5">
+                <p className="text-xs font-semibold text-ink-700">Mulai dari sini</p>
+                <h2 className="mt-1 font-display text-lg font-semibold text-ink-900">Prioritas hari ini</h2>
+                <p className="mt-1 text-sm leading-5 text-muted">Periksa risiko, lalu gunakan saran saat meninjau pesanan mitra.</p>
+              </div>
+              <div className="divide-y divide-line">
+                <button type="button" onClick={() => setSubTab('defisit')} className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:px-5">
+                  <span className="min-w-0"><strong className="block text-sm text-ink-900">Cabang darurat</strong><span className="mt-0.5 block text-xs leading-5 text-muted">Lihat stok, penyebab, dan tindakan yang disarankan</span></span>
+                  <span className={`shrink-0 font-display text-xl font-semibold tabular-nums ${urgentBranches > 0 ? 'text-crit-fg' : 'text-ink-900'}`}>{urgentBranches}</span>
+                </button>
+                <button type="button" onClick={() => setSubTab('pabrik')} className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:px-5">
+                  <span className="min-w-0"><strong className="block text-sm text-ink-900">Produk pusat perlu pengadaan</strong><span className="mt-0.5 block text-xs leading-5 text-muted">Cek ketahanan stok dan saran pesanan pabrik</span></span>
+                  <span className={`shrink-0 font-display text-xl font-semibold tabular-nums ${urgentProducts > 0 ? 'text-crit-fg' : 'text-ink-900'}`}>{urgentProducts}</span>
+                </button>
               </div>
             </div>
-          ) : null}
+            <div className="dashboard-surface px-4 py-4 sm:px-5">
+              <h2 className="font-display text-lg font-semibold text-ink-900">Cara memakai saran AI</h2>
+              <ol className="mt-4 space-y-4">
+                <li className="flex gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">1</span><span className="text-sm leading-5 text-ink-900"><strong className="block">Mitra melaporkan stok</strong><span className="text-muted">Sistem membaca stok dan riwayat pemakaian.</span></span></li>
+                <li className="flex gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">2</span><span className="text-sm leading-5 text-ink-900"><strong className="block">AI menyusun prioritas</strong><span className="text-muted">Risiko cabang dan kebutuhan pasokan dihitung.</span></span></li>
+                <li className="flex gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">3</span><span className="text-sm leading-5 text-ink-900"><strong className="block">Admin memutuskan</strong><span className="text-muted">Tinjau saran sebelum menyetujui pesanan atau mengajukan produksi.</span></span></li>
+              </ol>
+              <button type="button" onClick={onReviewOrders} className="mt-5 inline-flex min-h-11 items-center rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">
+                Buka persetujuan pesanan
+              </button>
+            </div>
+          </div>
 
-          {/* 3-Pillar KPI Metrics Strip */}
           {kpi ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="dashboard-surface p-4">
-                <div className="flex items-center justify-between text-muted">
-                  <span className="text-xs font-medium">Penjualan (7 Hari)</span>
-                  <TrendingUp className="h-4 w-4 text-ink-900" />
+            <div className="dashboard-surface overflow-hidden">
+              <div className="border-b border-line px-4 py-3 sm:px-5"><h2 className="text-sm font-semibold text-ink-900">Gambaran jaringan, 7 hari terakhir</h2></div>
+              <dl className="grid sm:grid-cols-3 sm:divide-x sm:divide-line">
+                <div className="border-b border-line px-4 py-4 sm:border-b-0 sm:px-5">
+                  <dt className="text-xs font-medium text-muted">Barang terjual</dt>
+                  <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">{kpi.weekly_sales_units.toLocaleString('id-ID')} <span className="text-sm font-normal text-muted">pcs</span></dd>
+                  <p className="mt-1 text-xs text-muted">{kpi.sales_growth_percentage >= 0 ? '+' : ''}{kpi.sales_growth_percentage}% dari 7 hari sebelumnya</p>
                 </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="num font-display text-2xl font-bold text-ink-900">
-                    {kpi.weekly_sales_units.toLocaleString('id-ID')}
-                  </span>
-                  <span className="text-xs text-muted">pcs</span>
+                <div className="border-b border-line px-4 py-4 sm:border-b-0 sm:px-5">
+                  <dt className="text-xs font-medium text-muted">Permintaan terpenuhi</dt>
+                  <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">{kpi.restock_fulfillment_rate}%</dd>
+                  <p className="mt-1 text-xs text-muted">Porsi jumlah yang disetujui dari pengajuan mitra</p>
                 </div>
-                <p className="mt-1 text-xs text-muted">
-                  Tren{' '}
-                  <span className={`font-semibold ${kpi.sales_growth_percentage >= 0 ? 'text-ok-fg' : 'text-crit-fg'}`}>
-                    {kpi.sales_growth_percentage >= 0 ? `+${kpi.sales_growth_percentage}%` : `${kpi.sales_growth_percentage}%`}
-                  </span>{' '}
-                  vs periode lalu
-                </p>
-              </div>
-
-              <div className="dashboard-surface p-4">
-                <div className="flex items-center justify-between text-muted">
-                  <span className="text-xs font-medium">Tingkat Restok</span>
-                  <Truck className="h-4 w-4 text-ink-900" />
+                <div className="px-4 py-4 sm:px-5">
+                  <dt className="text-xs font-medium text-muted">Daya tahan stok pusat</dt>
+                  <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">{kpi.central_stock_health_days} <span className="text-sm font-normal text-muted">hari</span></dd>
+                  <p className="mt-1 text-xs text-muted">Estimasi berdasarkan laju konsumsi mitra</p>
                 </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="num font-display text-2xl font-bold text-ink-900">
-                    {kpi.restock_fulfillment_rate}%
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-muted">Efisiensi pemenuhan pesanan</p>
-              </div>
-
-              <div className="dashboard-surface p-4">
-                <div className="flex items-center justify-between text-muted">
-                  <span className="text-xs font-medium">Stok Pusat Aman</span>
-                  <Factory className="h-4 w-4 text-ink-900" />
-                </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="num font-display text-2xl font-bold text-ink-900">
-                    {kpi.central_stock_health_days}
-                  </span>
-                  <span className="text-xs text-muted">hari</span>
-                </div>
-                <p className="mt-1 text-xs text-muted">Buffer sebelum butuh PO pabrik</p>
-              </div>
-
-              <div className="dashboard-surface p-4">
-                <div className="flex items-center justify-between text-muted">
-                  <span className="text-xs font-medium">Kritis = Laris</span>
-                  <Flame className="h-4 w-4 text-amber-500" />
-                </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="num font-display text-2xl font-bold text-amber-600">
-                    {kpi.critical_high_turnover_count}
-                  </span>
-                  <span className="text-xs text-muted">item</span>
-                </div>
-                <p className="mt-1 text-xs text-muted">Produk laku butuh ekspansi rak</p>
-              </div>
+              </dl>
             </div>
           ) : null}
 
-          {/* Section 1: Produk Laris (Kritis = Laris) & Rekomendasi Par Level */}
-          <div className="dashboard-surface overflow-hidden">
-            <div className="border-b border-line px-5 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Flame className="h-5 w-5 text-amber-500" />
-                    <h3 className="font-semibold text-ink-900">
-                      Mitra & Produk Paling Laku (Kritis = Laris)
-                    </h3>
-                  </div>
-                  <p className="mt-1 text-sm text-muted">
-                    Produk yang sering menyentuh ambang kritis (&lt;20%) karena tingginya laju penjualan. AI merekomendasikan kenaikan Par Level (kapasitas rak) agar cabang tidak kehabisan barang.
-                  </p>
-                </div>
-                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-500/20">
-                  {fastMoving.length} Item Terdeteksi
-                </span>
-              </div>
+          <div>
+            <h2 className="mb-3 font-display text-lg font-semibold text-ink-900">Telusuri analisis</h2>
+            <div className="flex gap-2 overflow-x-auto border-b border-line pb-3" aria-label="Bagian analisis AI">
+              {sections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setSubTab(section.id)}
+                  aria-pressed={subTab === section.id}
+                  className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border px-3.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${subTab === section.id
+                    ? 'border-ink-900 bg-ink-900 text-white'
+                    : 'border-line bg-white text-ink-700 hover:bg-ink-50'}`}
+                >
+                  {section.label}
+                  <span className={`rounded px-1.5 py-0.5 text-xs tabular-nums ${subTab === section.id ? 'bg-white/20 text-white' : 'bg-ink-100 text-ink-700'}`}>{section.count}</span>
+                </button>
+              ))}
             </div>
-
-            {fastMoving.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-ink-50/70 text-xs text-muted">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
-                      <th className="px-5 py-3 font-semibold">Produk</th>
-                      <th className="px-5 py-3 text-right font-semibold">Laku (7 Hari)</th>
-                      <th className="px-5 py-3 text-right font-semibold">Par Saat Ini</th>
-                      <th className="px-5 py-3 text-right font-semibold">Saran Par Baru</th>
-                      <th className="px-5 py-3 text-center font-semibold">Turnover</th>
-                      <th className="px-5 py-3 font-semibold">Analisis Kebutuhan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {fastMoving.map((item) => (
-                      <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.partner_name}</p>
-                          <p className="text-xs text-muted capitalize">{item.partner_type}</p>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.product_name}</p>
-                          <span className="inline-block rounded bg-ink-100 px-1.5 py-0.5 text-[11px] font-mono text-ink-700">
-                            {item.product_sku}
-                          </span>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right tabular-nums">
-                          <p className="font-semibold text-ink-900">{item.weekly_consumption} pcs</p>
-                          <p className="text-xs text-muted">~{item.daily_velocity} pcs/hari</p>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-medium text-muted tabular-nums">
-                          {item.par_level} pcs
-                        </td>
-                        <td className="num px-5 py-3.5 text-right tabular-nums">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-ok-bg px-2.5 py-1 text-xs font-bold text-ok-fg">
-                            <ArrowUpRight className="h-3 w-3" />
-                            {item.suggested_par_level} pcs
-                          </span>
-                          {item.par_delta > 0 ? (
-                            <p className="mt-0.5 text-[11px] font-semibold text-ok-fg">
-                              +{item.par_delta} pcs
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-5 py-3.5 text-center">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                            <Flame className="h-3 w-3 text-amber-600" />
-                            {item.turnover_rate}%
-                          </span>
-                          <p className="mt-0.5 text-[11px] text-muted">{item.critical_frequency}x kritis</p>
-                        </td>
-                        <td className="px-5 py-3.5 text-xs text-muted max-w-[240px]">
-                          {item.reason}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                title="Semua Par Level Optimal"
-                description="Belum ada cabang yang membutuhkan penyesuaian kapasitas rak berdasarkan laju penjualan saat ini."
-              />
-            )}
           </div>
 
-          {/* Section 2: Analisis Defisit & Mitra Rawan Kehabisan Stok */}
-          <div className="dashboard-surface overflow-hidden">
-            <div className="border-b border-line px-5 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-crit-fg" />
-                    <h3 className="font-semibold text-ink-900">
-                      Analisis Defisit & Cabang Rawan Kehabisan Stok
-                    </h3>
-                  </div>
-                  <p className="mt-1 text-sm text-muted">
-                    Diagnosa akar masalah kekosongan stok di cabang (kapasitas rak kurang vs terlambat order restok vs pasokan pusat terpangkas).
-                  </p>
-                </div>
-                <span className="rounded-full bg-crit-bg px-3 py-1 text-xs font-semibold text-crit-fg">
-                  {deficitAnalysis.length} Cabang Berisiko
-                </span>
-              </div>
-            </div>
-
-            {deficitAnalysis.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-ink-50/70 text-xs text-muted">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
-                      <th className="px-5 py-3 font-semibold">Produk</th>
-                      <th className="px-5 py-3 text-right font-semibold">Sisa Stok / Par</th>
-                      <th className="px-5 py-3 text-right font-semibold">Cakupan Stok</th>
-                      <th className="px-5 py-3 font-semibold">Akar Masalah</th>
-                      <th className="px-5 py-3 font-semibold">Tindakan AI</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {deficitAnalysis.map((item) => (
-                      <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.partner_name}</p>
-                          <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
-                            item.risk_level === 'DARURAT' ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'
-                          }`}>
-                            {item.risk_level}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.product_name}</p>
-                          <span className="text-xs text-muted">{item.critical_frequency}x fase kritis</span>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                          <span className="text-crit-fg">{item.current_qty}</span>
-                          <span className="text-muted"> / {item.par_level} pcs</span>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                          <span className={item.days_of_cover < 2 ? 'text-crit-fg' : 'text-warn-fg'}>
-                            {item.days_of_cover} hari
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
-                            item.root_cause === 'UNDER_CAPACITY'
-                              ? 'bg-amber-100 text-amber-800'
-                              : item.root_cause === 'LATE_REORDER'
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {item.root_cause_label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-xs text-muted max-w-[280px]">
-                          {item.action_recommendation}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                title="Stok Cabang Aman Terkendali"
-                description="Tidak ada cabang mitra yang mengalami defisit kritis atau risiko stockout saat ini."
+          {/* TAB 1: PETA WILAYAH RAWAN */}
+          {subTab === 'wilayah' && (
+            <div className="space-y-6">
+              <RegionalAnalysis
+                activity={data?.regional_activity}
+                fastMovingProducts={fastMoving}
+                deficitAnalysis={deficitAnalysis}
               />
-            )}
-          </div>
 
-          {/* Section 3: Proyeksi Pembelian & Produksi Pabrik */}
-          <div className="dashboard-surface overflow-hidden">
-            <div className="border-b border-line px-5 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Factory className="h-5 w-5 text-ink-900" />
-                    <h3 className="font-semibold text-ink-900">
-                      Proyeksi Pengadaan & Produksi Pabrik
-                    </h3>
-                  </div>
-                  <p className="mt-1 text-sm text-muted">
-                    Kebutuhan pasokan gudang pusat berdasarkan agregasi konsumsi 100 mitra dan lead time produksi pabrik (5–7 hari).
-                  </p>
-                </div>
-                <span className="rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700">
-                  Buffer Target: 21 Hari
-                </span>
-              </div>
-            </div>
-
-            {factoryForecast.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-ink-50/70 text-xs text-muted">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Produk</th>
-                      <th className="px-5 py-3 text-right font-semibold">Stok Pusat</th>
-                      <th className="px-5 py-3 text-right font-semibold">Total Konsumsi Mitra / Minggu</th>
-                      <th className="px-5 py-3 text-right font-semibold">Ketahanan Stok</th>
-                      <th className="px-5 py-3 text-right font-semibold">Saran Pesanan Pabrik</th>
-                      <th className="px-5 py-3 text-center font-semibold">Status Kesiapan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {factoryForecast.map((item) => (
-                      <tr key={item.product_id} className="hover:bg-ink-50/30">
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium text-ink-900">{item.product_name}</p>
-                          <span className="font-mono text-xs text-muted">{item.product_sku}</span>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
-                          {item.central_stock.toLocaleString('id-ID')} pcs
-                        </td>
-                        <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
-                          {item.total_partner_demand_weekly.toLocaleString('id-ID')} pcs/mgg
-                        </td>
-                        <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                          <span className={item.urgency === 'CRITICAL' ? 'text-crit-fg' : item.urgency === 'WARNING' ? 'text-warn-fg' : 'text-ok-fg'}>
-                            {item.estimated_runout_days} hari
-                          </span>
-                        </td>
-                        <td className="num px-5 py-3.5 text-right tabular-nums">
-                          {item.suggested_factory_batch_order > 0 ? (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-600/20">
-                              +{item.suggested_factory_batch_order.toLocaleString('id-ID')} pcs
+              {hotspots ? (
+                <section className="dashboard-surface p-5" aria-label="Hotspot pasar mingguan">
+                  <h3 className="font-display text-base font-semibold text-ink-900">
+                    Hotspot Pasar Mingguan
+                  </h3>
+                  <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-muted uppercase">5 Mitra Konsumsi Terlaris</h4>
+                      <ol className="mt-2 divide-y divide-line">
+                        {hotspots.top_performers.map((item, index) => (
+                          <li key={`${item.partner_name}-${index}`} className="flex justify-between gap-3 py-2 text-sm">
+                            <span>
+                              <span className="font-medium text-ink-900">{item.partner_name}</span>
+                              <span className="block text-xs text-muted">{item.region}</span>
                             </span>
-                          ) : (
-                            <span className="text-xs text-muted">Stok Cukup</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5 text-center">
-                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                            item.urgency === 'CRITICAL'
-                              ? 'bg-crit-bg text-crit-fg'
-                              : item.urgency === 'WARNING'
-                                ? 'bg-warn-bg text-warn-fg'
-                                : 'bg-ok-bg text-ok-fg'
-                          }`}>
-                            {item.urgency === 'CRITICAL' ? 'Order Segera' : item.urgency === 'WARNING' ? 'Siapkan PO' : 'Aman'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </div>
+                            <strong className="num font-semibold text-ink-900 tabular-nums">
+                              {item.weekly_units} pcs
+                            </strong>
+                          </li>
+                        ))}
+                      </ol>
+                      {hotspots.top_performers.length === 0 && (
+                        <p className="mt-2 text-xs text-muted">Belum ada laporan konsumsi pekan ini.</p>
+                      )}
+                    </div>
 
-          {/* Section 4: Rekomendasi Alokasi Pengiriman Cabang */}
-          <div className="dashboard-surface overflow-hidden">
-            <div className="border-b border-line px-5 py-4">
-              <h3 className="font-semibold text-ink-900">Rekomendasi Alokasi Pengiriman Cabang</h3>
-              <p className="mt-1 text-sm text-muted">
-                Saran kuantitas pengiriman berdasarkan sisa hari stok cabang dan ketersediaan gudang pusat.
-              </p>
+                    <div>
+                      <h4 className="text-xs font-bold text-muted uppercase">3 Wilayah Defisit Tertinggi</h4>
+                      <ol className="mt-2 divide-y divide-line">
+                        {hotspots.regions.map((item) => (
+                          <li key={item.region} className="flex justify-between gap-3 py-2 text-sm">
+                            <span>
+                              <span className="font-medium text-ink-900">{item.region}</span>
+                              <span className="block text-xs text-muted">{item.partner_count} mitra</span>
+                            </span>
+                            <strong className="num font-semibold text-crit-fg tabular-nums">
+                              {item.deficit_units} pcs
+                            </strong>
+                          </li>
+                        ))}
+                      </ol>
+                      {hotspots.regions.length === 0 && (
+                        <p className="mt-2 text-xs text-muted">Belum ada defisit wilayah.</p>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
             </div>
-            {recommendations.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] text-left text-sm">
-                  <thead className="bg-ink-50/70 text-xs text-muted">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Cabang</th>
-                      <th className="px-5 py-3 font-semibold">Produk</th>
-                      <th className="px-5 py-3 text-right font-semibold">Disarankan</th>
-                      <th className="px-5 py-3 text-right font-semibold">Cakupan</th>
-                      <th className="px-5 py-3 font-semibold">Prioritas</th>
-                      <th className="px-5 py-3 font-semibold">Model AI</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {recommendations.map((row, index) => {
-                      const emergency = Number(row.days_of_cover ?? 0) < 2
-                      return (
-                        <tr
-                          key={`${row.partner_id}-${row.product_id}-${row.generated_at}-${index}`}
-                          className="hover:bg-ink-50/30"
-                        >
-                          <td className="px-5 py-3.5 font-medium text-ink-900">{row.partner_name}</td>
-                          <td className="px-5 py-3.5">{row.product_name}</td>
-                          <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
-                            {row.suggested_qty} pcs
-                          </td>
-                          <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
-                            {row.days_of_cover ?? '—'} hari
-                          </td>
-                          <td className="px-5 py-3.5">
+          )}
+
+          {/* TAB 2: PRODUK LARIS (PENJUALAN TINGGI) TERAGREGASI PER MITRA */}
+          {subTab === 'laris' && (
+            <div className="dashboard-surface overflow-hidden">
+              <div className="border-b border-line px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Flame className="h-5 w-5 text-amber-500" />
+                      <h3 className="font-semibold text-ink-900">
+                        Mitra & Produk Paling Laku (Penjualan Tertinggi)
+                      </h3>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Daftar performa penjualan teragregasi per cabang mitra. Klik baris mitra untuk melihat rincian barang paling laku dan rekomendasi buffer AI.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-500/20">
+                      {partnerFastMovingGroups.length} Cabang Mitra Terdeteksi ({fastMoving.length} Item)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {partnerFastMovingGroups.length > 0 ? (
+                <div>
+                  {/* Tampilan Mobile: Kartu per Mitra */}
+                  <div className="divide-y divide-line sm:hidden">
+                    {partnerFastMovingGroups.map((group, index) => (
+                      <article
+                        key={group.partner_id}
+                        className="space-y-3 p-4 transition-colors hover:bg-ink-50/40"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
                             <span
-                              className={`rounded-sm px-2 py-1 text-xs font-semibold ${
-                                emergency ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'
+                              className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                                index === 0
+                                  ? 'bg-amber-500 text-white shadow-xs'
+                                  : index === 1
+                                    ? 'bg-ink-200 text-ink-900'
+                                    : 'bg-ink-100 text-ink-700'
                               }`}
                             >
-                              {emergency ? 'Darurat' : 'Terjadwal'}
+                              #{index + 1}
+                            </span>
+                            <div>
+                              <h4 className="font-semibold text-ink-900">
+                                {group.partner_name}
+                              </h4>
+                              <p className="text-xs capitalize text-muted">
+                                {group.partner_type}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="rounded-md bg-ink-100 px-2 py-0.5 text-xs font-semibold text-ink-700">
+                            {group.products.length} dari 4 produk
+                          </span>
+                        </div>
+
+                        <dl className="grid grid-cols-2 gap-2 rounded-xl bg-ink-50/70 p-3 text-xs">
+                          <div>
+                            <dt className="text-muted">Total Laku (7 Hari)</dt>
+                            <dd className="num mt-1 font-bold text-ink-900 tabular-nums">
+                              {group.total_weekly_units.toLocaleString('id-ID')} pcs
+                            </dd>
+                            <p className="text-[11px] text-muted">
+                              ~{group.total_daily_velocity} pcs/hari
+                            </p>
+                          </div>
+                          <div>
+                            <dt className="text-muted">Rata-rata Turnover</dt>
+                            <dd className="num mt-1 font-bold text-amber-600 tabular-nums">
+                              {group.avg_turnover_rate}%
+                            </dd>
+                            <p className="text-[11px] text-muted">
+                              {group.total_critical_frequency}x fase kritis
+                            </p>
+                          </div>
+                        </dl>
+
+                        <div className="rounded-lg border border-line bg-white p-2.5 text-xs">
+                          <p className="text-[11px] font-medium text-muted">
+                            Produk Paling Dominan:
+                          </p>
+                          <p className="font-semibold text-ink-900">
+                            {group.top_product.product_name}
+                          </p>
+                          <p className="text-[11px] text-muted">
+                            Terjual {group.top_product.weekly_consumption} pcs (
+                            {Math.round(
+                              (group.top_product.weekly_consumption /
+                                group.total_weekly_units) *
+                                100,
+                            )}
+                            % dari total mitra ini)
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPartnerGroup(group)}
+                          className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink-800 shadow-2xs transition hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                        >
+                          Lihat Rincian ({group.products.length} Produk)
+                          <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+
+                  {/* Tampilan Desktop: Tabel per Mitra */}
+                  <div className="hidden overflow-x-auto sm:block">
+                    <table className="w-full min-w-[760px] text-left text-sm">
+                      <thead className="bg-ink-50/70 text-xs text-muted">
+                        <tr>
+                          <th className="px-5 py-3 font-semibold">Peringkat & Cabang Mitra</th>
+                          <th className="px-5 py-3 text-right font-semibold">Total Laku (7 Hari)</th>
+                          <th className="px-5 py-3 font-semibold">Produk Paling Dominan</th>
+                          <th className="px-5 py-3 text-center font-semibold">Cakupan Item Laris</th>
+                          <th className="px-5 py-3 text-center font-semibold">Rata-rata Turnover</th>
+                          <th className="px-5 py-3 text-right font-semibold">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {partnerFastMovingGroups.map((group, index) => (
+                          <tr
+                            key={group.partner_id}
+                            onClick={() => setSelectedPartnerGroup(group)}
+                            className="cursor-pointer transition-colors hover:bg-ink-50/40"
+                          >
+                            {/* 1. Peringkat & Mitra */}
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                                    index === 0
+                                      ? 'bg-amber-500 text-white shadow-xs'
+                                      : index === 1
+                                        ? 'bg-ink-200 text-ink-900'
+                                        : 'bg-ink-100 text-ink-700'
+                                  }`}
+                                >
+                                  #{index + 1}
+                                </span>
+                                <div>
+                                  <p className="font-semibold text-ink-900 hover:text-ume">
+                                    {group.partner_name}
+                                  </p>
+                                  <p className="text-xs capitalize text-muted">
+                                    {group.partner_type}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 2. Total Laku 7 Hari */}
+                            <td className="num px-5 py-3.5 text-right tabular-nums">
+                              <p className="font-bold text-ink-900">
+                                {group.total_weekly_units.toLocaleString('id-ID')} pcs
+                              </p>
+                              <p className="text-xs text-muted">
+                                ~{group.total_daily_velocity} pcs/hari
+                              </p>
+                            </td>
+
+                            {/* 3. Produk Paling Dominan */}
+                            <td className="px-5 py-3.5">
+                              <p className="font-semibold text-ink-900">
+                                {group.top_product.product_name}
+                              </p>
+                              <p className="text-xs text-muted">
+                                {group.top_product.weekly_consumption} pcs (
+                                {Math.round(
+                                  (group.top_product.weekly_consumption /
+                                    group.total_weekly_units) *
+                                    100,
+                                )}
+                                % dari total)
+                              </p>
+                            </td>
+
+                            {/* 4. Cakupan Item Laris */}
+                            <td className="px-5 py-3.5 text-center">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-ink-50 px-2.5 py-1 text-xs font-semibold text-ink-800 ring-1 ring-line">
+                                {group.products.length} dari 4 produk
+                              </span>
+                            </td>
+
+                            {/* 5. Turnover & Fase Kritis */}
+                            <td className="px-5 py-3.5 text-center">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                <Flame className="h-3 w-3 text-amber-600" />
+                                {group.avg_turnover_rate}%
+                              </span>
+                              <p className="mt-0.5 text-[11px] text-muted">
+                                {group.total_critical_frequency}x fase kritis
+                              </p>
+                            </td>
+
+                            {/* 6. Aksi */}
+                            <td className="px-5 py-3.5 text-right">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedPartnerGroup(group)
+                                }}
+                                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-700 shadow-2xs transition hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                              >
+                                Lihat Rincian
+                                <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  title="Buffer stok cabang memadai"
+                  description="Belum ada cabang yang membutuhkan penyesuaian buffer minimal berdasarkan laju penjualan saat ini."
+                />
+              )}
+
+              {/* Modal Detail Barang Paling Laku per Mitra */}
+              <PartnerFastMovingModal
+                group={selectedPartnerGroup}
+                open={selectedPartnerGroup !== null}
+                onOpenChange={(open) => {
+                  if (!open) setSelectedPartnerGroup(null)
+                }}
+              />
+            </div>
+          )}
+
+          {/* TAB 3: DIAGNOSA DEFISIT CABANG */}
+          {subTab === 'defisit' && (
+            <div className="dashboard-surface overflow-hidden">
+              <div className="border-b border-line px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-crit-fg" />
+                      <h3 className="font-semibold text-ink-900">
+                        Risiko stok cabang
+                      </h3>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Urutkan penanganan dari stok yang paling mendesak. Tindakan di bawah adalah saran untuk ditinjau admin.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-crit-bg px-3 py-1 text-xs font-semibold text-crit-fg">
+                    {deficitAnalysis.length} temuan
+                  </span>
+                </div>
+              </div>
+
+              {deficitAnalysis.length > 0 ? (
+                <div>
+                  <div className="divide-y divide-line sm:hidden">
+                    {deficitAnalysis.map((item) => (
+                      <article key={`${item.partner_id}-${item.product_id}`} className="space-y-3 px-4 py-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0"><h4 className="font-semibold text-ink-900">{item.partner_name}</h4><p className="mt-0.5 text-sm text-muted">{item.product_name}</p></div>
+                          <span className={`shrink-0 rounded px-2 py-1 text-xs font-semibold ${item.risk_level === 'DARURAT' ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'}`}>{item.risk_level === 'DARURAT' ? 'Darurat' : 'Waspada'}</span>
+                        </div>
+                        <dl className="grid grid-cols-2 gap-3 rounded-md bg-ink-50 p-3 text-xs">
+                          <div><dt className="text-muted">Sisa stok</dt><dd className="mt-1 font-semibold tabular-nums text-ink-900">{item.current_qty} pcs</dd></div>
+                          <div><dt className="text-muted">Perkiraan bertahan</dt><dd className="mt-1 font-semibold tabular-nums text-ink-900">{item.days_of_cover} hari</dd></div>
+                        </dl>
+                        <p className="text-xs text-muted">Penyebab: <span className="font-medium text-ink-900">{item.root_cause_label}</span></p>
+                        <p className="border-l-2 border-ink-700 pl-3 text-sm leading-5 text-ink-900">{item.action_recommendation}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="hidden overflow-x-auto sm:block">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="bg-ink-50/70 text-xs text-muted">
+                      <tr>
+                        <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
+                        <th className="px-5 py-3 font-semibold">Produk</th>
+                        <th className="px-5 py-3 text-right font-semibold">Sisa Stok</th>
+                        <th className="px-5 py-3 text-right font-semibold">Cakupan Stok</th>
+                        <th className="px-5 py-3 font-semibold">Akar Masalah</th>
+                        <th className="px-5 py-3 font-semibold">Tindakan Solusi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {deficitAnalysis.map((item) => (
+                        <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
+                          <td className="px-5 py-3.5">
+                            <p className="font-medium text-ink-900">{item.partner_name}</p>
+                            <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+                              item.risk_level === 'DARURAT' ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'
+                            }`}>
+                              {item.risk_level}
                             </span>
                           </td>
-                          <td className="px-5 py-3.5 text-xs text-muted font-mono">
-                            {row.model_version}
+                          <td className="px-5 py-3.5">
+                            <p className="font-medium text-ink-900">{item.product_name}</p>
+                            <span className="text-xs text-muted">{item.critical_frequency}x fase kritis</span>
+                          </td>
+                          <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
+                            <span className={item.current_qty === 0 ? 'text-crit-fg' : 'text-ink-900'}>
+                              {item.current_qty} pcs
+                            </span>
+                          </td>
+                          <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
+                            <span className={item.days_of_cover < 2 ? 'text-crit-fg' : 'text-warn-fg'}>
+                              {item.days_of_cover} hari
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
+                              item.root_cause === 'UNDER_CAPACITY'
+                                ? 'bg-amber-100 text-amber-800'
+                                : item.root_cause === 'LATE_REORDER'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {item.root_cause_label}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-xs font-medium text-ink-800">
+                            {item.action_recommendation}
                           </td>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  title="Stok Cabang Aman Terkendali"
+                  description="Tidak ada cabang mitra yang mengalami defisit kritis atau risiko stockout saat ini."
+                />
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: PENGADAAN PABRIK & REKOMENDASI ALOKASI */}
+          {subTab === 'pabrik' && (
+            <div className="space-y-6">
+              {/* Proyeksi Pabrik */}
+              <div className="dashboard-surface overflow-hidden">
+                <div className="border-b border-line px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Factory className="h-5 w-5 text-ink-900" />
+                        <h3 className="font-semibold text-ink-900">
+                          Proyeksi Pengadaan & Produksi Pabrik
+                        </h3>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted">
+                        Kebutuhan pasokan gudang pusat berdasarkan konsumsi seluruh mitra dan estimasi lead time pabrik (5–7 hari).
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700">
+                      Target Buffer: 21 Hari
+                    </span>
+                  </div>
+                </div>
+
+                {factoryForecast.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] text-left text-sm">
+                      <thead className="bg-ink-50/70 text-xs text-muted">
+                        <tr>
+                          <th className="px-5 py-3 font-semibold">Produk</th>
+                          <th className="px-5 py-3 text-right font-semibold">Stok Pusat</th>
+                          <th className="px-5 py-3 text-right font-semibold">Konsumsi Mitra / Minggu</th>
+                          <th className="px-5 py-3 text-right font-semibold">Ketahanan Stok</th>
+                          <th className="px-5 py-3 text-right font-semibold">Saran Pesanan Pabrik</th>
+                          <th className="px-5 py-3 text-center font-semibold">Status Kesiapan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {factoryForecast.map((item) => (
+                          <tr key={item.product_id} className="hover:bg-ink-50/30">
+                            <td className="px-5 py-3.5 font-medium text-ink-900">
+                              {item.product_name}
+                            </td>
+                            <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
+                              {item.central_stock.toLocaleString('id-ID')} pcs
+                            </td>
+                            <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
+                              {item.total_partner_demand_weekly.toLocaleString('id-ID')} pcs/mgg
+                            </td>
+                            <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
+                              <span className={item.urgency === 'CRITICAL' ? 'text-crit-fg' : item.urgency === 'WARNING' ? 'text-warn-fg' : 'text-ok-fg'}>
+                                {item.estimated_runout_days} hari
+                              </span>
+                            </td>
+                            <td className="num px-5 py-3.5 text-right tabular-nums">
+                              {item.suggested_factory_batch_order > 0 ? (
+                                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-600/20">
+                                  +{item.suggested_factory_batch_order.toLocaleString('id-ID')} pcs
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted">Stok Cukup</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-center">
+                              <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                item.urgency === 'CRITICAL'
+                                  ? 'bg-crit-bg text-crit-fg'
+                                  : item.urgency === 'WARNING'
+                                    ? 'bg-warn-bg text-warn-fg'
+                                    : 'bg-ok-bg text-ok-fg'
+                              }`}>
+                                {item.urgency === 'CRITICAL' ? 'Order Segera' : item.urgency === 'WARNING' ? 'Siapkan PO' : 'Aman'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
               </div>
-            ) : (
-              <EmptyState
-                title="Belum Ada Rekomendasi"
-                description="Klik tombol 'Evaluasi Data AI Sekarang' di bagian atas untuk menghasilkan rekomendasi alokasi terbaru."
-              />
-            )}
-          </div>
+
+              {/* Rekomendasi Alokasi Cabang */}
+              <div className="dashboard-surface overflow-hidden">
+                <div className="border-b border-line px-5 py-4">
+                  <h3 className="font-semibold text-ink-900">Rekomendasi Alokasi Pengiriman Cabang</h3>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Prediksi kebutuhan tujuh hari berdasarkan konsumsi cabang. Persetujuan tetap mengikuti ketersediaan stok pusat.
+                  </p>
+                </div>
+                {recommendations.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[700px] text-left text-sm">
+                      <thead className="bg-ink-50/70 text-xs text-muted">
+                        <tr>
+                          <th className="px-5 py-3 font-semibold">Cabang</th>
+                          <th className="px-5 py-3 font-semibold">Produk</th>
+                          <th className="px-5 py-3 text-right font-semibold">Disarankan</th>
+                          <th className="px-5 py-3 text-right font-semibold">Prediksi 7 hari</th>
+                          <th className="px-5 py-3 text-right font-semibold">Cakupan</th>
+                          <th className="px-5 py-3 font-semibold">Prioritas</th>
+                          <th className="px-5 py-3 font-semibold">Alasan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {recommendations.map((row, index) => {
+                          const urgency = row.metadata?.urgency ?? (Number(row.days_of_cover ?? 0) < 2 ? 'CRITICAL' : 'NORMAL')
+                          return (
+                            <tr
+                              key={`${row.partner_id}-${row.product_id}-${row.generated_at}-${index}`}
+                              className="hover:bg-ink-50/30"
+                            >
+                              <td className="px-5 py-3.5 font-medium text-ink-900">{row.partner_name}</td>
+                              <td className="px-5 py-3.5">{row.product_name}</td>
+                              <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
+                                {row.suggested_qty} pcs
+                              </td>
+                              <td className="num px-5 py-3.5 text-right tabular-nums">{row.forecast_qty} pcs</td>
+                              <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
+                                {row.days_of_cover ?? '—'} hari
+                              </td>
+                              <td className="px-5 py-3.5">
+                                <span
+                                  className={`rounded-sm px-2 py-1 text-xs font-semibold ${
+                                    urgency === 'CRITICAL' ? 'bg-crit-bg text-crit-fg' : urgency === 'WARNING' ? 'bg-warn-bg text-warn-fg' : 'bg-ok-bg text-ok-fg'
+                                  }`}
+                                >
+                                  {urgency === 'CRITICAL' ? 'Darurat' : urgency === 'WARNING' ? 'Waspada' : 'Normal'}
+                                </span>
+                              </td>
+                              <td className="max-w-64 px-5 py-3.5 text-xs leading-5 text-muted">
+                                {row.metadata?.reasoning || 'Rekomendasi berdasarkan cakupan stok cabang.'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="Belum Ada Rekomendasi"
+                    description="Gunakan tombol 'Perbarui saran' untuk menghitung kembali saran alokasi."
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
     </section>
@@ -1756,11 +2725,11 @@ function AIInsightsPanel({
 }
 
 function AdminDashboard() {
-  const { user, logout, isLoading: authLoading } = useAuth()
+  const { user, logout, clearSession, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  useInventoryEvents(user?.role === 'admin', 'admin')
   const [tab, setTab] = useState<AdminTab>('stocks')
+  useInventoryEvents(user?.role === 'admin' && tab !== 'alerts', 'admin')
   const [shipmentPage, setShipmentPage] = useState(1)
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
@@ -1803,56 +2772,41 @@ function AdminDashboard() {
 
   const metrics = useQuery<Metrics>({
     queryKey: ['admin-metrics'],
-    queryFn: async () => {
-      const response = await api.admin.metrics.get()
-      if (response.error || 'error' in response.data) {
-        throw apiError(
-          response.error ?? response.data,
-          'Ringkasan belum dimuat',
-        )
-      }
-      return response.data
-    },
+    queryFn: () => getAdminMetrics(),
     enabled: user?.role === 'admin',
-    staleTime: 30_000,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
   })
   const stocks = useQuery<StockItem[]>({
     queryKey: ['admin-stocks'],
-    queryFn: async () =>
-      unwrapData(
-        await api.stocks.get({ query: {} }),
-        'Stok cabang belum dimuat',
-      ),
+    queryFn: () => getStocks(),
     enabled: user?.role === 'admin' && (tab === 'stocks' || tab === 'orders'),
     staleTime: 30_000,
   })
   const centralProducts = useQuery<Product[]>({
     queryKey: ['admin-central-products'],
-    queryFn: async () =>
-      unwrapData(await api.products.get(), 'Stok pusat belum dimuat'),
+    queryFn: () => getProducts(),
     enabled: user?.role === 'admin' && tab === 'stocks',
     staleTime: 30_000,
   })
   const orders = useQuery<Order[]>({
     queryKey: ['admin-orders'],
-    queryFn: async () =>
-      unwrapData(await api.orders.get({ query: {} }), 'Pesanan belum dimuat'),
-    enabled: user?.role === 'admin' && (tab === 'orders' || tab === 'alerts'),
+    queryFn: () => getOrders(),
+    enabled: user?.role === 'admin' && tab === 'orders',
     staleTime: 30_000,
   })
   const shipmentLogs = useQuery<ShipmentLogPage>({
     queryKey: ['admin-shipment-logs', shipmentPage],
-    queryFn: () => adminFetch(`shipment-logs?page=${shipmentPage}`),
+    queryFn: () => getShipmentLogs(shipmentPage),
     enabled: user?.role === 'admin' && tab === 'shipments',
     staleTime: 30_000,
   })
-  const notifications = useQuery<NotificationItem[]>({
+  const notifications = useQuery<NotificationFeed>({
     queryKey: ['admin-notifications'],
-    queryFn: async () =>
-      unwrapData(await api.notifications.get(), 'Notifikasi belum dimuat'),
-    enabled: user?.role === 'admin',
+    queryFn: () => getAdminNotifications(),
+    enabled: user?.role === 'admin' && tab === 'alerts',
     refetchInterval: 60_000,
-    staleTime: 30_000,
+    staleTime: 0,
   })
 
   useEffect(() => {
@@ -1868,34 +2822,31 @@ function AdminDashboard() {
 
     if (isUnauthorized) {
       toast.error('Sesi login telah berakhir. Silakan login kembali.')
+      clearSession()
+      queryClient.clear()
       void navigate({ to: '/login' })
     }
-  }, [metrics.error, stocks.error, orders.error, notifications.error, navigate])
-  const weeklySummary = useQuery<{ data: WeeklySummary }>({
+  }, [metrics.error, stocks.error, orders.error, notifications.error, navigate, clearSession, queryClient])
+  const weeklySummary = useQuery<WeeklySummary>({
     queryKey: ['admin-weekly-summary'],
-    queryFn: () => adminFetch('weekly-summary'),
+    queryFn: () => getWeeklySummary(),
     enabled: user?.role === 'admin' && tab === 'data-science',
   })
-  const logPartners = useQuery<{ data: StockLogPartner[] }>({
+  const logPartners = useQuery<StockLogPartner[]>({
     queryKey: ['admin-stock-log-partners'],
-    queryFn: () => adminFetch('stock-logs/partners'),
+    queryFn: () => getPartnerStockLogs(),
     enabled: user?.role === 'admin' && tab === 'data-science',
   })
-  const aiInsights = useQuery<{ data: AIInsights }>({
+  const aiInsights = useQuery<AIInsights>({
     queryKey: ['admin-ai-insights'],
-    queryFn: () => adminFetch('ai-insights'),
+    queryFn: () => getAiInsights(),
     enabled: user?.role === 'admin' && tab === 'ai-insights',
     refetchInterval: 60_000,
   })
 
   const exportRawLogs = async () => {
     try {
-      const apiUrl = resolveApiUrl()
-      const response = await fetch(`${apiUrl}/admin/stock-logs/export`, {
-        credentials: 'include',
-      })
-      if (!response.ok) throw new Error('Ekspor log belum berhasil.')
-      const blob = await response.blob()
+      const blob = await exportStockLogs()
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -1934,7 +2885,14 @@ function AdminDashboard() {
         ]),
       ),
     )
-  }, [orders.data])
+
+    // Sinkronkan cache admin-metrics secara instan ketika orders.data berubah
+    const actualPending = orders.data.filter((item) => item.status === 'diproses').length
+    queryClient.setQueryData<Metrics>(['admin-metrics'], (current) => {
+      if (!current || current.pendingOrders === actualPending) return current
+      return { ...current, pendingOrders: actualPending }
+    })
+  }, [orders.data, queryClient])
 
   const updateOrder = useMutation({
     mutationFn: async (input: {
@@ -1942,11 +2900,10 @@ function AdminDashboard() {
       status: OrderStatus
       rejected_reason?: string
     }) => {
-      const response = await api.orders({ id: input.id }).status.patch({
+      return updateOrderStatus(input.id, {
         status: input.status,
         rejected_reason: input.rejected_reason,
       })
-      if (response.error) throw apiError(response.error, 'Status belum berubah')
     },
     onSuccess: async () => {
       toast.success('Status pesanan diperbarui')
@@ -1967,12 +2924,10 @@ function AdminDashboard() {
       admin_note?: string
       items: Array<{ product_id: string; qty_approved: number }>
     }) => {
-      const response = await api.orders({ id: input.id }).approval.patch({
+      return approveOrder(input.id, {
         admin_note: input.admin_note,
         items: input.items,
       })
-      if (response.error)
-        throw apiError(response.error, 'Persetujuan belum disimpan')
     },
     onSuccess: async (_data, variables) => {
       dirtyApprovalOrderIds.current.delete(variables.id)
@@ -1989,26 +2944,25 @@ function AdminDashboard() {
   })
 
   const markRead = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await api.notifications({ id }).read.patch()
-      if (response.error)
-        throw apiError(response.error, 'Notifikasi belum ditandai')
+    mutationFn: (id: string) => markNotificationRead(id),
+    onSuccess: (result, id) => {
+      const readAt = result.read_at
+      queryClient.setQueryData<NotificationFeed>(['admin-notifications'], (current) => current && ({
+        ...current,
+        data: current.data.map((item) => item.id === id ? { ...item, read_at: readAt } : item),
+      }))
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin-notifications'] })
-      await queryClient.invalidateQueries({ queryKey: ['admin-metrics'] })
-    },
+    onError: (error: unknown) => toast.error(getErrorMessage(error)),
   })
 
   const markAllRead = useMutation({
-    mutationFn: async (ids: string[]) => {
-      await Promise.all(
-        ids.map((id) => api.notifications({ id }).read.patch()),
-      )
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin-notifications'] })
-      await queryClient.invalidateQueries({ queryKey: ['admin-metrics'] })
+    mutationFn: () => markAllNotificationsRead(),
+    onSuccess: (result) => {
+      const readAt = result.read_at
+      queryClient.setQueryData<NotificationFeed>(['admin-notifications'], (current) => current && ({
+        ...current,
+        data: current.data.map((item) => item.read_at ? item : { ...item, read_at: readAt }),
+      }))
       toast.success('Semua alert berhasil ditandai sudah dibaca')
     },
     onError: (error: unknown) => toast.error(getErrorMessage(error)),
@@ -2039,9 +2993,15 @@ function AdminDashboard() {
     })
   }, [partner, deferredSearch, status, stocks.data])
   const unread = useMemo(
-    () => (notifications.data ?? []).reduce((count, item) => count + Number(!item.read_at), 0),
+    () => (notifications.data?.data ?? []).reduce((count, item) => count + Number(!item.read_at), 0),
     [notifications.data],
   )
+  const pendingOrdersCount = useMemo(() => {
+    if (orders.data) {
+      return orders.data.filter((item) => item.status === 'diproses').length
+    }
+    return metrics.data?.pendingOrders ?? 0
+  }, [orders.data, metrics.data?.pendingOrders])
 
   if (authLoading || !user || user.role !== 'admin') {
     return (
@@ -2058,7 +3018,7 @@ function AdminDashboard() {
       <AdminSidebar
         tab={tab}
         onSelectTab={setTab}
-        pendingOrders={metrics.data?.pendingOrders}
+        pendingOrders={pendingOrdersCount}
         unread={unread}
         userName={user.full_name}
         onLogout={() => { void logout().then(() => navigate({ to: '/login' })).catch((error) => toast.error(getErrorMessage(error))) }}
@@ -2127,7 +3087,7 @@ function AdminDashboard() {
                 <div className="admin-summary grid md:grid-cols-3">
                   <Metric label="Cabang mitra" value={metrics.data?.totalBranches} detail="Cabang terdaftar" Icon={Building2} />
                   <Metric label="Cabang kritis" value={metrics.data?.criticalBranches} detail={`${metrics.data?.criticalItemsCount ?? 0} produk perlu perhatian`} Icon={AlertOctagon} critical />
-                  <Metric label="Perlu persetujuan" value={metrics.data?.pendingOrders} detail="Pesanan menunggu keputusan" Icon={ClipboardCheck} />
+                  <Metric label="Perlu persetujuan" value={pendingOrdersCount} detail="Pesanan menunggu keputusan" Icon={ClipboardCheck} />
                 </div>
               )}
             </section>
@@ -2203,11 +3163,10 @@ function AdminDashboard() {
           {tab === 'alerts' ? (
             <AlertPanel
               query={notifications}
-              orders={orders.data ?? EMPTY_ORDERS}
               marking={markRead.isPending}
               isMarkingAll={markAllRead.isPending}
               onRead={(id) => markRead.mutate(id)}
-              onReadAll={(ids) => markAllRead.mutate(ids)}
+              onReadAll={() => markAllRead.mutate()}
               onViewOrderDetail={handleViewOrderDetail}
               onNavigateToStock={handleNavigateToStock}
             />
@@ -2223,10 +3182,10 @@ function AdminDashboard() {
           {tab === 'partners' ? <PartnerManagementPanel /> : null}
           {tab === 'data-science' ? (
             <DataSciencePanel
-              summary={weeklySummary.data?.data}
+              summary={weeklySummary.data}
               summaryLoading={weeklySummary.isLoading}
               summaryError={weeklySummary.error}
-              logPartners={logPartners.data?.data ?? []}
+              logPartners={logPartners.data ?? []}
               logPartnersLoading={logPartners.isLoading}
               logPartnersError={logPartners.error}
               totalPartners={metrics.data?.totalBranches ?? 0}
@@ -2239,10 +3198,11 @@ function AdminDashboard() {
           ) : null}
           {tab === 'ai-insights' ? (
             <AIInsightsPanel
-              data={aiInsights.data?.data}
+              data={aiInsights.data}
               loading={aiInsights.isLoading}
               error={aiInsights.error}
               onRetry={() => void aiInsights.refetch()}
+              onReviewOrders={() => setTab('orders')}
             />
           ) : null}
         </main>
@@ -2258,7 +3218,7 @@ function AdminDashboard() {
             const isActive = tab === id
             const badgeCount =
               id === 'orders'
-                ? metrics.data?.pendingOrders
+                ? pendingOrdersCount
                 : id === 'alerts'
                   ? unread
                   : undefined
@@ -2495,12 +3455,11 @@ function PartnerManagementPanel() {
   }>({
     queryKey: ['admin-partners', debouncedSearch, typeFilter],
     queryFn: () => {
-      const params = new URLSearchParams()
-      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim())
-      if (typeFilter && typeFilter !== 'all') params.set('type', typeFilter)
-      params.set('limit', '200')
-      const qs = params.toString()
-      return adminFetch(`partners${qs ? `?${qs}` : ''}`)
+      return getPartners({
+        search: debouncedSearch.trim() || undefined,
+        type: typeFilter && typeFilter !== 'all' ? typeFilter : undefined,
+        limit: 200,
+      })
     },
     placeholderData: keepPreviousData,
     staleTime: 60_000,
@@ -2517,16 +3476,18 @@ function PartnerManagementPanel() {
   }
   const savePartner = useMutation({
     mutationFn: () => editingPartner
-      ? adminFetch(`partners/${editingPartner.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          name: form.name, type: form.type, address: form.address,
-          pic_name: form.pic_name, phone: form.phone,
-          province_code: form.province_code, regency_code: form.regency_code,
-          district_code: form.district_code, village_code: form.village_code,
-        }),
-      })
-      : adminFetch('partners', { method: 'POST', body: JSON.stringify(form) }),
+      ? apiUpdatePartner(editingPartner.id, {
+          name: form.name,
+          type: form.type,
+          address: form.address,
+          pic_name: form.pic_name,
+          phone: form.phone,
+          province_code: form.province_code,
+          regency_code: form.regency_code,
+          district_code: form.district_code,
+          village_code: form.village_code,
+        })
+      : apiCreatePartner(form),
     onSuccess: async () => {
       setFormOpen(false)
       setForm(emptyPartnerForm)
@@ -2541,7 +3502,7 @@ function PartnerManagementPanel() {
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
   const deletePartner = useMutation({
-    mutationFn: (id: string) => adminFetch(`partners/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => apiDeletePartner(id),
     onSuccess: async (_, id) => {
       setPartnerToDelete(null)
       setSelectedPartnerIds((prev) => {
@@ -2556,11 +3517,7 @@ function PartnerManagementPanel() {
   })
 
   const deleteBulkPartners = useMutation({
-    mutationFn: (ids: string[]) =>
-      adminFetch<{ status: string }>('partners/bulk-delete', {
-        method: 'POST',
-        body: JSON.stringify({ ids }),
-      }),
+    mutationFn: (ids: string[]) => bulkDeletePartners(ids),
     onSuccess: async (_, ids) => {
       setBulkDeleteDialogOpen(false)
       setSelectedPartnerIds(new Set())
@@ -2897,7 +3854,7 @@ function PartnerManagementPanel() {
             onClick={() => setVisiblePartners((current) => current + 30)}
             className="min-h-11 w-full rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
           >
-            Tampilkan 30 mitra berikutnya
+            Tampilkan Mitra lainnya
           </button>
         ) : null}
       </div>
@@ -3152,16 +4109,7 @@ function StockPanel({
 
       const results = await Promise.all(
         itemsToSave.map(async (item) => {
-          const response = await api
-            .products({ id: item.productId })
-          ['central-stock'].put({ central_stock: item.centralStock })
-
-          if (response.error || 'error' in response.data) {
-            throw apiError(
-              response.error ?? response.data,
-              `Gagal memperbarui stok ${item.name}`,
-            )
-          }
+          await updateCentralStock(item.productId, item.centralStock)
           return item
         }),
       )
@@ -3637,7 +4585,7 @@ function StockPanel({
               onClick={() => setVisibleBranches((current) => current + 24)}
               className="min-h-11 w-full rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
             >
-              Tampilkan 24 cabang berikutnya
+              Tampilkan cabang Lainnya
             </button>
           ) : null}
         </div>
@@ -3689,6 +4637,7 @@ function OrderPanel({
     useState<OrderCategoryTab>('menunggu')
   const [internalSelectedOrderId, setInternalSelectedOrderId] =
     useState<string | null>(null)
+  const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null)
   const [visibleOrders, setVisibleOrders] = useState(30)
 
   const activeCategory = controlledCategory ?? internalCategory
@@ -3741,6 +4690,7 @@ function OrderPanel({
     )
   }, [activeCategory, allOrders])
   const selectedOrder = allOrders.find((order) => order.id === selectedOrderId)
+  const receiptOrder = allOrders.find((order) => order.id === receiptOrderId)
 
   return (
     <section aria-labelledby="orders-title" className="dashboard-panel-enter space-y-5">
@@ -3917,6 +4867,12 @@ function OrderPanel({
                       {order.receipt_proof_requested_at ? 'Bukti diminta' : 'Tanpa foto'}
                     </span>
                   ) : null}
+                  {order.status === 'selesai' && order.receipt_photo_present ? (
+                    <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                      <CheckCircle2 className="size-3 text-emerald-600" aria-hidden="true" />
+                      <span>Foto Bukti Ada</span>
+                    </span>
+                  ) : null}
                   <span className="hidden text-xs text-muted sm:inline">
                     {formatDetailedDateTime(order.created_at)}
                   </span>
@@ -3988,7 +4944,7 @@ function OrderPanel({
             onClick={() => setVisibleOrders((current) => current + 30)}
             className="min-h-11 w-full rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50 shadow-2xs"
           >
-            Tampilkan 30 pesanan berikutnya
+            Tampilkan  pesanan lainnya
           </button>
         ) : null}
       </div>
@@ -4016,8 +4972,23 @@ function OrderPanel({
           setActiveCategory('selesai')
         }}
         onReject={onReject}
-        onShip={onShip}
+        onShip={async (id) => {
+          await onShip(id)
+          setReceiptOrderId(id)
+        }}
       />
+      {receiptOrder?.status === 'dalam_pengiriman' &&
+      receiptOrder.delivery_code &&
+      receiptOrder.delivery_qr_token ? (
+        <DeliveryReceiptModal
+          order={receiptOrder}
+          open={receiptOrderId !== null}
+          onOpenChange={(open) => {
+            if (!open) setReceiptOrderId(null)
+          }}
+          afterShipment
+        />
+      ) : null}
     </section>
   )
 }
@@ -4053,21 +5024,16 @@ function ApprovalDialog({
   const [rejectionReason, setRejectionReason] = useState('')
   const [actionError, setActionError] = useState('')
   const [shippingConfirmMode, setShippingConfirmMode] = useState(false)
+  const [printOpen, setPrintOpen] = useState(false)
   const queryClient = useQueryClient()
-  const receiptProof = useQuery<{ photo_data_url: string | null }>({
+  const receiptProof = useQuery<ReceiptProofData>({
     queryKey: ['admin-receipt-proof', order?.id],
-    queryFn: async () => {
-      const response = await api.orders({ id: order!.id })['receipt-proof'].get()
-      return unwrapData<{ photo_data_url: string | null }>(response, 'Foto bukti belum dapat dimuat')
-    },
+    queryFn: () => getOrderReceiptProof(order!.id),
     enabled: open && Boolean(order?.receipt_photo_present),
-    staleTime: 60_000,
+    staleTime: 5_000,
   })
   const requestReceiptProof = useMutation({
-    mutationFn: async (orderId: string) => {
-      const response = await api.orders({ id: orderId })['request-receipt-proof'].patch()
-      if (response.error) throw apiError(response.error, 'Permintaan bukti belum terkirim')
-    },
+    mutationFn: (orderId: string) => apiRequestReceiptProof(orderId),
     onSuccess: async () => {
       toast.success('Permintaan foto bukti dikirim ke mitra')
       await Promise.all([
@@ -4093,24 +5059,22 @@ function ApprovalDialog({
       (s) => s.partner_id === order.partner_id && s.product_id === item.product_id,
     )
     const currentQty = item.partner_current_stock ?? matchingStock?.current_qty ?? 0
-    const parLevel = item.partner_par_level ?? matchingStock?.par_level ?? 40
-    const stockPercentage =
-      parLevel > 0 ? Math.round((currentQty / parLevel) * 100) : 0
-    const stockStatus: StockStatus =
-      matchingStock?.status ?? getStockStatus(currentQty, parLevel)
+    const parLevel = item.partner_par_level ?? matchingStock?.par_level
+    const stockStatus: StockStatus | null = parLevel
+      ? getStockStatus(currentQty, parLevel)
+      : matchingStock?.status ?? null
 
     const qty =
       approved[order.id]?.[item.product_id] ??
       item.qty_approved ??
       item.qty_requested
-    const availableForOrder =
-      item.central_stock + (order.status === 'disetujui' ? (item.qty_approved ?? 0) : 0)
+    const availableForOrder = item.central_stock + item.qty_reserved
     const max = Math.min(item.qty_requested, availableForOrder)
 
     const projectedQty = currentQty + qty
-    const projectedPercent =
-      parLevel > 0 ? Math.round((projectedQty / parLevel) * 100) : 0
-    const projectedStatus = getStockStatus(projectedQty, parLevel)
+    const projectedStatus: StockStatus | null = parLevel
+      ? getStockStatus(projectedQty, parLevel)
+      : null
 
     return {
       item,
@@ -4118,11 +5082,8 @@ function ApprovalDialog({
       max,
       availableForOrder,
       currentQty,
-      parLevel,
-      stockPercentage,
       stockStatus,
       projectedQty,
-      projectedPercent,
       projectedStatus,
     }
   })
@@ -4160,7 +5121,7 @@ function ApprovalDialog({
 
   const quickNoteTemplates = [
     'Stok gudang pusat dialokasikan sebagian',
-    'Penyesuaian kuota kapasitas rak cabang',
+    'Jumlah disesuaikan dengan kebutuhan cabang',
     'Pengiriman batch berikutnya dalam 3 hari',
   ]
 
@@ -4175,6 +5136,7 @@ function ApprovalDialog({
   }
 
   return (
+    <>
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45 backdrop-blur-xs" />
@@ -4268,7 +5230,7 @@ function ApprovalDialog({
                   <span>Permintaan Restock Telah Disetujui</span>
                 </div>
                 <p className="mt-1 text-xs text-ink-800 leading-relaxed">
-                  Stok pusat sudah berkurang sesuai jumlah yang disetujui. Pesanan masuk ke tab <strong>Setelah Persetujuan</strong> untuk disiapkan dan dikirim.
+                  Stok pusat sudah direservasi saat pengajuan. Jika jumlah disetujui lebih kecil, selisihnya langsung kembali ke stok tersedia.
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
                   <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
@@ -4287,7 +5249,7 @@ function ApprovalDialog({
             {order.status === 'dalam_pengiriman' ? (
               <div className="rounded-lg border border-order-pengiriman-bg bg-order-pengiriman-bg/40 p-3.5 text-sm text-ink-900">
                 <p className="font-semibold text-order-pengiriman">
-                  🚚 Dalam Pengiriman
+                  <Truck className="mr-1.5 inline size-4" aria-hidden="true" /> Dalam Pengiriman
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
                   Barang kiriman sedang dalam perjalanan. Menunggu konfirmasi penerimaan fisik dari PIC cabang mitra.
@@ -4297,16 +5259,50 @@ function ApprovalDialog({
 
             {order.status === 'selesai' ? (
               <section className={`rounded-lg border p-4 ${order.receipt_photo_present ? 'border-line bg-paper/40' : 'border-warn bg-warn-bg/30'}`} aria-label="Bukti penerimaan barang">
-                <h3 className="text-sm font-semibold text-ink-900">Bukti penerimaan barang</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-ink-900">Bukti penerimaan barang</h3>
+                  {order.receipt_photo_present ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                      <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden="true" />
+                      <span>Foto Terlampir</span>
+                    </span>
+                  ) : null}
+                </div>
                 {order.receipt_photo_present ? (
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-3">
                     {receiptProof.isLoading ? <LoadingState label="Memuat foto bukti..." /> : null}
                     {receiptProof.isError ? (
                       <ErrorState message={getErrorMessage(receiptProof.error)} onRetry={() => void receiptProof.refetch()} />
                     ) : null}
-                    {receiptProof.data?.photo_data_url ? (
-                      <img src={resolveImageUrl(receiptProof.data.photo_data_url) ?? ''} alt={`Foto bukti penerimaan pesanan ${order.order_no}`} className="max-h-96 w-full rounded-md border border-line bg-white object-contain" />
-                    ) : null}
+                    {(() => {
+                      const proofUrl = receiptProof.data?.photo_data_url
+                      if (!proofUrl) return null
+                      const resolved = resolveImageUrl(proofUrl) ?? ''
+                      return (
+                        <div className="space-y-2">
+                          <div className="relative group overflow-hidden rounded-lg border border-line bg-ink-950/5 p-1 flex justify-center items-center">
+                            <img
+                              src={resolved}
+                              alt={`Foto bukti penerimaan pesanan ${order.order_no}`}
+                              className="max-h-[380px] w-auto max-w-full rounded-md object-contain bg-white shadow-xs"
+                              loading="lazy"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-muted">
+                            <span className="text-[11px] text-ink-600">Disimpan aman di server</span>
+                            <a
+                              href={resolved}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-ume hover:underline"
+                            >
+                              <ExternalLink className="size-3" aria-hidden="true" />
+                              <span>Lihat foto penuh</span>
+                            </a>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 ) : (
                   <div className="mt-2">
@@ -4345,9 +5341,6 @@ function ApprovalDialog({
                 <h3 className="font-display text-base font-bold text-ink-900">
                   Rincian Permintaan Restock ({order.items.length} Produk)
                 </h3>
-                <span className="text-xs text-muted">
-                  Bandingkan stok cabang & gudang pusat untuk persetujuan alokasi
-                </span>
               </div>
 
               <div className="space-y-3">
@@ -4359,11 +5352,8 @@ function ApprovalDialog({
                       max,
                       availableForOrder,
                       currentQty,
-                      parLevel,
-                      stockPercentage,
                       stockStatus,
                       projectedQty,
-                      projectedPercent,
                       projectedStatus,
                     },
                     index,
@@ -4395,7 +5385,7 @@ function ApprovalDialog({
 
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs text-muted">Kondisi Cabang:</span>
-                            <StockStatusBadge status={stockStatus} />
+                            {stockStatus ? <StockStatusBadge status={stockStatus} /> : <span className="text-xs text-muted">Belum ada laporan stok</span>}
                           </div>
                         </div>
 
@@ -4404,34 +5394,17 @@ function ApprovalDialog({
                           {/* 1. Sisa di Cabang Mitra */}
                           <div className="rounded-lg border border-line/70 bg-paper/40 p-3">
                             <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">
-                              Sisa di Mitra
+                              Sisa Stok Cabang
                             </span>
                             <div className="mt-1 flex items-baseline gap-1">
                               <span className="font-display text-xl font-bold tabular-nums text-ink-900">
                                 {currentQty}
                               </span>
                               <span className="text-xs text-muted">
-                                / {parLevel} {item.product_unit}
-                              </span>
-                              <span className="ml-auto text-xs font-semibold tabular-nums text-muted">
-                                ({stockPercentage}%)
+                                {item.product_unit}
                               </span>
                             </div>
-                            {/* Visual Bar Kapasitas Rak */}
-                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-line/80">
-                              <div
-                                className={`h-full transition-all ${
-                                  stockStatus === 'kritis'
-                                    ? 'bg-crit'
-                                    : stockStatus === 'waspada'
-                                      ? 'bg-warn'
-                                      : 'bg-ok'
-                                }`}
-                                style={{
-                                  width: `${Math.min(100, Math.max(5, stockPercentage))}%`,
-                                }}
-                              />
-                            </div>
+                            <div className="mt-2">{stockStatus ? <StockStatusBadge status={stockStatus} /> : <span className="text-xs text-muted">Status belum tersedia</span>}</div>
                           </div>
 
                           {/* 2. Stok Gudang Pusat */}
@@ -4448,8 +5421,8 @@ function ApprovalDialog({
                                 }`}
                               >
                                 {availableForOrder >= item.qty_requested
-                                  ? '✓ Cukup'
-                                  : '⚠️ Terbatas'}
+                                  ? <><Check className="mr-1 inline size-3.5" aria-hidden="true" />Cukup</>
+                                  : <><AlertTriangle className="mr-1 inline size-3.5" aria-hidden="true" />Terbatas</>}
                               </span>
                             </div>
                             <div className="mt-1 flex items-baseline gap-1">
@@ -4626,12 +5599,11 @@ function ApprovalDialog({
                           </div>
 
                           <div className="text-muted">
-                            Estimasi sisa rak setelah tiba:{' '}
+                            Estimasi stok cabang setelah tiba:{' '}
                             <strong className="font-bold tabular-nums text-ink-900">
-                              {projectedQty} / {parLevel} {item.product_unit}
+                              {projectedQty} {item.product_unit}
                             </strong>{' '}
-                            ({projectedPercent}% ·{' '}
-                            <span
+                            {projectedStatus ? <>·{' '}<span
                               className={`font-semibold ${
                                 projectedStatus === 'kritis'
                                   ? 'text-crit'
@@ -4645,7 +5617,7 @@ function ApprovalDialog({
                                 : projectedStatus === 'waspada'
                                   ? 'Waspada'
                                   : 'Kritis'}
-                            </span>)
+                            </span></> : null}
                           </div>
                         </div>
                       </div>
@@ -4808,7 +5780,7 @@ function ApprovalDialog({
                       Kirim Sekarang ke {order.partner_name}?
                     </h4>
                     <p className="mt-1 text-xs text-ink-700 leading-relaxed">
-                      Pastikan barang fisik sudah dikemas dan kurir/armada ekspedisi telah siap berangkat ke cabang mitra. Stok pusat sudah dikurangi saat pesanan disetujui.
+                      Pastikan barang sudah dikemas dan kurir siap berangkat. Stok pusat sudah direservasi saat pengajuan dan tidak dipotong lagi saat pengiriman.
                     </p>
                     <p className="mt-1.5 text-xs font-semibold text-warn-fg">
                       Jika armada belum siap atau barang belum selesai dikemas, Anda bisa memilih <strong>Tahan dulu (Belum siap)</strong>.
@@ -4839,6 +5811,9 @@ function ApprovalDialog({
           </div>
 
           <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-white p-4 sm:flex-row sm:justify-end sm:p-5">
+            {order.status === 'dalam_pengiriman' && order.delivery_code && order.delivery_qr_token ? (
+              <button type="button" onClick={() => setPrintOpen(true)} className="min-h-11 rounded-md border border-ume bg-white px-4 text-sm font-semibold text-ume focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Cetak Resi / Surat Jalan</button>
+            ) : null}
             {order.status === 'diproses' && !rejectionMode ? (
               <button
                 type="button"
@@ -4911,6 +5886,8 @@ function ApprovalDialog({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+    {order.delivery_code && order.delivery_qr_token ? <DeliveryReceiptModal order={order} open={printOpen} onOpenChange={setPrintOpen} /> : null}
+    </>
   )
 }
 
@@ -4923,7 +5900,7 @@ interface ParsedAlertInfo {
   typeLabel: string
   typeBadgeColor: string
   relatedOrderId: string | null
-  matchedOrder: Order | null
+  matchedOrder: AlertOrder | null
 }
 
 function formatSelectedDate(dateStr: string): string {
@@ -4942,8 +5919,9 @@ function formatSelectedDate(dateStr: string): string {
 }
 
 interface AlertOrderLookup {
-  byNumber: Map<string, Order>
-  byPartner: Map<string, Order>
+  byNumber: Map<string, AlertOrder>
+  byPartner: Map<string, AlertOrder>
+  byPartnerList: Map<string, AlertOrder[]>
 }
 
 function parseAndFormatAlert(
@@ -4958,12 +5936,27 @@ function parseAndFormatAlert(
   const poMatch = `${rawTitle} ${rawBody}`.match(/PO-[A-Za-z0-9-]+/i)
   const poCode = poMatch ? poMatch[0].toUpperCase() : null
 
-  let matchedOrder: Order | null = null
+  let matchedOrder: AlertOrder | null = null
   if (poCode) {
     matchedOrder = orderLookup.byNumber.get(poCode) ?? null
   }
   if (!matchedOrder && item.partner_id) {
-    matchedOrder = orderLookup.byPartner.get(item.partner_id) ?? null
+    const partnerOrders = orderLookup.byPartnerList.get(item.partner_id)
+    if (partnerOrders && partnerOrders.length > 0) {
+      const itemTime = new Date(item.created_at).getTime()
+      let closestOrder = partnerOrders[0]
+      let minDiff = Math.abs(new Date(closestOrder.created_at).getTime() - itemTime)
+      for (let i = 1; i < partnerOrders.length; i++) {
+        const diff = Math.abs(new Date(partnerOrders[i].created_at).getTime() - itemTime)
+        if (diff < minDiff) {
+          minDiff = diff
+          closestOrder = partnerOrders[i]
+        }
+      }
+      matchedOrder = closestOrder
+    } else {
+      matchedOrder = orderLookup.byPartner.get(item.partner_id) ?? null
+    }
   }
 
   if (item.type === 'receipt_missing_proof' || item.type === 'receipt_proof_uploaded') {
@@ -4980,15 +5973,21 @@ function parseAndFormatAlert(
     }
   }
 
+  const isOrderReceived =
+    item.type === 'order_received' ||
+    rawTitle.toLowerCase().includes('barang diterima') ||
+    rawTitle.toLowerCase().includes('sudah menerima barang') ||
+    rawTitle.toLowerCase().includes('sudah menerima kiriman') ||
+    rawTitle.toLowerCase().includes('terverifikasi') ||
+    rawBody.toLowerCase().includes('penerimaan barang') ||
+    rawBody.toLowerCase().includes('mengonfirmasi penerimaan') ||
+    rawBody.toLowerCase().includes('memindai resi')
+
   const isNewOrder =
     item.type === 'new_order' ||
     rawTitle.toLowerCase().includes('pesanan restock') ||
+    rawTitle.toLowerCase().includes('mau restok barang') ||
     rawBody.toLowerCase().includes('mengajukan restock')
-
-  const isOrderReceived =
-    rawTitle.toLowerCase().includes('barang diterima') ||
-    rawBody.toLowerCase().includes('penerimaan barang') ||
-    rawBody.toLowerCase().includes('mengonfirmasi penerimaan')
 
   const isLowStock =
     item.type === 'low_stock' ||
@@ -5001,14 +6000,110 @@ function parseAndFormatAlert(
       .replace(/PO-[A-Za-z0-9-]+/gi, '')
       .trim()
 
+    const itemSummaries =
+      matchedOrder && matchedOrder.items.length > 0
+        ? matchedOrder.items
+            .map(
+              (i) =>
+                `${i.product_name} (${(i.qty_approved ?? i.qty_requested)} ${i.product_unit || 'pcs'})`,
+            )
+            .join(', ')
+        : ''
+
+    // Jika pesanan sudah diterima oleh mitra (selesai):
+    if (matchedOrder?.status === 'selesai') {
+      const bodyText = itemSummaries
+        ? `Barang kiriman restock untuk ${matchedOrder.items.length} jenis item: ${itemSummaries} telah diterima oleh cabang. Stok cabang telah otomatis bertambah.`
+        : cleanBody ||
+          `Mitra telah mengonfirmasi bahwa kiriman paket barang restok telah tiba di cabang. Stok cabang telah otomatis bertambah.`
+
+      return {
+        title: `Mitra ${partnerName} sudah menerima kiriman barang`,
+        body: bodyText,
+        partnerName,
+        type: 'order_received',
+        typeLabel: 'Barang Diterima',
+        typeBadgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+        relatedOrderId: matchedOrder.id,
+        matchedOrder,
+      }
+    }
+
+    // Jika pesanan sedang dalam pengiriman:
+    if (matchedOrder?.status === 'dalam_pengiriman') {
+      const bodyText = itemSummaries
+        ? `Barang pesanan restock untuk ${matchedOrder.items.length} jenis item: ${itemSummaries} sedang dalam pengiriman ekspedisi ke cabang.`
+        : cleanBody ||
+          `Barang pesanan restock sedang dalam pengiriman menuju cabang mitra.`
+
+      return {
+        title: `Pesanan Mitra ${partnerName} sedang dalam pengiriman`,
+        body: bodyText,
+        partnerName,
+        type: 'new_order',
+        typeLabel: 'Dalam Pengiriman',
+        typeBadgeColor: 'bg-sky-50 text-sky-700 border-sky-200/80',
+        relatedOrderId: matchedOrder.id,
+        matchedOrder,
+      }
+    }
+
+    // Jika pesanan disetujui pusat:
+    if (matchedOrder?.status === 'disetujui') {
+      const bodyText = itemSummaries
+        ? `Pesanan restock untuk ${matchedOrder.items.length} jenis item: ${itemSummaries} telah disetujui admin dan siap dikirim.`
+        : cleanBody ||
+          `Pesanan restock telah disetujui admin pusat dan siap dikirim.`
+
+      return {
+        title: `Pesanan Mitra ${partnerName} telah disetujui`,
+        body: bodyText,
+        partnerName,
+        type: 'new_order',
+        typeLabel: 'Disetujui',
+        typeBadgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200/80',
+        relatedOrderId: matchedOrder.id,
+        matchedOrder,
+      }
+    }
+
+    // Jika pesanan ditolak:
+    if (matchedOrder?.status === 'ditolak') {
+      return {
+        title: `Pesanan Mitra ${partnerName} ditolak`,
+        body: `Permohonan restock untuk ${partnerName} telah ditolak oleh admin pusat.${matchedOrder.rejected_reason ? ` Alasan: ${matchedOrder.rejected_reason}` : ''}`,
+        partnerName,
+        type: 'new_order',
+        typeLabel: 'Ditolak',
+        typeBadgeColor: 'bg-rose-50 text-rose-700 border-rose-200/80',
+        relatedOrderId: matchedOrder.id,
+        matchedOrder,
+      }
+    }
+
+    // Jika pesanan dibatalkan:
+    if (matchedOrder?.status === 'dibatalkan') {
+      return {
+        title: `Pesanan Mitra ${partnerName} dibatalkan`,
+        body: `Pesanan restock untuk ${partnerName} telah dibatalkan oleh mitra.`,
+        partnerName,
+        type: 'new_order',
+        typeLabel: 'Dibatalkan',
+        typeBadgeColor: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+        relatedOrderId: matchedOrder.id,
+        matchedOrder,
+      }
+    }
+
+    // Default status pesanan: diproses / menunggu persetujuan
     if (matchedOrder && matchedOrder.items.length > 0) {
-      const itemSummaries = matchedOrder.items
+      const reqSummaries = matchedOrder.items
         .map(
           (i) =>
             `${i.product_name} (${i.qty_requested} ${i.product_unit || 'pcs'})`,
         )
         .join(', ')
-      cleanBody = `Mitra mengajukan restock untuk ${matchedOrder.items.length} jenis item: ${itemSummaries}. Pesanan sedang menunggu persetujuan admin pusat.`
+      cleanBody = `Mitra mengajukan restock untuk ${matchedOrder.items.length} jenis item: ${reqSummaries}. Pesanan sedang menunggu persetujuan admin pusat.`
     } else if (!cleanBody) {
       cleanBody = `Mitra ${partnerName} mengajukan permohonan restock barang untuk cabang. Pesanan menunggu persetujuan pusat.`
     }
@@ -5026,9 +6121,20 @@ function parseAndFormatAlert(
   }
 
   if (isOrderReceived) {
+    let cleanBody = rawBody
+      .replace(/:\s*PO-[A-Za-z0-9-]+/gi, '')
+      .replace(/PO-[A-Za-z0-9-]+/gi, '')
+      .trim()
+
+    if (rawBody.toLowerCase().includes('memindai resi') || rawTitle.toLowerCase().includes('terverifikasi')) {
+      cleanBody = `Mitra telah memindai resi. Kiriman paket barang restok telah tiba di cabang dan stok cabang otomatis bertambah.`
+    } else if (!cleanBody) {
+      cleanBody = `Mitra telah mengonfirmasi bahwa kiriman paket barang restok telah tiba di cabang. Stok cabang telah otomatis bertambah.`
+    }
+
     return {
       title: `Mitra ${partnerName} sudah menerima kiriman barang`,
-      body: `Mitra telah mengonfirmasi bahwa kiriman paket barang restok telah tiba di cabang. Stok cabang telah otomatis bertambah.`,
+      body: cleanBody,
       partnerName,
       type: 'order_received',
       typeLabel: 'Barang Diterima',
@@ -5095,7 +6201,6 @@ const EMPTY_NOTIFICATIONS: NotificationItem[] = []
 
 function AlertPanel({
   query,
-  orders,
   marking,
   isMarkingAll,
   onRead,
@@ -5103,12 +6208,11 @@ function AlertPanel({
   onViewOrderDetail,
   onNavigateToStock,
 }: {
-  query: UseQueryResult<NotificationItem[]>
-  orders: Order[]
+  query: UseQueryResult<NotificationFeed>
   marking: boolean
   isMarkingAll?: boolean
   onRead: (id: string) => void
-  onReadAll?: (ids: string[]) => void
+  onReadAll?: () => void
   onViewOrderDetail: (orderId: string, category?: OrderCategoryTab) => void
   onNavigateToStock: (partnerName?: string) => void
 }) {
@@ -5126,15 +6230,20 @@ function AlertPanel({
     'semua',
   )
 
-  const allAlerts = query.data ?? EMPTY_NOTIFICATIONS
+  const allAlerts = query.data?.data ?? EMPTY_NOTIFICATIONS
+  const orders = query.data?.orders ?? EMPTY_ALERT_ORDERS
   const orderLookup = useMemo<AlertOrderLookup>(() => {
-    const byNumber = new Map<string, Order>()
-    const byPartner = new Map<string, Order>()
+    const byNumber = new Map<string, AlertOrder>()
+    const byPartner = new Map<string, AlertOrder>()
+    const byPartnerList = new Map<string, AlertOrder[]>()
     for (const order of orders) {
       byNumber.set(order.order_no.toUpperCase(), order)
       if (!byPartner.has(order.partner_id)) byPartner.set(order.partner_id, order)
+      const list = byPartnerList.get(order.partner_id) ?? []
+      list.push(order)
+      byPartnerList.set(order.partner_id, list)
     }
-    return { byNumber, byPartner }
+    return { byNumber, byPartner, byPartnerList }
   }, [orders])
   const parsedAlerts = useMemo(
     () => allAlerts.map((item) => ({ item, parsed: parseAndFormatAlert(item, orderLookup) })),
@@ -5426,10 +6535,7 @@ function AlertPanel({
                 type="button"
                 disabled={isMarkingAll || marking}
                 onClick={() => {
-                  const unreadIds = allAlerts
-                    .filter((a) => !a.read_at)
-                    .map((a) => a.id)
-                  if (unreadIds.length > 0) onReadAll(unreadIds)
+                  onReadAll()
                 }}
                 className="inline-flex min-h-10 sm:min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
                 title="Tandai semua alert yang belum dibaca menjadi sudah dibaca"
@@ -5591,10 +6697,19 @@ function AlertPanel({
                     <button
                       type="button"
                       onClick={() => {
+                        const targetCategory: OrderCategoryTab =
+                          parsed.matchedOrder?.status === 'selesai' ||
+                          parsed.matchedOrder?.status === 'dalam_pengiriman' ||
+                          parsed.matchedOrder?.status === 'disetujui'
+                            ? 'selesai'
+                            : parsed.matchedOrder?.status === 'ditolak' ||
+                              parsed.matchedOrder?.status === 'dibatalkan'
+                              ? 'ditolak'
+                              : 'menunggu'
                         if (parsed.relatedOrderId) {
-                          onViewOrderDetail(parsed.relatedOrderId, 'menunggu')
+                          onViewOrderDetail(parsed.relatedOrderId, targetCategory)
                         } else {
-                          onViewOrderDetail('', 'menunggu')
+                          onViewOrderDetail('', targetCategory)
                         }
                       }}
                       className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-ink-700 transition-colors focus-visible:outline-2 focus-visible:outline-ink-700"
@@ -5639,7 +6754,7 @@ function AlertPanel({
             onClick={() => setVisibleAlerts((current) => current + 30)}
             className="min-h-11 w-full rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
           >
-            Tampilkan 30 notifikasi berikutnya
+            Tampilkan Notifikasi lainnya
           </button>
         ) : null}
       </div>

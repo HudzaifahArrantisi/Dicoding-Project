@@ -1,21 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { api, setCsrfToken } from './api'
-import { apiError } from './api-response'
-import type { RegionCodes } from '@/components/inventory/region-picker'
+import {
+  getCurrentUser,
+  login as apiLogin,
+  logout as apiLogout,
+  setCsrfToken,
+  type User,
+} from './api'
 
-export interface User {
-  id: string
-  email: string
-  role: 'admin' | 'mitra'
-  partner_id: string | null
-  partner_name?: string | null
-  partner_pic_name?: string | null
-  partner_phone?: string | null
-  partner_address?: string | null
-  partner_photo?: string | null
-  partner_region?: RegionCodes | null
-  full_name: string
-}
+export type { User } from './api'
 
 interface AuthResult {
   success: boolean
@@ -29,6 +21,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<AuthResult>
   refreshUser: () => Promise<User>
   logout: () => Promise<void>
+  clearSession: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -38,25 +31,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   const refreshUser = async (): Promise<User> => {
-    const response = await api.me.get()
-    if (response.error || !('user' in response.data) || !('csrf_token' in response.data)) {
-      throw apiError(response.error, 'Sesi tidak valid')
-    }
-    const nextUser = response.data.user as User
-    setCsrfToken(response.data.csrf_token as string)
-    setUser(nextUser)
-    return nextUser
+    const data = await getCurrentUser()
+    setUser(data.user)
+    return data.user
   }
 
   useEffect(() => {
     const status = { cancelled: false }
     void (async () => {
       try {
-        const response = await api.me.get()
-        if (response.error || !('user' in response.data) || !('csrf_token' in response.data)) return
+        const data = await getCurrentUser()
         if (!status.cancelled) {
-          setCsrfToken(response.data.csrf_token as string)
-          setUser(response.data.user as User)
+          setUser(data.user)
         }
       } finally {
         if (!status.cancelled) setIsLoading(false)
@@ -71,8 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string): Promise<AuthResult> => {
     try {
-      const response = await api.auth.login.post({ email, password })
-      if (response.error) throw apiError(response.error, 'Email atau password salah')
+      await apiLogin({ email, password })
       const nextUser = await refreshUser()
       return { success: true, role: nextUser.role }
     } catch (error: unknown) {
@@ -83,14 +68,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const logout = async (): Promise<void> => {
-    const response = await api.auth.logout.post()
-    if (response.error) throw apiError(response.error, 'Gagal keluar. Coba lagi.')
+  const clearSession = () => {
     setCsrfToken(null)
     setUser(null)
   }
 
-  return <AuthContext.Provider value={{ user, isLoading, login, refreshUser, logout }}>{children}</AuthContext.Provider>
+  const logout = async (): Promise<void> => {
+    try {
+      await apiLogout()
+    } finally {
+      clearSession()
+    }
+  }
+
+  return (
+    <AuthContext.Provider
+      value={{ user, isLoading, login, refreshUser, logout, clearSession }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {

@@ -10,6 +10,7 @@
     "dev:web": "bun run --cwd apps/web dev:web",
     "dev:api": "bun scripts/banner.ts && bun run --cwd apps/api dev",
     "seed": "bun run --cwd apps/api seed",
+    "ai:naive-bayes": "python ai/jobs/regional_stockout_naive_bayes.py",
     "typecheck": "bun run --cwd apps/web typecheck && bun run --cwd apps/api typecheck"
   }
 }

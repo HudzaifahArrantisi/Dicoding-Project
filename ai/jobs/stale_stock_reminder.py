@@ -4,10 +4,11 @@ import os
 
 import psycopg
 from dotenv import load_dotenv
+from pathlib import Path
 
 
 def create_stale_reminders() -> int:
-    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     database_url = os.environ["DATABASE_URL"]
 
     with psycopg.connect(database_url) as connection:
@@ -29,7 +30,7 @@ def create_stale_reminders() -> int:
                 INSERT INTO notifications (audience, type, partner_id, title, body)
                 SELECT
                     'mitra',
-                    'stale_stock',
+                    'stale_update',
                     stale.id,
                     'Laporan stok harian belum diperbarui',
                     stale.name || ' belum memperbarui stok selama lebih dari 24 jam.'
@@ -37,7 +38,8 @@ def create_stale_reminders() -> int:
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM notifications existing
-                    WHERE existing.type = 'stale_stock'
+                    WHERE existing.audience = 'mitra'
+                      AND existing.type = 'stale_update'
                       AND existing.partner_id = stale.id
                       AND existing.resolved_at IS NULL
                       AND existing.created_at >= NOW() - INTERVAL '24 hours'

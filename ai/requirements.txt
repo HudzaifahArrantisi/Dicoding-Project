@@ -1,4 +1,7 @@
 pandas
+numpy
+psycopg
+scikit-learn
 httpx
 psycopg[binary]
 python-dotenv

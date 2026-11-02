@@ -7,10 +7,9 @@ export function stockPercent(qty: number, parLevel: number): number {
 }
 
 export function getStockStatus(qty: number, parLevel: number): StockStatus {
-  if (qty <= 10) return "kritis";
   const pct = stockPercent(qty, parLevel);
   if (pct > STOCK_THRESHOLDS.aman) return "aman";
-  if (pct >= STOCK_THRESHOLDS.kritis) return "waspada";
+  if (pct > STOCK_THRESHOLDS.kritis) return "waspada";
   return "kritis";
 }
 
@@ -42,7 +41,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   diproses: ["disetujui", "ditolak", "dibatalkan"],
-  disetujui: ["dalam_pengiriman"],
+  disetujui: ["dalam_pengiriman", "dibatalkan"],
   dalam_pengiriman: ["selesai"],
   selesai: [],
   ditolak: [],

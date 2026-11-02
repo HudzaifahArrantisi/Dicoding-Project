@@ -39,12 +39,22 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     ],
     links: [
       {
-        rel: 'manifest',
-        href: '/manifest.webmanifest',
+        rel: 'icon',
+        type: 'image/jpeg',
+        href: '/icons/logo.jpg',
+      },
+      {
+        rel: 'shortcut icon',
+        type: 'image/jpeg',
+        href: '/icons/logo.jpg',
       },
       {
         rel: 'apple-touch-icon',
-        href: '/icons/icon-192.png',
+        href: '/icons/logo.jpg',
+      },
+      {
+        rel: 'manifest',
+        href: '/manifest.webmanifest',
       },
       {
         rel: 'stylesheet',
@@ -74,6 +84,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
       <head>
+        <link rel="icon" type="image/jpeg" href="/icons/logo.jpg" />
+        <link rel="shortcut icon" type="image/jpeg" href="/icons/logo.jpg" />
+        <link rel="apple-touch-icon" href="/icons/logo.jpg" />
         <script src="/pwa.js" />
         <HeadContent />
       </head>

@@ -130,10 +130,11 @@ daisuki-inventory/
    - **Concurrency Safety**: Stock updates in Elysia must wrap operations in transactions and use `SELECT ... FOR UPDATE` row locks to prevent race conditions when writing to `partner_stocks` and `stock_logs`.
 
 5. **Shared Business Logic ([packages/shared/src/index.ts](packages/shared/src/index.ts))**:
-   - **Stock Status**: Calculated relative to `par_level`:
+   - **Unbounded Partner Stock**: No maximum stock per product, category, or branch. Never use 40 pcs or any other fixed ceiling for stock reports or restock requests. In Admin and Mitra UI, show stock as `{current_qty} pcs` or `Sisa Stok`, without `/40`, `/par`, or `Sisa Stok / Par`. Do not call a branch's stock ceiling `Kapasitas Rak` or `Max Stock`; use `Sisa Stok`, `Buffer Minimal`, or `Saran Pasokan` as appropriate. `par_level` and status thresholds are safety buffers and demand signals, never capacity caps. Restock requests are limited only by `products.central_stock` at transaction time.
+   - **Stock Status**: Calculated relative to buffer thresholds:
      - `aman`: > 50%
-     - `waspada`: 20% to 50%
-     - `kritis`: < 20%
+     - `waspada`: > 20% to 50%
+     - `kritis`: <= 20%
      - Stale: `updated_at` older than 24 hours (`isStale()`).
    - **Order State Machine**:
      - Statuses: `diproses` → `disetujui` (or `ditolak` / `dibatalkan`) → `dalam_pengiriman` → `selesai`.

@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   integer,
+  jsonb,
   numeric,
   bigserial,
   primaryKey,
@@ -159,6 +160,10 @@ export const orders = pgTable("orders", {
   receipt_proof_requested_at: timestamp("receipt_proof_requested_at", {
     withTimezone: true,
   }),
+  delivery_code: text("delivery_code"),
+  delivery_qr_token: text("delivery_qr_token"),
+  delivery_code_claimed_at: timestamp("delivery_code_claimed_at", { withTimezone: true }),
+  cycle_period: text("cycle_period").notNull().default("weekly"),
 });
 
 export const orderItems = pgTable("order_items", {
@@ -171,6 +176,7 @@ export const orderItems = pgTable("order_items", {
     .references(() => products.id),
   qty_requested: integer("qty_requested").notNull(),
   qty_approved: integer("qty_approved"),
+  qty_reserved: integer("qty_reserved").notNull().default(0),
 });
 
 export const notifications = pgTable("notifications", {
@@ -200,6 +206,7 @@ export const restockRecommendations = pgTable("restock_recommendations", {
   suggested_qty: integer("suggested_qty").notNull(),
   days_of_cover: numeric("days_of_cover", { precision: 5, scale: 1 }),
   model_version: text("model_version").notNull(),
+  metadata: jsonb("metadata"),
   generated_at: timestamp("generated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

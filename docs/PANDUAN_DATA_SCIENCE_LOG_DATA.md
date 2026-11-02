@@ -72,7 +72,7 @@ Dalam file `data-science/src/clean_logs.py`, Data Science menghitung 4 metrik pe
 
 ### 1. Membedakan Jenis Mutasi Log Stok
 Tidak semua mutasi stok berarti barang terjual:
-* `manual_update`: Mitra menghitung fisik rak toko (misal: dari 40 pcs sisa 32 pcs = **8 pcs terjual / konsumsi**). Ini yang dihitung sebagai pemakaian.
+* `manual_update`: Mitra menghitung fisik rak toko (misal: dari 100 pcs sisa 92 pcs = **8 pcs terjual / konsumsi**). Ini yang dihitung sebagai pemakaian.
 * `order_received`: Barang kiriman dari pabrik Daisuki tiba (misal: stok bertambah +50 pcs). Ini **bukan konsumsi**, melainkan pasokan masuk (*restock*).
 
 ### 2. Average Daily Usage (ADU) — Laju Konsumsi Harian

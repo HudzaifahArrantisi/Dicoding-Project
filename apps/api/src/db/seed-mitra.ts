@@ -32,7 +32,7 @@ const locations = [
 const categories = [
   { type: "hotel", label: "Hotel", parLevel: 80 },
   { type: "restoran", label: "Restoran", parLevel: 60 },
-  { type: "kafe", label: "Kafe", parLevel: 40 },
+  { type: "kafe", label: "Kafe", parLevel: 60 },
   { type: "minimarket", label: "Minimarket", parLevel: 100 },
 ] as const;
 

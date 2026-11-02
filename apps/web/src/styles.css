@@ -343,7 +343,29 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
+  .log-chart-bar {
+    animation: log-chart-bar-enter 180ms ease-out both;
+  }
+
+  @keyframes log-chart-bar-enter {
+    from { opacity: 0.55; transform: scaleX(0); }
+    to { opacity: 1; transform: scaleX(1); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .dashboard-panel-enter { animation: none; }
+    .log-chart-bar { animation: none; }
   }
+}
+@media print {
+  html:has(.delivery-receipt), body:has(.delivery-receipt) { width: 80mm !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  body:has(.delivery-receipt) > :not(:has(.delivery-receipt)) { display: none !important; }
+  body:has(.delivery-receipt) * { visibility: hidden !important; }
+  body:has(.delivery-receipt) .delivery-receipt,
+  body:has(.delivery-receipt) .delivery-receipt * { visibility: visible !important; }
+  body:has(.delivery-receipt) .receipt-dialog { position: static !important; transform: none !important; max-height: none !important; width: 80mm !important; max-width: none !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; border: 0 !important; box-shadow: none !important; }
+  body:has(.delivery-receipt) .delivery-receipt { width: 80mm !important; max-width: none !important; box-sizing: border-box !important; margin: 0 !important; padding: 3mm !important; border: 0 !important; color: #000 !important; }
+  body:has(.delivery-receipt) .delivery-receipt img { print-color-adjust: exact; }
+  body:has(.delivery-receipt) .delivery-receipt svg { width: 100% !important; height: auto !important; }
+  body:has(.delivery-receipt) .receipt-actions { display: none !important; }
 }

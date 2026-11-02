@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
@@ -58,8 +58,8 @@ function LoginPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-paper sm:grid sm:place-items-center sm:px-6 sm:py-10">
-      <section className="mx-auto w-full max-w-4xl bg-white sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:shadow-[0_20px_55px_-45px_rgba(20,27,61,0.35)] lg:grid lg:grid-cols-[0.9fr_1.1fr]">
+    <main className="min-h-dvh bg-paper sm:grid sm:place-items-center sm:px-6 sm:py-10 animate-in fade-in duration-500">
+      <section className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col bg-paper sm:block sm:min-h-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:bg-white sm:shadow-[0_20px_55px_-45px_rgba(20,27,61,0.35)] lg:grid lg:grid-cols-[0.9fr_1.1fr] animate-in fade-in zoom-in-[0.98] duration-500">
         <div className="relative isolate flex flex-col overflow-hidden bg-[#a9000c] px-6 pb-7 pt-8 text-white sm:px-10 sm:pb-9 sm:pt-10 lg:justify-between lg:px-12 lg:py-12">
           <img
             src="/icons/logo.jpg"
@@ -91,11 +91,12 @@ function LoginPage() {
           </div>
         </div>
 
-        <div className="px-6 pb-8 pt-8 sm:px-10 sm:pb-10 sm:pt-10 lg:px-12 lg:py-12">
+        <div className="flex flex-1 flex-col justify-center px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-8 sm:block sm:bg-white sm:px-10 sm:pb-10 sm:pt-10 lg:px-12 lg:py-12">
           <div className="mx-auto max-w-sm">
             <h2 className="font-display text-2xl font-semibold text-ink-900">
               Masuk ke akun
             </h2>
+            <Link to="/" search={{ tour: true }} className="mt-2 inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-ume underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Lihat Panduan Sistem</Link>
             <p className="mt-2 text-sm leading-6 text-muted">
               Gunakan email atau username dan kata sandi akun Daisuki Anda.
             </p>

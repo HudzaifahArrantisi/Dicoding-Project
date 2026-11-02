@@ -18,7 +18,7 @@ def load_summary() -> list[dict[str, str]]:
 def classify(row: dict[str, str]) -> str:
     cover = float(row.get("days_of_cover") or 0)
     qty, par = int(float(row.get("current_qty") or 0)), int(float(row.get("par_level") or 0))
-    if cover < 2 or (par > 0 and qty < par * 0.2):
+    if cover < 2 or qty <= 10 or (par > 0 and qty < par * 0.2):
         return "HIGH_STOCKOUT_RISK"
     if cover <= 4:
         return "MODERATE_RISK"
@@ -31,13 +31,13 @@ def analyze_stockouts() -> list[dict[str, str]]:
         row["risk_level"] = classify(row)
     RISK_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     columns = list(rows[0].keys()) if rows else []
-    if columns:
-        with RISK_OUTPUT.open("w", newline="", encoding="utf-8") as handle:
+    with RISK_OUTPUT.open("w", newline="", encoding="utf-8") as handle:
+        if columns:
             writer = csv.DictWriter(handle, fieldnames=columns)
             writer.writeheader()
             writer.writerows(rows)
     counts = {risk: sum(row["risk_level"] == risk for row in rows) for risk in ("HIGH_STOCKOUT_RISK", "MODERATE_RISK", "SAFE")}
-    print(f"Analisis risiko: {len(rows)} baris; {counts}")
+    print(f"resiko analisis: {len(rows)} baris; {counts}")
     return rows
 
 

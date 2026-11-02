@@ -224,15 +224,12 @@ def run_company_analytics() -> dict[str, Any]:
         is_fast_moving = (turnover_rate >= 60.0 or crit_count >= 2) and adu >= 1.0
 
         # Rekomendasi Par Level Dinamis:
-        # Par level ideal harus menampung kebutuhan siklus pengiriman (lead time 6 hari + buffer 3 hari) + safety stock
-        recommended_par_level = max(par_level, round(adu * (LEAD_TIME_DAYS + 3) + safety_stock))
-        # Pembulatan rapi ke kelipatan 5 atau 10
-        if recommended_par_level > 20:
-            recommended_par_level = math.ceil(recommended_par_level / 5.0) * 5
+        # Par level mengikuti kebutuhan selama lead time dan stok pengaman.
+        recommended_par_level = max(1, math.ceil(adu * LEAD_TIME_DAYS + safety_stock))
 
         par_expansion_needed = recommended_par_level > par_level
 
-        if is_fast_moving or par_expansion_needed:
+        if is_fast_moving or (par_expansion_needed and adu > 0):
             fast_moving_products.append({
                 "partner_id": partner_id,
                 "partner_name": partner["name"],
@@ -249,10 +246,10 @@ def run_company_analytics() -> dict[str, Any]:
                 "suggested_par_level": recommended_par_level,
                 "par_delta": recommended_par_level - par_level,
                 "reason": (
-                    f"Barang sangat laku (terjual {sold_7d} pcs/minggu). Kapasitas rak saat ini ({par_level} pcs) "
-                    f"terlalu kecil sehingga {crit_count}x menyentuh status kritis. Disarankan naikkan ke {recommended_par_level} pcs."
+                    f"Barang sangat laku (terjual {sold_7d} pcs/minggu). Tingkatkan pasokan restok "
+                    f"karena {crit_count}x berstatus kritis. Saran pasokan: {recommended_par_level} pcs."
                     if par_expansion_needed else
-                    f"Perputaran barang cepat (omzet {turnover_rate}% dari kapasitas rak per minggu)."
+                    f"Perputaran barang cepat (terjual {sold_7d} pcs/minggu)."
                 ),
             })
 
@@ -267,8 +264,8 @@ def run_company_analytics() -> dict[str, Any]:
             # 3. SUPPLY_DEFICIT: Stok pusat minim atau pengiriman terakhir terlambat/kurang
             if par_level < round(adu * LEAD_TIME_DAYS):
                 root_cause = "UNDER_CAPACITY"
-                root_cause_label = "Kapasitas Rak Kurang (Under-Capacity)"
-                action_rec = f"Naikkan par level ke minimal {recommended_par_level} pcs agar pasokan bertahan selama 6 hari pengiriman."
+                root_cause_label = "Laju Penjualan Cepat (Tingkat Konsumsi Tinggi)"
+                action_rec = f"Laju penjualan sangat cepat (~{adu:.1f} pcs/hari). Tambahkan suplai pesanan restok hingga minimal {recommended_par_level} pcs."
             elif current_qty <= rop and days_of_cover < 2.0:
                 root_cause = "LATE_REORDER"
                 root_cause_label = "Keterlambatan Pesan Restok"
@@ -297,7 +294,7 @@ def run_company_analytics() -> dict[str, Any]:
             })
 
         # Siapkan saran kuantitas restok untuk restock_recommendations
-        ideal_demand = max(0, recommended_par_level - current_qty + safety_stock)
+        ideal_demand = max(0, recommended_par_level - current_qty)
         upsert_recommendations.append({
             "partner_id": partner_id,
             "product_id": product_id,
@@ -330,8 +327,8 @@ def run_company_analytics() -> dict[str, Any]:
             if 0 < duration_h < 720:  # Validasi batas 30 hari
                 completed_orders_lead_time_hours.append(duration_h)
 
-    restock_fulfillment_rate = round((total_approved_units / total_requested_units) * 100, 1) if total_requested_units > 0 else 100.0
-    avg_delivery_hours = round(sum(completed_orders_lead_time_hours) / len(completed_orders_lead_time_hours), 1) if completed_orders_lead_time_hours else 24.0
+    restock_fulfillment_rate = round((total_approved_units / total_requested_units) * 100, 1) if total_requested_units > 0 else 0.0
+    avg_delivery_hours = round(sum(completed_orders_lead_time_hours) / len(completed_orders_lead_time_hours), 1) if completed_orders_lead_time_hours else None
 
     # =========================================================================
     # E. ANALISIS PEMBELIAN & KESIAPAN GUDANG PUSAT (PROYEKSI PRODUKSI PABRIK)
@@ -344,13 +341,13 @@ def run_company_analytics() -> dict[str, Any]:
     factory_procurement_forecast = []
     total_central_stock_all = sum(p["central_stock"] for p in products_map.values())
     total_weekly_consumption_all = sum(total_demand_per_product.values())
-    central_stock_health_days = round((total_central_stock_all / (total_weekly_consumption_all / 7.0)), 1) if total_weekly_consumption_all > 0 else 99.0
+    central_stock_health_days = round((total_central_stock_all / (total_weekly_consumption_all / 7.0)), 1) if total_weekly_consumption_all > 0 else None
 
     for prod_id, prod in products_map.items():
         c_stock = prod["central_stock"]
         weekly_dem = total_demand_per_product.get(prod_id, 0)
-        daily_dem = weekly_dem / 7.0 if weekly_dem > 0 else 0.5
-        runout_days = round(c_stock / daily_dem, 1) if daily_dem > 0 else 999.0
+        daily_dem = weekly_dem / 7.0 if weekly_dem > 0 else 0.0
+        runout_days = round(c_stock / daily_dem, 1) if daily_dem > 0 else None
 
         # Kebutuhan pesanan pabrik (memperhitungkan Factory Lead Time 7 hari + 14 hari buffer persediaan)
         target_buffer = round(daily_dem * (FACTORY_LEAD_TIME_DAYS + 14))
@@ -359,7 +356,7 @@ def run_company_analytics() -> dict[str, Any]:
         if suggested_batch > 0:
             suggested_batch = math.ceil(suggested_batch / 50.0) * 50
 
-        urgency = "CRITICAL" if runout_days <= 7.0 else ("WARNING" if runout_days <= 14.0 else "HEALTHY")
+        urgency = "CRITICAL" if runout_days is not None and runout_days <= 7.0 else ("WARNING" if runout_days is not None and runout_days <= 14.0 else "HEALTHY")
 
         factory_procurement_forecast.append({
             "product_id": prod_id,
@@ -372,7 +369,7 @@ def run_company_analytics() -> dict[str, Any]:
             "urgency": urgency,
         })
 
-    factory_procurement_forecast.sort(key=lambda x: (0 if x["urgency"] == "CRITICAL" else (1 if x["urgency"] == "WARNING" else 2), x["estimated_runout_days"]))
+    factory_procurement_forecast.sort(key=lambda x: (0 if x["urgency"] == "CRITICAL" else (1 if x["urgency"] == "WARNING" else 2), x["estimated_runout_days"] if x["estimated_runout_days"] is not None else float("inf")))
 
     # =========================================================================
     # F. SIMPAN REKOMENDASI PINTAR KE DATABASE (RESTOCK_RECOMMENDATIONS)
@@ -443,21 +440,20 @@ def run_company_analytics() -> dict[str, Any]:
     # =========================================================================
     # G. GENERATE AI EXECUTIVE DIGEST
     # =========================================================================
-    top_fast_partner = fast_moving_products[0]["partner_name"] if fast_moving_products else "Mitra Jaringan"
-    top_fast_product = fast_moving_products[0]["product_name"] if fast_moving_products else "Produk Terlaris"
+    top_fast = fast_moving_products[0] if fast_moving_products else None
 
     critical_procurement = [f for f in factory_procurement_forecast if f["urgency"] == "CRITICAL"]
     procurement_text = (
         f"Gudang pusat perlu memesan produksi pabrik segera untuk {len(critical_procurement)} produk "
         f"({', '.join(p['product_name'] for p in critical_procurement[:2])}) karena stok bertahan ≤ 7 hari."
         if critical_procurement else
-        f"Kesiapan stok gudang pusat dalam kondisi aman ({central_stock_health_days} hari daya tahan rata-rata)."
+        (f"Estimasi daya tahan stok gudang pusat {central_stock_health_days} hari berdasarkan konsumsi 7 hari terakhir." if central_stock_health_days is not None else "Belum ada konsumsi 7 hari terakhir untuk menghitung daya tahan stok pusat.")
     )
 
     ai_digest = {
         "headline": f"Perkembangan Bisnis: {total_sales_7d} pcs Terjual Minggu Ini ({'+' if sales_growth_pct >= 0 else ''}{sales_growth_pct}%)",
-        "sales_insight": f"Produk sering berstatus kritis terbukti merupakan produk paling laris. Contoh: {top_fast_product} di {top_fast_partner} mencatatkan perputaran sangat tinggi, sehingga kapasitas rak disarankan dinaikkan.",
-        "restock_insight": f"Tingkat pemenuhan restok jaringan mencapai {restock_fulfillment_rate}% dengan rata-rata kecepatan pengiriman {avg_delivery_hours} jam.",
+        "sales_insight": (f"{top_fast['product_name']} di {top_fast['partner_name']} mencatat {top_fast['weekly_consumption']} pcs konsumsi dalam 7 hari." if top_fast else "Belum ada produk dengan perputaran cepat yang teridentifikasi."),
+        "restock_insight": (f"Tingkat pemenuhan restok jaringan mencapai {restock_fulfillment_rate}%. " + (f"Rata-rata waktu dari pemesanan hingga selesai {avg_delivery_hours} jam." if avg_delivery_hours is not None else "Belum ada pesanan selesai untuk menghitung waktu pemenuhan.")),
         "procurement_insight": procurement_text,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

@@ -1,3 +1,6 @@
+import { getWeeklyPipelineStatus, startWeeklyPipeline } from "../../lib/weekly-pipeline";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { Elysia, t } from "elysia";
 import { desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, sql as postgres } from "../../db/client";
@@ -6,7 +9,6 @@ import {
   orders,
   orderItems,
   partners,
-  partnerStocks,
   products,
   restockRecommendations,
   stockLogs,
@@ -15,6 +17,11 @@ import {
 import { getAuthUser } from "../../plugins/auth";
 import { resolveRegion, RegionError } from "../regions";
 import { publishInventoryChange } from "../../realtime";
+import {
+  computeDeepNaiveBayes,
+  type RawStockAnalysisRow,
+  type NaiveBayesAnalysisResult,
+} from "../../lib/naive-bayes-analyzer";
 
 export const adminModule = new Elysia({ prefix: "/admin" })
   .get("/metrics", async ({ headers, set }) => {
@@ -83,6 +90,8 @@ export const adminModule = new Elysia({ prefix: "/admin" })
           partner_name: partners.name,
           status: orders.status,
           shipped_at: orders.shipped_at,
+          receipt_photo_data_url: orders.receipt_photo_data_url,
+          receipt_photo_present: sql<boolean>`${orders.receipt_photo_data_url} is not null`,
         })
         .from(orders)
         .innerJoin(partners, eq(orders.partner_id, partners.id))
@@ -668,41 +677,68 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       return { error: "Forbidden: Admin only" };
     }
 
-    const [summary] = await db.execute<{
-      total_logs_this_week: number;
-      active_partners_count: number;
-      total_units_consumed: number;
-    }>(sql`
-      SELECT
-        COUNT(*)::int AS total_logs_this_week,
-        COUNT(DISTINCT partner_id)::int AS active_partners_count,
-        COALESCE(SUM(GREATEST(qty_before - qty_after, 0)), 0)::int AS total_units_consumed
-      FROM stock_logs
-      WHERE created_at >= NOW() - INTERVAL '7 days'
-        AND source = 'manual_update'
-    `);
-    const daily = await db.execute<{
-      day: string;
-      active_partners: number;
-      log_count: number;
-    }>(sql`
-      WITH days AS (
-        SELECT generate_series(
-          (NOW() AT TIME ZONE 'Asia/Jakarta')::date - 6,
-          (NOW() AT TIME ZONE 'Asia/Jakarta')::date,
-          INTERVAL '1 day'
-        )::date AS report_day
-      )
-      SELECT TO_CHAR(days.report_day, 'YYYY-MM-DD') AS day,
-        COUNT(DISTINCT logs.partner_id)::int AS active_partners,
-        COUNT(logs.id)::int AS log_count
-      FROM days
-      LEFT JOIN stock_logs logs
-        ON (logs.created_at AT TIME ZONE 'Asia/Jakarta')::date = days.report_day
-        AND logs.created_at >= NOW() - INTERVAL '7 days'
-        AND logs.source = 'manual_update'
-      GROUP BY days.report_day ORDER BY days.report_day
-    `);
+    const [summaryRows, daily, partnerDaily] = await Promise.all([
+      db.execute<{
+        total_logs_this_week: number;
+        active_partners_count: number;
+        total_units_consumed: number;
+      }>(sql`
+        SELECT
+          COUNT(*)::int AS total_logs_this_week,
+          COUNT(DISTINCT partner_id)::int AS active_partners_count,
+          COALESCE(SUM(GREATEST(qty_before - qty_after, 0)), 0)::int AS total_units_consumed
+        FROM stock_logs
+        WHERE source = 'manual_update'
+          AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >=
+            (NOW() AT TIME ZONE 'Asia/Jakarta')::date - 6
+          AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <=
+            (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+      `),
+      db.execute<{
+        day: string;
+        active_partners: number;
+        log_count: number;
+      }>(sql`
+        WITH days AS (
+          SELECT generate_series(
+            (NOW() AT TIME ZONE 'Asia/Jakarta')::date - 6,
+            (NOW() AT TIME ZONE 'Asia/Jakarta')::date,
+            INTERVAL '1 day'
+          )::date AS report_day
+        )
+        SELECT TO_CHAR(days.report_day, 'YYYY-MM-DD') AS day,
+          COUNT(DISTINCT logs.partner_id)::int AS active_partners,
+          COUNT(logs.id)::int AS log_count
+        FROM days
+        LEFT JOIN stock_logs logs
+          ON (logs.created_at AT TIME ZONE 'Asia/Jakarta')::date = days.report_day
+          AND logs.source = 'manual_update'
+        GROUP BY days.report_day ORDER BY days.report_day
+      `),
+      db.execute<{
+        day: string;
+        partner_id: string;
+        partner_name: string;
+        log_count: number;
+      }>(sql`
+        SELECT
+          TO_CHAR((sl.created_at AT TIME ZONE 'Asia/Jakarta')::date, 'YYYY-MM-DD') AS day,
+          p.id AS partner_id,
+          p.name AS partner_name,
+          COUNT(sl.id)::int AS log_count
+        FROM stock_logs sl
+        JOIN partners p ON p.id = sl.partner_id
+        WHERE p.is_active = true
+          AND sl.source = 'manual_update'
+          AND (sl.created_at AT TIME ZONE 'Asia/Jakarta')::date >=
+            (NOW() AT TIME ZONE 'Asia/Jakarta')::date - 6
+          AND (sl.created_at AT TIME ZONE 'Asia/Jakarta')::date <=
+            (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+        GROUP BY (sl.created_at AT TIME ZONE 'Asia/Jakarta')::date, p.id, p.name
+        ORDER BY day, log_count DESC, p.name
+      `),
+    ]);
+    const [summary] = summaryRows;
 
     return {
       data: {
@@ -710,6 +746,10 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         active_partners_count: Number(summary?.active_partners_count ?? 0),
         total_units_consumed: Number(summary?.total_units_consumed ?? 0),
         daily_update_breakdown: daily,
+        partner_daily_log_breakdown: partnerDaily.map((row) => ({
+          ...row,
+          log_count: Number(row.log_count),
+        })),
       },
     };
   })
@@ -727,6 +767,18 @@ export const adminModule = new Elysia({ prefix: "/admin" })
     const analytics = await computeCompanyAiAnalytics();
     return { data: analytics };
   })
+  .get("/ai-insights/run", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+    if (user.role !== "admin") {
+      set.status = 403;
+      return { error: "Forbidden: Admin only" };
+    }
+    return getWeeklyPipelineStatus();
+  })
   .post("/ai-insights/run", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) {
@@ -738,106 +790,228 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       return { error: "Forbidden: Admin only" };
     }
 
-    // 1. Eksekusi pembaruan analitik AI di database
-    const analytics = await computeCompanyAiAnalytics();
-
-    // 2. Upsert rekomendasi cerdas ke tabel restock_recommendations
-    const productRows = await db
-      .select({ id: products.id, central_stock: products.central_stock })
-      .from(products)
-      .where(eq(products.is_active, true));
-    const centralStockMap = new Map(productRows.map((p) => [p.id, p.central_stock]));
-
-    // Ambil daftar stok mitra untuk dihitung alokasi cerdas
-    const partnerStockRows = await db
-      .select({
-        partner_id: partnerStocks.partner_id,
-        product_id: partnerStocks.product_id,
-        current_qty: partnerStocks.current_qty,
-        par_level: partnerStocks.par_level,
-      })
-      .from(partnerStocks);
-
-    // Kebutuhan alokasi per mitra
-    const sortedRecommendations = partnerStockRows.map((ps) => {
-      const fastMatch = analytics.fast_moving_products.find(
-        (f) => f.partner_id === ps.partner_id && f.product_id === ps.product_id,
-      );
-      const targetPar = fastMatch?.suggested_par_level ?? ps.par_level;
-      const weeklyCons = fastMatch?.weekly_consumption ?? 0;
-      const adu = Number((weeklyCons / 7).toFixed(2));
-      const safety = Math.max(5, Math.round(adu * 2));
-      const idealDemand = Math.max(0, targetPar - ps.current_qty + safety);
-      const daysOfCover = adu > 0 ? Number((ps.current_qty / adu).toFixed(1)) : 99;
-
-      return {
-        partner_id: ps.partner_id,
-        product_id: ps.product_id,
-        forecast_qty: Math.round(adu * 6),
-        ideal_demand: idealDemand,
-        days_of_cover: daysOfCover,
-        is_emergency: ps.current_qty <= Math.max(10, ps.par_level * 0.2) || daysOfCover < 2,
-      };
-    }).sort((a, b) => (a.is_emergency ? -1 : 1) - (b.is_emergency ? -1 : 1) || a.days_of_cover - b.days_of_cover);
-
-    for (const item of sortedRecommendations) {
-      const currentCentral = centralStockMap.get(item.product_id) ?? 0;
-      const allocated = Math.min(item.ideal_demand, currentCentral);
-      centralStockMap.set(item.product_id, Math.max(0, currentCentral - allocated));
-
-      await db
-        .insert(restockRecommendations)
-        .values({
-          partner_id: item.partner_id,
-          product_id: item.product_id,
-          forecast_qty: item.forecast_qty,
-          suggested_qty: allocated,
-          days_of_cover: String(item.days_of_cover),
-          model_version: "v2.0-ai-company-analytics",
-          generated_at: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [restockRecommendations.partner_id, restockRecommendations.product_id],
-          set: {
-            forecast_qty: item.forecast_qty,
-            suggested_qty: allocated,
-            days_of_cover: String(item.days_of_cover),
-            model_version: "v2.0-ai-company-analytics",
-            generated_at: new Date(),
-          },
-        });
-    }
-
-    // 3. Notifikasi darurat untuk cabang dengan risiko tinggi
-    const emergencyBranches = analytics.stockout_deficit_analysis.filter((d) => d.risk_level === "DARURAT").slice(0, 3);
-    for (const emg of emergencyBranches) {
-      await db.execute(sql`
-        INSERT INTO notifications (audience, type, partner_id, title, body)
-        SELECT 'admin', 'low_stock', ${emg.partner_id}::uuid, ${`Prioritas Suplai: ${emg.partner_name}`}, ${`Produk ${emg.product_name} di ${emg.partner_name} berisiko habis (sisa ${emg.days_of_cover} hari). ${emg.action_recommendation}`}
-        WHERE NOT EXISTS (
-          SELECT 1 FROM notifications existing
-          WHERE existing.audience = 'admin'
-            AND existing.type = 'low_stock'
-            AND existing.partner_id = ${emg.partner_id}::uuid
-            AND existing.title = ${`Prioritas Suplai: ${emg.partner_name}`}
-            AND existing.created_at >= NOW() - INTERVAL '12 hours'
-        )
-      `);
-    }
-
-    // 4. Coba panggil python company_analytics.py di background jika tersedia
-    try {
-      Bun.spawn(["python", "ai/jobs/company_analytics.py"], {
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-    } catch {
-      // Python opsional, kalkulasi SQL/TypeScript di atas sudah 100% lengkap
-    }
-
-    // Ambil data terbaru setelah upsert
-    return { status: "ok" };
+    set.status = 202;
+    return startWeeklyPipeline();
   });
+
+type RegionalModel = {
+  generated_at: string;
+  algorithm?: string;
+  model_version?: string;
+  regional_rankings: Array<{
+    province_name: string;
+    regency_name: string;
+    total_partners?: number;
+    critical_partners_count?: number;
+    warning_partners_count?: number;
+    average_stockout_probability?: number;
+    peak_stockout_probability?: number;
+    regional_zone: "ZONA_MERAH" | "ZONA_KUNING" | "ZONA_HIJAU";
+    primary_risk_driver?: string;
+    recommended_action: string;
+    partners: Array<{
+      partner_id: string;
+      partner_name?: string;
+      max_stockout_probability?: number;
+      average_stockout_probability?: number;
+      zone: "ZONA_MERAH" | "ZONA_KUNING" | "ZONA_HIJAU";
+      urgent_items?: Array<{
+        product_name: string;
+        stockout_probability: number;
+      }>;
+      fast_moving_products?: Array<{
+        product_name: string;
+        suggested_par_level: number;
+      }>;
+    }>;
+  }>;
+};
+
+async function loadRegionalModel(): Promise<RegionalModel | null> {
+  const path = resolve(import.meta.dir, "../../../../../ai/data/regional_stockout_insights.json");
+  try {
+    const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (!parsed || typeof parsed !== "object" || !("regional_rankings" in parsed) ||
+        !Array.isArray(parsed.regional_rankings)) {
+      throw new Error("Format hasil model wilayah tidak valid");
+    }
+    return parsed as RegionalModel;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function getRegionalActivity(naiveBayesResult?: NaiveBayesAnalysisResult) {
+  const [model, rows] = await Promise.all([
+    loadRegionalModel(),
+    db.execute(sql<{
+      partner_id: string;
+      partner_name: string;
+      province_name: string;
+      regency_name: string;
+      critical_logs: number;
+      stockout_logs: number;
+      restock_requests: number;
+      weekly_units: number;
+    }>`
+      WITH stockout AS (
+        SELECT sl.partner_id,
+          COUNT(*) FILTER (WHERE sl.qty_after <= GREATEST(10, ps.par_level * 0.2))::int AS critical_logs,
+          COUNT(*) FILTER (WHERE sl.qty_after = 0)::int AS stockout_logs
+        FROM stock_logs sl
+        JOIN partner_stocks ps ON ps.partner_id = sl.partner_id AND ps.product_id = sl.product_id
+        WHERE sl.created_at >= NOW() - INTERVAL '60 days'
+        GROUP BY sl.partner_id
+      ), restock AS (
+        SELECT partner_id, COUNT(*)::int AS restock_requests
+        FROM orders
+        WHERE status <> 'dibatalkan' AND created_at >= NOW() - INTERVAL '60 days'
+        GROUP BY partner_id
+      ), sales AS (
+        SELECT partner_id,
+          SUM(qty_before - qty_after)::int AS weekly_units
+        FROM stock_logs
+        WHERE source = 'manual_update'
+          AND qty_before > qty_after
+          AND created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY partner_id
+      )
+      SELECT p.id::text AS partner_id, p.name AS partner_name,
+        COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
+        COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
+        COALESCE(s.critical_logs, 0)::int AS critical_logs,
+        COALESCE(s.stockout_logs, 0)::int AS stockout_logs,
+        COALESCE(r.restock_requests, 0)::int AS restock_requests,
+        COALESCE(sa.weekly_units, 0)::int AS weekly_units
+      FROM partners p
+      LEFT JOIN stockout s ON s.partner_id = p.id
+      LEFT JOIN restock r ON r.partner_id = p.id
+      LEFT JOIN sales sa ON sa.partner_id = p.id
+      WHERE p.is_active = true
+    `),
+  ]);
+
+  const modelRegions = new Map<string, RegionalModel["regional_rankings"][number]>(
+    model?.regional_rankings.map((region) =>
+      [`${region.province_name}\u0000${region.regency_name}`, region] as const
+    ) ?? []
+  );
+
+  const nbHotspots = new Map<string, NaiveBayesAnalysisResult["regional_hotspots"][number]>(
+    naiveBayesResult?.regional_hotspots.map((h) =>
+      [`${h.province_name}\u0000${h.regency_name}`, h] as const
+    ) ?? []
+  );
+
+  const regions = new Map<string, {
+    province_name: string;
+    regency_name: string;
+    regional_zone: string;
+    recommended_action: string | null;
+    primary_risk_driver: string | null;
+    peak_stockout_probability: number;
+    average_stockout_probability: number;
+    critical_logs: number;
+    stockout_logs: number;
+    restock_requests: number;
+    partners: Array<{
+      partner_id: string;
+      partner_name: string;
+      critical_logs: number;
+      stockout_logs: number;
+      restock_requests: number;
+      weekly_units: number;
+      zone: string;
+      max_stockout_probability: number;
+      average_stockout_probability: number;
+      urgent_items: Array<{ product_name: string; stockout_probability: number }>;
+      suggested_products: Array<{ product_name: string; suggested_par_level: number }>;
+    }>;
+  }>();
+
+  for (const row of rows) {
+    const provinceName = String(row.province_name);
+    const regencyName = String(row.regency_name);
+    const key = `${provinceName}\u0000${regencyName}`;
+    const modelRegion = modelRegions.get(key);
+    const nbHotspot = nbHotspots.get(key);
+
+    let region = regions.get(key);
+    if (!region) {
+      const zoneDetermined =
+        regencyName === "Tidak diketahui"
+          ? "PERLU_LOKASI"
+          : nbHotspot?.zone ?? modelRegion?.regional_zone ?? "BELUM_DIANALISIS";
+
+      const actionDetermined =
+        regencyName === "Tidak diketahui"
+          ? "Lengkapi kabupaten/kota pada profil mitra sebelum menentukan alokasi per wilayah. Prioritaskan cabang dengan log stok kritis terbanyak."
+          : nbHotspot?.recommended_action ?? modelRegion?.recommended_action ?? null;
+
+      region = {
+        province_name: provinceName,
+        regency_name: regencyName,
+        regional_zone: zoneDetermined,
+        recommended_action: actionDetermined,
+        primary_risk_driver: nbHotspot?.primary_risk_driver ?? modelRegion?.primary_risk_driver ?? null,
+        peak_stockout_probability: nbHotspot?.peak_stockout_probability ?? modelRegion?.peak_stockout_probability ?? 0,
+        average_stockout_probability: nbHotspot?.average_stockout_probability ?? modelRegion?.average_stockout_probability ?? 0,
+        critical_logs: 0,
+        stockout_logs: 0,
+        restock_requests: 0,
+        partners: [],
+      };
+      regions.set(key, region);
+    }
+
+    const currentRegion = region;
+    const modelPartner = modelRegion?.partners.find((partner) => partner.partner_id === row.partner_id);
+    const nbPartner = nbHotspot?.partners.find((partner) => partner.partner_id === row.partner_id);
+
+    currentRegion.critical_logs += Number(row.critical_logs);
+    currentRegion.stockout_logs += Number(row.stockout_logs);
+    currentRegion.restock_requests += Number(row.restock_requests);
+
+    const partnerZone =
+      nbPartner?.zone ?? modelPartner?.zone ?? "BELUM_DIANALISIS";
+
+    currentRegion.partners.push({
+      partner_id: String(row.partner_id),
+      partner_name: String(row.partner_name),
+      critical_logs: Number(row.critical_logs),
+      stockout_logs: Number(row.stockout_logs),
+      restock_requests: Number(row.restock_requests),
+      weekly_units: Number(row.weekly_units),
+      zone: partnerZone,
+      max_stockout_probability: nbPartner?.max_stockout_probability ?? modelPartner?.max_stockout_probability ?? 0,
+      average_stockout_probability: nbPartner?.average_stockout_probability ?? modelPartner?.average_stockout_probability ?? 0,
+      urgent_items: nbPartner?.urgent_items ?? modelPartner?.urgent_items ?? [],
+      suggested_products: modelPartner?.fast_moving_products ?? [],
+    });
+  }
+
+  return {
+    period_days: 60,
+    model_generated_at: model?.generated_at ?? new Date().toISOString(),
+    regions: [...regions.values()]
+      .map((region) => ({
+        ...region,
+        partners: region.partners.sort(
+          (a, b) =>
+            b.max_stockout_probability - a.max_stockout_probability ||
+            b.critical_logs - a.critical_logs ||
+            b.restock_requests - a.restock_requests
+        ),
+      }))
+      .sort(
+        (a, b) =>
+          b.peak_stockout_probability - a.peak_stockout_probability ||
+          b.critical_logs - a.critical_logs ||
+          b.restock_requests - a.restock_requests
+      ),
+  };
+}
 
 async function computeCompanyAiAnalytics() {
   // 1. Existing frequentStockouts for backwards-compatibility
@@ -869,6 +1043,7 @@ async function computeCompanyAiAnalytics() {
       suggested_qty: restockRecommendations.suggested_qty,
       days_of_cover: restockRecommendations.days_of_cover,
       model_version: restockRecommendations.model_version,
+      metadata: restockRecommendations.metadata,
       generated_at: restockRecommendations.generated_at,
     })
     .from(restockRecommendations)
@@ -1010,12 +1185,9 @@ async function computeCompanyAiAnalytics() {
     const turnoverRate = parLevel > 0 ? Number(((weeklyConsumption / parLevel) * 100).toFixed(1)) : 0;
     const daysOfCover = dailyVelocity > 0 ? Number((currentQty / dailyVelocity).toFixed(1)) : (currentQty > 0 ? 99 : 0);
 
-    // Hitung Par Level Dinamis AI (Lead Time 6 hari + 3 hari buffer + safety stock)
+    // Hitung Par Level Dinamis AI dari lead time dan safety stock.
     const safetyStock = Math.max(5, Math.round(dailyVelocity * 2));
-    let suggestedPar = Math.max(parLevel, Math.round(dailyVelocity * 9 + safetyStock));
-    if (suggestedPar > 20) {
-      suggestedPar = Math.ceil(suggestedPar / 5) * 5;
-    }
+    const suggestedPar = Math.max(1, Math.ceil(dailyVelocity * 6 + safetyStock));
     const parDelta = suggestedPar - parLevel;
 
     // Deteksi Fast Moving (Kritis = Laris)
@@ -1037,8 +1209,8 @@ async function computeCompanyAiAnalytics() {
         suggested_par_level: suggestedPar,
         par_delta: parDelta,
         reason: parDelta > 0
-          ? `Barang sangat laku (terjual ${weeklyConsumption} pcs/minggu). Kapasitas rak saat ini (${parLevel} pcs) terlalu kecil sehingga ${critFreq}x berstatus kritis. Disarankan naikkan ke ${suggestedPar} pcs.`
-          : `Perputaran barang cepat (omzet ${turnoverRate}% dari kapasitas rak per minggu).`,
+          ? `Barang sangat laku (terjual ${weeklyConsumption} pcs/minggu). Tingkatkan pasokan restok karena ${critFreq}x berstatus kritis. Saran pasokan: ${suggestedPar} pcs.`
+          : `Perputaran barang cepat (terjual ${weeklyConsumption} pcs/minggu).`,
       });
     }
 
@@ -1051,8 +1223,8 @@ async function computeCompanyAiAnalytics() {
 
       if (parLevel < Math.round(dailyVelocity * 6)) {
         rootCause = 'UNDER_CAPACITY';
-        rootCauseLabel = 'Kapasitas Rak Kurang (Under-Capacity)';
-        actionRec = `Kapasitas rak tidak menampung kebutuhan 6 hari pengiriman. Naikkan par level ke ${suggestedPar} pcs.`;
+        rootCauseLabel = 'Laju Penjualan Cepat (Tingkat Konsumsi Tinggi)';
+        actionRec = `Laju penjualan sangat cepat (~${dailyVelocity} pcs/hari). Tambahkan suplai pesanan restok hingga minimal ${suggestedPar} pcs.`;
       } else if (!row.has_active_order && daysOfCover < 3) {
         rootCause = 'LATE_REORDER';
         rootCauseLabel = 'Keterlambatan Pesan Restok';
@@ -1155,12 +1327,83 @@ async function computeCompanyAiAnalytics() {
   const aiDigest = {
     headline: `Perkembangan Bisnis: ${totalSales7d} pcs Terjual Minggu Ini (${salesGrowthPct >= 0 ? '+' : ''}${salesGrowthPct}%)`,
     sales_insight: topFast
-      ? `Produk berstatus sering kritis terbukti merupakan produk paling laris. Contoh: ${topFast.product_name} di ${topFast.partner_name} mencatatkan penjualan ${topFast.weekly_consumption} pcs/minggu. Disarankan menaikkan kapasitas rak.`
+      ? `Produk berstatus sering kritis terbukti merupakan produk paling laris. Contoh: ${topFast.product_name} di ${topFast.partner_name} mencatatkan penjualan ${topFast.weekly_consumption} pcs/minggu. Tinjau kembali buffer minimal dan jadwal pasokannya.`
       : `Konsumsi produk di seluruh mitra terpantau stabil.`,
     restock_insight: `Tingkat pemenuhan pesanan restok jaringan mencapai ${fulfillmentRate}% dari seluruh permohonan cabang.`,
     procurement_insight: procurementText,
     generated_at: new Date().toISOString(),
   };
+
+  const topPerformers = await db.execute(sql<{ partner_name: string; region: string; weekly_units: number }>`
+    SELECT p.name AS partner_name, COALESCE(p.regency_name, 'Tidak diketahui') AS region,
+           SUM(GREATEST(0, sl.qty_before-sl.qty_after))::int AS weekly_units
+    FROM stock_logs sl JOIN partners p ON p.id=sl.partner_id
+    WHERE sl.source='manual_update' AND sl.created_at >= now()-interval '7 days'
+    GROUP BY p.id ORDER BY weekly_units DESC LIMIT 5
+  `);
+  const hotspotRegions = await db.execute(sql<{ region: string; deficit_units: number; partner_count: number }>`
+    SELECT COALESCE(p.regency_name, 'Tidak diketahui') AS region,
+           SUM(GREATEST(0, r.suggested_qty))::int AS deficit_units,
+           COUNT(DISTINCT p.id)::int AS partner_count
+    FROM restock_recommendations r JOIN partners p ON p.id=r.partner_id
+    GROUP BY region ORDER BY deficit_units DESC LIMIT 3
+  `);
+
+  // 7. Real-Time Deep Multi-Factor Naive Bayes Stockout Analytics
+  const rawStockRows = await db.execute(sql<RawStockAnalysisRow>`
+    WITH recent_7d AS (
+      SELECT partner_id, product_id,
+        COALESCE(SUM(qty_before - qty_after), 0)::float / 7.0 AS adu_7d
+      FROM stock_logs
+      WHERE source = 'manual_update'
+        AND qty_before > qty_after
+        AND created_at >= NOW() - INTERVAL '7 days'
+      GROUP BY partner_id, product_id
+    ),
+    historical_30d AS (
+      SELECT partner_id, product_id,
+        COALESCE(SUM(qty_before - qty_after), 0)::float / 23.0 AS adu_prev,
+        COUNT(CASE WHEN qty_after <= 10 THEN 1 END)::int AS crit_count,
+        COUNT(CASE WHEN qty_after = 0 THEN 1 END)::int AS zero_count
+      FROM stock_logs
+      WHERE source = 'manual_update'
+        AND qty_before > qty_after
+        AND created_at >= NOW() - INTERVAL '30 days'
+        AND created_at < NOW() - INTERVAL '7 days'
+      GROUP BY partner_id, product_id
+    ),
+    active_orders AS (
+      SELECT DISTINCT o.partner_id, oi.product_id
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.status IN ('diproses', 'disetujui', 'dalam_pengiriman')
+    )
+    SELECT
+      p.id::text AS partner_id,
+      p.name AS partner_name,
+      p.type::text AS partner_type,
+      COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
+      COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
+      pr.id::text AS product_id,
+      pr.name AS product_name,
+      pr.sku AS product_sku,
+      ps.current_qty::int AS current_qty,
+      COALESCE(r7.adu_7d, 0.0)::float AS daily_velocity,
+      COALESCE(h30.adu_prev, 0.0)::float AS prev_velocity,
+      COALESCE(h30.crit_count, 0)::int AS critical_events,
+      COALESCE(h30.zero_count, 0)::int AS zero_stock_events,
+      CASE WHEN ao.product_id IS NOT NULL THEN 1 ELSE 0 END AS has_active_order
+    FROM partners p
+    JOIN partner_stocks ps ON ps.partner_id = p.id
+    JOIN products pr ON pr.id = ps.product_id AND pr.is_active = true
+    LEFT JOIN recent_7d r7 ON r7.partner_id = p.id AND r7.product_id = ps.product_id
+    LEFT JOIN historical_30d h30 ON h30.partner_id = p.id AND h30.product_id = ps.product_id
+    LEFT JOIN active_orders ao ON ao.partner_id = p.id AND ao.product_id = ps.product_id
+    WHERE p.is_active = true
+  `);
+
+  const naiveBayesResult = computeDeepNaiveBayes(rawStockRows as unknown as RawStockAnalysisRow[]);
+  const regionalActivity = await getRegionalActivity(naiveBayesResult);
 
   return {
     engine_status: {
@@ -1181,6 +1424,9 @@ async function computeCompanyAiAnalytics() {
     factory_procurement_forecast: factoryProcurementForecast,
     frequent_stockouts: frequentStockouts,
     recommendations,
+    market_hotspots: { top_performers: topPerformers, regions: hotspotRegions },
+    regional_activity: regionalActivity,
+    naive_bayes_analysis: naiveBayesResult,
     ai_digest: aiDigest,
   };
 }
