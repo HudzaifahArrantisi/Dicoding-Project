@@ -2773,8 +2773,9 @@ function AdminDashboard() {
   const metrics = useQuery<Metrics>({
     queryKey: ['admin-metrics'],
     queryFn: () => getAdminMetrics(),
-    enabled: user?.role === 'admin' && (tab === 'stocks' || tab === 'data-science'),
-    staleTime: 30_000,
+    enabled: user?.role === 'admin',
+    staleTime: 10_000,
+    refetchInterval: 15_000,
   })
   const stocks = useQuery<StockItem[]>({
     queryKey: ['admin-stocks'],
@@ -2884,7 +2885,14 @@ function AdminDashboard() {
         ]),
       ),
     )
-  }, [orders.data])
+
+    // Sinkronkan cache admin-metrics secara instan ketika orders.data berubah
+    const actualPending = orders.data.filter((item) => item.status === 'diproses').length
+    queryClient.setQueryData<Metrics>(['admin-metrics'], (current) => {
+      if (!current || current.pendingOrders === actualPending) return current
+      return { ...current, pendingOrders: actualPending }
+    })
+  }, [orders.data, queryClient])
 
   const updateOrder = useMutation({
     mutationFn: async (input: {
@@ -2988,6 +2996,12 @@ function AdminDashboard() {
     () => (notifications.data?.data ?? []).reduce((count, item) => count + Number(!item.read_at), 0),
     [notifications.data],
   )
+  const pendingOrdersCount = useMemo(() => {
+    if (orders.data) {
+      return orders.data.filter((item) => item.status === 'diproses').length
+    }
+    return metrics.data?.pendingOrders ?? 0
+  }, [orders.data, metrics.data?.pendingOrders])
 
   if (authLoading || !user || user.role !== 'admin') {
     return (
@@ -3004,7 +3018,7 @@ function AdminDashboard() {
       <AdminSidebar
         tab={tab}
         onSelectTab={setTab}
-        pendingOrders={metrics.data?.pendingOrders}
+        pendingOrders={pendingOrdersCount}
         unread={unread}
         userName={user.full_name}
         onLogout={() => { void logout().then(() => navigate({ to: '/login' })).catch((error) => toast.error(getErrorMessage(error))) }}
@@ -3073,7 +3087,7 @@ function AdminDashboard() {
                 <div className="admin-summary grid md:grid-cols-3">
                   <Metric label="Cabang mitra" value={metrics.data?.totalBranches} detail="Cabang terdaftar" Icon={Building2} />
                   <Metric label="Cabang kritis" value={metrics.data?.criticalBranches} detail={`${metrics.data?.criticalItemsCount ?? 0} produk perlu perhatian`} Icon={AlertOctagon} critical />
-                  <Metric label="Perlu persetujuan" value={metrics.data?.pendingOrders} detail="Pesanan menunggu keputusan" Icon={ClipboardCheck} />
+                  <Metric label="Perlu persetujuan" value={pendingOrdersCount} detail="Pesanan menunggu keputusan" Icon={ClipboardCheck} />
                 </div>
               )}
             </section>
@@ -3204,7 +3218,7 @@ function AdminDashboard() {
             const isActive = tab === id
             const badgeCount =
               id === 'orders'
-                ? metrics.data?.pendingOrders
+                ? pendingOrdersCount
                 : id === 'alerts'
                   ? unread
                   : undefined

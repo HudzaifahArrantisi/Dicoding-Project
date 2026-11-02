@@ -316,7 +316,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       if (error instanceof OrderWorkflowError) { set.status = error.status; return { error: error.message }; }
       throw error;
     }
-    publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "notifications"] });
+    publishInventoryChange({ partnerId: user.partnerId, topics: ["orders", "metrics", "notifications"] });
     publishInventoryChange({ partnerId: null, topics: ["products"] });
     return { status: "ok" };
   }, { body: t.Object({ note: t.Optional(t.String({ maxLength: 1000 })), items: t.Array(t.Object({ product_id: t.String(), qty_requested: t.Integer({ minimum: 1, maximum: 2_147_483_647 }) }), { minItems: 1 }) }) })
