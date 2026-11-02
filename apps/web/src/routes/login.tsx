@@ -84,10 +84,6 @@ function LoginPage() {
             <h1 className="font-display text-[clamp(1.8rem,3.3vw,2.55rem)] font-semibold leading-[1.15] text-white">
               Stok cabang dan restock, lebih mudah diikuti.
             </h1>
-            <p className="mt-4 max-w-xs text-sm leading-6 text-white/90 sm:text-base sm:leading-7">
-              Satu tempat untuk laporan stok mitra dan tindak lanjut pesanan
-              oleh admin pusat.
-            </p>
           </div>
         </div>
 
