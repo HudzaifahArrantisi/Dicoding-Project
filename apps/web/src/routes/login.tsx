@@ -6,6 +6,12 @@ import { InstallApp } from '@/components/install-app'
 
 export const Route = createFileRoute('/login')({ component: LoginPage })
 
+const DEMO_ACCOUNTS = [
+  { label: 'Admin Pusat', username: 'admin', password: 'password123' },
+  { label: 'Kafe Sejuk', username: 'mitra1', password: 'password123' },
+  { label: 'Hotel Aruna', username: 'mitra2', password: 'password123' },
+] as const
+
 function LoginPage() {
   const { user, login, isLoading } = useAuth()
   const navigate = useNavigate()
@@ -94,6 +100,28 @@ function LoginPage() {
             </h2>
             <Link to="/" search={{ tour: true }} className="mt-2 inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-ume underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Lihat Panduan Sistem</Link>
             <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
+              <div>
+                <p className="mb-2 text-sm font-medium text-ink-900">
+                  Isi cepat akun demo
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {DEMO_ACCOUNTS.map((account) => (
+                    <button
+                      key={account.username}
+                      type="button"
+                      onClick={() => {
+                        setEmail(account.username)
+                        setPassword(account.password)
+                        setError(null)
+                      }}
+                      className="min-h-11 rounded-lg border border-[#858e9d] bg-white px-3 text-sm font-medium text-ink-900 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                    >
+                      {account.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label
                   htmlFor="email"
