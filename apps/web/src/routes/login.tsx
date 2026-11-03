@@ -102,7 +102,7 @@ function LoginPage() {
             <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
               <div>
                 <p className="mb-2 text-sm font-medium text-ink-900">
-                  Isi cepat akun demo
+                  Isi cepat akun 
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {DEMO_ACCOUNTS.map((account) => (
