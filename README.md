@@ -6,13 +6,13 @@ Platform manajemen inventaris dan pemesanan restock multi-tenant B2B antara **Ad
 
 ## Tech Stack
 
-Proyek ini menggunakan arsitektur monorepo modern dengan pemisahan peran yang jelas antara frontend, backend, database, dan modul machine learning:
-
-- **Runtime & Monorepo**: [Bun](https://bun.sh/) *(Package manager & runtime berkecepatan tinggi)*
-- **Frontend Web**: React 19, TanStack Start / Vite, Tailwind CSS v4, TanStack Query
-- **Backend API**: ElysiaJS, Drizzle ORM, Jose JWT, Eden Treaty *(End-to-end Type Safety)*
-- **Database**: [Neon DB](https://neon.tech/) *(Serverless PostgreSQL)*
-- **Data Science & AI**: Python 3.10+, Scikit-Learn *(Naive Bayes Model & Text Filtering)*, Psycopg
+| Kategori | Teknologi & Framework | Keterangan |
+|---|---|---|
+| **Runtime & Monorepo** | ![Bun](https://img.shields.io/badge/Bun-000000?style=flat-square&logo=bun&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white) | Bun Monorepo workspace & runtime berkecepatan tinggi |
+| **Frontend Web** | ![React](https://img.shields.io/badge/React_19-20232A?style=flat-square&logo=react&logoColor=61DAFB) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white) | TanStack Start, Tailwind v4, TanStack Query |
+| **Backend API** | ![ElysiaJS](https://img.shields.io/badge/ElysiaJS-000000?style=flat-square&logo=elysia&logoColor=white) ![Drizzle ORM](https://img.shields.io/badge/Drizzle_ORM-C5F74F?style=flat-square&logo=drizzle&logoColor=black) | Bun runtime, Jose JWT, End-to-end Type Safety (Eden Treaty) |
+| **Database** | ![Neon PostgreSQL](https://img.shields.io/badge/Neon_PostgreSQL-00E599?style=flat-square&logo=postgresql&logoColor=black) | Serverless PostgreSQL via connection pooling |
+| **Data Science & AI** | ![Python](https://img.shields.io/badge/Python_3.10+-3776AB?style=flat-square&logo=python&logoColor=white) ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white) | Multi-Factor Naive Bayes, Text Filtering, & Demand Forecasting |
 
 ---
 
