@@ -39,6 +39,7 @@ const answers: Record<MitraTour, { reply: string; label: string }> = {
 };
 
 const outOfScope = /\b(resep|masak|memasak|coding|kode program|python|javascript|politik|presiden|pemilu|gosip|selebriti|film|cuaca|olahraga|matematika)\b/i;
+const greeting = /^(?:hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|assalamualaikum|permisi)(?: semua| admin| kak)?$/i;
 const intentPatterns: Array<[MitraTour, RegExp]> = [
   ["delivery", /\b(scan|pindai|barcode|qr|resi|terima dus|barang sampai|penerimaan barang|konfirmasi barang|kurir|pengiriman)\b/i],
   ["restock", /\b(restock|pesan barang|pesanan baru|ajukan pesanan|tambah pesanan|stok gudang|stok pusat|gudang pusat|pengajuan barang)\b/i],
@@ -53,6 +54,10 @@ export function answerMitraQuestion(message: string): MitraAssistantReply {
 
   if (!normalized || outOfScope.test(normalized)) {
     return { ...base, reply: "Maaf, saya hanya bisa membantu urusan inventaris Daisuki: laporan stok, restock, penerimaan barang, riwayat pesanan, log, dan profil toko. Pilih salah satu topik itu, ya." };
+  }
+
+  if (greeting.test(normalized)) {
+    return { ...base, reply: "Halo! Ada yang ingin kamu cek soal toko Daisuki? Saya bisa bantu lihat stok, prioritas restock, pesanan, penerimaan barang, log, atau profil toko. Pilih pertanyaan cepat di bawah atau tulis pertanyaanmu." };
   }
 
   for (const [intent, pattern] of intentPatterns) {

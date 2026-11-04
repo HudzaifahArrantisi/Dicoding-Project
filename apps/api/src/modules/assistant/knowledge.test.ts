@@ -2,6 +2,13 @@ import { describe, expect, test } from 'bun:test'
 import { answerMitraQuestion } from './knowledge'
 
 describe('asisten mitra', () => {
+  test.each(['hi', 'Hai!', 'halo', 'Selamat pagi', 'permisi'])('membalas sapaan %s', (question) => {
+    const answer = answerMitraQuestion(question)
+    expect(answer.reply).toContain('Halo!')
+    expect(answer.suggestedTour).toBeUndefined()
+    expect(answer.quickReplies).toHaveLength(5)
+  })
+
   test.each([
     ['pesan barang untuk toko', 'restock'],
     ['lapor stok harian', 'stock_report'],
@@ -19,6 +26,11 @@ describe('asisten mitra', () => {
     const answer = answerMitraQuestion('Buatkan resep masakan untuk restock toko')
     expect(answer.suggestedTour).toBeUndefined()
     expect(answer.reply).toContain('hanya bisa membantu urusan inventaris Daisuki')
+  })
+
+  test('sapaan bersama pertanyaan tetap mengikuti topiknya', () => {
+    expect(answerMitraQuestion('Halo, stok saya sekarang berapa?').suggestedTour).toBe('stock_report')
+    expect(answerMitraQuestion('Hi, buatkan resep masakan').reply).toContain('hanya bisa membantu urusan inventaris Daisuki')
   })
 
   test('menolak pertanyaan umum yang tidak cocok dengan kata kunci', () => {
