@@ -87,4 +87,14 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     return { status: "ok" };
   },
   { params: t.Object({ id: t.String({ format: "uuid" }) }), body: t.Object({ rating: t.Union([t.Literal(1), t.Literal(-1)]) }) },
+).delete(
+  "/mitra/history",
+  async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isMitra(user)) { set.status = 403; return { error: "Akses hanya untuk mitra" }; }
+    await db.delete(assistantChatEvents)
+      .where(and(eq(assistantChatEvents.partner_id, user.partnerId), eq(assistantChatEvents.user_id, user.userId)));
+    return { status: "ok" };
+  },
 );

@@ -657,9 +657,9 @@ function StocksPanel({
       </div>
 
       {/* 2. Bagian Stok Saya (Stok Mitra) - Menjadi Satu Kesatuan Border dengan Laporan Stok */}
-      <div data-tour="daily-report-card" className="dashboard-surface mt-6 overflow-hidden border border-line shadow-xs">
+      <div className="dashboard-surface mt-6 overflow-hidden border border-line shadow-xs">
         {/* Header Stok Saya dengan H1 yang menyatu dalam satu border */}
-        <div className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
+        <div data-tour="daily-report-card" className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
           <div className="flex items-center gap-3">
             <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/70 shadow-xs" aria-hidden="true">
               <Store className="size-5.5 text-emerald-700" />
@@ -1277,8 +1277,8 @@ function OrderHistory({
   }, [allOrders, statusFilter])
 
   return (
-    <section data-tour="order-history-list" aria-labelledby="history-heading" className="dashboard-panel-enter">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+    <section aria-labelledby="history-heading" className="dashboard-panel-enter">
+      <div data-tour="order-history-list" className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="dashboard-eyebrow">Riwayat restock</p>
           <h1
@@ -2415,11 +2415,10 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
 
   return (
     <section
-      data-tour="stock-log-panel"
       aria-labelledby="mitra-logs-title"
       className="dashboard-panel-enter space-y-4 sm:space-y-6"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div data-tour="stock-log-panel" className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="dashboard-eyebrow">Aktivitas stok</p>
           <h1

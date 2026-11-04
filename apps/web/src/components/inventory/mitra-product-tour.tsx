@@ -57,8 +57,12 @@ export function MitraProductTour({
   const [index, setIndex] = useState(0)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const [usingFallback, setUsingFallback] = useState(false)
+  const [isScrolling, setIsScrolling] = useState(false)
+  const [dialogHeight, setDialogHeight] = useState(240)
   const closeRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const previousTabRef = useRef<MitraTab | null>(null)
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const step = tours[tour][index]
 
   useEffect(() => {
@@ -67,45 +71,99 @@ export function MitraProductTour({
     return () => previous?.focus()
   }, [])
 
+  // Pantau ukuran aktual dialog popover agar kalkulasi posisi selalu presisi tanpa terpotong
   useEffect(() => {
+    const el = dialogRef.current
+    if (!el) return
+    const update = () => {
+      if (el) setDialogHeight(el.offsetHeight || 240)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [index])
+
+  useEffect(() => {
+    const isTabSwitching = previousTabRef.current !== null && previousTabRef.current !== step.tab
+    previousTabRef.current = step.tab
+
     onTabChange(step.tab)
     onDeliveryStepChange(tour === 'delivery' ? index : -1)
-    setRect(null)
+
+    // Jika berpindah tab, bersihkan rect sebentar agar tidak ada glitch posisi.
+    // Jika pada tab yang sama, pertahankan rect agar animasi perpindahan spotlight meluncur halus (smooth glide).
+    if (isTabSwitching) {
+      setRect(null)
+    }
     setUsingFallback(false)
 
     let attempts = 0
     let timer: ReturnType<typeof setTimeout> | undefined
     let active = true
-    const measure = () => {
+
+    const measure = (shouldScroll = true) => {
       if (!active) return
       const target = visibleTarget(step.target)
       const fallback = target ? null : (step.fallback ? visibleTarget(step.fallback) : null)
       const element = target ?? fallback
       if (element) {
-        if (target || attempts === 0) element.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        if (shouldScroll) {
+          element.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        }
         const bounds = element.getBoundingClientRect()
         setRect(bounds)
         setUsingFallback(Boolean(fallback))
-      } else {
+      } else if (isTabSwitching) {
         setRect(null)
       }
-      if (!target && attempts < 40) {
+      if (!target && attempts < 35) {
         attempts += 1
-        timer = setTimeout(measure, 250)
+        timer = setTimeout(() => measure(true), 150)
       }
     }
-    timer = setTimeout(measure, 80)
+
+    // Interval bertahap agar saat smooth scroll dan rendering selesai, posisi tetap presisi
+    timer = setTimeout(() => {
+      measure(true)
+      // Pengukuran susulan saat animasi scroll selesai
+      setTimeout(() => measure(false), 220)
+      setTimeout(() => measure(false), 450)
+    }, isTabSwitching ? 120 : 30)
+
+    // Gunakan requestAnimationFrame throttling agar event scroll di mobile (60-120fps) tidak patah-patah
+    let rafId: number | null = null
     const refresh = () => {
-      const target = visibleTarget(step.target) ?? (step.fallback ? visibleTarget(step.fallback) : null)
-      if (target) setRect(target.getBoundingClientRect())
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        if (!active) return
+        const target = visibleTarget(step.target) ?? (step.fallback ? visibleTarget(step.fallback) : null)
+        if (target) {
+          setRect(target.getBoundingClientRect())
+        }
+      })
     }
-    window.addEventListener('resize', refresh)
-    window.addEventListener('scroll', refresh, true)
+
+    const handleScroll = () => {
+      setIsScrolling(true)
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
+      scrollTimerRef.current = setTimeout(() => {
+        setIsScrolling(false)
+      }, 120)
+      refresh()
+    }
+
+    window.addEventListener('resize', refresh, { passive: true })
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true })
+
     return () => {
       active = false
       clearTimeout(timer)
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
+      if (rafId !== null) cancelAnimationFrame(rafId)
       window.removeEventListener('resize', refresh)
-      window.removeEventListener('scroll', refresh, true)
+      window.removeEventListener('scroll', handleScroll, true)
     }
   }, [index, step, tour, onTabChange, onDeliveryStepChange])
 
@@ -125,28 +183,176 @@ export function MitraProductTour({
   }, [onClose])
 
   const last = index === tours[tour].length - 1
+
+  // Hitung posisi dinamis tooltip dengan pertimbangan safe area mobile dan floating nav bar
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 375
+  const isMobile = vw < 640
+  const topSafeBoundary = 16
+  const bottomSafeBoundary = isMobile ? 84 : 24
+  const dialogW = isMobile ? Math.min(448, vw - 24) : Math.min(448, vw - 32)
+  const minDialogTop = topSafeBoundary
+  const maxDialogTop = Math.max(topSafeBoundary, vh - bottomSafeBoundary - dialogHeight)
+
+  const isTargetInViewport = Boolean(
+    rect &&
+    rect.bottom > topSafeBoundary &&
+    rect.top < vh - bottomSafeBoundary
+  )
+
+  let placeAbove = false
+  let clampedTop = maxDialogTop
+  let leftPos = Math.max(12, Math.min(vw - dialogW - 12, (vw - dialogW) / 2))
+  let arrowLeft = 24
+
+  if (rect && typeof window !== 'undefined') {
+    const targetCenterX = rect.left + rect.width / 2
+    leftPos = Math.max(12, Math.min(vw - dialogW - 12, targetCenterX - dialogW / 2))
+    arrowLeft = Math.max(20, Math.min(dialogW - 20, targetCenterX - leftPos))
+
+    if (isTargetInViewport) {
+      const spaceAbove = rect.top - topSafeBoundary
+      const spaceBelow = vh - bottomSafeBoundary - rect.bottom
+
+      if (spaceBelow >= dialogHeight + 12) {
+        // Cukup ruang di bawah elemen target
+        placeAbove = false
+        const desiredTop = rect.bottom + 12
+        clampedTop = Math.max(minDialogTop, Math.min(maxDialogTop, desiredTop))
+      } else if (spaceAbove >= dialogHeight + 12) {
+        // Cukup ruang di atas elemen target
+        placeAbove = true
+        const desiredTop = rect.top - dialogHeight - 12
+        clampedTop = Math.max(minDialogTop, Math.min(maxDialogTop, desiredTop))
+      } else {
+        // Ruang sempit: pilih sisi yang memiliki jarak sisa lebih besar
+        const preferAbove = spaceAbove >= spaceBelow
+        placeAbove = preferAbove
+        const desiredTop = preferAbove ? rect.top - dialogHeight - 12 : rect.bottom + 12
+        clampedTop = Math.max(minDialogTop, Math.min(maxDialogTop, desiredTop))
+      }
+    } else {
+      // Elemen target tergulir ke luar layar
+      if (rect.bottom <= topSafeBoundary) {
+        // Target tergulir ke atas layar: posisikan tooltip di bawah agar tetap terlihat aman
+        clampedTop = maxDialogTop
+        placeAbove = false
+      } else {
+        // Target tergulir ke bawah layar: posisikan tooltip di atas agar tetap terlihat aman
+        clampedTop = minDialogTop
+        placeAbove = false
+      }
+    }
+  }
+
+  const dialogPositionStyle: React.CSSProperties = rect
+    ? {
+        top: `${clampedTop}px`,
+        left: `${leftPos}px`,
+        width: `${dialogW}px`,
+        maxHeight: `min(85dvh, calc(100dvh - ${topSafeBoundary + bottomSafeBoundary}px))`,
+      }
+    : {}
+
   return (
     <div className="fixed inset-0 z-[80] font-sans" role="dialog" aria-modal="true" aria-labelledby="mitra-tour-title" aria-describedby="mitra-tour-description">
-      <div className={`absolute inset-0 ${rect ? '' : 'bg-ink-900/75'}`} aria-hidden="true" />
-      {rect ? (
+      <div
+        className={`absolute inset-0 transition-opacity duration-300 ${
+          rect && isTargetInViewport ? 'opacity-100' : 'bg-ink-900/75 opacity-90'
+        }`}
+        aria-hidden="true"
+      />
+      {rect && isTargetInViewport ? (
         <div
-          className="pointer-events-none fixed rounded-md border-2 border-white transition-all duration-200"
-          style={{ left: Math.max(4, rect.left - 5), top: Math.max(4, rect.top - 5), width: rect.width + 10, height: rect.height + 10, boxShadow: '0 0 0 9999px rgba(12, 16, 36, 0.75)' }}
+          className={`pointer-events-none fixed rounded-xl border-2 border-white will-change-[top,left,width,height] ${
+            isScrolling
+              ? 'transition-none'
+              : 'transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
+          }`}
+          style={{
+            left: Math.max(4, rect.left - 6),
+            top: Math.max(4, rect.top - 6),
+            width: rect.width + 12,
+            height: rect.height + 12,
+            boxShadow: '0 0 0 9999px rgba(12, 16, 36, 0.72)',
+          }}
           aria-hidden="true"
         />
       ) : null}
       <div className="absolute inset-0" aria-hidden="true" />
-      <div ref={dialogRef} className="fixed inset-x-3 bottom-[calc(7rem+env(safe-area-inset-bottom))] z-10 mx-auto max-h-[min(44dvh,310px)] max-w-md overflow-y-auto rounded-xl border border-line bg-white p-4 shadow-float sm:bottom-6 sm:p-5">
+      <div
+        ref={dialogRef}
+        style={rect ? dialogPositionStyle : undefined}
+        className={`fixed z-10 overflow-y-auto rounded-2xl border border-line bg-white p-4.5 shadow-float sm:p-5 will-change-[top,bottom,left,transform] ${
+          isScrolling
+            ? 'transition-none'
+            : 'transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
+        } ${
+          rect
+            ? ''
+            : 'inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] mx-auto max-h-[min(44dvh,310px)] max-w-md sm:bottom-6'
+        }`}
+      >
+        {rect && isTargetInViewport ? (
+          <div
+            className={`pointer-events-none absolute size-3.5 rotate-45 bg-white transition-all duration-300 ease-out ${
+              placeAbove
+                ? '-bottom-1.5 border-r border-b border-line shadow-2xs'
+                : '-top-1.5 border-l border-t border-line shadow-2xs'
+            }`}
+            style={{ left: `${arrowLeft}px`, transform: 'translateX(-50%) rotate(45deg)' }}
+            aria-hidden="true"
+          />
+        ) : null}
         <div className="flex items-start justify-between gap-3">
-          <p className="text-xs font-semibold text-ink-700">Langkah {index + 1} dari {tours[tour].length}</p>
-          <button ref={closeRef} type="button" onClick={onClose} aria-label="Tutup panduan" className="-m-2 grid size-11 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-ink-700"><X className="size-5" /></button>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-100/90 px-2.5 py-0.5 text-[11px] font-bold text-ink-800">
+            Langkah {index + 1} dari {tours[tour].length}
+          </span>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup panduan"
+            className="-m-2 grid size-10 shrink-0 place-items-center rounded-full text-ink-600 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700 active:scale-95 transition-transform"
+          >
+            <X className="size-4.5" />
+          </button>
         </div>
-        <h2 id="mitra-tour-title" className="font-display text-lg font-semibold text-ink-900">{step.title}</h2>
-        <p id="mitra-tour-description" className="mt-2 text-sm leading-relaxed text-text">{step.description}</p>
-        {usingFallback || !rect ? <p className="mt-2 text-xs text-muted">Bagian ini belum tersedia pada kondisi toko saat ini. Kamu tetap bisa lanjut ke langkah berikutnya.</p> : null}
-        <div className="mt-4 flex justify-between gap-3">
-          <button type="button" onClick={() => setIndex((value) => Math.max(0, value - 1))} disabled={index === 0} className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line px-3 text-sm font-semibold text-ink-700 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"><ArrowLeft className="size-4" /> Mundur</button>
-          <button type="button" onClick={last ? onClose : () => setIndex((value) => value + 1)} className="inline-flex min-h-11 items-center gap-1 rounded-md bg-ink-700 px-4 text-sm font-semibold text-white hover:bg-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">{last ? 'Selesai' : 'Lanjut'}{last ? null : <ArrowRight className="size-4" />}</button>
+        <div key={index} className="animate-in fade-in-50 duration-200">
+          <h2 id="mitra-tour-title" className="mt-2 font-display text-base sm:text-lg font-semibold text-ink-900 leading-snug">
+            {step.title}
+          </h2>
+          <p id="mitra-tour-description" className="mt-1.5 text-xs sm:text-sm leading-relaxed text-text">
+            {step.description}
+          </p>
+        </div>
+        {usingFallback || !rect ? (
+          <p className="mt-2 text-xs text-muted">
+            Bagian ini belum tersedia pada kondisi toko saat ini. Kamu tetap bisa lanjut ke langkah berikutnya.
+          </p>
+        ) : null}
+        {rect && !isTargetInViewport ? (
+          <p className="mt-2 text-xs text-muted">
+            Bagian ini tergulir di luar layar. Gulir halaman untuk melihatnya atau tekan Lanjut.
+          </p>
+        ) : null}
+        <div className="mt-4 flex items-center justify-between gap-3 pt-2 border-t border-line/60">
+          <button
+            type="button"
+            onClick={() => setIndex((value) => Math.max(0, value - 1))}
+            disabled={index === 0}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-line px-3.5 text-xs sm:text-sm font-semibold text-ink-700 disabled:opacity-30 hover:bg-ink-50 active:scale-98 transition-all focus-visible:outline-2 focus-visible:outline-ink-700"
+          >
+            <ArrowLeft className="size-3.5" /> Mundur
+          </button>
+          <button
+            type="button"
+            onClick={last ? onClose : () => setIndex((value) => value + 1)}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-ink-900 px-4.5 text-xs sm:text-sm font-semibold text-white hover:bg-ink-800 active:scale-98 shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+          >
+            {last ? 'Selesai' : 'Lanjut'}
+            {last ? null : <ArrowRight className="size-3.5" />}
+          </button>
         </div>
       </div>
     </div>

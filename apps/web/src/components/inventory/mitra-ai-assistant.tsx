@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Loader2, MessageCircle, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react'
-import { askMitraAssistant, getMitraAssistantHistory, rateMitraAssistantAnswer, type MitraAssistantReply, type MitraTour } from '@/lib/api/assistant'
+import { ArrowUp, Loader2, MessageCircle, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import {
+  askMitraAssistant,
+  clearMitraAssistantHistory,
+  getMitraAssistantHistory,
+  rateMitraAssistantAnswer,
+  type MitraAssistantReply,
+  type MitraTour,
+} from '@/lib/api/assistant'
 
 type ChatMessage = { id: number; author: 'mitra' | 'assistant'; text: string; tour?: MitraTour; tourLabel?: string; interactionId?: string; feedback?: -1 | 1 | null }
 
@@ -12,19 +19,43 @@ const initialReplies = [
   'Bagaimana cara melengkapi profil toko?',
 ]
 
+const initialGreeting: ChatMessage = {
+  id: 0,
+  author: 'assistant',
+  text: 'Halo! Saya bisa bantu soal stok, restock, penerimaan barang, riwayat, log, dan profil toko Daisuki. Pilih pertanyaan di bawah atau ketik sendiri.',
+}
+
 export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTour) => void }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 0, author: 'assistant', text: 'Halo! Saya bisa bantu soal stok, restock, penerimaan barang, riwayat, log, dan profil toko Daisuki. Pilih pertanyaan di bawah atau ketik sendiri.' },
-  ])
+  const [messages, setMessages] = useState<ChatMessage[]>([initialGreeting])
   const [replies, setReplies] = useState(initialReplies)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [showConfirmClear, setShowConfirmClear] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const nextId = useRef(1)
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+
+  const hasMessages = messages.length > 1
+
+  async function handleClearChat() {
+    setClearing(true)
+    setError('')
+    try {
+      await clearMitraAssistantHistory()
+      nextId.current = 1
+      setMessages([initialGreeting])
+      setReplies(initialReplies)
+      setShowConfirmClear(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menghapus percakapan. Coba lagi.')
+    } finally {
+      setClearing(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -108,8 +139,69 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
               <h2 className="font-display text-base font-semibold text-ink-900">Daisuki AI Assistant</h2>
               <p className="text-xs text-muted">Asisten operasional mitra</p>
             </div>
-            <button type="button" onClick={() => setOpen(false)} aria-label="Tutup percakapan" className="grid size-11 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-ink-700"><X className="size-5" /></button>
+            <div className="flex items-center gap-0.5">
+              {hasMessages ? (
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmClear(true)}
+                  disabled={busy || clearing}
+                  aria-label="Hapus percakapan"
+                  title="Hapus riwayat chat"
+                  className="grid size-9 place-items-center rounded-md text-muted hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-rose-500"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  setShowConfirmClear(false)
+                }}
+                aria-label="Tutup percakapan"
+                className="grid size-9 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-ink-700"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
           </header>
+
+          {showConfirmClear ? (
+            <div className="border-b border-rose-100 bg-rose-50/90 p-3.5 backdrop-blur-xs animate-in fade-in-50 duration-150">
+              <div className="flex items-start gap-2.5">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-700">
+                  <Trash2 className="size-3.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-rose-950">
+                    Hapus riwayat percakapan?
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-rose-700">
+                    Semua pesan tanya-jawab akan dihapus permanen dari riwayat toko Anda.
+                  </p>
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={clearing}
+                      onClick={() => setShowConfirmClear(false)}
+                      className="inline-flex min-h-8 items-center rounded-md border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-900 hover:bg-rose-100/60 transition-colors focus-visible:outline-2 focus-visible:outline-rose-600"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      disabled={clearing}
+                      onClick={() => void handleClearChat()}
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md bg-rose-600 px-3 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 disabled:opacity-60 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700"
+                    >
+                      {clearing ? <Loader2 className="size-3 animate-spin" /> : null}
+                      {clearing ? 'Menghapus...' : 'Ya, Hapus Chat'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div ref={feedRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite" aria-relevant="additions text">
             {messages.map((message) => (

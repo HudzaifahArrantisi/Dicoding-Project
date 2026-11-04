@@ -32,3 +32,7 @@ export async function getMitraAssistantHistory(): Promise<MitraChatHistoryItem[]
 export function rateMitraAssistantAnswer(id: string, rating: -1 | 1): Promise<{ status: string }> {
   return apiClient.patch<{ status: string }>(`/assistant/mitra/chat/${encodeURIComponent(id)}/feedback`, { rating })
 }
+
+export function clearMitraAssistantHistory(): Promise<{ status: string }> {
+  return apiClient.delete<{ status: string }>('/assistant/mitra/history')
+}
