@@ -97,16 +97,6 @@ Aplikasi siap diakses di browser:
 
 ---
 
-##  Akun Login Demo
-
-Setelah proses *seed* selesai, Anda bisa langsung masuk ke sistem menggunakan akun bawaan:
-
-| Peran | Email | Kata Sandi | Akses & Fitur |
-|---|---|---|---|
-| **Admin Pusat** | `admin@daisuki.test` | `password123` | Monitoring stok cabang, approval restock, alokasi gudang pusat |
-| **Mitra 1** | `mitra1@daisuki.test` | `password123` | Portal Cabang Kafe Sejuk (lapor stok harian & pengajuan restock) |
-| **Mitra 2** | `mitra2@daisuki.test` | `password123` | Portal Cabang Hotel Aruna |
-
 ---
 
 ##  Perintah Pengembangan Harian
