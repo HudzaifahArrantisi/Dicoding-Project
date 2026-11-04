@@ -1,4 +1,4 @@
-# Daisuki Inventory — B2B Inventory & Order Management
+# Daisuki Inventory  B2B Inventory & Order Management
 
 Platform manajemen inventaris dan pemesanan restock multi-tenant B2B antara **Admin Daisuki Pusat** dan **Mitra Cabang** (hotel, kafe, restoran, dan minimarket).
 
