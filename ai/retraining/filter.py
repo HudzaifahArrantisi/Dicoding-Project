@@ -24,8 +24,9 @@ class Prediction(TypedDict):
 
 
 class DaisukiFilter:
-    def __init__(self, model_path: str | Path = MODEL_FILE) -> None:
+    def __init__(self, model_path: str | Path = MODEL_FILE, model_key: str = "risk") -> None:
         self.model_path = Path(model_path)
+        self.model_key = model_key
         self._model: Pipeline | None = None
         self._last_loaded_mtime: int | None = None
         self.load_model()
@@ -44,7 +45,11 @@ class DaisukiFilter:
         try:
             with self.model_path.open("rb") as source:
                 model = pickle.load(source)
-            if not isinstance(model, Pipeline) or not hasattr(model, "predict_proba"):
+            if isinstance(model, dict):
+                model = model.get(self.model_key)
+            elif self.model_key != "risk":
+                model = None
+            if model is not None and (not isinstance(model, Pipeline) or not hasattr(model, "predict_proba")):
                 raise ValueError("Artefak model bukan pipeline klasifikasi yang valid")
         except (OSError, pickle.UnpicklingError, ValueError, AttributeError, ImportError) as error:
             LOGGER.error("Gagal memuat model %s: %s", self.model_path, error)
@@ -59,6 +64,10 @@ class DaisukiFilter:
     def is_ready(self) -> bool:
         self.load_model()
         return self._model is not None
+
+    @property
+    def model(self) -> Pipeline:
+        return self._ready_model()
 
     @staticmethod
     def _normalize(texts: str | list[str]) -> list[str]:

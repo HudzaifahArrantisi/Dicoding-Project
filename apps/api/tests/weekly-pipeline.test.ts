@@ -28,7 +28,7 @@ test("pipeline berjalan di belakang respons dan permintaan bersamaan memakai sat
 
     releaseFirst(0);
     await runWeeklyPipeline();
-    expect(spawned).toBe(4);
+    expect(spawned).toBe(6);
     expect(getWeeklyPipelineStatus().status).toBe("succeeded");
     expect(getWeeklyPipelineStatus().finished_at).not.toBeNull();
 

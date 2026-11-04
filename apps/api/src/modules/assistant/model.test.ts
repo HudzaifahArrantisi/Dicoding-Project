@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { predictMitraStocks, stopMitraModelWorker } from './model'
+import { classifyMitraMessage, predictMitraStocks, stopMitraModelWorker } from './model'
 import type { ModelRecord } from './context'
 
 afterAll(() => stopMitraModelWorker())
@@ -25,4 +25,15 @@ test.skipIf(!existsSync(modelPath) || !Bun.which(python))('memakai daisuki.pkl u
   expect(result.predictions[0].product_id).toBe(record.product_id)
   expect(['urgent_restock', 'regular_order', 'normal']).toContain(result.predictions[0].label)
   expect(result.predictions[0].confidence).toBeGreaterThan(0)
+}, 40_000)
+
+test.skipIf(!existsSync(modelPath) || !Bun.which(python))('model mengenali intent pesan mitra', async () => {
+  for (const [message, expected] of [
+    ['hai', 'greeting'],
+    ['berapa total stok gudang pusat daisuki saat ini', 'central_stock'],
+    ['produk apa yang paling laku', 'top_products'],
+    ['siapa presiden indonesia', 'out_of_scope'],
+  ] as const) {
+    expect((await classifyMitraMessage(message))?.label).toBe(expected)
+  }
 }, 40_000)

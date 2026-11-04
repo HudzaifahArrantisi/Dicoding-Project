@@ -116,3 +116,25 @@ def build_training_samples(records: list[Mapping[str, Any]]) -> tuple[list[str],
         texts.append(text)
         labels.append(label)
     return texts, labels
+
+
+INTENT_EXAMPLES: dict[str, list[str]] = {
+    "greeting": ["hai", "halo", "hi admin", "selamat pagi kak", "selamat siang", "permisi", "assalamualaikum", "halo daisuki"],
+    "central_stock": ["berapa total stok gudang pusat daisuki", "stok pusat berapa", "cek ketersediaan barang di pusat", "berapa persediaan gudang", "jumlah barang di gudang pusat", "stok basreng di pusat berapa", "apa stok seblak di gudang", "gudang punya berapa produk"],
+    "top_products": ["produk apa yang paling laku", "barang terlaris minggu ini", "makanan paling banyak terjual", "produk penjualan tertinggi", "kategori produk paling laris", "seblak atau basreng mana paling laku", "peringkat produk terlaris", "produk populer tujuh hari terakhir"],
+    "top_partners": ["mitra paling laku", "cabang paling laris", "toko penjualan tertinggi", "siapa mitra terlaris minggu ini", "cabang mana paling banyak menjual", "peringkat mitra konsumsi terbesar", "mitra paling aktif menjual", "top lima toko minggu ini"],
+    "top_regions": ["daerah mana paling aktif", "wilayah terlaris", "kota penjualan tertinggi", "wilayah mana paling ramai", "daerah rawan kehabisan stok", "zona merah ada di mana", "hotspot wilayah minggu ini", "risiko stok wilayah mana tinggi"],
+    "restock": ["bagaimana cara restock barang", "mau pesan barang ke pusat", "ajukan pesanan baru", "alur minta stok ke gudang", "butuh restok produk", "produk mana perlu restock", "rekomendasi jumlah pesanan", "cara pesan seblak untuk toko"],
+    "stock_report": ["bagaimana cara lapor stok harian", "update stok toko saat tutup", "laporan fisik cabang", "sisa stok saya berapa", "stok toko sekarang", "status stok cabang", "cara simpan laporan harian", "cek buffer minimal toko"],
+    "delivery": ["cara konfirmasi barang sampai", "scan resi kardus", "verifikasi barcode kurir", "paket dalam pengiriman", "barang sudah sampai toko", "bagaimana terima dus", "status kiriman saya", "pindai resi pesanan"],
+    "logs": ["cara cek log mutasi", "lihat riwayat persetujuan pesanan", "catatan admin pesanan", "status pesanan terbaru", "log perubahan stok", "riwayat laporan toko", "pesanan saya sudah disetujui", "lihat log penerimaan barang"],
+    "profile": ["cara melengkapi profil cabang", "ubah penanggung jawab toko", "nomor telepon pic toko", "alamat pengiriman cabang", "wilayah toko saya", "perbarui profil mitra", "data provinsi dan kelurahan", "nama toko saya"],
+    "out_of_scope": ["buatkan resep seblak", "siapa presiden indonesia", "buatkan kode program python", "prediksi cuaca besok", "cerita gosip artis", "cara memasak nasi", "jelaskan matematika", "berita politik hari ini", "film apa yang bagus", "buat website dengan javascript"],
+}
+
+
+def build_intent_samples() -> tuple[list[str], list[str]]:
+    return (
+        [sample for samples in INTENT_EXAMPLES.values() for sample in samples],
+        [intent for intent, samples in INTENT_EXAMPLES.items() for _ in samples],
+    )

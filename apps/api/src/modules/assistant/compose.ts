@@ -1,10 +1,19 @@
 import { getStockStatus, isStale } from "@daisuki/shared";
 import type { MitraContext, ModelRecord } from "./context";
-import { answerMitraQuestion, isOutOfScopeQuestion, type MitraAssistantReply, type MitraTour } from "./knowledge";
+import { answerMitraQuestion, isOperationalQuestion, isOutOfScopeQuestion, type MitraAssistantReply, type MitraTour } from "./knowledge";
 import type { ModelResult } from "./model";
 
 const number = (value: number) => value.toLocaleString("id-ID");
-const followUp = /\b(yang tadi|yang itu|berapa|bagaimana|detailnya|lanjut|sekarang|terbaru|mana saja)\b/i;
+const followUp = /\b(yang tadi|yang itu)\b|^(berapa|bagaimana|detailnya|lanjut|sekarang|terbaru|mana saja)\s*\??$/i;
+export type AssistantIntent = MitraTour | "greeting" | "central_stock" | "top_products" | "top_partners" | "top_regions" | "out_of_scope";
+const factualIntents = new Set<AssistantIntent>(["central_stock", "top_products", "top_partners", "top_regions"]);
+const tours = new Set<AssistantIntent>(["restock", "stock_report", "delivery", "logs", "profile"]);
+const factualPatterns: Array<[AssistantIntent, RegExp]> = [
+  ["central_stock", /\b(total stok|stok pusat|stok gudang|gudang pusat|persediaan pusat|ketersediaan pusat)\b/i],
+  ["top_products", /\b(produk|barang|makanan|kategori)\b.*\b(laris|laku|terjual|populer|tertinggi)\b|\b(laris|laku|terjual)\b.*\b(produk|barang|kategori)\b/i],
+  ["top_partners", /\b(mitra|cabang|toko)\b.*\b(laris|laku|terjual|aktif|tertinggi)\b|\b(laris|laku)\b.*\b(mitra|cabang|toko)\b/i],
+  ["top_regions", /\b(daerah|wilayah|kota|zona)\b.*\b(aktif|laris|ramai|rawan|risiko|merah|tertinggi)\b/i],
+];
 
 function selectedStocks(message: string, stocks: ModelRecord[]): ModelRecord[] {
   const normalized = message.toLowerCase();
@@ -66,15 +75,48 @@ function profileReply(context: MitraContext): string {
   return `Profil ${partner.name}: PIC ${partner.pic_name || "belum diisi"}; nomor telepon ${partner.pic_phone ? "sudah diisi" : "belum diisi"}; wilayah ${region || "belum lengkap"}. Periksa alamat dan lengkapi wilayah di tab Profil agar tujuan pengiriman jelas.`;
 }
 
-export function resolveMitraIntent(message: string, previousIntent: MitraTour | null): MitraTour | null {
-  if (isOutOfScopeQuestion(message)) return null;
+function factReply(intent: AssistantIntent, context: MitraContext): string {
+  const facts = context.weeklyFacts;
+  if (!facts) return "Ringkasan mingguan belum tersedia. Minta admin menjalankan Perbarui Saran di tab AI Insights, lalu coba lagi.";
+  const when = new Date(facts.metadata.generated_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" });
+  const stamp = `Data dihitung pada ${when} WIB; stok dan penjualan bisa berubah setelah waktu itu.`;
+  if (intent === "central_stock") {
+    const lines = facts.central_warehouse.products.map((item) => `${item.name}: ${number(item.central_stock)} pcs.`);
+    return `Total stok gudang pusat pada snapshot: ${number(facts.central_warehouse.total_stock_units)} pcs.\n${lines.join("\n")}\n${stamp}`;
+  }
+  if (intent === "top_products") {
+    if (!facts.top_selling_products.length) return `Belum ada konsumsi produk yang tercatat untuk 7 hari ini. ${stamp}`;
+    const lines = facts.top_selling_products.map((item) => `${item.rank}. ${item.product_name} (${item.category}): ${number(item.weekly_units)} pcs, ${item.share_pct}%.`);
+    const categories = facts.top_selling_categories.map((item) => `${item.category} ${number(item.weekly_units)} pcs`).join(", ");
+    return `Produk paling laku dalam 7 hari sebelum snapshot:\n${lines.join("\n")}\nKategori: ${categories || "belum ada"}.\n${stamp}`;
+  }
+  if (intent === "top_partners") {
+    if (!facts.top_performers_partners.length) return `Belum ada konsumsi mitra yang tercatat untuk 7 hari ini. ${stamp}`;
+    return `Mitra dengan konsumsi tercatat terbesar dalam 7 hari:\n${facts.top_performers_partners.map((item) => `${item.rank}. ${item.partner_name} (${item.region}): ${number(item.weekly_units)} pcs, ${item.percentage}%.`).join("\n")}\n${stamp}`;
+  }
+  if (!facts.regional_hotspots.length) return `Analisis wilayah belum memiliki hasil. ${stamp}`;
+  return `Wilayah menurut konsumsi tercatat dalam 7 hari:\n${[...facts.regional_hotspots].sort((a, b) => b.weekly_units - a.weekly_units).map((item) => `${item.region}, ${item.province}: ${number(item.weekly_units)} pcs dari ${item.active_partners} mitra, ${item.status.replaceAll("_", " ")}, risiko puncak ${item.stockout_probability}%.`).join("\n")}\n${stamp}`;
+}
+
+export function resolveMitraIntent(message: string, previousIntent: AssistantIntent | null, classified?: { label: string; confidence: number } | null): AssistantIntent | null {
+  if (isOutOfScopeQuestion(message) || !isOperationalQuestion(message) && !followUp.test(message)) return null;
+  const normalized = message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  if (/^(hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam)|assalamualaikum|permisi)( semua| admin| kak)?$/.test(normalized)) return "greeting";
+  for (const [intent, pattern] of factualPatterns) if (pattern.test(normalized)) return intent;
+  if (classified?.label === "out_of_scope" && classified.confidence >= 0.35) return null;
+  if (classified?.confidence && classified.confidence >= 0.35 &&
+    (factualIntents.has(classified.label as AssistantIntent) || tours.has(classified.label as AssistantIntent))) {
+    return classified.label as AssistantIntent;
+  }
   return answerMitraQuestion(message).suggestedTour ?? (followUp.test(message) ? previousIntent : null);
 }
 
-export function composeMitraReply(message: string, context: MitraContext, model: ModelResult, previousIntent: MitraTour | null): MitraAssistantReply {
+export function composeMitraReply(message: string, context: MitraContext, model: ModelResult, previousIntent: AssistantIntent | null, classified?: { label: string; confidence: number } | null): MitraAssistantReply {
   const base = answerMitraQuestion(message);
-  const intent = resolveMitraIntent(message, previousIntent);
+  const intent = resolveMitraIntent(message, previousIntent, classified);
   if (!intent) return base;
+  if (intent === "greeting") return { ...base, reply: `Halo, ${context.partner?.name ?? "mitra Daisuki"}! Ada yang ingin kamu cek hari ini? Saya bisa bantu stok toko, restock, pengiriman, dan ringkasan jaringan minggu ini.` };
+  if (factualIntents.has(intent)) return { reply: factReply(intent, context), quickReplies: ["Stok pusat berapa?", "Produk apa paling laku?", "Mitra paling laris?", "Wilayah mana paling aktif?", "Stok saya sekarang berapa?"] };
   const reply = intent === "stock_report" ? stockReply(message, context)
     : intent === "restock" ? restockReply(message, context, model)
     : intent === "delivery" ? deliveryReply(context)
@@ -84,5 +126,5 @@ export function composeMitraReply(message: string, context: MitraContext, model:
     ? `${base.reply}\n\n${reply}`
     : reply;
   const quickReplies = ["Stok saya sekarang berapa?", "Produk mana perlu restock?", "Ada kiriman dalam pengiriman?", "Status pesanan terbaru?", "Bagaimana profil toko saya?"];
-  return { ...base, reply: withSteps, suggestedTour: intent, tourLabel: base.tourLabel ?? answerMitraQuestion(intent === "stock_report" ? "lapor stok" : intent === "delivery" ? "scan resi" : intent === "logs" ? "lihat log" : intent === "profile" ? "profil toko" : "restock").tourLabel, quickReplies };
+  return { ...base, reply: withSteps, suggestedTour: intent as MitraTour, tourLabel: base.tourLabel ?? answerMitraQuestion(intent === "stock_report" ? "lapor stok" : intent === "delivery" ? "scan resi" : intent === "logs" ? "lihat log" : intent === "profile" ? "profil toko" : "restock").tourLabel, quickReplies };
 }

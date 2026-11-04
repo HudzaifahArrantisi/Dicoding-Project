@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { WeeklyInsights } from '@/components/inventory/weekly-insights'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   keepPreviousData,
@@ -2092,6 +2093,7 @@ function AIInsightsPanel({
         <LoadingState label="Memuat analisis wilayah dan mitra..." />
       ) : error ? null : (
         <>
+          <WeeklyInsights facts={data?.weekly_facts} modelSync={data?.model_sync} />
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
             <div className="dashboard-surface overflow-hidden">
               <div className="border-b border-line px-4 py-4 sm:px-5">
@@ -2123,7 +2125,7 @@ function AIInsightsPanel({
             </div>
           </div>
 
-          {kpi ? (
+          {kpi && !data.weekly_facts ? (
             <div className="dashboard-surface overflow-hidden">
               <div className="border-b border-line px-4 py-3 sm:px-5"><h2 className="text-sm font-semibold text-ink-900">Gambaran jaringan, 7 hari terakhir</h2></div>
               <dl className="grid sm:grid-cols-3 sm:divide-x sm:divide-line">

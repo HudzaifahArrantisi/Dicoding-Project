@@ -4,9 +4,9 @@ import { db } from "../../db/client";
 import { assistantChatEvents } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
 import { answerMitraQuestion, type MitraTour } from "./knowledge";
-import { composeMitraReply, resolveMitraIntent } from "./compose";
+import { composeMitraReply, resolveMitraIntent, type AssistantIntent } from "./compose";
 import { loadMitraContext } from "./context";
-import { predictMitraStocks, type ModelResult } from "./model";
+import { classifyMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 
 const emptyModel: ModelResult = { available: false, predictions: [] };
 
@@ -30,7 +30,8 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     }).from(assistantChatEvents)
       .where(and(eq(assistantChatEvents.partner_id, user.partnerId), eq(assistantChatEvents.user_id, user.userId)))
       .orderBy(desc(assistantChatEvents.created_at)).limit(30);
-    return { data: rows.reverse() };
+    const tours = new Set<MitraTour>(["restock", "stock_report", "delivery", "logs", "profile"]);
+    return { data: rows.reverse().map((row) => ({ ...row, intent: tours.has(row.intent as MitraTour) ? row.intent : null })) };
   },
 ).post(
   "/mitra/chat",
@@ -46,14 +47,15 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const [previous] = await db.select({ intent: assistantChatEvents.intent }).from(assistantChatEvents)
       .where(and(eq(assistantChatEvents.partner_id, user.partnerId), eq(assistantChatEvents.user_id, user.userId)))
       .orderBy(desc(assistantChatEvents.created_at)).limit(1);
-    const previousIntent = previous?.intent as MitraTour | null ?? null;
-    const intent = resolveMitraIntent(message, previousIntent);
+    const previousIntent = previous?.intent as AssistantIntent | null ?? null;
+    const classified = await classifyMitraMessage(message);
+    const intent = resolveMitraIntent(message, previousIntent, classified);
     const context = intent ? await loadMitraContext(user.partnerId) : null;
     const model = context && (intent === "restock" || intent === "stock_report")
       ? await predictMitraStocks(context.stocks)
       : emptyModel;
     const response = context
-      ? composeMitraReply(message, context, model, previousIntent)
+      ? composeMitraReply(message, context, model, previousIntent, classified)
       : answerMitraQuestion(message);
     const ranked = [...model.predictions].sort((a, b) => {
       const weight = { urgent_restock: 0, regular_order: 1, normal: 2 };
@@ -64,10 +66,10 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       user_id: user.userId,
       message,
       reply: response.reply,
-      intent: response.suggestedTour ?? null,
+      intent,
       model_label: ranked[0]?.label ?? null,
       model_confidence: ranked[0] ? String(ranked[0].confidence) : null,
-      model_results: model.predictions,
+      model_results: { intent: classified, stocks: model.predictions },
     }).returning({ id: assistantChatEvents.id });
     return { ...response, interactionId: saved.id, modelAvailable: model.available };
   },

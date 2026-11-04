@@ -2,6 +2,9 @@
 
 Dokumen spesifikasi arsitektur, guardrail keamanan, dan alur integrasi fitur **Chatbot AI Mitra** terhubung langsung dengan **Interactive In-App Product Tour Controller** pada platform Daisuki B2B Inventory.
 
+> 📘 **Dokumen Arsitektur Lengkap Pipeline & Data Riil**:
+> Lihat [ARSITEKTUR_AI_PIPELINE_DAN_CHATBOT.md](ARSITEKTUR_AI_PIPELINE_DAN_CHATBOT.md) untuk detail siklus mingguan: *Weekly Insights ➔ JSON Facts ➔ Retraining daisuki.pkl ➔ Chatbot NLP/ML Mitra Berbasis Data Riil*.
+
 ---
 
 ## 1. Latar Belakang & Tujuan Fitur

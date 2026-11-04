@@ -12,7 +12,7 @@ import psycopg
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
-from source import build_training_samples, fetch_training_records
+from source import build_intent_samples, build_training_samples, fetch_training_records
 
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,7 +30,7 @@ def train_pipeline(texts: list[str], labels: list[str]) -> Pipeline:
     return model
 
 
-def save_model_safely(model: Pipeline, dest_path: Path, temp_path: Path) -> None:
+def save_model_safely(model: Pipeline | dict[str, Pipeline], dest_path: Path, temp_path: Path) -> None:
     """Write beside the destination, then atomically replace the old model."""
     try:
         with temp_path.open("wb") as output:
@@ -51,15 +51,19 @@ def run_retraining_loop() -> bool:
     try:
         records = fetch_training_records()
         texts, labels = build_training_samples(records)
-        if not texts:
-            LOGGER.warning("Belum ada data stok mitra untuk training; model lama dipertahankan")
-            return False
-        if len(set(labels)) < 2:
-            LOGGER.warning("Hanya ada satu kelas label dari data nyata; model lama dipertahankan")
-            return False
-        LOGGER.info("Training dari %d pasangan mitra-produk dan %d kelas", len(texts), len(set(labels)))
-        model = train_pipeline(texts, labels)
-        save_model_safely(model, MODEL_OUTPUT_FILE, TEMP_MODEL_FILE)
+        intent_texts, intent_labels = build_intent_samples()
+        bundle: dict[str, Pipeline] = {"intent": train_pipeline(intent_texts, intent_labels)}
+        if len(set(labels)) >= 2:
+            bundle["risk"] = train_pipeline(texts, labels)
+        elif MODEL_OUTPUT_FILE.exists():
+            from filter import DaisukiFilter
+            previous = DaisukiFilter(MODEL_OUTPUT_FILE, model_key="risk")
+            if previous.is_ready:
+                bundle["risk"] = previous.model
+        if "risk" not in bundle:
+            LOGGER.warning("Data stok hanya satu kelas; model intent tetap dilatih, prediksi risiko belum tersedia")
+        LOGGER.info("Training intent dari %d frasa dan risiko dari %d pasangan mitra-produk", len(intent_texts), len(texts))
+        save_model_safely(bundle, MODEL_OUTPUT_FILE, TEMP_MODEL_FILE)
         return True
     except (OSError, ValueError, RuntimeError, psycopg.Error) as error:
         LOGGER.exception("Retraining gagal; model lama dipertahankan: %s", error)

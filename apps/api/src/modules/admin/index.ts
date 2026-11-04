@@ -1,4 +1,5 @@
 import { getWeeklyPipelineStatus, startWeeklyPipeline } from "../../lib/weekly-pipeline";
+import { getModelSyncStatus, loadWeeklyFacts } from "../assistant/facts";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Elysia, t } from "elysia";
@@ -764,8 +765,9 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       return { error: "Forbidden: Admin only" };
     }
 
-    const analytics = await computeCompanyAiAnalytics();
-    return { data: analytics };
+    const [analytics, weeklyFacts] = await Promise.all([computeCompanyAiAnalytics(), loadWeeklyFacts()]);
+    const modelSync = await getModelSyncStatus(weeklyFacts);
+    return { data: { ...analytics, weekly_facts: weeklyFacts, model_sync: modelSync } };
   })
   .get("/ai-insights/run", async ({ headers, set }) => {
     const user = await getAuthUser(headers);

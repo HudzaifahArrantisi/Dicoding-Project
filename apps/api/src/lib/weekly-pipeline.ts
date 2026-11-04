@@ -6,6 +6,8 @@ const jobs = [
   "ai/jobs/weekly_restock_predictor.py",
   "ai/jobs/market_hotspot_analytics.py",
   "ai/jobs/regional_stockout_naive_bayes.py",
+  "ai/jobs/weekly_facts_aggregator.py",
+  "ai/retraining/train.py",
 ] as const;
 
 let running: Promise<void> | null = null;

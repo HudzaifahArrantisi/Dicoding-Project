@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { orders, partners, products, stockLogs } from "../../db/schema";
+import { loadWeeklyFacts } from "./facts";
 
 export interface ModelRecord {
   partner_id: string;
@@ -23,7 +24,7 @@ export interface ModelRecord {
 }
 
 export async function loadMitraContext(partnerId: string) {
-  const [stockRows, [partner], latestOrders, latestLogs] = await Promise.all([
+  const [stockRows, [partner], latestOrders, latestLogs, weeklyFacts] = await Promise.all([
     db.execute(sql<ModelRecord>`
       with sales as (
         select product_id,
@@ -76,6 +77,7 @@ export async function loadMitraContext(partnerId: string) {
     db.select({ name: partners.name, pic_name: partners.pic_name, pic_phone: partners.pic_phone, address: partners.address, province_name: partners.province_name, regency_name: partners.regency_name, district_name: partners.district_name, village_name: partners.village_name }).from(partners).where(eq(partners.id, partnerId)).limit(1),
     db.select({ order_no: orders.order_no, status: orders.status, created_at: orders.created_at, admin_note: orders.admin_note }).from(orders).where(eq(orders.partner_id, partnerId)).orderBy(desc(orders.created_at)).limit(3),
     db.select({ product_name: products.name, qty_before: stockLogs.qty_before, qty_after: stockLogs.qty_after, source: stockLogs.source, created_at: stockLogs.created_at }).from(stockLogs).innerJoin(products, eq(stockLogs.product_id, products.id)).where(and(eq(stockLogs.partner_id, partnerId), eq(products.is_active, true))).orderBy(desc(stockLogs.created_at)).limit(3),
+    loadWeeklyFacts(),
   ]);
   const stocks: ModelRecord[] = Array.from(stockRows, (row) => ({
     partner_id: String(row.partner_id),
@@ -96,7 +98,7 @@ export async function loadMitraContext(partnerId: string) {
     has_active_order: row.has_active_order === true,
     updated_at: row.updated_at instanceof Date ? row.updated_at : new Date(String(row.updated_at)),
   }));
-  return { stocks, partner, orders: latestOrders, logs: latestLogs };
+  return { stocks, partner, orders: latestOrders, logs: latestLogs, weeklyFacts };
 }
 
 export type MitraContext = Awaited<ReturnType<typeof loadMitraContext>>;

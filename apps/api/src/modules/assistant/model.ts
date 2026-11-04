@@ -10,13 +10,14 @@ export interface ModelPrediction {
 export interface ModelResult {
   available: boolean;
   predictions: ModelPrediction[];
+  intent?: { label: string; confidence: number } | null;
 }
 
 type WorkerReply = ModelResult & { id: string; error?: string };
 type Pending = { resolve: (result: ModelResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 
 const scriptPath = resolve(import.meta.dir, "../../../../../ai/retraining/inference_worker.py");
-let currentWorker: { send: (records: ModelRecord[]) => Promise<ModelResult>; stop: () => void } | null = null;
+let currentWorker: { send: (records: ModelRecord[], message?: string) => Promise<ModelResult>; stop: () => void } | null = null;
 
 function createWorker() {
   const python = process.env.DAISUKI_PYTHON_BIN || (process.platform === "win32" ? "python" : "python3");
@@ -27,7 +28,7 @@ function createWorker() {
 
   const client = {
     stop() { processHandle.kill(); },
-    send(records: ModelRecord[]): Promise<ModelResult> {
+    send(records: ModelRecord[], message?: string): Promise<ModelResult> {
       const id = crypto.randomUUID();
       return new Promise((resolveResult, reject) => {
         const timer = setTimeout(() => {
@@ -37,7 +38,7 @@ function createWorker() {
         }, 30_000);
         pending.set(id, { resolve: resolveResult, reject, timer });
         try {
-          processHandle.stdin.write(JSON.stringify({ id, records }) + "\n");
+          processHandle.stdin.write(JSON.stringify({ id, records, message }) + "\n");
           processHandle.stdin.flush();
         } catch (error) {
           clearTimeout(timer);
@@ -63,7 +64,7 @@ function createWorker() {
               pending.delete(result.id);
               clearTimeout(request.timer);
               if (result.error) request.reject(new Error(result.error));
-              else request.resolve({ available: result.available, predictions: result.predictions });
+              else request.resolve({ available: result.available, predictions: result.predictions, intent: result.intent });
             }
           } catch (error) {
             console.error("[ASSISTANT] Respons worker model tidak valid", error);
@@ -102,6 +103,16 @@ export async function predictMitraStocks(records: ModelRecord[]): Promise<ModelR
   } catch (error) {
     console.error("[ASSISTANT] Prediksi stok belum tersedia", error);
     return { available: false, predictions: [] };
+  }
+}
+
+export async function classifyMitraMessage(message: string): Promise<ModelResult["intent"]> {
+  try {
+    currentWorker ??= createWorker();
+    return (await currentWorker.send([], message)).intent ?? null;
+  } catch (error) {
+    console.error("[ASSISTANT] Klasifikasi pesan belum tersedia", error);
+    return null;
   }
 }
 

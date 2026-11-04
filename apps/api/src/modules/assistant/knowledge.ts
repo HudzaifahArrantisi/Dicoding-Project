@@ -40,6 +40,7 @@ const answers: Record<MitraTour, { reply: string; label: string }> = {
 
 const outOfScope = /\b(resep|masak|memasak|coding|kode program|python|javascript|politik|presiden|pemilu|gosip|selebriti|film|cuaca|olahraga|matematika)\b/i;
 const greeting = /^(?:hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|assalamualaikum|permisi)(?: semua| admin| kak)?$/i;
+const operationalTerms = /\b(daisuki|stok|stock|restock|restok|gudang|produk|barang|pesanan|order|mitra|cabang|toko|jualan|penjualan|terjual|terlaris|laku|konsumsi|daerah|wilayah|zona|resi|pindai|scan|barcode|log|mutasi|profil|pengiriman|seblak|basreng|makaroni|keripik|laporan|lapor|pasokan|buffer)\b/i;
 const intentPatterns: Array<[MitraTour, RegExp]> = [
   ["delivery", /\b(scan|pindai|barcode|qr|resi|terima dus|barang sampai|penerimaan barang|konfirmasi barang|kurir|pengiriman)\b/i],
   ["restock", /\b(restock|pesan barang|pesanan baru|ajukan pesanan|tambah pesanan|stok gudang|stok pusat|gudang pusat|pengajuan barang)\b/i],
@@ -76,6 +77,10 @@ export function answerMitraQuestion(message: string): MitraAssistantReply {
 
 export function isOutOfScopeQuestion(message: string): boolean {
   return outOfScope.test(message.toLowerCase());
+}
+
+export function isOperationalQuestion(message: string): boolean {
+  return greeting.test(message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()) || operationalTerms.test(message);
 }
 
 

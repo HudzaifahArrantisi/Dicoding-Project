@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type { RegionalActivity } from '@/components/inventory/regional-analysis'
+import type { WeeklyFacts } from './weekly-facts'
 
 export interface AdminMetrics {
   totalBranches: number
@@ -22,6 +23,8 @@ export interface WeeklySummary {
 }
 
 export interface AIInsights {
+  weekly_facts?: WeeklyFacts | null
+  model_sync?: { trained_at: string | null; synchronized: boolean }
   regional_activity?: RegionalActivity
   engine_status?: {
     is_active: boolean
