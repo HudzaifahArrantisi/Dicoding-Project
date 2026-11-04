@@ -4,6 +4,18 @@ Platform manajemen inventaris dan pemesanan restock multi-tenant B2B antara **Ad
 
 ---
 
+## Tech Stack
+
+Proyek ini menggunakan arsitektur monorepo modern dengan pemisahan peran yang jelas antara frontend, backend, database, dan modul machine learning:
+
+- **Runtime & Monorepo**: [Bun](https://bun.sh/) *(Package manager & runtime berkecepatan tinggi)*
+- **Frontend Web**: React 19, TanStack Start / Vite, Tailwind CSS v4, TanStack Query
+- **Backend API**: ElysiaJS, Drizzle ORM, Jose JWT, Eden Treaty *(End-to-end Type Safety)*
+- **Database**: [Neon DB](https://neon.tech/) *(Serverless PostgreSQL)*
+- **Data Science & AI**: Python 3.10+, Scikit-Learn *(Naive Bayes Model & Text Filtering)*, Psycopg
+
+---
+
 ## Panduan Setup Cepat (Mulai dari Nol)
 
 Pastikan sudah menginstal **[Git](https://git-scm.com/)** dan **[Bun](https://bun.sh/)** di komputer Anda.  
