@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Dialog } from 'radix-ui'
 import {
@@ -35,6 +35,8 @@ import {
 } from '@/components/inventory/query-state'
 import { RegionPicker, emptyRegion } from '@/components/inventory/region-picker'
 import { DeliveryScannerModal } from '@/components/inventory/delivery-scanner-modal'
+import { MitraAiAssistant } from '@/components/inventory/mitra-ai-assistant'
+import { MitraProductTour, type MitraTab } from '@/components/inventory/mitra-product-tour'
 import {
   BatchDetailModal,
   type StockLogBatch,
@@ -60,11 +62,11 @@ import {
 } from '@/lib/api'
 import { useInventoryEvents } from '@/lib/inventory-events'
 import { useAuth, type User } from '@/lib/auth'
+import type { MitraTour } from '@/lib/api/assistant'
 import type { Order, Product, StockItem, StockLog } from '@/lib/inventory-types'
 
 export const Route = createFileRoute('/mitra')({ component: MitraPortal })
 
-type MitraTab = 'stocks' | 'order' | 'history' | 'logs' | 'profile'
 type DraftOrderItem = { product_id: string; qty: string }
 
 function validOrderQuantity(qty: string): boolean {
@@ -96,10 +98,14 @@ function errorMessage(error: unknown) {
 
 function MitraPortal() {
   const { user, logout, refreshUser, clearSession, isLoading: authLoading } = useAuth()
+  const refreshUserRef = useRef(refreshUser)
+  refreshUserRef.current = refreshUser
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   useInventoryEvents(user?.role === 'mitra', 'mitra')
   const [activeTab, setActiveTab] = useState<MitraTab>('stocks')
+  const [activeTour, setActiveTour] = useState<MitraTour | null>(null)
+  const [deliveryTourStep, setDeliveryTourStep] = useState(-1)
   const [editedStocks, setEditedStocks] = useState<Record<string, number>>({})
   const [orderItems, setOrderItems] = useState<DraftOrderItem[]>([])
   const [skippedProductIds, setSkippedProductIds] = useState<Set<string>>(
@@ -107,12 +113,17 @@ function MitraPortal() {
   )
   const [orderNote, setOrderNote] = useState('')
 
-  const openTab = (nextTab: MitraTab) => {
+  const openTab = useCallback((nextTab: MitraTab) => {
     setActiveTab(nextTab)
     if (nextTab === 'profile') {
-      void refreshUser().catch(() => toast.error('Profil terbaru belum dapat dimuat'))
+      void refreshUserRef.current().catch(() => toast.error('Profil terbaru belum dapat dimuat'))
     }
-  }
+  }, [])
+
+  const closeTour = useCallback(() => {
+    setActiveTour(null)
+    setDeliveryTourStep(-1)
+  }, [])
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'mitra')) {
@@ -392,6 +403,7 @@ function MitraPortal() {
           {desktopTabItems.map(({ id, label, Icon }) => (
             <button
               key={id}
+              data-tour={id === 'logs' ? 'logs-tab' : undefined}
               type="button"
               onClick={() => openTab(id)}
               aria-current={activeTab === id ? 'page' : undefined}
@@ -450,6 +462,7 @@ function MitraPortal() {
         {activeTab === 'history' ? (
           <OrderHistory
             query={ordersQuery}
+            deliveryTourStep={deliveryTourStep}
             onOpenOrder={() => setActiveTab('order')}
             onVerify={(orderId, code) => verifyDelivery.mutateAsync({ orderId, code })}
             confirming={verifyDelivery.isPending}
@@ -472,6 +485,17 @@ function MitraPortal() {
         {activeTab === 'profile' ? <ProfilePanel user={user} /> : null}
       </main>
 
+      <MitraAiAssistant onStartTour={setActiveTour} />
+      {activeTour ? (
+        <MitraProductTour
+          key={activeTour}
+          tour={activeTour}
+          onClose={closeTour}
+          onTabChange={openTab}
+          onDeliveryStepChange={setDeliveryTourStep}
+        />
+      ) : null}
+
       {/* Floating Pill Nav Bar (Mode Mobile) */}
       <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none bg-gradient-to-t from-[#faf7f2] via-[#faf7f2]/80 to-transparent px-3 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
         <nav
@@ -483,6 +507,7 @@ function MitraPortal() {
             return (
               <button
                 key={id}
+                data-tour={id === 'logs' ? 'logs-tab' : undefined}
                 type="button"
                 onClick={() => openTab(id)}
                 aria-current={isActive ? 'page' : undefined}
@@ -552,7 +577,7 @@ function StocksPanel({
       </div>
 
       {/* 1. Grid Stok Gudang Pusat Daisuki */}
-      <div className="dashboard-surface mt-6 overflow-hidden border border-line">
+      <div data-tour="central-stock-card" className="dashboard-surface mt-6 overflow-hidden border border-line">
         <div className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
           <div className="flex items-center gap-3">
             <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-rose-500 via-rose-600 to-amber-400 p-0.5 shadow-sm shadow-rose-300/30" aria-hidden="true">
@@ -632,7 +657,7 @@ function StocksPanel({
       </div>
 
       {/* 2. Bagian Stok Saya (Stok Mitra) - Menjadi Satu Kesatuan Border dengan Laporan Stok */}
-      <div className="dashboard-surface mt-6 overflow-hidden border border-line shadow-xs">
+      <div data-tour="daily-report-card" className="dashboard-surface mt-6 overflow-hidden border border-line shadow-xs">
         {/* Header Stok Saya dengan H1 yang menyatu dalam satu border */}
         <div className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
           <div className="flex items-center gap-3">
@@ -701,7 +726,7 @@ function StocksPanel({
                       ) : null}
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
+                  <div data-tour="stock-status-badge" className="flex shrink-0 flex-col items-end gap-1">
                     <StockStatusBadge status={status} />
                     {stock.is_stale ? <StaleBadge /> : null}
                   </div>
@@ -719,7 +744,7 @@ function StocksPanel({
                   >
                     Stok di toko:
                   </label>
-                  <div className="flex items-center gap-2">
+                  <div data-tour="daily-report-counter" className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => onQtyChange(stock, qty - 1)}
@@ -762,6 +787,7 @@ function StocksPanel({
         {query.data && query.data.length > 0 ? (
           <div className="border-t border-line bg-paper/50 p-4 sm:p-5 flex justify-center">
             <button
+              data-tour="save-stock-button"
               type="button"
               onClick={onSave}
               disabled={changedIds.size === 0 || isSaving}
@@ -994,6 +1020,7 @@ function OrderForm({
                             <Minus className="size-4" aria-hidden="true" />
                           </button>
                           <input
+                            data-tour="restock-item-input"
                             id={`order-${stock.product_id}`}
                             type="text"
                             inputMode="numeric"
@@ -1019,6 +1046,7 @@ function OrderForm({
                         </div>
                       ) : (
                         <button
+                          data-tour="restock-item-input"
                           type="button"
                           onClick={() => onAdd(stock)}
                           className="inline-flex min-h-11 items-center gap-2 rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
@@ -1146,6 +1174,7 @@ function OrderForm({
           <span className="font-normal text-muted">(opsional)</span>
         </label>
         <textarea
+          data-tour="restock-note-input"
           id="order-note"
           value={note}
           onChange={(event) => onNoteChange(event.target.value)}
@@ -1154,6 +1183,7 @@ function OrderForm({
           maxLength={500}
         />
         <button
+          data-tour="submit-order-button"
           type="button"
           onClick={onSubmit}
           disabled={orderItems.length === 0 || hasInvalidQty || hasAnyExceeded || isSubmitting}
@@ -1171,6 +1201,7 @@ function OrderForm({
 
 function OrderHistory({
   query,
+  deliveryTourStep,
   onOpenOrder,
   onVerify,
   confirming,
@@ -1182,6 +1213,7 @@ function OrderHistory({
   uploadingProof,
 }: {
   query: ReturnType<typeof useQuery<Order[]>>
+  deliveryTourStep: number
   onOpenOrder: () => void
   onVerify: (orderId: string, code: string) => Promise<unknown>
   confirming: boolean
@@ -1193,6 +1225,7 @@ function OrderHistory({
   uploadingProof: boolean
 }) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const tourOpenedOrderId = useRef<string | null>(null)
   const [editTarget, setEditTarget] = useState<Order | null>(null)
   const [scanOpen, setScanOpen] = useState(false)
   const [cancelMode, setCancelMode] = useState(false)
@@ -1205,6 +1238,24 @@ function OrderHistory({
 
   const allOrders = query.data ?? []
   const selectedOrder = allOrders.find((order) => order.id === selectedOrderId) ?? null
+
+  useEffect(() => {
+    if (deliveryTourStep < 0) {
+      if (tourOpenedOrderId.current) setSelectedOrderId(null)
+      tourOpenedOrderId.current = null
+      return
+    }
+    const shipment = query.data?.find((order) => order.status === 'dalam_pengiriman')
+    if (!shipment) return
+    setStatusFilter('dalam_pengiriman')
+    if (deliveryTourStep >= 2) {
+      tourOpenedOrderId.current = shipment.id
+      setSelectedOrderId(shipment.id)
+    } else if (tourOpenedOrderId.current) {
+      setSelectedOrderId(null)
+      tourOpenedOrderId.current = null
+    }
+  }, [deliveryTourStep, query.data])
 
   const handleReceiptFile = async (file?: File) => {
     if (!file) return
@@ -1226,7 +1277,7 @@ function OrderHistory({
   }, [allOrders, statusFilter])
 
   return (
-    <section aria-labelledby="history-heading" className="dashboard-panel-enter">
+    <section data-tour="order-history-list" aria-labelledby="history-heading" className="dashboard-panel-enter">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="dashboard-eyebrow">Riwayat restock</p>
@@ -1367,6 +1418,7 @@ function OrderHistory({
             return (
               <article
                 key={order.id}
+                data-tour={order.status === 'dalam_pengiriman' ? 'delivery-order-card' : undefined}
                 onClick={() => {
                   setSelectedOrderId(order.id)
                   setReceiptPhoto(null)
@@ -1631,7 +1683,7 @@ function OrderHistory({
                       Setelah paket tiba di cabang dan kuantitas barang sesuai,
                       konfirmasikan penerimaan untuk menambahkan stok cabang secara otomatis.
                     </p>
-                    <button type="button" onClick={() => setScanOpen(true)} disabled={confirming} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-ume px-4 text-sm font-semibold text-white disabled:opacity-50">Pindai QR / Barcode Resi</button>
+                    <button data-tour="delivery-confirm-button" type="button" onClick={() => setScanOpen(true)} disabled={confirming} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-ink-700 px-4 text-sm font-semibold text-white hover:bg-ink-900 disabled:opacity-50">Pindai QR / Barcode Resi</button>
                     <DeliveryScannerModal open={scanOpen} onOpenChange={setScanOpen} pending={confirming} onVerify={(code) => onVerify(selectedOrder.id, code).then(() => { setSelectedOrderId(null); setReceiptPhoto(null) })} />
                   </div>
                 ) : null}
@@ -1915,7 +1967,7 @@ function ProfilePanel({ user }: { user: User }) {
           </div>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div data-tour="profile-section" className="grid gap-5 sm:grid-cols-2">
           <div>
             <label
               htmlFor="profile-name"
@@ -1989,7 +2041,7 @@ function ProfilePanel({ user }: { user: User }) {
             />
           </div>
         </div>
-        <RegionPicker idPrefix="profile-region" value={region} onChange={setRegion} />
+        <div data-tour="profile-region"><RegionPicker idPrefix="profile-region" value={region} onChange={setRegion} /></div>
         <button
           type="submit"
           disabled={saveProfile.isPending || isProcessingPhoto}
@@ -2363,6 +2415,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
 
   return (
     <section
+      data-tour="stock-log-panel"
       aria-labelledby="mitra-logs-title"
       className="dashboard-panel-enter space-y-4 sm:space-y-6"
     >

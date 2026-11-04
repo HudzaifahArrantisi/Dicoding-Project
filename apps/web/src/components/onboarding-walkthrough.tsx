@@ -10,7 +10,6 @@ import {
   Plus,
   RotateCcw,
   ScanLine,
-  Sparkles,
 } from 'lucide-react'
 import './onboarding-walkthrough.css'
 

@@ -1,14 +1,14 @@
-# Error umum: 10 panduan
+# Kategori 05: Error Umum (10 Panduan)
 
-Panduan kategori ini akan ditulis pada batch berikutnya.
+Daftar panduan lengkap untuk memahami dan mengatasi pesan error Git yang paling sering ditemui:
 
-41. Atasi push ditolak karena non-fast-forward.
-42. Atasi pesan no upstream branch.
-43. Atasi pesan Please tell me who you are.
-44. Atasi local changes would be overwritten.
-45. Keluar dari detached HEAD dengan aman.
-46. Atasi divergent branches saat pull.
-47. Atasi refusing to merge unrelated histories.
-48. Atasi file terlalu besar ditolak GitHub.
-49. Atasi not a git repository.
-50. Cari sebab nothing to commit padahal sudah mengedit.
+- [41. Cara Atasi Push Ditolak karena Non-Fast-Forward](41-push-ditolak-non-fast-forward.md)
+- [42. Cara Atasi Pesan No Upstream Branch](42-no-upstream-branch.md)
+- [43. Cara Atasi Pesan Please Tell Me Who You Are](43-please-tell-me-who-you-are.md)
+- [44. Cara Atasi Local Changes Would Be Overwritten](44-local-changes-would-be-overwritten.md)
+- [45. Cara Keluar dari Detached HEAD dengan Aman](45-keluar-dari-detached-head.md)
+- [46. Cara Atasi Divergent Branches saat Pull](46-divergent-branches-saat-pull.md)
+- [47. Cara Atasi Refusing to Merge Unrelated Histories](47-refusing-to-merge-unrelated-histories.md)
+- [48. Cara Atasi File Terlalu Besar Ditolak GitHub](48-file-terlalu-besar-ditolak-github.md)
+- [49. Cara Atasi Not a Git Repository](49-not-a-git-repository.md)
+- [50. Cara Cari Sebab Nothing to Commit Padahal Sudah Mengedit](50-nothing-to-commit-padahal-sudah-edit.md)

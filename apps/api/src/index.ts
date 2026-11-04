@@ -16,6 +16,7 @@ import { notificationsModule } from "./modules/notifications";
 import { adminNotificationModule } from "./modules/notifications/admin";
 import { adminModule } from "./modules/admin";
 import { regionModule } from "./modules/regions";
+import { assistantModule } from "./modules/assistant";
 import { realtimeModule } from "./realtime";
 import { runWeeklyPipeline } from "./lib/weekly-pipeline";
 
@@ -221,6 +222,7 @@ export const app = new Elysia()
   .use(adminNotificationModule)
   .use(adminModule)
   .use(regionModule)
+  .use(assistantModule)
   .use(
     cron({
       name: "weekly-demand-and-restock",

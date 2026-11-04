@@ -138,6 +138,20 @@ export const stockLogs = pgTable("stock_logs", {
     .defaultNow(),
 });
 
+export const assistantChatEvents = pgTable("assistant_chat_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partner_id: uuid("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  user_id: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  message: text("message").notNull(),
+  reply: text("reply").notNull(),
+  intent: text("intent"),
+  model_label: text("model_label"),
+  model_confidence: numeric("model_confidence", { precision: 5, scale: 4 }),
+  model_results: jsonb("model_results"),
+  feedback: integer("feedback"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const orders = pgTable("orders", {
   id: uuid("id").primaryKey().defaultRandom(),
   order_no: text("order_no").notNull().unique(),

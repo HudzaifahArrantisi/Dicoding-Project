@@ -1,14 +1,14 @@
-# Riwayat dan inspeksi: 10 panduan
+# Kategori 08: Riwayat & Inspeksi (10 Panduan)
 
-Panduan kategori ini akan ditulis pada batch berikutnya.
+Daftar panduan lengkap untuk melihat riwayat commit, membandingkan branch, dan mencari perubahan kode:
 
-71. Lihat riwayat commit.
-72. Lihat perubahan baris dengan git diff.
-73. Lihat isi satu commit.
-74. Cari siapa yang mengubah baris tertentu.
-75. Bandingkan dua branch.
-76. Lihat commit yang belum masuk main.
-77. Cari commit berdasarkan pesan.
-78. Lihat riwayat satu file.
-79. Lihat perubahan yang sudah di-add.
-80. Lihat ringkasan perubahan per commit.
+- [71. Cara Lihat Riwayat Commit](71-lihat-riwayat-commit.md)
+- [72. Cara Lihat Perubahan Baris dengan Git Diff](72-lihat-perubahan-baris-git-diff.md)
+- [73. Cara Lihat Isi Satu Commit Tertentu](73-lihat-isi-satu-commit.md)
+- [74. Cara Cari Siapa yang Mengubah Baris Tertentu (Blame)](74-cari-siapa-yang-mengubah-baris.md)
+- [75. Cara Bandingkan Dua Branch](75-bandingkan-dua-branch.md)
+- [76. Cara Lihat Commit yang Belum Masuk ke main](76-lihat-commit-belum-masuk-main.md)
+- [77. Cara Cari Commit Berdasarkan Pesan (Grep)](77-cari-commit-berdasarkan-pesan.md)
+- [78. Cara Lihat Riwayat Satu File Tertentu](78-lihat-riwayat-satu-file.md)
+- [79. Cara Lihat Perubahan yang Sudah di-Add (Staged)](79-lihat-perubahan-yang-sudah-diadd.md)
+- [80. Cara Lihat Ringkasan Perubahan per Commit (Stat)](80-lihat-ringkasan-perubahan-per-commit.md)

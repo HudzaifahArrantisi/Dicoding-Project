@@ -8,4 +8,5 @@ export * from './users'
 export * from './notifications'
 export * from './admin'
 export * from './regions'
+export * from './assistant'
 
