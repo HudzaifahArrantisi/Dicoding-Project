@@ -201,7 +201,7 @@ export function ThreeDPieChart({
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Title & View Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           {title ? (
             <h4 className="font-display text-sm font-bold text-ink-900 sm:text-base">
@@ -211,7 +211,7 @@ export function ThreeDPieChart({
           {subtitle ? <p className="text-xs text-muted mt-0.5">{subtitle}</p> : null}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
           {/* Mode Switcher: 3D Isometrik vs Donut 2D */}
           <div
             className="inline-flex items-center rounded-lg border border-line bg-ink-50/80 p-0.5 text-xs shadow-2xs"
@@ -254,9 +254,9 @@ export function ThreeDPieChart({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1.1fr] items-center gap-6 rounded-xl border border-line bg-gradient-to-b from-ink-50/50 via-white to-ink-50/30 p-4 sm:p-5 shadow-xs">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1.1fr] items-center gap-4 sm:gap-6 rounded-xl border border-line bg-gradient-to-b from-ink-50/50 via-white to-ink-50/30 p-3 sm:p-5 shadow-xs">
         {/* Left: Interactive SVG Chart Canvas */}
-        <div className="relative flex items-center justify-center overflow-hidden min-h-[280px]">
+        <div className="relative flex items-center justify-center overflow-hidden min-h-[200px] sm:min-h-[280px] w-full">
           {totalValue === 0 ? (
             <div className="flex flex-col items-center justify-center p-6 text-center">
               <CheckCircle2 className="h-10 w-10 text-ok-fg mb-2 opacity-80" />

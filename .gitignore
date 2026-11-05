@@ -8,6 +8,7 @@ dist
 .tanstack
 .wrangler
 *.log
+qa-reports/
 .demo-mitra-credentials.txt
 .DS_Store
 .github/CODEOWNERS

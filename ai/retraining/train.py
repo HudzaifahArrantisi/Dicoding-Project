@@ -38,7 +38,7 @@ def save_model_safely(model: Pipeline | dict[str, Pipeline], dest_path: Path, te
             output.flush()
             os.fsync(output.fileno())
         os.replace(temp_path, dest_path)
-        LOGGER.info("Model tersimpan: %s", dest_path)
+        LOGGER.info("Model udh  di simpan: %s", dest_path)
     finally:
         if temp_path.exists():
             try:

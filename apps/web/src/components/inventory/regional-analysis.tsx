@@ -306,11 +306,11 @@ export function RegionalAnalysis({
   return (
     <section className="dashboard-surface overflow-hidden" aria-labelledby="regional-analysis-title">
       {/* Header Panel */}
-      <div className="border-b border-line px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="border-b border-line px-4 py-3.5 sm:px-5 sm:py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <PieChart className="h-5 w-5 text-ink-900" />
+              <PieChart className="h-5 w-5 text-ink-900 shrink-0" />
               <h2 id="regional-analysis-title" className="font-display text-lg font-semibold text-ink-900 sm:text-xl">
                 Analisis stok per wilayah
               </h2>
@@ -318,37 +318,37 @@ export function RegionalAnalysis({
             <p className="mt-1 text-sm text-muted">Pilih wilayah pada diagram atau daftar untuk melihat cabang dan pemakaian stoknya.</p>
           </div>
           {activity?.model_generated_at ? (
-            <span className="rounded-full bg-ink-50 px-2.5 py-1 text-xs text-muted ring-1 ring-line">
+            <span className="inline-flex items-center self-start sm:self-auto rounded-full bg-ink-50 px-2.5 py-1 text-xs text-muted ring-1 ring-line">
               Diperbarui: {new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(new Date(activity.model_generated_at))} · {analyzedRegions.length} wilayah
             </span>
           ) : null}
         </div>
       </div>
 
-      <div className="space-y-6 p-5">
+      <div className="space-y-4 p-3.5 sm:p-5 sm:space-y-6">
         {/* KPI Strip */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Ringkasan wilayah terpilih">
-          <div className="rounded-lg bg-ink-50/60 p-3">
-            <p className="text-xs font-semibold text-muted">Wilayah Terpantau</p>
-            <p className="num mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" aria-label="Ringkasan wilayah terpilih">
+          <div className="rounded-lg bg-ink-50/60 p-2.5 sm:p-3">
+            <p className="text-[11px] sm:text-xs font-semibold text-muted">Wilayah Terpantau</p>
+            <p className="num mt-0.5 sm:mt-1 font-display text-xl sm:text-2xl font-bold tabular-nums text-ink-900">
               {number(visibleRegions.length)}
             </p>
           </div>
-          <div className="rounded-lg bg-warn-bg/50 p-3">
-            <p className="text-xs font-semibold text-warn-fg">Log Stok Kritis</p>
-            <p className="num mt-1 font-display text-2xl font-bold tabular-nums text-warn-fg">
+          <div className="rounded-lg bg-warn-bg/50 p-2.5 sm:p-3">
+            <p className="text-[11px] sm:text-xs font-semibold text-warn-fg">Log Stok Kritis</p>
+            <p className="num mt-0.5 sm:mt-1 font-display text-xl sm:text-2xl font-bold tabular-nums text-warn-fg">
               {number(totalCritical)}
             </p>
           </div>
-          <div className="rounded-lg bg-crit-bg/50 p-3">
-            <p className="text-xs font-semibold text-crit-fg">Stok Habis (0 pcs)</p>
-            <p className="num mt-1 font-display text-2xl font-bold tabular-nums text-crit-fg">
+          <div className="rounded-lg bg-crit-bg/50 p-2.5 sm:p-3">
+            <p className="text-[11px] sm:text-xs font-semibold text-crit-fg">Stok Habis (0 pcs)</p>
+            <p className="num mt-0.5 sm:mt-1 font-display text-xl sm:text-2xl font-bold tabular-nums text-crit-fg">
               {number(totalStockouts)}
             </p>
           </div>
-          <div className="rounded-lg bg-ink-50/60 p-3">
-            <p className="text-xs font-semibold text-muted">Pengajuan Restok</p>
-            <p className="num mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">
+          <div className="rounded-lg bg-ink-50/60 p-2.5 sm:p-3">
+            <p className="text-[11px] sm:text-xs font-semibold text-muted">Pengajuan Restok</p>
+            <p className="num mt-0.5 sm:mt-1 font-display text-xl sm:text-2xl font-bold tabular-nums text-ink-900">
               {number(totalRequests)}
             </p>
           </div>
@@ -356,43 +356,43 @@ export function RegionalAnalysis({
 
         {/* Naive Bayes Multi-Factor Intelligence Panel */}
         {naiveBayesAnalysis ? (
-          <div className="rounded-xl border border-line bg-white p-4 sm:p-5 shadow-2xs">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3.5">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-800 ring-1 ring-line">
-                  <BrainCircuit className="size-5" aria-hidden="true" />
+          <div className="rounded-xl border border-line bg-white p-3.5 sm:p-5 shadow-2xs">
+            <div className="flex flex-col gap-3.5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-800 ring-1 ring-line">
+                  <BrainCircuit className="size-4 sm:size-5" aria-hidden="true" />
                 </span>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-display text-base font-bold text-ink-900">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <h3 className="font-display text-sm sm:text-base font-bold text-ink-900">
                       Model Prediksi Risiko Kehabisan Stok Naive Bayes
                     </h3>
-                    <span className="rounded-full bg-ink-100 px-2 py-0.5 text-xs font-semibold text-ink-700">
-                      Multi-Factor Gaussian & Categorical
+                    <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] sm:text-xs font-semibold text-ink-700">
+                      Multi-Factor
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-muted max-w-xl">
+                  <p className="mt-1 text-xs text-muted max-w-xl leading-relaxed">
                     Menganalisis probabilitas stok habis sebelum pasokan tiba dengan membaca ketahanan hari (Days of Cover), percepatan konsumsi harian, indeks stres lead time pabrik 6 hari, dan probabilitas tipe mitra.
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5 shrink-0">
-                <div className="rounded-lg border border-crit-fg/20 bg-crit-bg/50 px-3 py-2 text-center">
-                  <p className="text-[11px] font-semibold text-crit-fg">Item Risiko Tinggi</p>
-                  <p className="num font-display text-lg font-bold tabular-nums text-crit-fg">
+              <div className="grid grid-cols-3 gap-2 w-full lg:w-auto shrink-0">
+                <div className="rounded-lg border border-crit-fg/20 bg-crit-bg/50 px-2.5 py-1.5 sm:px-3 sm:py-2 text-center min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-crit-fg truncate">Item Risiko</p>
+                  <p className="num font-display text-base sm:text-lg font-bold tabular-nums text-crit-fg">
                     {naiveBayesAnalysis.summary.high_risk_items_count}
                   </p>
                 </div>
-                <div className="rounded-lg border border-warn-fg/20 bg-warn-bg/50 px-3 py-2 text-center">
-                  <p className="text-[11px] font-semibold text-warn-fg">Lonjakan Konsumsi</p>
-                  <p className="num font-display text-lg font-bold tabular-nums text-warn-fg">
+                <div className="rounded-lg border border-warn-fg/20 bg-warn-bg/50 px-2.5 py-1.5 sm:px-3 sm:py-2 text-center min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-warn-fg truncate">Lonjakan</p>
+                  <p className="num font-display text-base sm:text-lg font-bold tabular-nums text-warn-fg">
                     {naiveBayesAnalysis.summary.surge_detected_count}
                   </p>
                 </div>
-                <div className="rounded-lg border border-line bg-ink-50 px-3 py-2 text-center">
-                  <p className="text-[11px] font-semibold text-ink-800">Wilayah Merah</p>
-                  <p className="num font-display text-lg font-bold tabular-nums text-ink-900">
+                <div className="rounded-lg border border-line bg-ink-50 px-2.5 py-1.5 sm:px-3 sm:py-2 text-center min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-ink-800 truncate">Zona Merah</p>
+                  <p className="num font-display text-base sm:text-lg font-bold tabular-nums text-ink-900">
                     {naiveBayesAnalysis.summary.red_zone_regions_count}
                   </p>
                 </div>
@@ -1026,29 +1026,29 @@ export function RegionalAnalysis({
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-line pb-3">
               <div>
                 <h3 className="text-sm font-bold text-ink-900 sm:text-base flex items-center gap-2">
-                  <PieChart className="h-4 w-4 text-ume" />
-                  Aktivitas stok per wilayah
+                  <PieChart className="h-4 w-4 text-ume shrink-0" />
+                  <span>Aktivitas stok per wilayah</span>
                 </h3>
                 <p className="mt-1 text-xs leading-5 text-muted">Diagram menunjukkan bagian tiap wilayah dari metrik yang dipilih. Pilih wilayah untuk melihat rincian cabang.</p>
               </div>
 
               {/* Metric Filter Tabs */}
-              <div className="flex flex-wrap items-center gap-1.5 bg-ink-100/70 p-1 rounded-lg text-xs self-start sm:self-auto">
+              <div className="flex items-center gap-1.5 overflow-x-auto rounded-lg bg-ink-100/70 p-1 text-xs w-full sm:w-auto scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setPieMetric('critical')}
                   aria-pressed={pieMetric === 'critical'}
-                  className={`min-h-11 px-3 py-1.5 rounded-md font-semibold transition ${
+                  className={`min-h-10 shrink-0 px-3 py-1.5 rounded-md font-semibold transition ${
                     pieMetric === 'critical' ? 'bg-white text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
                   }`}
                 >
-                   Log Kritis
+                  Log Kritis
                 </button>
                 <button
                   type="button"
                   onClick={() => setPieMetric('stockout')}
                   aria-pressed={pieMetric === 'stockout'}
-                  className={`min-h-11 px-3 py-1.5 rounded-md font-semibold transition ${
+                  className={`min-h-10 shrink-0 px-3 py-1.5 rounded-md font-semibold transition ${
                     pieMetric === 'stockout' ? 'bg-white text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
                   }`}
                 >
@@ -1058,7 +1058,7 @@ export function RegionalAnalysis({
                   type="button"
                   onClick={() => setPieMetric('restock')}
                   aria-pressed={pieMetric === 'restock'}
-                  className={`min-h-11 px-3 py-1.5 rounded-md font-semibold transition ${
+                  className={`min-h-10 shrink-0 px-3 py-1.5 rounded-md font-semibold transition ${
                     pieMetric === 'restock' ? 'bg-white text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
                   }`}
                 >
@@ -1068,11 +1068,11 @@ export function RegionalAnalysis({
                   type="button"
                   onClick={() => setPieMetric('total')}
                   aria-pressed={pieMetric === 'total'}
-                  className={`min-h-11 px-3 py-1.5 rounded-md font-semibold transition ${
+                  className={`min-h-10 shrink-0 px-3 py-1.5 rounded-md font-semibold transition ${
                     pieMetric === 'total' ? 'bg-white text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
                   }`}
                 >
-                   Total
+                  Total
                 </button>
               </div>
             </div>
@@ -1108,16 +1108,111 @@ export function RegionalAnalysis({
 
           {visiblePartners.length > 0 ? (
             <div className="overflow-hidden rounded-xl border border-line bg-white shadow-2xs">
-              {/* Header Kolom Desktop */}
-              <div className="hidden lg:grid lg:grid-cols-[2fr_2fr_1.4fr_140px] items-center gap-4 border-b border-line bg-ink-50/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted">
-                <div>Mitra Cabang & Wilayah</div>
-                <div>Produk Rawan & Saran Buffer</div>
-                <div>Aktivitas Log (7 Hari)</div>
-                <div className="text-right">Status Zona</div>
+              {/* TAMPILAN MOBILE: Kartu Responsif Tanpa Terpotong */}
+              <div className="divide-y divide-line lg:hidden">
+                {visiblePartners.map((partner) => {
+                  const locText = formatLocationText(partner.region_name, partner.province_name)
+                  const hasCritical = partner.critical_logs > 0
+                  const hasStockout = partner.stockout_logs > 0
+                  const hasRestock = partner.restock_requests > 0
+                  const hasAnyLogIssue = hasCritical || hasStockout || hasRestock
+                  const badge = zoneBadgeConfig[partner.zone]
+
+                  return (
+                    <article
+                      key={`m-${partner.partner_id}`}
+                      className="p-3.5 space-y-2.5 hover:bg-ink-50/30 transition-colors"
+                    >
+                      {/* Baris 1: Identitas Mitra & Badge Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="font-semibold text-sm text-ink-900 break-words">
+                              {partner.partner_name}
+                            </h4>
+                            {partner.max_stockout_probability !== undefined && partner.max_stockout_probability >= 50 && (
+                              <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-800">
+                                {partner.max_stockout_probability}% risiko
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted mt-0.5 truncate">
+                            {locText}
+                          </p>
+                        </div>
+                        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badge.chip}`}>
+                          <span className={`size-1.5 rounded-full ${badge.dot}`} />
+                          {badge.label}
+                        </span>
+                      </div>
+
+                      {/* Baris 2: Produk Rawan & Rekomendasi Buffer */}
+                      {partner.urgent_items && partner.urgent_items.length > 0 ? (
+                        <div className="rounded-lg bg-rose-50/50 border border-rose-200/60 p-2.5 space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-rose-900">Rawan:</span>
+                            {partner.urgent_items.map((item) => (
+                              <span
+                                key={item.product_name}
+                                className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 text-[10px] font-medium text-rose-900 border border-rose-200/80 shadow-2xs"
+                              >
+                                <span className="break-words">{item.product_name}</span>
+                                <span className="font-bold tabular-nums text-rose-600">({item.stockout_probability}%)</span>
+                              </span>
+                            ))}
+                          </div>
+                          {partner.suggested_products.length > 0 ? (
+                            <p className="text-[11px] text-ink-700 leading-snug">
+                              <span className="font-semibold text-ink-900">Saran buffer:</span>{' '}
+                              {partner.suggested_products.map((p) => `${p.product_name} → ${p.suggested_par_level} pcs`).join(', ')}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs text-muted">
+                          <span className="size-1.5 rounded-full bg-emerald-500" />
+                          <span>Stok aman · Tidak ada produk rawan</span>
+                        </div>
+                      )}
+
+                      {/* Baris 3: Log Aktivitas 7 Hari */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-line/60">
+                        <span className="text-[11px] text-muted font-medium">Aktivitas 7 hari:</span>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                          {hasCritical && (
+                            <span className="inline-flex items-center gap-1 font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
+                              <span className="font-bold tabular-nums">{partner.critical_logs}</span> kritis
+                            </span>
+                          )}
+                          {hasStockout && (
+                            <span className="inline-flex items-center gap-1 font-medium text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200/60">
+                              <span className="font-bold tabular-nums">{partner.stockout_logs}</span> habis
+                            </span>
+                          )}
+                          {hasRestock && (
+                            <span className="inline-flex items-center gap-1 text-ink-700 bg-ink-100 px-1.5 py-0.5 rounded">
+                              <span className="font-bold tabular-nums">{partner.restock_requests}</span> restok
+                            </span>
+                          )}
+                          {!hasAnyLogIssue && (
+                            <span className="text-muted text-[11px]">Log stabil</span>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
               </div>
 
-              {/* Baris Data */}
-              <div className="divide-y divide-line">
+              {/* TAMPILAN DESKTOP: Grid Multi-Kolom Tabular */}
+              <div className="hidden lg:block divide-y divide-line">
+                <div className="grid grid-cols-[2fr_2fr_1.4fr_140px] items-center gap-4 bg-ink-50/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted border-b border-line">
+                  <div>Mitra Cabang & Wilayah</div>
+                  <div>Produk Rawan & Saran Buffer</div>
+                  <div>Aktivitas Log (7 Hari)</div>
+                  <div className="text-right">Status Zona</div>
+                </div>
+
                 {visiblePartners.map((partner) => {
                   const locText = formatLocationText(partner.region_name, partner.province_name)
                   const hasCritical = partner.critical_logs > 0
@@ -1128,8 +1223,8 @@ export function RegionalAnalysis({
 
                   return (
                     <div
-                      key={partner.partner_id}
-                      className="grid gap-3 p-4 lg:grid-cols-[2fr_2fr_1.4fr_140px] lg:items-center hover:bg-ink-50/40 transition-colors"
+                      key={`d-${partner.partner_id}`}
+                      className="grid grid-cols-[2fr_2fr_1.4fr_140px] items-center gap-4 p-4 hover:bg-ink-50/40 transition-colors"
                     >
                       {/* Kolom 1: Mitra & Lokasi */}
                       <div className="min-w-0">
@@ -1202,7 +1297,7 @@ export function RegionalAnalysis({
                       </div>
 
                       {/* Kolom 4: Status Zona */}
-                      <div className="flex lg:justify-end">
+                      <div className="flex justify-end">
                         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${badge.chip}`}>
                           <span className={`size-1.5 rounded-full ${badge.dot}`} />
                           {badge.label}

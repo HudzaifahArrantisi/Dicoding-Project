@@ -2046,7 +2046,7 @@ function AIInsightsPanel({
   }
 
   return (
-    <section className="dashboard-panel-enter space-y-6" aria-labelledby="ai-insights-title">
+    <section className="dashboard-panel-enter min-w-0 space-y-6" aria-labelledby="ai-insights-title">
       <div className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="dashboard-eyebrow">Perencanaan pasokan</p>
@@ -2058,7 +2058,7 @@ function AIInsightsPanel({
           </p>
         </div>
 
-        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+        <div className="flex min-w-0 flex-col items-start gap-2 sm:shrink-0 sm:items-end">
           <button
             type="button"
             onClick={() => void handleRunAiAnalysis()}
@@ -2094,7 +2094,7 @@ function AIInsightsPanel({
       ) : error ? null : (
         <>
           <WeeklyInsights facts={data?.weekly_facts} modelSync={data?.model_sync} />
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
             <div className="dashboard-surface overflow-hidden">
               <div className="border-b border-line px-4 py-4 sm:px-5">
                 <p className="text-xs font-semibold text-ink-700">Mulai dari sini</p>
@@ -2150,14 +2150,14 @@ function AIInsightsPanel({
 
           <div>
             <h2 className="mb-3 font-display text-lg font-semibold text-ink-900">Telusuri analisis</h2>
-            <div className="flex gap-2 overflow-x-auto border-b border-line pb-3" aria-label="Bagian analisis AI">
+            <div className="grid grid-cols-2 gap-2 border-b border-line pb-3 sm:flex sm:flex-wrap" aria-label="Bagian analisis AI">
               {sections.map((section) => (
                 <button
                   key={section.id}
                   type="button"
                   onClick={() => setSubTab(section.id)}
                   aria-pressed={subTab === section.id}
-                  className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border px-3.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${subTab === section.id
+                  className={`inline-flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-md border px-2.5 text-left text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:justify-start sm:px-3.5 sm:text-sm ${subTab === section.id
                     ? 'border-ink-900 bg-ink-900 text-white'
                     : 'border-line bg-white text-ink-700 hover:bg-ink-50'}`}
                 >
@@ -2178,7 +2178,7 @@ function AIInsightsPanel({
               />
 
               {hotspots ? (
-                <section className="dashboard-surface p-5" aria-label="Hotspot pasar mingguan">
+                <section className="dashboard-surface p-3.5 sm:p-5" aria-label="Hotspot pasar mingguan">
                   <h3 className="font-display text-base font-semibold text-ink-900">
                     Hotspot Pasar Mingguan
                   </h3>
@@ -2597,7 +2597,26 @@ function AIInsightsPanel({
                 </div>
 
                 {factoryForecast.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div>
+                    <div className="divide-y divide-line sm:hidden">
+                      {factoryForecast.map((item) => (
+                        <article key={item.product_id} className="space-y-3 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <h4 className="min-w-0 flex-1 font-semibold text-ink-900">{item.product_name}</h4>
+                            <span className={`rounded px-2 py-1 text-xs font-semibold ${item.urgency === 'CRITICAL' ? 'bg-crit-bg text-crit-fg' : item.urgency === 'WARNING' ? 'bg-warn-bg text-warn-fg' : 'bg-ok-bg text-ok-fg'}`}>
+                              {item.urgency === 'CRITICAL' ? 'Order segera' : item.urgency === 'WARNING' ? 'Siapkan PO' : 'Aman'}
+                            </span>
+                          </div>
+                          <dl className="grid grid-cols-2 gap-3 rounded-md bg-ink-50 p-3 text-xs">
+                            <div><dt className="text-muted">Stok pusat</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{item.central_stock.toLocaleString('id-ID')} pcs</dd></div>
+                            <div><dt className="text-muted">Konsumsi per minggu</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{item.total_partner_demand_weekly.toLocaleString('id-ID')} pcs</dd></div>
+                            <div><dt className="text-muted">Ketahanan stok</dt><dd className={`num mt-1 font-semibold tabular-nums ${item.urgency === 'CRITICAL' ? 'text-crit-fg' : item.urgency === 'WARNING' ? 'text-warn-fg' : 'text-ok-fg'}`}>{item.estimated_runout_days} hari</dd></div>
+                            <div><dt className="text-muted">Saran pesanan pabrik</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{item.suggested_factory_batch_order > 0 ? `+${item.suggested_factory_batch_order.toLocaleString('id-ID')} pcs` : 'Stok cukup'}</dd></div>
+                          </dl>
+                        </article>
+                      ))}
+                    </div>
+                    <div className="hidden overflow-x-auto sm:block">
                     <table className="w-full min-w-[720px] text-left text-sm">
                       <thead className="bg-ink-50/70 text-xs text-muted">
                         <tr>
@@ -2650,6 +2669,7 @@ function AIInsightsPanel({
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -2663,7 +2683,29 @@ function AIInsightsPanel({
                   </p>
                 </div>
                 {recommendations.length ? (
-                  <div className="overflow-x-auto">
+                  <div>
+                    <div className="divide-y divide-line sm:hidden">
+                      {recommendations.map((row, index) => {
+                        const urgency = row.metadata?.urgency ?? (Number(row.days_of_cover ?? 0) < 2 ? 'CRITICAL' : 'NORMAL')
+                        return (
+                          <article key={`${row.partner_id}-${row.product_id}-${row.generated_at}-${index}`} className="space-y-3 p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1"><h4 className="font-semibold text-ink-900">{row.partner_name}</h4><p className="mt-0.5 text-sm text-muted">{row.product_name}</p></div>
+                              <span className={`rounded px-2 py-1 text-xs font-semibold ${urgency === 'CRITICAL' ? 'bg-crit-bg text-crit-fg' : urgency === 'WARNING' ? 'bg-warn-bg text-warn-fg' : 'bg-ok-bg text-ok-fg'}`}>
+                                {urgency === 'CRITICAL' ? 'Darurat' : urgency === 'WARNING' ? 'Waspada' : 'Normal'}
+                              </span>
+                            </div>
+                            <dl className="grid grid-cols-3 gap-2 rounded-md bg-ink-50 p-3 text-xs">
+                              <div><dt className="text-muted">Disarankan</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{row.suggested_qty} pcs</dd></div>
+                              <div><dt className="text-muted">Prediksi 7 hari</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{row.forecast_qty} pcs</dd></div>
+                              <div><dt className="text-muted">Cakupan</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{row.days_of_cover ?? '—'} hari</dd></div>
+                            </dl>
+                            <p className="text-xs leading-5 text-muted">{row.metadata?.reasoning || 'Rekomendasi berdasarkan cakupan stok cabang.'}</p>
+                          </article>
+                        )
+                      })}
+                    </div>
+                    <div className="hidden overflow-x-auto sm:block">
                     <table className="w-full min-w-[700px] text-left text-sm">
                       <thead className="bg-ink-50/70 text-xs text-muted">
                         <tr>
@@ -2710,6 +2752,7 @@ function AIInsightsPanel({
                         })}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 ) : (
                   <EmptyState
@@ -3073,7 +3116,7 @@ function AdminDashboard() {
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28 lg:pb-8">
+        <main className="mx-auto min-w-0 max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28 lg:pb-8">
           {tab === 'stocks' ? (
             <section aria-labelledby="summary-title" className="dashboard-panel-enter">
               <div className="mb-4 flex items-end justify-between gap-3">
