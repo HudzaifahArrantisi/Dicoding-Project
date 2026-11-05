@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ModelRecord } from "./context";
 
@@ -16,26 +17,47 @@ export interface ModelResult {
 type WorkerReply = ModelResult & { id: string; error?: string };
 type Pending = { resolve: (result: ModelResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 
-const scriptPath = resolve(import.meta.dir, "../../../../../ai/retraining/inference_worker.py");
+const retrainingDir = resolve(import.meta.dir, "../../../../../ai/retraining");
+const scriptPath = resolve(retrainingDir, "inference_worker.py");
 let currentWorker: { send: (records: ModelRecord[], message?: string) => Promise<ModelResult>; stop: () => void } | null = null;
 
+function resolvePythonBinary(): string {
+  if (process.env.DAISUKI_PYTHON_BIN) return process.env.DAISUKI_PYTHON_BIN;
+  if (process.env.PYTHON_EXECUTABLE) return process.env.PYTHON_EXECUTABLE;
+  const venvWin = resolve(import.meta.dir, "../../../../../ai/.venv/Scripts/python.exe");
+  if (existsSync(venvWin)) return venvWin;
+  const venvUnix = resolve(import.meta.dir, "../../../../../ai/.venv/bin/python");
+  if (existsSync(venvUnix)) return venvUnix;
+  return process.platform === "win32" ? "python" : "python3";
+}
+
 function createWorker() {
-  const python = process.env.DAISUKI_PYTHON_BIN || (process.platform === "win32" ? "python" : "python3");
-  const processHandle = Bun.spawn([python, scriptPath], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  const python = resolvePythonBinary();
+  const processHandle = Bun.spawn([python, "-u", scriptPath], {
+    cwd: retrainingDir,
+    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const pending = new Map<string, Pending>();
   const decoder = new TextDecoder();
   let buffer = "";
 
   const client = {
-    stop() { processHandle.kill(); },
+    stop() {
+      if (currentWorker === client) currentWorker = null;
+      try { processHandle.kill(); } catch {}
+    },
     send(records: ModelRecord[], message?: string): Promise<ModelResult> {
       const id = crypto.randomUUID();
       return new Promise((resolveResult, reject) => {
         const timer = setTimeout(() => {
           pending.delete(id);
           reject(new Error("Prediksi model melewati batas waktu"));
-          processHandle.kill();
-        }, 30_000);
+          if (currentWorker === client) currentWorker = null;
+          try { processHandle.kill(); } catch {}
+        }, 5_000);
         pending.set(id, { resolve: resolveResult, reject, timer });
         try {
           processHandle.stdin.write(JSON.stringify({ id, records, message }) + "\n");

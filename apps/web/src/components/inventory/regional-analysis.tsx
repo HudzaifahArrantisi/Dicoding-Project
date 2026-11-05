@@ -88,7 +88,46 @@ const zoneStyle: Record<Zone, string> = {
   PERLU_LOKASI: 'bg-ink-100 text-ink-700 border-line',
 }
 
+const zoneBadgeConfig: Record<Zone, { label: string; chip: string; dot: string }> = {
+  ZONA_MERAH: {
+    label: 'Prioritas Tinggi',
+    chip: 'bg-rose-50 text-rose-700 border-rose-200/80',
+    dot: 'bg-rose-500',
+  },
+  ZONA_KUNING: {
+    label: 'Perlu Dipantau',
+    chip: 'bg-amber-50 text-amber-800 border-amber-200/80',
+    dot: 'bg-amber-500',
+  },
+  ZONA_HIJAU: {
+    label: 'Pasokan Stabil',
+    chip: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+    dot: 'bg-emerald-500',
+  },
+  BELUM_DIANALISIS: {
+    label: 'Belum Dinilai',
+    chip: 'bg-ink-50 text-ink-600 border-line',
+    dot: 'bg-ink-400',
+  },
+  PERLU_LOKASI: {
+    label: 'Perlu Lokasi',
+    chip: 'bg-ink-50 text-ink-600 border-line',
+    dot: 'bg-ink-400',
+  },
+}
+
 const number = (value: number) => value.toLocaleString('id-ID')
+
+function formatLocationText(regency?: string | null, province?: string | null): string {
+  const isUnknown = (s?: string | null) =>
+    !s || s.toLowerCase().includes('tidak diketahui') || s.toLowerCase().includes('unknown')
+  if (isUnknown(regency) && isUnknown(province)) {
+    return 'Wilayah belum diatur'
+  }
+  if (isUnknown(regency)) return province!
+  if (isUnknown(province)) return regency!
+  return `${regency}, ${province}`
+}
 
 function cleanRiskDriver(driver?: string | null): string {
   if (!driver) return ''
@@ -146,16 +185,37 @@ export function RegionalAnalysis({
     )
   }, [visibleRegions])
 
-  const visiblePartners =
-    partnerId === 'semua'
-      ? partners.filter(
-          (partner) =>
-            partner.critical_logs > 0 ||
-            partner.stockout_logs > 0 ||
-            partner.restock_requests > 0 ||
-            partner.zone === 'ZONA_MERAH'
-        )
-      : partners.filter((partner) => partner.partner_id === partnerId)
+  const visiblePartners = useMemo(() => {
+    const list =
+      partnerId === 'semua'
+        ? partners.filter(
+            (partner) =>
+              partner.critical_logs > 0 ||
+              partner.stockout_logs > 0 ||
+              partner.restock_requests > 0 ||
+              partner.zone === 'ZONA_MERAH'
+          )
+        : partners.filter((partner) => partner.partner_id === partnerId)
+
+    const zoneWeight: Record<Zone, number> = {
+      ZONA_MERAH: 3,
+      ZONA_KUNING: 2,
+      ZONA_HIJAU: 1,
+      BELUM_DIANALISIS: 0,
+      PERLU_LOKASI: 0,
+    }
+
+    return [...list].sort((a, b) => {
+      const weightDiff = zoneWeight[b.zone] - zoneWeight[a.zone]
+      if (weightDiff !== 0) return weightDiff
+      const probA = a.max_stockout_probability ?? 0
+      const probB = b.max_stockout_probability ?? 0
+      if (probB !== probA) return probB - probA
+      const logsA = a.critical_logs * 2 + a.stockout_logs * 3 + a.restock_requests
+      const logsB = b.critical_logs * 2 + b.stockout_logs * 3 + b.restock_requests
+      return logsB - logsA
+    })
+  }, [partners, partnerId])
 
   // Overall metric totals for KPI cards
   const totalCritical = visibleRegions.reduce((sum, r) => sum + r.critical_logs, 0)
@@ -190,10 +250,13 @@ export function RegionalAnalysis({
         else if (pieMetric === 'restock') val = region.restock_requests
         else val = region.critical_logs + region.stockout_logs + region.restock_requests
 
+        const cleanLabel = formatLocationText(region.regency_name, region.province_name)
+        const sub = region.partners.length > 0 ? `${region.partners.length} mitra cabang` : '0 mitra'
+
         return {
           id: key,
-          label: region.regency_name,
-          sublabel: `${region.province_name} · ${region.partners.length} mitra`,
+          label: cleanLabel,
+          sublabel: sub,
           value: val,
           badge: zoneLabel[region.regional_zone],
         }
@@ -378,7 +441,7 @@ export function RegionalAnalysis({
                   key={`${region.province_name}\u0000${region.regency_name}`}
                   value={`${region.province_name}\u0000${region.regency_name}`}
                 >
-                  {region.regency_name}, {region.province_name} [{region.regional_zone.replace('_', ' ')}]
+                  {formatLocationText(region.regency_name, region.province_name)} [{region.regional_zone.replace('_', ' ')}]
                 </option>
               ))}
             </select>
@@ -433,10 +496,7 @@ export function RegionalAnalysis({
                     </div>
 
                     <Dialog.Title className="font-display text-xl font-bold text-ink-900 sm:text-2xl">
-                      {selectedRegion.regency_name}
-                      <span className="ml-2 text-sm font-normal text-muted">
-                        · {selectedRegion.province_name}
-                      </span>
+                      {formatLocationText(selectedRegion.regency_name, selectedRegion.province_name)}
                     </Dialog.Title>
                     <Dialog.Description className="mt-0.5 text-xs text-muted">
                       {selectedRegion.partners.length} cabang aktif di wilayah ini
@@ -1032,105 +1092,131 @@ export function RegionalAnalysis({
 
         {/* Daftar Mitra Cabang yang Perlu Diperiksa */}
         <div className="pt-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div>
               <h3 className="text-sm font-semibold text-ink-900">
                 Mitra Cabang yang Perlu Perhatian
               </h3>
               <p className="mt-0.5 text-xs text-muted">
-                Cabang dengan log stok kritis, pengajuan restok, atau berstatus prioritas tinggi.
+                Daftar cabang diurutkan berdasarkan urgensi risiko kehabisan stok dan aktivitas operasional.
               </p>
             </div>
-            <span className="text-xs text-muted font-medium">
-              {visiblePartners.length} mitra terdaftar
+            <span className="rounded-full bg-ink-100 px-2.5 py-1 text-xs text-ink-700 font-semibold">
+              {visiblePartners.length} cabang terpantau
             </span>
           </div>
 
           {visiblePartners.length > 0 ? (
-            <ul className="mt-3 divide-y divide-line border-y border-line">
-              {visiblePartners.map((partner) => (
-                <li
-                  key={partner.partner_id}
-                  className="grid gap-2 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start hover:bg-ink-50/30 px-2 rounded-md"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-ink-900">
-                        {partner.partner_name}{' '}
-                        <span className="font-normal text-muted">
-                          · {partner.region_name}, {partner.province_name}
-                        </span>
-                      </p>
-                      {partner.max_stockout_probability !== undefined && partner.max_stockout_probability > 0 && (
-                        <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${
-                          partner.max_stockout_probability >= 65
-                            ? 'bg-crit-bg text-crit-fg'
-                            : partner.max_stockout_probability >= 30
-                              ? 'bg-warn-bg text-warn-fg'
-                              : 'bg-ok-bg text-ok-fg'
-                        }`}>
-                          {partner.max_stockout_probability}% risiko habis
-                        </span>
-                      )}
-                    </div>
+            <div className="overflow-hidden rounded-xl border border-line bg-white shadow-2xs">
+              {/* Header Kolom Desktop */}
+              <div className="hidden lg:grid lg:grid-cols-[2fr_2fr_1.4fr_140px] items-center gap-4 border-b border-line bg-ink-50/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted">
+                <div>Mitra Cabang & Wilayah</div>
+                <div>Produk Rawan & Saran Buffer</div>
+                <div>Aktivitas Log (7 Hari)</div>
+                <div className="text-right">Status Zona</div>
+              </div>
 
-                    {partner.urgent_items && partner.urgent_items.length > 0 && (
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] font-semibold text-crit-fg">
-                          Produk rawan:
-                        </span>
-                        {partner.urgent_items.map((item) => (
-                          <span
-                            key={item.product_name}
-                            className="inline-flex items-center gap-1 rounded bg-crit-bg/50 px-2 py-0.2 text-[11px] font-medium text-crit-fg"
-                          >
-                            <span>{item.product_name}</span>
-                            <span className="font-bold tabular-nums">({item.stockout_probability}%)</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
+              {/* Baris Data */}
+              <div className="divide-y divide-line">
+                {visiblePartners.map((partner) => {
+                  const locText = formatLocationText(partner.region_name, partner.province_name)
+                  const hasCritical = partner.critical_logs > 0
+                  const hasStockout = partner.stockout_logs > 0
+                  const hasRestock = partner.restock_requests > 0
+                  const hasAnyLogIssue = hasCritical || hasStockout || hasRestock
+                  const badge = zoneBadgeConfig[partner.zone]
 
-                    {partner.suggested_products.length > 0 ? (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] font-medium text-muted">
-                          Rekomendasi Kapasitas AI:
-                        </span>
-                        {partner.suggested_products.map((product) => (
-                          <span
-                            key={product.product_name}
-                            className="inline-flex items-center gap-1 rounded bg-ok-bg/50 px-2 py-0.5 text-[11px] font-medium text-ok-fg"
-                          >
-                            <span>{product.product_name}</span>
-                            <span className="font-bold">→ {product.suggested_par_level} pcs</span>
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs sm:justify-end">
-                    <span
-                      className={`rounded-sm px-2 py-0.5 font-semibold ${zoneStyle[partner.zone]}`}
+                  return (
+                    <div
+                      key={partner.partner_id}
+                      className="grid gap-3 p-4 lg:grid-cols-[2fr_2fr_1.4fr_140px] lg:items-center hover:bg-ink-50/40 transition-colors"
                     >
-                      {zoneLabel[partner.zone]}
-                    </span>
-                    <span className="num rounded bg-ink-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-amber-700">
-                      {number(partner.critical_logs)} kritis
-                    </span>
-                    <span className="num rounded bg-ink-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700">
-                      {number(partner.stockout_logs)} habis
-                    </span>
-                    <span className="num rounded bg-ink-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-indigo-700">
-                      {number(partner.restock_requests)} restok
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      {/* Kolom 1: Mitra & Lokasi */}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-sm text-ink-900 truncate">
+                            {partner.partner_name}
+                          </p>
+                          {partner.max_stockout_probability !== undefined && partner.max_stockout_probability >= 50 && (
+                            <span className="shrink-0 rounded bg-rose-100/80 px-1.5 py-0.5 text-[10px] font-bold text-rose-800">
+                              {partner.max_stockout_probability}% risiko
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted mt-0.5 truncate">
+                          {locText}
+                        </p>
+                      </div>
+
+                      {/* Kolom 2: Produk Rawan */}
+                      <div className="min-w-0">
+                        {partner.urgent_items && partner.urgent_items.length > 0 ? (
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {partner.urgent_items.map((item) => (
+                                <span
+                                  key={item.product_name}
+                                  className="inline-flex items-center gap-1 rounded border border-rose-200/70 bg-rose-50/70 px-2 py-0.5 text-[11px] font-medium text-rose-900"
+                                >
+                                  <span className="truncate max-w-[140px]">{item.product_name}</span>
+                                  <span className="font-bold tabular-nums text-rose-600">({item.stockout_probability}%)</span>
+                                </span>
+                              ))}
+                            </div>
+                            {partner.suggested_products.length > 0 ? (
+                              <p className="text-[11px] text-muted truncate">
+                                Saran buffer: {partner.suggested_products.map((p) => `${p.product_name} → ${p.suggested_par_level} pcs`).join(', ')}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted flex items-center gap-1.5">
+                            <span className="size-1.5 rounded-full bg-emerald-500" />
+                            Stok aman · Tidak ada produk rawan
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Kolom 3: Log 7 Hari */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {hasCritical && (
+                          <span className="inline-flex items-center gap-1 font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                            <span className="font-bold tabular-nums">{partner.critical_logs}</span> kritis
+                          </span>
+                        )}
+                        {hasStockout && (
+                          <span className="inline-flex items-center gap-1 font-medium text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200/60">
+                            <span className="font-bold tabular-nums">{partner.stockout_logs}</span> habis
+                          </span>
+                        )}
+                        {hasRestock && (
+                          <span className="inline-flex items-center gap-1 text-ink-700 bg-ink-100/80 px-2 py-0.5 rounded">
+                            <span className="font-bold tabular-nums">{partner.restock_requests}</span> restok
+                          </span>
+                        )}
+                        {!hasAnyLogIssue && (
+                          <span className="text-muted text-[11px]">
+                            Log stabil
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Kolom 4: Status Zona */}
+                      <div className="flex lg:justify-end">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${badge.chip}`}>
+                          <span className={`size-1.5 rounded-full ${badge.dot}`} />
+                          {badge.label}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           ) : (
-            <p className="mt-3 rounded-md bg-ink-50 px-4 py-5 text-sm text-ink-700">
-              Belum ada mitra yang perlu diperiksa untuk pilihan ini.
-            </p>
+            <div className="rounded-xl border border-line bg-white p-8 text-center text-xs text-muted">
+              Tidak ada mitra cabang yang memerlukan perhatian khusus pada pilihan ini.
+            </div>
           )}
         </div>
       </div>

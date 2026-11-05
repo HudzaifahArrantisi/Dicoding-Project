@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_at": "2026-11-04T17:40:05.648350+00:00",
+    "generated_at": "2026-11-05T11:40:37.206357+00:00",
     "period_days": 7,
     "model_version": "daisuki-nb-3.0",
     "regional_generated_at": "2026-11-04T17:26:50.962510+00:00"
@@ -39,11 +39,11 @@
     ]
   },
   "network_sales": {
-    "total_sold_7d": 727,
-    "total_sold_prev_7d": 1256,
-    "sales_growth_percentage": -42.1,
+    "total_sold_7d": 607,
+    "total_sold_prev_7d": 1376,
+    "sales_growth_percentage": -55.9,
     "restock_fulfillment_rate": 91.7,
-    "central_stock_health_days": 10.2,
+    "central_stock_health_days": 12.2,
     "requested_restock_units": 600,
     "approved_restock_units": 550
   },
@@ -53,21 +53,37 @@
       "partner_name": "kopken cijeruk",
       "region": "Kota Administrasi Jakarta Selatan",
       "weekly_units": 519,
-      "percentage": 71.4
+      "percentage": 85.5
     },
     {
       "rank": 2,
-      "partner_name": "Restoran Purnama Cirebon",
-      "region": "Kota Depok",
-      "weekly_units": 120,
-      "percentage": 16.5
-    },
-    {
-      "rank": 3,
       "partner_name": "Restoran Mentari Solo",
       "region": "Wilayah belum diisi",
       "weekly_units": 88,
-      "percentage": 12.1
+      "percentage": 14.5
+    }
+  ],
+  "top_log_partners": [
+    {
+      "rank": 1,
+      "partner_name": "kopken cijeruk",
+      "region": "Kota Administrasi Jakarta Selatan",
+      "log_count": 8,
+      "manual_report_count": 4
+    },
+    {
+      "rank": 2,
+      "partner_name": "Restoran Mentari Solo",
+      "region": "Wilayah belum diisi",
+      "log_count": 7,
+      "manual_report_count": 4
+    },
+    {
+      "rank": 3,
+      "partner_name": "Minimarket Senja Serang",
+      "region": "Wilayah belum diisi",
+      "log_count": 1,
+      "manual_report_count": 0
     }
   ],
   "top_selling_products": [
@@ -76,40 +92,40 @@
       "product_name": "Seblak Jadul Instan",
       "category": "Makanan Instan",
       "weekly_units": 240,
-      "share_pct": 33.0
+      "share_pct": 39.5
     },
     {
       "rank": 2,
-      "product_name": "Basreng Daun Jeruk",
-      "category": "Camilan",
-      "weekly_units": 233,
-      "share_pct": 32.0
-    },
-    {
-      "rank": 3,
       "product_name": "Keripik Pisang Rasa Coklat",
       "category": "Camilan",
       "weekly_units": 166,
-      "share_pct": 22.8
+      "share_pct": 27.3
+    },
+    {
+      "rank": 3,
+      "product_name": "Basreng Daun Jeruk",
+      "category": "Camilan",
+      "weekly_units": 113,
+      "share_pct": 18.6
     },
     {
       "rank": 4,
       "product_name": "Makaroni Daun Jeruk",
       "category": "Camilan",
       "weekly_units": 88,
-      "share_pct": 12.1
+      "share_pct": 14.5
     }
   ],
   "top_selling_categories": [
     {
       "category": "Camilan",
-      "weekly_units": 487,
-      "share_pct": 67.0
+      "weekly_units": 367,
+      "share_pct": 60.5
     },
     {
       "category": "Makanan Instan",
       "weekly_units": 240,
-      "share_pct": 33.0
+      "share_pct": 39.5
     }
   ],
   "regional_hotspots": [
@@ -127,8 +143,8 @@
       "region": "Kota Depok",
       "province": "Jawa Barat",
       "status": "ZONA_MERAH",
-      "active_partners": 1,
-      "weekly_units": 120,
+      "active_partners": 0,
+      "weekly_units": 0,
       "stockout_probability": 25.0,
       "urgency": "DARURAT",
       "recommended_action": "Prioritaskan suplai pengiriman darurat ke cabang berisiko tinggi dan amankan buffer stok."

@@ -76,7 +76,7 @@ export function MitraProductTour({
     const el = dialogRef.current
     if (!el) return
     const update = () => {
-      if (el) setDialogHeight(el.offsetHeight || 240)
+      setDialogHeight(el.offsetHeight || 240)
     }
     update()
     const ro = new ResizeObserver(update)

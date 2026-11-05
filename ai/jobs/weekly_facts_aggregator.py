@@ -64,6 +64,19 @@ def build_facts(connection: psycopg.Connection, regional: dict) -> dict:
             for rank, (name, region, units) in enumerate(cursor.fetchall(), 1)
         ]
         cursor.execute("""
+            select p.name, coalesce(nullif(p.regency_name, ''), 'Wilayah belum diisi'),
+              count(*)::int,
+              count(*) filter (where sl.source = 'manual_update')::int
+            from stock_logs sl join partners p on p.id = sl.partner_id
+            where sl.created_at >= now() - interval '7 days'
+            group by p.id order by 3 desc, p.name limit 10
+        """)
+        top_log_partners = [
+            {"rank": rank, "partner_name": name, "region": region,
+             "log_count": log_count, "manual_report_count": manual_count}
+            for rank, (name, region, log_count, manual_count) in enumerate(cursor.fetchall(), 1)
+        ]
+        cursor.execute("""
             select pr.name, sum(greatest(sl.qty_before - sl.qty_after, 0))::int
             from stock_logs sl join products pr on pr.id = sl.product_id
             where sl.source = 'manual_update' and sl.created_at >= now() - interval '7 days'
@@ -118,6 +131,7 @@ def build_facts(connection: psycopg.Connection, regional: dict) -> dict:
                           "central_stock_health_days": round(total_stock / (sold / 7), 1) if sold else None,
                           "requested_restock_units": requested, "approved_restock_units": approved},
         "top_performers_partners": partners,
+        "top_log_partners": top_log_partners,
         "top_selling_products": top_products,
         "top_selling_categories": top_categories,
         "regional_hotspots": hotspots,

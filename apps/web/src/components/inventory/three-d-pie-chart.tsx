@@ -50,7 +50,7 @@ export function ThreeDPieChart({
   className = '',
 }: ThreeDPieChartProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [chartMode, setChartMode] = useState<'3d' | 'donut'>('3d')
+  const [chartMode, setChartMode] = useState<'3d' | 'donut'>('donut')
 
   const activeId = hoveredId || selectedId
 

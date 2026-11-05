@@ -14,7 +14,13 @@ def main() -> None:
     model_path = os.environ.get("DAISUKI_MODEL_PATH") or MODEL_FILE
     risk_classifier = DaisukiFilter(model_path, model_key="risk")
     intent_classifier = DaisukiFilter(model_path, model_key="intent")
-    for line in sys.stdin:
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            break
+        line = line.strip()
+        if not line:
+            continue
         request = None
         try:
             request = json.loads(line)
