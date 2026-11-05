@@ -8,6 +8,19 @@ type Route = { method: Method; path: string; source: string }
 type Check = { result: Result; method: Method; path: string; probe: string; status?: number; ms?: number; detail?: string }
 type Session = { cookie: string; role: Role }
 
+const categories = [
+  'Login & Sesi',
+  'Admin · Dashboard & AI',
+  'Admin · Mitra & Log',
+  'Admin · Notifikasi',
+  'Mitra · Asisten & Notifikasi',
+  'Pesanan · Admin & Mitra',
+  'Stok & Produk · Admin & Mitra',
+  'Wilayah · Admin & Mitra',
+  'Sistem & Berkas',
+] as const
+type Category = typeof categories[number]
+
 const root = resolve(import.meta.dir, '..')
 const apiSource = resolve(root, 'apps/api/src')
 const args = process.argv.slice(2)
@@ -136,6 +149,89 @@ function autoFixture(route: Route, responses: Record<string, unknown>): string |
   return null
 }
 
+function categoryFor(path: string): Category {
+  if (path.startsWith('/auth/') || path === '/me' || path.startsWith('/me/')) return 'Login & Sesi'
+  if (path.startsWith('/admin/ai-insights') || path === '/admin/metrics' || path === '/admin/weekly-summary') return 'Admin · Dashboard & AI'
+  if (path.startsWith('/admin/')) return 'Admin · Mitra & Log'
+  if (path === '/notification' || path.startsWith('/notification/')) return 'Admin · Notifikasi'
+  if (path.startsWith('/assistant/') || path === '/notifications' || path.startsWith('/notifications/')) return 'Mitra · Asisten & Notifikasi'
+  if (path === '/orders' || path.startsWith('/orders/')) return 'Pesanan · Admin & Mitra'
+  if (path === '/stocks' || path.startsWith('/stocks/') || path === '/products' || path.startsWith('/products/')) return 'Stok & Produk · Admin & Mitra'
+  if (path.startsWith('/regions/')) return 'Wilayah · Admin & Mitra'
+  return 'Sistem & Berkas'
+}
+
+function counts(checks: Check[]) {
+  return {
+    pass: checks.filter((check) => check.result === 'PASS').length,
+    fail: checks.filter((check) => check.result === 'FAIL').length,
+    skip: checks.filter((check) => check.result === 'SKIP').length,
+  }
+}
+
+function wrapCell(value: string, width: number): string[] {
+  const words = value.replace(/\s+/g, ' ').trim().split(' ')
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    if (line && line.length + word.length + 1 > width) {
+      lines.push(line)
+      line = ''
+    }
+    if (word.length > width) {
+      if (line) lines.push(line)
+      for (let start = 0; start < word.length; start += width) {
+        const part = word.slice(start, start + width)
+        if (part.length === width) lines.push(part)
+        else line = part
+      }
+    } else {
+      line = line ? `${line} ${word}` : word
+    }
+  }
+  if (line || !lines.length) lines.push(line)
+  return lines
+}
+
+function table(headers: string[], rows: string[][], widths: number[]): string {
+  const border = `+${widths.map((width) => '-'.repeat(width + 2)).join('+')}+`
+  const render = (cells: string[]) => {
+    const wrapped = cells.map((cell, index) => wrapCell(cell, widths[index]))
+    const height = Math.max(...wrapped.map((cell) => cell.length))
+    return Array.from({ length: height }, (_, line) =>
+      `|${widths.map((width, index) => ` ${(wrapped[index][line] ?? '').padEnd(width)} `).join('|')}|`,
+    ).join('\n')
+  }
+  return [border, render(headers), border, ...rows.map(render), border].join('\n')
+}
+
+function printReport(routes: Route[], checks: Check[]): Record<Category, ReturnType<typeof counts>> {
+  const byCategory = Object.fromEntries(categories.map((category) => [category, counts(checks.filter((check) => categoryFor(check.path) === category))])) as Record<Category, ReturnType<typeof counts>>
+  const categoryRows = categories.map((category) => {
+    const count = routes.filter((route) => categoryFor(route.path) === category).length
+    const result = byCategory[category]
+    return [category, String(count), String(result.pass), String(result.fail), String(result.skip)]
+  })
+  const summary = counts(checks)
+  console.log(`\nQA API | ${baseUrl.origin}${baseUrl.pathname} | ${routes.length} route`)
+  console.log(table(['Fitur', 'Route', 'Lulus', 'Gagal', 'Skip'], categoryRows, [31, 5, 5, 5, 5]))
+  for (const category of categories) {
+    const entries = checks.filter((check) => categoryFor(check.path) === category)
+    if (!entries.length) continue
+    const result = byCategory[category]
+    console.log(`\n${category} | Lulus ${result.pass} · Gagal ${result.fail} · Skip ${result.skip}`)
+    const wide = (process.stdout.columns ?? 120) >= 110
+    const widths = wide ? [5, 6, 35, 14, 4, 8, 26] : [5, 6, 18, 12, 4, 16]
+    const headers = wide ? ['Hasil', 'Metode', 'Endpoint', 'Pengujian', 'HTTP', 'Waktu', 'Keterangan'] : ['Hasil', 'Metode', 'Endpoint', 'Pengujian', 'HTTP', 'Keterangan']
+    const rows = entries.map((check) => wide
+      ? [check.result, check.method, check.path, check.probe, String(check.status ?? '-'), check.ms === undefined ? '-' : `${check.ms}ms`, check.detail ?? '-']
+      : [check.result, check.method, check.path, check.probe, String(check.status ?? '-'), check.detail ?? (check.ms === undefined ? '-' : `${check.ms} ms`)])
+    console.log(table(headers, rows, widths))
+  }
+  console.log(`\nTotal: ${summary.pass} lulus · ${summary.fail} gagal · ${summary.skip} belum diuji`)
+  return byCategory
+}
+
 async function main(): Promise<void> {
   const routes = await discoverRoutes()
   if (!routes.length) throw new Error('Tidak ada route Elysia yang terdeteksi.')
@@ -224,14 +320,12 @@ async function main(): Promise<void> {
     }
   }
 
-  const summary = { pass: checks.filter((check) => check.result === 'PASS').length, fail: checks.filter((check) => check.result === 'FAIL').length, skip: checks.filter((check) => check.result === 'SKIP').length }
-  console.log(`\nQA API · ${baseUrl.origin}${baseUrl.pathname} · ${routes.length} route ditemukan`)
-  for (const check of checks) console.log(`${check.result.padEnd(4)} ${check.method.padEnd(6)} ${check.path.padEnd(38)} ${check.probe.padEnd(14)} ${check.status ?? '-'} ${check.ms === undefined ? '' : `${check.ms}ms`} ${check.detail ?? ''}`)
-  console.log(`\nLulus ${summary.pass} · Gagal ${summary.fail} · Belum diuji ${summary.skip}`)
+  const summary = counts(checks)
+  const summaryByCategory = printReport(routes, checks)
   if (jsonPath) {
     const output = resolve(root, jsonPath)
     await mkdir(dirname(output), { recursive: true })
-    await writeFile(output, JSON.stringify({ generated_at: new Date().toISOString(), base_url: `${baseUrl.origin}${baseUrl.pathname}`, routes, checks, summary }, null, 2) + '\n')
+    await writeFile(output, JSON.stringify({ generated_at: new Date().toISOString(), base_url: `${baseUrl.origin}${baseUrl.pathname}`, routes, checks: checks.map((check) => ({ ...check, category: categoryFor(check.path) })), summary, summary_by_category: summaryByCategory }, null, 2) + '\n')
     console.log(`Laporan JSON: ${output}`)
   }
   if (summary.fail) process.exitCode = 1

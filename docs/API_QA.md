@@ -6,7 +6,7 @@ Jalankan API lokal lebih dulu (`bun --cwd=apps/api run dev`), lalu di terminal l
 bun run qa:api --json qa-reports/api-latest.json
 ```
 
-Perintah ini membaca route Elysia dari `apps/api/src`, memeriksa `/health`, lalu mencoba semua GET statis tanpa login. Hasil `PASS` untuk akses tanpa login berarti endpoint privat mengembalikan HTTP 401. Hasil `FAIL` berarti status tidak sesuai, server error, atau permintaan timeout. Laporan JSON berisi sumber route dan rincian setiap pemeriksaan.
+Perintah ini membaca route Elysia dari `apps/api/src`, memeriksa `/health`, lalu mencoba semua GET statis tanpa login. Output terminal menampilkan tabel ringkasan dan tabel detail per fitur: Login & Sesi, Admin Dashboard & AI, Admin Mitra & Log, Admin Notifikasi, Mitra Asisten & Notifikasi, Pesanan, Stok & Produk, Wilayah, serta Sistem & Berkas. Kolom `Route` menghitung endpoint, sedangkan `Lulus`, `Gagal`, dan `Skip` menghitung pemeriksaan. Hasil `PASS` untuk akses tanpa login berarti endpoint privat mengembalikan HTTP 401. Hasil `FAIL` berarti status tidak sesuai, server error, atau permintaan timeout. Laporan JSON berisi sumber route, kategori, ringkasan per kategori, dan rincian setiap pemeriksaan.
 
 Untuk memeriksa respons GET sebagai admin dan mitra, isi kredensial akun development melalui environment variable di terminal yang menjalankan QA. Kata sandi tidak ditulis ke laporan:
 

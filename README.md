@@ -110,6 +110,45 @@ Aplikasi siap diakses di browser:
 | `bun --cwd apps/web run lint` | Menjalankan ESLint pada frontend |
 | `bun --cwd apps/web run build` | Build production frontend |
 | `bun --cwd apps/api run seed` | Menjalankan ulang pengisian data demo database |
+| `bun run qa:api` | Memeriksa route API lokal dan menampilkan hasil QA per fitur dalam tabel terminal |
+
+---
+
+## QA API saat Development
+
+Jalankan backend API lokal, lalu buka terminal kedua untuk pemeriksaan QA:
+
+```powershell
+bun --cwd=apps/api run dev
+# Di terminal lain:
+bun run qa:api --json qa-reports/api-latest.json
+```
+
+Perintah `qa:api` membaca route Elysia langsung dari kode. Output terminal berupa tabel ringkasan dan tabel detail yang dikelompokkan menurut fitur: **Login & Sesi**, **Admin**, **Mitra**, **Pesanan**, **Stok & Produk**, **Wilayah**, serta **Sistem & Berkas**. Kolom `Route` menghitung endpoint unik; kolom `Lulus`, `Gagal`, dan `Skip` menghitung pemeriksaan, sehingga jumlahnya dapat lebih besar dari jumlah route.
+
+Contoh ringkasan terminal:
+
+```text
++---------------------------------+-------+-------+-------+-------+
+| Fitur                           | Route | Lulus | Gagal | Skip  |
++---------------------------------+-------+-------+-------+-------+
+| Login & Sesi                    | 4     | 4     | 0     | 2     |
+| Admin · Dashboard & AI          | 5     | 8     | 0     | 1     |
+| Pesanan · Admin & Mitra         | 10    | 4     | 0     | 8     |
++---------------------------------+-------+-------+-------+-------+
+```
+
+Untuk menguji GET sebagai pengguna yang sudah login, isi akun **development** melalui environment variable PowerShell sebelum menjalankan `qa:api`:
+
+```powershell
+$env:QA_ADMIN_EMAIL = 'email-admin-development'
+$env:QA_ADMIN_PASSWORD = 'kata-sandi-admin'
+$env:QA_MITRA_EMAIL = 'email-mitra-development'
+$env:QA_MITRA_PASSWORD = 'kata-sandi-mitra'
+bun run qa:api --json qa-reports/api-latest.json
+```
+
+`PASS` berarti status sesuai harapan: HTTP 401 untuk endpoint privat tanpa login, atau HTTP 2xx setelah login. `FAIL` menunjukkan status tidak sesuai, timeout, atau server tidak terjangkau; perintah keluar dengan kode `1`. `SKIP` berarti pemeriksaan belum dijalankan. Mutasi stok dan pesanan sengaja tidak dikirim agar data development tidak berubah. Laporan JSON tersimpan di `qa-reports/api-latest.json` dan memuat kategori setiap pemeriksaan. Petunjuk fixture untuk route dinamis dan opsi lain tersedia di [panduan QA API](docs/API_QA.md).
 
 ---
 
