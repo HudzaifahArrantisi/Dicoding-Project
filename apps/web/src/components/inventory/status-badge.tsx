@@ -13,17 +13,17 @@ import {
 const stockConfig = {
   aman: {
     label: 'Aman',
-    className: 'bg-ok-bg text-ok-fg',
+    className: 'border border-emerald-200 bg-emerald-50 text-emerald-800',
     Icon: CheckCircle2,
   },
   waspada: {
     label: 'Waspada',
-    className: 'bg-warn-bg text-warn-fg',
+    className: 'border border-amber-200 bg-amber-50 text-amber-800',
     Icon: AlertTriangle,
   },
   kritis: {
     label: 'Kritis',
-    className: 'bg-crit-bg text-crit-fg',
+    className: 'border border-rose-200 bg-rose-50 text-rose-800',
     Icon: AlertOctagon,
   },
 } satisfies Record<

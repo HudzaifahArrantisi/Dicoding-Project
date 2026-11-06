@@ -4,6 +4,10 @@ export function getContext() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
+        staleTime: 1000 * 60 * 5,
+        gcTime: 1000 * 60 * 30,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         retry: (failureCount, error) => {
           const status = (error as { status?: number } | undefined)?.status
           const msg = error instanceof Error ? error.message : String(error)

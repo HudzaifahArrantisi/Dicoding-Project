@@ -21,6 +21,9 @@ const config = defineConfig({
     port: 3000,
     strictPort: true,
     allowedHosts: true,
+    hmr: {
+      clientPort: 3000,
+    },
     proxy: apiProxy,
     fs: {
       allow: ['../..'],

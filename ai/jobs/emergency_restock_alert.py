@@ -39,7 +39,7 @@ def create_emergency_alerts() -> int:
                     critical.product_name || ' di ' || critical.partner_name ||
                         ' tersisa ' || critical.current_qty || ' dari ' ||
                         critical.par_level || ' pcs.'
-                FROM critical_stock critical
+                FROM critcal_stock critical
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM notifications existing

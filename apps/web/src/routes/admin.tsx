@@ -2046,8 +2046,8 @@ function AIInsightsPanel({
   }
 
   return (
-    <section className="dashboard-panel-enter min-w-0 space-y-6" aria-labelledby="ai-insights-title">
-      <div className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <section className="dashboard-panel-enter min-w-0 space-y-7" aria-labelledby="ai-insights-title">
+      <div className="flex flex-col gap-5 rounded-xl border border-line bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div>
           <p className="dashboard-eyebrow">Perencanaan pasokan</p>
           <h1 id="ai-insights-title" className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl">
@@ -2058,7 +2058,7 @@ function AIInsightsPanel({
           </p>
         </div>
 
-        <div className="flex min-w-0 flex-col items-start gap-2 sm:shrink-0 sm:items-end">
+        <div className="flex min-w-0 flex-col items-start gap-2.5 sm:shrink-0 sm:items-end">
           <button
             type="button"
             onClick={() => void handleRunAiAnalysis()}
@@ -2093,26 +2093,25 @@ function AIInsightsPanel({
         <LoadingState label="Memuat analisis wilayah dan mitra..." />
       ) : error ? null : (
         <>
-          <WeeklyInsights facts={data?.weekly_facts} modelSync={data?.model_sync} />
           <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
             <div className="dashboard-surface overflow-hidden">
-              <div className="border-b border-line px-4 py-4 sm:px-5">
+              <div className="border-b border-line bg-ink-50/60 px-4 py-4 sm:px-5 sm:py-5">
                 <p className="text-xs font-semibold text-ink-700">Mulai dari sini</p>
                 <h2 className="mt-1 font-display text-lg font-semibold text-ink-900">Prioritas hari ini</h2>
                 <p className="mt-1 text-sm leading-5 text-muted">Periksa risiko, lalu gunakan saran saat meninjau pesanan mitra.</p>
               </div>
               <div className="divide-y divide-line">
-                <button type="button" onClick={() => setSubTab('defisit')} className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:px-5">
+                <button type="button" onClick={() => setSubTab('defisit')} className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:px-5">
                   <span className="min-w-0"><strong className="block text-sm text-ink-900">Cabang darurat</strong><span className="mt-0.5 block text-xs leading-5 text-muted">Lihat stok, penyebab, dan tindakan yang disarankan</span></span>
                   <span className={`shrink-0 font-display text-xl font-semibold tabular-nums ${urgentBranches > 0 ? 'text-crit-fg' : 'text-ink-900'}`}>{urgentBranches}</span>
                 </button>
-                <button type="button" onClick={() => setSubTab('pabrik')} className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:px-5">
+                <button type="button" onClick={() => setSubTab('pabrik')} className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:px-5">
                   <span className="min-w-0"><strong className="block text-sm text-ink-900">Produk pusat perlu pengadaan</strong><span className="mt-0.5 block text-xs leading-5 text-muted">Cek ketahanan stok dan saran pesanan pabrik</span></span>
                   <span className={`shrink-0 font-display text-xl font-semibold tabular-nums ${urgentProducts > 0 ? 'text-crit-fg' : 'text-ink-900'}`}>{urgentProducts}</span>
                 </button>
               </div>
             </div>
-            <div className="dashboard-surface px-4 py-4 sm:px-5">
+            <div className="dashboard-surface px-4 py-5 sm:px-5">
               <h2 className="font-display text-lg font-semibold text-ink-900">Cara memakai saran AI</h2>
               <ol className="mt-4 space-y-4">
                 <li className="flex gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">1</span><span className="text-sm leading-5 text-ink-900"><strong className="block">Mitra melaporkan stok</strong><span className="text-muted">Sistem membaca stok dan riwayat pemakaian.</span></span></li>
@@ -2124,6 +2123,8 @@ function AIInsightsPanel({
               </button>
             </div>
           </div>
+
+          <WeeklyInsights facts={data?.weekly_facts} modelSync={data?.model_sync} />
 
           {kpi && !data.weekly_facts ? (
             <div className="dashboard-surface overflow-hidden">
@@ -2148,21 +2149,24 @@ function AIInsightsPanel({
             </div>
           ) : null}
 
-          <div>
-            <h2 className="mb-3 font-display text-lg font-semibold text-ink-900">Telusuri analisis</h2>
-            <div className="grid grid-cols-2 gap-2 border-b border-line pb-3 sm:flex sm:flex-wrap" aria-label="Bagian analisis AI">
+          <div className="space-y-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-ink-900">Telusuri analisis</h2>
+              <p className="mt-1 text-sm text-muted">Pilih bagian yang ingin ditinjau lebih lanjut.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-line bg-ink-50 p-1.5 sm:flex sm:flex-wrap" aria-label="Bagian analisis AI">
               {sections.map((section) => (
                 <button
                   key={section.id}
                   type="button"
                   onClick={() => setSubTab(section.id)}
                   aria-pressed={subTab === section.id}
-                  className={`inline-flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-md border px-2.5 text-left text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:justify-start sm:px-3.5 sm:text-sm ${subTab === section.id
-                    ? 'border-ink-900 bg-ink-900 text-white'
-                    : 'border-line bg-white text-ink-700 hover:bg-ink-50'}`}
+                  className={`inline-flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-lg px-2.5 text-left text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:justify-start sm:px-3.5 sm:text-sm ${subTab === section.id
+                    ? 'bg-white text-ink-900 shadow-sm ring-1 ring-line'
+                    : 'text-ink-700 hover:bg-white/70'}`}
                 >
                   {section.label}
-                  <span className={`rounded px-1.5 py-0.5 text-xs tabular-nums ${subTab === section.id ? 'bg-white/20 text-white' : 'bg-ink-100 text-ink-700'}`}>{section.count}</span>
+                  <span className={`rounded-md px-1.5 py-0.5 text-xs tabular-nums ${subTab === section.id ? 'bg-ink-100 text-ink-900' : 'bg-white text-ink-700'}`}>{section.count}</span>
                 </button>
               ))}
             </div>
@@ -2170,7 +2174,7 @@ function AIInsightsPanel({
 
           {/* TAB 1: PETA WILAYAH RAWAN */}
           {subTab === 'wilayah' && (
-            <div className="space-y-6">
+            <div className="dashboard-panel-enter space-y-6">
               <RegionalAnalysis
                 activity={data?.regional_activity}
                 fastMovingProducts={fastMoving}
@@ -2230,7 +2234,7 @@ function AIInsightsPanel({
 
           {/* TAB 2: PRODUK LARIS (PENJUALAN TINGGI) TERAGREGASI PER MITRA */}
           {subTab === 'laris' && (
-            <div className="dashboard-surface overflow-hidden">
+            <div className="dashboard-panel-enter dashboard-surface overflow-hidden">
               <div className="border-b border-line px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -2468,7 +2472,7 @@ function AIInsightsPanel({
 
           {/* TAB 3: DIAGNOSA DEFISIT CABANG */}
           {subTab === 'defisit' && (
-            <div className="dashboard-surface overflow-hidden">
+            <div className="dashboard-panel-enter dashboard-surface overflow-hidden">
               <div className="border-b border-line px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -2574,7 +2578,7 @@ function AIInsightsPanel({
 
           {/* TAB 4: PENGADAAN PABRIK & REKOMENDASI ALOKASI */}
           {subTab === 'pabrik' && (
-            <div className="space-y-6">
+            <div className="dashboard-panel-enter space-y-6">
               {/* Proyeksi Pabrik */}
               <div className="dashboard-surface overflow-hidden">
                 <div className="border-b border-line px-5 py-4">
@@ -5070,6 +5074,7 @@ function ApprovalDialog({
   const [actionError, setActionError] = useState('')
   const [shippingConfirmMode, setShippingConfirmMode] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
+  const rejectionFormRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
   const receiptProof = useQuery<ReceiptProofData>({
     queryKey: ['admin-receipt-proof', order?.id],
@@ -5095,6 +5100,14 @@ function ApprovalDialog({
     setActionError('')
     setShippingConfirmMode(false)
   }, [order?.id])
+
+  useEffect(() => {
+    if (rejectionMode) {
+      window.requestAnimationFrame(() => {
+        rejectionFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+    }
+  }, [rejectionMode])
 
   if (!order) return null
 
@@ -5168,6 +5181,13 @@ function ApprovalDialog({
     'Stok gudang pusat dialokasikan sebagian',
     'Jumlah disesuaikan dengan kebutuhan cabang',
     'Pengiriman batch berikutnya dalam 3 hari',
+  ]
+
+  const quickRejectionTemplates = [
+    'Stok gudang pusat sedang tidak mencukupi',
+    'Sisa stok cabang masih mencukupi',
+    'Jumlah pesanan melebihi kuota alokasi',
+    'Perlu penyesuaian jadwal atau koordinasi ulang',
   ]
 
   const runAction = async (action: () => Promise<unknown>, close = true) => {
@@ -5427,11 +5447,6 @@ function ApprovalDialog({
                               {item.product_unit}
                             </span>
                           </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-muted">Kondisi Cabang:</span>
-                            {stockStatus ? <StockStatusBadge status={stockStatus} /> : <span className="text-xs text-muted">Belum ada laporan stok</span>}
-                          </div>
                         </div>
 
                         {/* 4 Kolom Perbandingan: Sisa Cabang | Stok Pusat | Diminta Mitra | Persetujuan Admin */}
@@ -5439,7 +5454,7 @@ function ApprovalDialog({
                           {/* 1. Sisa di Cabang Mitra */}
                           <div className="rounded-lg border border-line/70 bg-paper/40 p-3">
                             <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">
-                              Sisa Stok Cabang
+                              Sisa Stok diCabang
                             </span>
                             <div className="mt-1 flex items-baseline gap-1">
                               <span className="font-display text-xl font-bold tabular-nums text-ink-900">
@@ -5672,8 +5687,8 @@ function ApprovalDialog({
               </div>
             </div>
 
-            {/* Input Catatan Admin & Template Cepat */}
-            {editable ? (
+            {/* Input Catatan Admin & Template Cepat (Hanya tampil saat mode persetujuan, bukan mode penolakan) */}
+            {editable && !rejectionMode ? (
               <div className="rounded-xl border border-line bg-white p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label
@@ -5687,15 +5702,7 @@ function ApprovalDialog({
                       <span className="font-normal text-muted">(Opsional)</span>
                     )}
                   </label>
-                  {hasAdjustment ? (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-warn-bg px-2 py-0.5 text-xs font-bold text-warn-fg">
-                      <AlertTriangle className="size-3" /> Ada penyesuaian kuantitas
-                    </span>
-                  ) : null}
                 </div>
-                <p className="mt-1 text-xs text-muted">
-                  Jelaskan alasan penyesuaian jika kuantitas barang yang disetujui berbeda dari permintaan mitra agar PIC cabang memahaminya.
-                </p>
 
                 {/* Template Cepat */}
                 {hasAdjustment ? (
@@ -5708,7 +5715,7 @@ function ApprovalDialog({
                         key={template}
                         type="button"
                         onClick={() => onAdminNoteChange(order.id, template)}
-                        className="rounded-md border border-line bg-ink-50 px-2 py-1 text-xs font-medium text-ink-800 transition-colors hover:border-ink-700 hover:bg-white"
+                        className="rounded-md border border-line bg-ink-50 px-2 py-1 text-xs font-medium text-ink-800 transition-colors hover:border-ink-700 hover:bg-white cursor-pointer"
                       >
                         {template}
                       </button>
@@ -5731,16 +5738,8 @@ function ApprovalDialog({
                     }`}
                   placeholder="Contoh: Stok gudang pusat dialokasikan sebagian, sisa akan dikirim batch berikutnya..."
                 />
-                {noteRequired ? (
-                  <p
-                    className="mt-1.5 text-xs font-bold text-crit"
-                    role="alert"
-                  >
-                    Catatan admin wajib diisi karena terdapat penyesuaian kuantitas dari permintaan mitra.
-                  </p>
-                ) : null}
               </div>
-            ) : order.admin_note ? (
+            ) : order.admin_note && !rejectionMode ? (
               <div className="rounded-xl border border-line bg-ink-50 p-4 text-sm">
                 <p className="text-xs font-bold uppercase tracking-wider text-muted">
                   Catatan Admin
@@ -5758,30 +5757,82 @@ function ApprovalDialog({
               </div>
             ) : null}
 
+            {/* Form Penolakan Pesanan yang Rapi & Terfokus */}
             {rejectionMode && order.status === 'diproses' ? (
-              <div className="rounded-xl border border-crit/40 bg-crit-bg/10 p-4 sm:p-5">
-                <label
-                  htmlFor={`rejection-reason-${order.id}`}
-                  className="text-sm font-bold text-ink-900"
-                >
-                  Alasan Penolakan Permintaan Restock
-                </label>
-                <textarea
-                  id={`rejection-reason-${order.id}`}
-                  rows={3}
-                  maxLength={1000}
-                  value={rejectionReason}
-                  onChange={(event) => setRejectionReason(event.target.value)}
-                  className="mt-2 w-full rounded-md border border-line p-3 text-sm text-ink-900 focus:border-crit focus:outline-none focus:ring-1 focus:ring-crit"
-                  placeholder="Tuliskan alasan yang akan dibaca mitra"
-                />
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <div
+                ref={rejectionFormRef}
+                className="rounded-xl border-2 border-crit/30 bg-crit-bg/25 p-4 sm:p-5 shadow-xs"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-crit/15 text-crit">
+                    <XCircle className="size-5" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-display text-base font-bold text-ink-900">
+                      Formulir Penolakan Permintaan Restock
+                    </h4>
+                    <p className="mt-1 text-xs text-ink-700 leading-relaxed">
+                      Permintaan restock akan ditolak dan alokasi stok pusat yang sempat direservasi akan dikembalikan ke stok tersedia. Mitra cabang akan menerima notifikasi beserta alasan penolakan ini.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Template Cepat Alasan Penolakan */}
+                <div className="mt-4 space-y-1.5">
+                  <span className="text-xs font-semibold text-ink-800">
+                    Template alasan cepat:
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {quickRejectionTemplates.map((template) => (
+                      <button
+                        key={template}
+                        type="button"
+                        onClick={() => setRejectionReason(template)}
+                        className="rounded-md border border-crit/25 bg-white px-2.5 py-1 text-xs font-medium text-ink-800 transition hover:border-crit hover:bg-crit-bg/40 hover:text-crit active:scale-95 cursor-pointer"
+                      >
+                        {template}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Input Textarea Alasan Penolakan */}
+                <div className="mt-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor={`rejection-reason-${order.id}`}
+                      className="text-xs font-bold text-ink-900"
+                    >
+                      Alasan Penolakan <span className="text-crit">* (Wajib diisi)</span>
+                    </label>
+                    <span className="text-[11px] tabular-nums text-muted">
+                      {rejectionReason.length}/1000
+                    </span>
+                  </div>
+                  <textarea
+                    id={`rejection-reason-${order.id}`}
+                    rows={3}
+                    maxLength={1000}
+                    value={rejectionReason}
+                    onChange={(event) => setRejectionReason(event.target.value)}
+                    className="w-full rounded-lg border border-line bg-white p-3 text-sm text-ink-900 shadow-2xs placeholder:text-muted focus:border-crit focus:outline-none focus:ring-1 focus:ring-crit"
+                    placeholder="Tuliskan alasan penolakan pesanan ini yang dapat dipahami mitra..."
+                  />
+                  {!rejectionReason.trim() ? (
+                    <p className="text-[11px] text-crit">
+                      * Alasan penolakan wajib diisi sebelum mengonfirmasi penolakan.
+                    </p>
+                  ) : null}
+                </div>
+
+                {/* Tombol Aksi di Dalam Form */}
+                <div className="mt-4 flex flex-col gap-2 border-t border-crit/20 pt-3 sm:flex-row sm:justify-end">
                   <button
                     type="button"
                     onClick={() => setRejectionMode(false)}
-                    className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-800"
+                    className="min-h-10 rounded-md border border-line bg-white px-4 text-xs font-semibold text-ink-700 hover:bg-paper cursor-pointer"
                   >
-                    Batal
+                    Batal Penolakan
                   </button>
                   <button
                     type="button"
@@ -5791,15 +5842,20 @@ function ApprovalDialog({
                         onReject(order.id, rejectionReason.trim()),
                       )
                     }
-                    className="min-h-11 rounded-md border border-crit px-4 text-sm font-semibold text-crit disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md bg-crit px-4 text-xs font-bold text-white hover:bg-crit/90 shadow-2xs disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                   >
-                    Konfirmasi penolakan
+                    {pending ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <XCircle className="size-3.5" />
+                    )}
+                    <span>Konfirmasi Tolak Permintaan</span>
                   </button>
                 </div>
               </div>
             ) : null}
 
-            {totalApproved < 1 && editable ? (
+            {totalApproved < 1 && editable && !rejectionMode ? (
               <p className="text-sm font-medium text-crit" role="alert">
                 Minimal satu barang harus disetujui.
               </p>
@@ -5824,12 +5880,6 @@ function ApprovalDialog({
                     <h4 className="font-display font-bold text-ink-900 text-sm sm:text-base">
                       Kirim Sekarang ke {order.partner_name}?
                     </h4>
-                    <p className="mt-1 text-xs text-ink-700 leading-relaxed">
-                      Pastikan barang sudah dikemas dan kurir siap berangkat. Stok pusat sudah direservasi saat pengajuan dan tidak dipotong lagi saat pengiriman.
-                    </p>
-                    <p className="mt-1.5 text-xs font-semibold text-warn-fg">
-                      Jika armada belum siap atau barang belum selesai dikemas, Anda bisa memilih <strong>Tahan dulu (Belum siap)</strong>.
-                    </p>
                   </div>
                 </div>
 
@@ -5858,6 +5908,30 @@ function ApprovalDialog({
           <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-white p-4 sm:flex-row sm:justify-end sm:p-5">
             {order.status === 'dalam_pengiriman' && order.delivery_code && order.delivery_qr_token ? (
               <button type="button" onClick={() => setPrintOpen(true)} className="min-h-11 rounded-md border border-ume bg-white px-4 text-sm font-semibold text-ume focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Cetak Resi / Surat Jalan</button>
+            ) : null}
+            {order.status === 'diproses' && rejectionMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setRejectionMode(false)}
+                  className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-paper cursor-pointer"
+                >
+                  Batal Penolakan
+                </button>
+                <button
+                  type="button"
+                  disabled={pending || !rejectionReason.trim()}
+                  onClick={() =>
+                    void runAction(() =>
+                      onReject(order.id, rejectionReason.trim()),
+                    )
+                  }
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-crit px-5 text-sm font-semibold text-white hover:bg-crit/90 shadow-2xs disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                >
+                  {pending ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}
+                  <span>Konfirmasi Tolak Permintaan</span>
+                </button>
+              </>
             ) : null}
             {order.status === 'diproses' && !rejectionMode ? (
               <button

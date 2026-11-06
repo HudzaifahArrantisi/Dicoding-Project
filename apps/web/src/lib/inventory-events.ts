@@ -110,6 +110,7 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
 
         es.onopen = () => {
           retryDelay = 3_000
+          queue(['orders'])
         }
 
         es.addEventListener('inventory', (event) => {
