@@ -1,5 +1,5 @@
 // @bun
-// scripts/figcraft-helper.ts
+// figcraft/figcraft-helper.ts
 import { spawn } from "child_process";
 var activeClient = null;
 
@@ -236,7 +236,9 @@ async function createBadge(a, b, c, d, e, f) {
   return frameId;
 }
 
-// scripts/build-daisuki-bento-app.ts
+// figcraft/build-daisuki-bento-app.ts
+import { resolve } from "path";
+import { fileURLToPath } from "url";
 var C = {
   bgApp: "#F6F7F9",
   bgWhite: "#FFFFFF",
@@ -258,6 +260,7 @@ var C = {
 };
 async function buildDaisukiBento(client) {
   console.log("Building Daisuki Mitra FigCraft prototype...");
+  await client.runCommand("file.new", {});
   await client.runCommand("page.setBackground", { color: "#F6F7F9" });
   const phoneW = 464;
   const phoneH = 980;
@@ -275,13 +278,13 @@ async function buildDaisukiBento(client) {
   ];
   const screens = [];
   async function createDeviceWrapper(name, x, y, label, screenBg) {
-    await createText(client, undefined, `Label_${name}`, label, {
+    await client.createNode({
+      type: "text",
+      name: `Label_${name}`,
+      text: label,
       x,
       y: y - 36,
-      fontSize: 20,
-      fontFamily: "Bricolage Grotesque",
-      fontStyle: "Bold",
-      fill: C.textBlack
+      props: { fontSize: 18, fontFamily: "Bricolage Grotesque", fontStyle: "Bold", fill: C.textBlack }
     });
     const deviceId = await createAutoFrame(client, undefined, name, 464, 980, {
       x,
@@ -359,10 +362,10 @@ async function buildDaisukiBento(client) {
       sizingV: "fixed"
     });
     const tabs = [
-      { name: "Stok", glyph: "\u2302" },
-      { name: "Pesan", glyph: "\u2637" },
-      { name: "Lacak", glyph: "\u21F6" },
-      { name: "Profil", glyph: "\u25EB" }
+      { name: "Stok", path: "M3 9 L5 4 H19 L21 9 V20 H3 Z M3 9 H21 M9 20 V13 H15 V20" },
+      { name: "Pesan", path: "M4 7 L12 3 L20 7 V17 L12 21 L4 17 Z M4 7 L12 11 L20 7 M12 11 V21 M16 3 V7 M14 5 H18" },
+      { name: "Lacak", path: "M2 6 H14 V17 H2 Z M14 10 H18 L21 14 V17 H14 Z M5 19 H8 M16 19 H19" },
+      { name: "Profil", path: "M12 12 A4 4 0 1 0 12 4 A4 4 0 1 0 12 12 M4 21 V19 A8 8 0 0 1 20 19 V21 Z" }
     ];
     let tStok = 0;
     let tPesan = 0;
@@ -371,19 +374,18 @@ async function buildDaisukiBento(client) {
     for (const tab of tabs) {
       const isActive = tab.name === activeTabName;
       if (isActive) {
-        const activeCircle = await createAutoFrame(client, navBar, `Tab_${tab.name}_Active`, 48, 48, {
-          cornerRadius: 24,
+        const activeCircle = await createAutoFrame(client, navBar, `Tab_${tab.name}_Active`, 88, 50, {
+          layout: "vertical",
+          gap: 1,
+          cornerRadius: 25,
           fill: "#FFFFFF",
           mainAlign: "center",
           crossAlign: "center",
           sizingH: "fixed",
           sizingV: "fixed"
         });
-        await createText(client, activeCircle, "ic", tab.glyph, {
-          fontSize: 20,
-          fontStyle: "Bold",
-          fill: C.textBlack
-        });
+        await client.createNode({ type: "vector", name: `Icon_${tab.name}`, parent: activeCircle, path: tab.path, width: 18, height: 18, props: { fill: "none", stroke: C.textBlack, strokeWeight: 2 } });
+        await createText(client, activeCircle, "label", tab.name, { fontSize: 10, fontStyle: "Bold", fill: C.textBlack });
         if (tab.name === "Stok")
           tStok = activeCircle;
         if (tab.name === "Pesan")
@@ -393,17 +395,17 @@ async function buildDaisukiBento(client) {
         if (tab.name === "Profil")
           tProfil = activeCircle;
       } else {
-        const inactiveTab = await createAutoFrame(client, navBar, `Tab_${tab.name}`, 48, 48, {
+        const inactiveTab = await createAutoFrame(client, navBar, `Tab_${tab.name}`, 88, 50, {
+          layout: "vertical",
+          gap: 1,
           fill: "none",
           mainAlign: "center",
           crossAlign: "center",
           sizingH: "fixed",
           sizingV: "fixed"
         });
-        await createText(client, inactiveTab, "ic", tab.glyph, {
-          fontSize: 20,
-          fill: "#8E8E93"
-        });
+        await client.createNode({ type: "vector", name: `Icon_${tab.name}`, parent: inactiveTab, path: tab.path, width: 18, height: 18, props: { fill: "none", stroke: "#DDE1E8", strokeWeight: 2 } });
+        await createText(client, inactiveTab, "label", tab.name, { fontSize: 10, fontStyle: "Bold", fill: "#DDE1E8" });
         if (tab.name === "Stok")
           tStok = inactiveTab;
         if (tab.name === "Pesan")
@@ -497,7 +499,7 @@ Tanpa Ribet.`, {
   const mBasreng = await createAutoFrame(client, s1Cluster, "Tile_Basreng", 150, 150, {
     x: 20,
     y: 20,
-    cornerRadius: 38,
+    cornerRadius: 12,
     fill: C.peach,
     layout: "vertical",
     mainAlign: "center",
@@ -511,11 +513,11 @@ Tanpa Ribet.`, {
     crossAlign: "center"
   });
   await createText(client, icB1, "sym", "\u25B2", { fontSize: 22, fill: "#EA580C" });
-  await createText(client, mBasreng, "t", "Basreng Daun Jeruk", { fontSize: 13, fontStyle: "Bold", fill: C.textBlack });
+  await createText(client, mBasreng, "t", "Basreng Daun Jeruk", { fontSize: 12, fontStyle: "Bold", fill: C.textBlack, sizingH: "fill", textAlign: "center" });
   const mSeblak = await createAutoFrame(client, s1Cluster, "Tile_Seblak", 140, 140, {
     x: 240,
     y: 10,
-    cornerRadius: 70,
+    cornerRadius: 12,
     fill: C.yellow,
     layout: "vertical",
     mainAlign: "center",
@@ -529,11 +531,11 @@ Tanpa Ribet.`, {
     crossAlign: "center"
   });
   await createText(client, icS1, "sym", "\u25C6", { fontSize: 22, fill: "#D97706" });
-  await createText(client, mSeblak, "t", "Seblak Jadul Instan", { fontSize: 13, fontStyle: "Bold", fill: C.textBlack });
+  await createText(client, mSeblak, "t", "Seblak Jadul Instan", { fontSize: 12, fontStyle: "Bold", fill: C.textBlack, sizingH: "fill", textAlign: "center" });
   const mKeju = await createAutoFrame(client, s1Cluster, "Tile_Keju", 140, 140, {
-    x: -15,
+    x: 20,
     y: 175,
-    cornerRadius: 50,
+    cornerRadius: 12,
     fill: C.sky,
     layout: "vertical",
     mainAlign: "center",
@@ -547,11 +549,11 @@ Tanpa Ribet.`, {
     crossAlign: "center"
   });
   await createText(client, icK1, "sym", "", { fontSize: 20 });
-  await createText(client, mKeju, "t", "Makaroni Daun Jeruk", { fontSize: 13, fontStyle: "Bold", fill: C.textBlack });
+  await createText(client, mKeju, "t", "Makaroni Daun Jeruk", { fontSize: 12, fontStyle: "Bold", fill: C.textBlack, sizingH: "fill", textAlign: "center" });
   const mTruk = await createAutoFrame(client, s1Cluster, "Tile_Truk", 160, 160, {
     x: 135,
     y: 165,
-    cornerRadius: 36,
+    cornerRadius: 12,
     fill: C.lavender,
     layout: "vertical",
     mainAlign: "center",
@@ -567,9 +569,9 @@ Tanpa Ribet.`, {
   await createText(client, icTr, "sym", "\u21F6", { fontSize: 28, fontStyle: "Bold", fill: "#4338CA" });
   await createText(client, mTruk, "t", "Daisuki Express", { fontSize: 13, fontStyle: "Bold", fill: C.textBlack });
   const mKardus = await createAutoFrame(client, s1Cluster, "Tile_Kardus", 140, 140, {
-    x: 300,
+    x: 280,
     y: 175,
-    cornerRadius: 32,
+    cornerRadius: 12,
     fill: C.mint,
     layout: "vertical",
     mainAlign: "center",
@@ -587,7 +589,7 @@ Tanpa Ribet.`, {
   const mAlert = await createAutoFrame(client, s1Cluster, "Tile_Alert", 140, 140, {
     x: 30,
     y: 335,
-    cornerRadius: 38,
+    cornerRadius: 12,
     fill: C.coral,
     layout: "vertical",
     mainAlign: "center",
@@ -605,7 +607,7 @@ Tanpa Ribet.`, {
   const mSerah = await createAutoFrame(client, s1Cluster, "Tile_SerahTerima", 150, 150, {
     x: 220,
     y: 335,
-    cornerRadius: 40,
+    cornerRadius: 12,
     fill: "#FED7AA",
     layout: "vertical",
     mainAlign: "center",
@@ -660,7 +662,7 @@ Tanpa Ribet.`, {
     crossAlign: "center"
   });
   await createText(client, s2Bell, "ic", "\u25EC", { fontSize: 20, fontStyle: "Bold", fill: C.textBlack });
-  const s2Greeting = await createAutoFrame(client, s2Content, "Greeting", 400, 80, {
+  const s2Greeting = await createAutoFrame(client, s2Content, "Greeting", 400, 86, {
     layout: "vertical",
     gap: 4,
     fill: "none",
@@ -671,9 +673,8 @@ Tanpa Ribet.`, {
     fontStyle: "Medium",
     fill: C.textGray
   });
-  await createText(client, s2Greeting, "h", `Halo Kafe Sejuk!
-Semua stok terpantau.`, {
-    fontSize: 32,
+  await createText(client, s2Greeting, "h", "Stok cabang hari ini", {
+    fontSize: 29,
     fontFamily: "Bricolage Grotesque",
     fontStyle: "Bold",
     fill: C.textBlack
@@ -1574,6 +1575,10 @@ langsung ke gudang pusat.`, {
     cx: 800,
     cy: 1000,
     zoom: 0.35
+  });
+  await client.runCommand("file.save", {
+    path: resolve(fileURLToPath(new URL("./daisuki-mitra-portal.figcraft", import.meta.url))),
+    overwrite: true
   });
   console.log(" ALL MITRA SCREENS GENERATED & FULLY WIRED FOR PROTOTYPING!");
   return { screens };
