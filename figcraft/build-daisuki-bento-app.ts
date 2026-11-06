@@ -1561,7 +1561,7 @@ export async function buildDaisukiBento(client: FigCraftClient) {
   });
 
   await client.runCommand("file.save", {
-    path: resolve(fileURLToPath(new URL("../design/daisuki-mitra-portal.figcraft", import.meta.url))),
+    path: resolve(fileURLToPath(new URL("./daisuki-mitra-portal.figcraft", import.meta.url))),
     overwrite: true,
   });
 
