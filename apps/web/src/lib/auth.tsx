@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   getCurrentUser,
   login as apiLogin,
@@ -27,6 +28,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -58,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string): Promise<AuthResult> => {
     try {
       await apiLogin({ email, password })
+      queryClient.clear()
       const nextUser = await refreshUser()
       return { success: true, role: nextUser.role }
     } catch (error: unknown) {
@@ -71,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearSession = () => {
     setCsrfToken(null)
     setUser(null)
+    queryClient.clear()
   }
 
   const logout = async (): Promise<void> => {
