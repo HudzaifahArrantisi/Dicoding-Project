@@ -151,3 +151,17 @@ daisuki-inventory/
    - Stock Status Colors: Defined in [apps/web/src/styles.css](apps/web/src/styles.css) as semantic tokens (`--color-ok`, `--color-warn`, `--color-crit`, `--color-stale` and their fg/bg variants).
    - Brand Accent: `Ume` (`#b83a6a`) is reserved for branding, login headers, and illustrations; never use it for buttons or status chips to avoid confusion with critical red.
    - Touch Accessibility: Partner portal is optimized for mobile with touch targets of at least 44px.
+
+8. **Prosedur Otomatis Log Perubahan Harian (Daily Changelog Protocol)**:
+   - **Sebelum Bekerja**: Agen/Developer **wajib membaca** [AGENTS.md](AGENTS.md) dan [CLAUDE.md](CLAUDE.md) untuk memahami konteks dan perubahan terbaru.
+   - **Setelah Mengubah Kode**: Catat dokumentasi ringkas perubahan ke seksi `## Catatan Perubahan Harian (Daily Changelog)` di [CLAUDE.md](CLAUDE.md) dan [AGENTS.md](AGENTS.md) dengan format tanggal `YYYY-MM-DD`.
+
+---
+
+## Catatan Perubahan Harian (Daily Changelog)
+
+### 2026-11-07
+- **Admin Order Rejection**: Menghapus form ganda (*double form*) saat admin menolak pesanan restock di modal persetujuan. Form penolakan kini terisolasi, dilengkapi template alasan cepat, counter karakter, dan tombol aksi terintegrasi ([apps/web/src/routes/admin.tsx](apps/web/src/routes/admin.tsx)).
+- **Cetak Surat Jalan & Resi Pengiriman**: Memperbaiki modal cetak resi logistik agar mendukung format resmi **Surat Jalan A4** (lengkap dengan kop resmi, tanda tangan 3 pihak, rincian barang, dan verifikasi QR/Barcode) serta opsi struk thermal 80 mm via isolasi iframe print engine ([apps/web/src/components/inventory/delivery-receipt-modal.tsx](apps/web/src/components/inventory/delivery-receipt-modal.tsx)).
+- **Perencanaan Optimasi SSE & Cache**: Membuat rencana teknis [planing.md](planing.md) untuk meniadakan polling berulang dan menerapkan event-driven query cache dengan TanStack Query dan Server-Sent Events (SSE).
+- **Protokol Log Perubahan**: Menerapkan aturan wajib baca dan pencatatan log harian otomatis pada [CLAUDE.md](CLAUDE.md) dan [AGENTS.md](AGENTS.md).

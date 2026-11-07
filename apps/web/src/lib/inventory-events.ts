@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { resolveApiPath } from './api'
 
 type Role = 'admin' | 'mitra'
-type Topic = 'orders' | 'stocks' | 'logs' | 'products' | 'notifications' | 'metrics' | 'partners'
+type Topic = 'orders' | 'stocks' | 'logs' | 'products' | 'notifications' | 'metrics' | 'partners' | 'ai'
 
 const topics: Topic[] = [
   'orders',
@@ -13,18 +13,18 @@ const topics: Topic[] = [
   'notifications',
   'metrics',
   'partners',
+  'ai',
 ]
 
 const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
   admin: {
     orders: [
       ['admin-orders'],
-      ['admin-shipment-logs'],
       ['admin-receipt-proof'],
-      ['admin-metrics'],
     ],
     stocks: [['admin-stocks']],
     logs: [
+      ['admin-shipment-logs'],
       ['admin-stock-logs-partner'],
       ['admin-stock-log-partners'],
       ['admin-weekly-summary'],
@@ -37,8 +37,9 @@ const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
       ['admin-ai-insights'],
     ],
     notifications: [['admin-notifications']],
-    metrics: [['admin-metrics']],
+    metrics: [['admin-metrics'], ['admin-ai-insights']],
     partners: [['admin-partners']],
+    ai: [['admin-ai-run'], ['admin-ai-insights']],
   },
   mitra: {
     orders: [['mitra-orders']],
@@ -76,6 +77,7 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let invalidateTimer: ReturnType<typeof setTimeout> | null = null
     let retryDelay = 3_000
+    let hasConnected = false
     const pending = new Set<Topic>()
 
     const flush = () => {
@@ -89,7 +91,7 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
       }
       pending.clear()
       for (const key of keys.values()) {
-        void queryClientRef.current.invalidateQueries({ queryKey: key })
+        void queryClientRef.current.invalidateQueries({ queryKey: key, refetchType: 'active' })
       }
     }
 
@@ -110,7 +112,8 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
 
         es.onopen = () => {
           retryDelay = 3_000
-          queue(['orders'])
+          if (hasConnected) queue(topics)
+          hasConnected = true
         }
 
         es.addEventListener('inventory', (event) => {
@@ -161,7 +164,7 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
     }
 
     document.addEventListener('visibilitychange', handleVisibility)
-    connect()
+    if (!document.hidden) connect()
 
     return () => {
       stopped = true

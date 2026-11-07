@@ -1953,7 +1953,6 @@ function AIInsightsPanel({
   const runStatus = useQuery<AiRunStatus>({
     queryKey: ['admin-ai-run'],
     queryFn: getAiRunStatus,
-    refetchInterval: (query) => query.state.data?.status === 'running' ? 2_000 : false,
   })
   const [subTab, setSubTab] = useState<'wilayah' | 'laris' | 'defisit' | 'pabrik'>('defisit')
   const [selectedPartnerGroup, setSelectedPartnerGroup] = useState<PartnerFastMovingGroup | null>(null)
@@ -2778,7 +2777,7 @@ function AdminDashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<AdminTab>('stocks')
-  useInventoryEvents(user?.role === 'admin' && tab !== 'alerts', 'admin')
+  useInventoryEvents(user?.role === 'admin', 'admin')
   const [shipmentPage, setShipmentPage] = useState(1)
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
@@ -2823,39 +2822,37 @@ function AdminDashboard() {
     queryKey: ['admin-metrics'],
     queryFn: () => getAdminMetrics(),
     enabled: user?.role === 'admin',
-    staleTime: 10_000,
-    refetchInterval: 15_000,
+    staleTime: Infinity,
   })
   const stocks = useQuery<StockItem[]>({
     queryKey: ['admin-stocks'],
     queryFn: () => getStocks(),
     enabled: user?.role === 'admin' && (tab === 'stocks' || tab === 'orders'),
-    staleTime: 30_000,
+    staleTime: Infinity,
   })
   const centralProducts = useQuery<Product[]>({
     queryKey: ['admin-central-products'],
     queryFn: () => getProducts(),
     enabled: user?.role === 'admin' && tab === 'stocks',
-    staleTime: 30_000,
+    staleTime: Infinity,
   })
   const orders = useQuery<Order[]>({
     queryKey: ['admin-orders'],
     queryFn: () => getOrders(),
     enabled: user?.role === 'admin' && tab === 'orders',
-    staleTime: 30_000,
+    staleTime: Infinity,
   })
   const shipmentLogs = useQuery<ShipmentLogPage>({
     queryKey: ['admin-shipment-logs', shipmentPage],
     queryFn: () => getShipmentLogs(shipmentPage),
     enabled: user?.role === 'admin' && tab === 'shipments',
-    staleTime: 30_000,
+    staleTime: Infinity,
   })
   const notifications = useQuery<NotificationFeed>({
     queryKey: ['admin-notifications'],
     queryFn: () => getAdminNotifications(),
     enabled: user?.role === 'admin' && tab === 'alerts',
-    refetchInterval: 60_000,
-    staleTime: 0,
+    staleTime: Infinity,
   })
 
   useEffect(() => {
@@ -2890,7 +2887,7 @@ function AdminDashboard() {
     queryKey: ['admin-ai-insights'],
     queryFn: () => getAiInsights(),
     enabled: user?.role === 'admin' && tab === 'ai-insights',
-    refetchInterval: 60_000,
+    staleTime: Infinity,
   })
 
   const exportRawLogs = async () => {
@@ -3511,7 +3508,7 @@ function PartnerManagementPanel() {
       })
     },
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
+    staleTime: Infinity,
     refetchOnWindowFocus: false,
   })
   const refresh = async () => {
@@ -5080,7 +5077,7 @@ function ApprovalDialog({
     queryKey: ['admin-receipt-proof', order?.id],
     queryFn: () => getOrderReceiptProof(order!.id),
     enabled: open && Boolean(order?.receipt_photo_present),
-    staleTime: 5_000,
+    staleTime: Infinity,
   })
   const requestReceiptProof = useMutation({
     mutationFn: (orderId: string) => apiRequestReceiptProof(orderId),

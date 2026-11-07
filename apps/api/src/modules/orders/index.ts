@@ -976,6 +976,8 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         topics:
           targetStatus === "selesai"
             ? ["orders", "stocks", "logs", "metrics", "notifications"]
+            : targetStatus === "dalam_pengiriman"
+              ? ["orders", "logs", "metrics", "notifications"]
             : ["orders", "metrics", "notifications"],
       });
       if (targetStatus === "ditolak") {

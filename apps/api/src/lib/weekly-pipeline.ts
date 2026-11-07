@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { publishInventoryChange } from "../realtime";
 
 const root = resolve(import.meta.dir, "../../../..");
 const jobs = [
@@ -36,6 +37,7 @@ export function startWeeklyPipeline(): PipelineStatus {
 export function runWeeklyPipeline(): Promise<void> {
   if (running) return running;
   pipelineStatus = { status: "running", started_at: new Date().toISOString(), finished_at: null };
+  publishInventoryChange({ partnerId: null, topics: ["ai"] });
   running = (async () => {
     for (const job of jobs) {
       const child = Bun.spawn([process.env.PYTHON_EXECUTABLE || "python", resolve(root, job)], {
@@ -54,9 +56,11 @@ export function runWeeklyPipeline(): Promise<void> {
   })()
     .then(() => {
       pipelineStatus = { ...pipelineStatus, status: "succeeded", finished_at: new Date().toISOString() };
+      publishInventoryChange({ partnerId: null, topics: ["ai"] });
     })
     .catch((error) => {
       pipelineStatus = { ...pipelineStatus, status: "failed", finished_at: new Date().toISOString() };
+      publishInventoryChange({ partnerId: null, topics: ["ai"] });
       throw error;
     })
     .finally(() => { running = null; });

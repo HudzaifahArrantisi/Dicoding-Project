@@ -153,3 +153,20 @@ For UI, copy, people, mobile layout, or code comments work, read `antislop.md` (
 
 Before starting, ask the user when antislop applies: during the work, or after it is done.
 <!-- antislop:end -->
+
+---
+
+## 8. Protokol Dokumentasi & Log Perubahan Harian (Daily Changelog Protocol)
+
+1. **Wajib Baca Sebelum Bekerja**:
+   - Seluruh AI Agent dan developer wajib membaca [AGENTS.md](AGENTS.md) dan [CLAUDE.md](CLAUDE.md) sebelum melakukan tindakan perubahan untuk memastikan konsistensi dan tidak melanggar aturan arsitektur.
+2. **Auto-Catat Perubahan Harian**:
+   - Setiap kali selesai melakukan perbaikan bug, penambahan fitur, atau refaktor kode, catat ringkasan perubahannya ke seksi ini di [AGENTS.md](AGENTS.md) dan [CLAUDE.md](CLAUDE.md) dengan tanggal hari pengerjaan (`YYYY-MM-DD`).
+
+### Catatan Perubahan Harian (Daily Changelog)
+
+#### 2026-11-07
+- **Admin Approval Modal**: Memperbaiki alur penolakan restock agar form catatan admin dan form penolakan tidak bertumpuk/ganda (*double form*), dilengkapi template cepat dan validasi terisolasi ([apps/web/src/routes/admin.tsx](apps/web/src/routes/admin.tsx)).
+- **Cetak Surat Jalan & Resi**: Mengganti modal cetak resi menjadi dukungan penuh **Surat Jalan A4 Standar** (kop resmi Daisuki, tanda tangan 3 pihak, rincian produk, dan verifikasi QR/Barcode) serta opsi thermal 80 mm via isolasi iframe print engine ([apps/web/src/components/inventory/delivery-receipt-modal.tsx](apps/web/src/components/inventory/delivery-receipt-modal.tsx)).
+- **Perencanaan Optimasi SSE & Cache**: Membuat arsitektur [planing.md](planing.md) untuk efisiensi request dan eliminasi polling manual dengan TanStack Query + SSE.
+- **Protokol Log Perubahan Harian**: Menambahkan aturan wajib baca dan pencatatan log harian otomatis di [AGENTS.md](AGENTS.md) dan [CLAUDE.md](CLAUDE.md).

@@ -8,7 +8,8 @@ export type InventoryTopic =
   | "products"
   | "notifications"
   | "metrics"
-  | "partners";
+  | "partners"
+  | "ai";
 
 type InventoryEvent = {
   partnerId: string | null;
