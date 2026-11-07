@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { WeeklyInsights } from '@/components/inventory/weekly-insights'
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   keepPreviousData,
   useMutation,
@@ -2777,11 +2777,6 @@ function AdminDashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<AdminTab>('stocks')
-  const [hoveredNavIndex, setHoveredNavIndex] = useState<number | null>(null)
-  const activeNavIndex = Math.max(
-    0,
-    adminNavTabs.findIndex((item) => item.id === tab),
-  )
   useInventoryEvents(user?.role === 'admin', 'admin')
   const [shipmentPage, setShipmentPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -3259,94 +3254,118 @@ function AdminDashboard() {
         </main>
       </div>
 
-      {/* Floating Pill Nav Bar (Mode Mobile) */}
-      <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none bg-gradient-to-t from-[#f7f8fa] via-[#f7f8fa]/80 to-transparent px-2.5 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
-        <nav
-          onMouseLeave={() => setHoveredNavIndex(null)}
-          style={
-            {
-              '--active-index': activeNavIndex,
-              '--hover-index': hoveredNavIndex ?? activeNavIndex,
-            } as React.CSSProperties
-          }
-          className="pointer-events-auto relative mx-auto grid w-full max-w-[460px] grid-cols-7 items-center rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
-          aria-label="Menu navigasi admin"
+      <AdminFloatingNavbar
+        tab={tab}
+        onSelectTab={setTab}
+        pendingOrdersCount={pendingOrdersCount}
+        unread={unread}
+      />
+    </div>
+  )
+}
+
+function AdminFloatingNavbar({
+  tab,
+  onSelectTab,
+  pendingOrdersCount,
+  unread,
+}: {
+  tab: AdminTab
+  onSelectTab: (tab: AdminTab) => void
+  pendingOrdersCount?: number
+  unread?: number
+}) {
+  const [hoveredNavIndex, setHoveredNavIndex] = useState<number | null>(null)
+  const activeNavIndex = Math.max(
+    0,
+    adminNavTabs.findIndex((item) => item.id === tab),
+  )
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none bg-gradient-to-t from-[#f7f8fa] via-[#f7f8fa]/80 to-transparent px-2.5 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+      <nav
+        onMouseLeave={() => setHoveredNavIndex(null)}
+        style={
+          {
+            '--active-index': activeNavIndex,
+            '--hover-index': hoveredNavIndex ?? activeNavIndex,
+          } as React.CSSProperties
+        }
+        className="pointer-events-auto relative mx-auto grid w-full max-w-[460px] grid-cols-7 items-center overflow-hidden rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
+        aria-label="Menu navigasi admin"
+      >
+        {/* Liquid Glass Gliding Hover Pill */}
+        <div
+          aria-hidden="true"
+          className={`liquid-pill-hover-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/7)] rounded-full border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+            hoveredNavIndex !== null && hoveredNavIndex !== activeNavIndex
+              ? 'opacity-100 scale-100'
+              : 'pointer-events-none opacity-0 scale-95'
+          }`}
+        />
+
+        {/* Liquid Glass Sliding Active Capsule */}
+        <div
+          aria-hidden="true"
+          className="liquid-pill-active-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/7)] rounded-full bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)]"
         >
-          {/* Liquid Glass Gliding Hover Pill */}
-          <div
-            aria-hidden="true"
-            className={`pointer-events-none absolute z-0 rounded-full border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
-              top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/7)]
-              [transform:translate3d(calc(var(--hover-index)*100%),0,0)]
-              ${
-                hoveredNavIndex !== null && hoveredNavIndex !== activeNavIndex
-                  ? 'opacity-100 scale-100'
-                  : 'pointer-events-none opacity-0 scale-95'
+          {/* Glossy Liquid Specular Sheen */}
+          <div className="pointer-events-none absolute inset-x-1.5 top-0.5 h-2 rounded-t-full bg-gradient-to-b from-white/25 to-transparent" />
+        </div>
+
+        {adminNavTabs.map(({ id, shortLabel, Icon }, index) => {
+          const isActive = tab === id
+          const badgeCount =
+            id === 'orders'
+              ? pendingOrdersCount
+              : id === 'alerts'
+                ? unread
+                : undefined
+          const isCritical = id === 'alerts'
+
+          return (
+            <button
+              key={id}
+              type="button"
+              onMouseEnter={() => setHoveredNavIndex(index)}
+              onClick={() => {
+                setHoveredNavIndex(null)
+                onSelectTab(id)
+              }}
+              aria-current={isActive ? 'page' : undefined}
+              className={`group relative z-10 flex h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1 text-[9.5px] font-semibold transition-colors duration-200 ease-out active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:text-[10.5px] ${
+                isActive
+                  ? 'text-white'
+                  : 'text-slate-600 hover:text-ink-950'
               }`}
-          />
-
-          {/* Liquid Glass Sliding Active Capsule */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute z-0 rounded-full bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.25,1.4,0.4,1)]
-              top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/7)]
-              [transform:translate3d(calc(var(--active-index)*100%),0,0)]"
-          >
-            {/* Glossy Liquid Specular Sheen */}
-            <div className="pointer-events-none absolute inset-x-1.5 top-0.5 h-2 rounded-t-full bg-gradient-to-b from-white/25 to-transparent" />
-          </div>
-
-          {adminNavTabs.map(({ id, shortLabel, Icon }, index) => {
-            const isActive = tab === id
-            const badgeCount =
-              id === 'orders'
-                ? pendingOrdersCount
-                : id === 'alerts'
-                  ? unread
-                  : undefined
-            const isCritical = id === 'alerts'
-
-            return (
-              <button
-                key={id}
-                type="button"
-                onMouseEnter={() => setHoveredNavIndex(index)}
-                onClick={() => setTab(id)}
-                aria-current={isActive ? 'page' : undefined}
-                className={`group relative z-10 flex h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1 text-[9.5px] font-semibold transition-all duration-300 ease-out active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:text-[10.5px] ${
-                  isActive
-                    ? 'text-white'
-                    : 'text-slate-600 hover:text-ink-950'
+            >
+              <Icon
+                className={`size-4 shrink-0 transition-transform duration-200 ease-out sm:size-4.5 ${
+                  isActive ? 'scale-110 drop-shadow-xs' : 'group-hover:scale-110 group-active:scale-95'
                 }`}
-              >
-                <Icon
-                  className={`size-4 shrink-0 transition-transform duration-300 ease-out sm:size-4.5 ${
-                    isActive ? 'scale-110 drop-shadow-xs' : 'group-hover:scale-110 group-active:scale-95'
+                aria-hidden="true"
+              />
+              <span className="max-w-full truncate leading-none tracking-tight">
+                {shortLabel}
+              </span>
+              {badgeCount && badgeCount > 0 ? (
+                <span
+                  className={`absolute -right-0.5 top-0.5 grid min-w-4 h-4 place-items-center rounded-full px-1 text-[9px] tabular-nums font-bold shadow-xs transition-colors sm:right-0.5 sm:text-[10px] ${
+                    isActive
+                      ? 'bg-amber-400 text-ink-950 ring-1 ring-white/50'
+                      : isCritical
+                        ? 'bg-crit text-white ring-1 ring-white'
+                        : 'bg-ink-700 text-white ring-1 ring-white'
                   }`}
-                  aria-hidden="true"
-                />
-                <span className="max-w-full truncate leading-none tracking-tight">
-                  {shortLabel}
+                  aria-label={`${badgeCount} item`}
+                >
+                  {badgeCount > 99 ? '99+' : badgeCount}
                 </span>
-                {badgeCount && badgeCount > 0 ? (
-                  <span
-                    className={`absolute -right-0.5 top-0.5 grid min-w-4 h-4 place-items-center rounded-full px-1 text-[9px] tabular-nums font-bold shadow-xs transition-colors sm:right-0.5 sm:text-[10px] ${
-                      isActive
-                        ? 'bg-amber-400 text-ink-950 ring-1 ring-white/50'
-                        : isCritical
-                          ? 'bg-crit text-white ring-1 ring-white'
-                          : 'bg-ink-700 text-white ring-1 ring-white'
-                    }`}
-                    aria-label={`${badgeCount} item`}
-                  >
-                    {badgeCount > 99 ? '99+' : badgeCount}
-                  </span>
-                ) : null}
-              </button>
-            )
-          })}
-        </nav>
-      </div>
+              ) : null}
+            </button>
+          )
+        })}
+      </nav>
     </div>
   )
 }
@@ -3424,21 +3443,18 @@ function AdminSidebar({
               {/* Liquid Glass Gliding Hover Pill */}
               <div
                 aria-hidden="true"
-                className={`pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
-                  [transform:translate3d(0,calc(var(--hover-index)*48px),0)]
-                  ${
-                    hoveredOpIndex !== null && hoveredOpIndex !== activeOpIndex
-                      ? 'opacity-100 scale-100'
-                      : 'pointer-events-none opacity-0 scale-95'
-                  }`}
+                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+                  hoveredOpIndex !== null && hoveredOpIndex !== activeOpIndex
+                    ? 'opacity-100 scale-100'
+                    : 'pointer-events-none opacity-0 scale-95'
+                }`}
               />
 
               {/* Liquid Glass Sliding Active Capsule */}
               {activeOpIndex !== -1 ? (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl bg-gradient-to-r from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.25,1.4,0.4,1)]
-                    [transform:translate3d(0,calc(var(--active-index)*48px),0)]"
+                  className="liquid-pill-active-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl bg-gradient-to-r from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)]"
                 >
                   <div className="pointer-events-none absolute inset-x-2 top-0.5 h-2 rounded-t-xl bg-gradient-to-b from-white/25 to-transparent" />
                 </div>
@@ -3455,12 +3471,12 @@ function AdminSidebar({
                     aria-current={isActive ? 'page' : undefined}
                     aria-label={label}
                     title={label}
-                    className={`group relative z-10 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
+                    className={`group relative z-10 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors duration-200 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
                       isActive ? 'text-white' : 'text-slate-600 hover:text-ink-950'
                     }`}
                   >
                     <Icon
-                      className={`size-4.5 shrink-0 transition-transform duration-300 ease-out ${
+                      className={`size-4.5 shrink-0 transition-transform duration-200 ease-out ${
                         isActive ? 'scale-110 drop-shadow-xs' : 'group-hover:scale-110 group-active:scale-95'
                       }`}
                       aria-hidden="true"
@@ -3502,21 +3518,18 @@ function AdminSidebar({
               {/* Liquid Glass Gliding Hover Pill */}
               <div
                 aria-hidden="true"
-                className={`pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
-                  [transform:translate3d(0,calc(var(--hover-index)*48px),0)]
-                  ${
-                    hoveredAnalysisIndex !== null && hoveredAnalysisIndex !== activeAnalysisIndex
-                      ? 'opacity-100 scale-100'
-                      : 'pointer-events-none opacity-0 scale-95'
-                  }`}
+                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+                  hoveredAnalysisIndex !== null && hoveredAnalysisIndex !== activeAnalysisIndex
+                    ? 'opacity-100 scale-100'
+                    : 'pointer-events-none opacity-0 scale-95'
+                }`}
               />
 
               {/* Liquid Glass Sliding Active Capsule */}
               {activeAnalysisIndex !== -1 ? (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl bg-gradient-to-r from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.25,1.4,0.4,1)]
-                    [transform:translate3d(0,calc(var(--active-index)*48px),0)]"
+                  className="liquid-pill-active-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl bg-gradient-to-r from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)]"
                 >
                   <div className="pointer-events-none absolute inset-x-2 top-0.5 h-2 rounded-t-xl bg-gradient-to-b from-white/25 to-transparent" />
                 </div>
@@ -3533,12 +3546,12 @@ function AdminSidebar({
                     aria-current={isActive ? 'page' : undefined}
                     aria-label={label}
                     title={label}
-                    className={`group relative z-10 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
+                    className={`group relative z-10 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors duration-200 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
                       isActive ? 'text-white' : 'text-slate-600 hover:text-ink-950'
                     }`}
                   >
                     <Icon
-                      className={`size-4.5 shrink-0 transition-transform duration-300 ease-out ${
+                      className={`size-4.5 shrink-0 transition-transform duration-200 ease-out ${
                         isActive ? 'scale-110 drop-shadow-xs' : 'group-hover:scale-110 group-active:scale-95'
                       }`}
                       aria-hidden="true"

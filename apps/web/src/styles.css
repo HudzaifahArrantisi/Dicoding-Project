@@ -359,6 +359,46 @@
     .dashboard-panel-enter { animation: none; }
     .log-chart-bar { animation: none; }
   }
+
+  /* Apple Liquid Glass Fluid Navigation Capsules */
+  .liquid-pill-active-x {
+    transform: translate3d(calc(var(--active-index, 0) * 100%), 0, 0);
+    transition: transform 300ms cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: transform;
+  }
+  .liquid-pill-hover-x {
+    transform: translate3d(calc(var(--hover-index, 0) * 100%), 0, 0);
+    transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1), opacity 200ms ease, scale 200ms ease;
+    will-change: transform;
+  }
+  .liquid-pill-active-y-48 {
+    transform: translate3d(0, calc(var(--active-index, 0) * 48px), 0);
+    transition: transform 300ms cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: transform;
+  }
+  .liquid-pill-hover-y-48 {
+    transform: translate3d(0, calc(var(--hover-index, 0) * 48px), 0);
+    transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1), opacity 200ms ease, scale 200ms ease;
+    will-change: transform;
+  }
+  .liquid-pill-active-mitra {
+    transform: translate3d(calc(var(--active-index, 0) * 100%), 0, 0);
+    transition: transform 300ms cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: transform;
+  }
+  .liquid-pill-hover-mitra {
+    transform: translate3d(calc(var(--hover-index, 0) * 100%), 0, 0);
+    transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1), opacity 200ms ease, scale 200ms ease;
+    will-change: transform;
+  }
+  @media (min-width: 1024px) {
+    .liquid-pill-active-mitra {
+      transform: translate3d(0, calc(var(--active-index, 0) * 70px), 0);
+    }
+    .liquid-pill-hover-mitra {
+      transform: translate3d(0, calc(var(--hover-index, 0) * 70px), 0);
+    }
+  }
 }
 @media print {
   body {

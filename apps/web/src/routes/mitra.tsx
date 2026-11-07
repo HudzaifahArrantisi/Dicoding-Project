@@ -158,6 +158,7 @@ function MitraPortal() {
 
   const openTab = useCallback((nextTab: MitraTab) => {
     setActiveTab(nextTab)
+    setHoveredIndex(null)
     if (nextTab === 'profile') {
       void refreshUserRef
         .current()
@@ -571,17 +572,15 @@ function MitraPortal() {
                 '--hover-index': hoveredIndex ?? activeIndex,
               } as React.CSSProperties
             }
-            className="pointer-events-auto relative mx-auto grid w-full max-w-[390px] grid-cols-5 items-center rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[430px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
+            className="pointer-events-auto relative mx-auto grid w-full max-w-[390px] grid-cols-5 items-center overflow-hidden rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[430px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
             aria-label="Menu mitra"
           >
             {/* Liquid Glass Gliding Hover Pill */}
             <div
               aria-hidden="true"
-              className={`pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
+              className={`liquid-pill-hover-mitra pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md
                 top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/5)]
                 lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]
-                [transform:translate3d(calc(var(--hover-index)*100%),0,0)]
-                lg:[transform:translate3d(0,calc(var(--hover-index)*70px),0)]
                 ${
                   hoveredIndex !== null && hoveredIndex !== activeIndex
                     ? 'opacity-100 scale-100'
@@ -592,11 +591,9 @@ function MitraPortal() {
             {/* Liquid Glass Sliding Active Capsule */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.25,1.4,0.4,1)]
+              className="liquid-pill-active-mitra pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)]
                 top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/5)]
-                lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]
-                [transform:translate3d(calc(var(--active-index)*100%),0,0)]
-                lg:[transform:translate3d(0,calc(var(--active-index)*70px),0)]"
+                lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]"
             >
               {/* Glossy Liquid Specular Sheen */}
               <div className="pointer-events-none absolute inset-x-2 top-0.5 h-2.5 rounded-t-full bg-gradient-to-b from-white/25 to-transparent" />
@@ -612,14 +609,14 @@ function MitraPortal() {
                   onMouseEnter={() => setHoveredIndex(index)}
                   onClick={() => openTab(id)}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`group relative z-10 flex h-[54px] w-full flex-col items-center justify-center gap-1 rounded-full px-1 py-1 text-[10px] font-semibold transition-all duration-300 ease-out active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:text-[11px] lg:h-[62px] lg:rounded-[1.4rem] ${
+                  className={`group relative z-10 flex h-[54px] w-full flex-col items-center justify-center gap-1 rounded-full px-1 py-1 text-[10px] font-semibold transition-colors duration-200 ease-out active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:text-[11px] lg:h-[62px] lg:rounded-[1.4rem] ${
                     isActive
                       ? 'text-white'
                       : 'text-slate-600 hover:text-ink-950'
                   }`}
                 >
                   <Icon
-                    className={`size-4.5 shrink-0 transition-transform duration-300 ease-out sm:size-5 ${
+                    className={`size-4.5 shrink-0 transition-transform duration-200 ease-out sm:size-5 ${
                       isActive ? 'scale-110' : 'group-hover:scale-110 group-active:scale-95'
                     }`}
                     aria-hidden="true"
