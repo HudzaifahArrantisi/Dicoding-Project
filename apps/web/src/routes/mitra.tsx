@@ -99,6 +99,35 @@ function errorMessage(error: unknown) {
   return 'Periksa koneksi anda, lalu coba lagi'
 }
 
+function MitraProfileAvatar({ photo, name }: { photo: string | null | undefined; name: string }) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const imageUrl = resolveImageUrl(photo)
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toLocaleUpperCase('id-ID') || 'M'
+
+  if (imageUrl && !imageFailed) {
+    return (
+      <img
+        src={imageUrl}
+        alt=""
+        onError={() => setImageFailed(true)}
+        className="size-11 shrink-0 rounded-full border border-line object-cover"
+      />
+    )
+  }
+
+  return (
+    <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-full bg-ume/10 font-display text-sm font-bold text-ume">
+      {initials}
+    </span>
+  )
+}
+
 function MitraPortal() {
   const {
     user,
@@ -113,6 +142,11 @@ function MitraPortal() {
   const queryClient = useQueryClient()
   useInventoryEvents(user?.role === 'mitra', 'mitra')
   const [activeTab, setActiveTab] = useState<MitraTab>('stocks')
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const activeIndex = Math.max(
+    0,
+    tabItems.findIndex((item) => item.id === activeTab),
+  )
   const [activeTour, setActiveTour] = useState<MitraTour | null>(null)
   const [deliveryTourStep, setDeliveryTourStep] = useState(-1)
   const [editedStocks, setEditedStocks] = useState<Record<string, number>>({})
@@ -408,37 +442,36 @@ function MitraPortal() {
     <div className="dashboard-page mitra-dashboard min-h-screen bg-[#f6f7f9] pb-44 sm:pb-48 font-sans text-text">
       <header className="sticky top-0 z-20 border-b border-line bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              {user.partner_photo ? (
-                <img
-                  src={resolveImageUrl(user.partner_photo) ?? ''}
-                  alt=""
-                  className="size-10 shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ume/10 text-ume">
-                  <Store className="size-5" aria-hidden="true" />
-                </span>
-              )}
-              <div className="min-w-0">
-                <p className="truncate font-display text-base font-semibold text-ink-900 sm:text-lg">
-                  {user.partner_name ?? 'Portal mitra'}
-                </p>
-                <p className="truncate text-xs text-muted sm:text-sm">
-                  Cabang mitra · PIC {user.partner_pic_name || user.full_name}
-                </p>
-              </div>
+          <button
+            type="button"
+            onClick={() => openTab('profile')}
+            aria-label={`Buka profil ${user.partner_name || 'mitra'}`}
+            aria-current={activeTab === 'profile' ? 'page' : undefined}
+            className="flex min-h-11 min-w-0 items-center gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+          >
+            <MitraProfileAvatar
+              key={user.partner_photo ?? ''}
+              photo={user.partner_photo}
+              name={user.partner_name || user.full_name}
+            />
+            <div className="min-w-0">
+              <p className="truncate font-display text-base font-semibold text-ink-900 sm:text-lg">
+                {user.partner_name || 'Portal mitra'}
+              </p>
+              <p className="truncate text-xs text-muted sm:text-sm">
+                Cabang mitra · PIC {user.partner_pic_name || user.full_name}
+              </p>
             </div>
-          </div>
+          </button>
           <div className="flex items-center gap-1 sm:gap-2">
             <button
               type="button"
               onClick={handleLogout}
-              className="hidden min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted hover:bg-paper hover:text-crit-fg md:inline-flex"
+              aria-label="Keluar dari akun"
+              className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-2 text-sm font-semibold text-muted transition-colors hover:bg-crit-bg hover:text-crit-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer sm:px-3"
             >
               <LogOut className="size-4" aria-hidden="true" />
-              <span>Keluar</span>
+              <span className="hidden sm:inline">Keluar</span>
             </button>
           </div>
         </div>
@@ -512,7 +545,6 @@ function MitraPortal() {
         {activeTab === 'profile' ? (
           <ProfilePanel
             user={user}
-            syncHealthy={stocksQuery.isSuccess && ordersQuery.isSuccess}
             onLogout={handleLogout}
           />
         ) : null}
@@ -529,34 +561,79 @@ function MitraPortal() {
         />
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 lg:pointer-events-none lg:inset-x-0 lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:p-0">
-        <div className="mx-auto flex max-w-6xl justify-end px-4 sm:px-6">
+      <div className="fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 lg:pointer-events-none lg:inset-x-0 lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:p-0">
+        <div className="mx-auto flex max-w-6xl justify-center lg:justify-end px-3 sm:px-6">
           <nav
-            className="pointer-events-auto mx-auto flex max-w-lg items-center justify-between gap-1 rounded-full border border-line bg-white p-1.5 shadow-lg shadow-ink-900/10 lg:mx-0 lg:max-h-[calc(100dvh-2rem)] lg:w-20 lg:flex-col lg:gap-3 lg:overflow-y-auto lg:bg-ink-100"
+            onMouseLeave={() => setHoveredIndex(null)}
+            style={
+              {
+                '--active-index': activeIndex,
+                '--hover-index': hoveredIndex ?? activeIndex,
+              } as React.CSSProperties
+            }
+            className="pointer-events-auto relative mx-auto grid w-full max-w-[390px] grid-cols-5 items-center rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[430px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
             aria-label="Menu mitra"
           >
-            {tabItems.map(({ id, label, Icon }) => {
+            {/* Liquid Glass Gliding Hover Pill */}
+            <div
+              aria-hidden="true"
+              className={`pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
+                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/5)]
+                lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]
+                [transform:translate3d(calc(var(--hover-index)*100%),0,0)]
+                lg:[transform:translate3d(0,calc(var(--hover-index)*70px),0)]
+                ${
+                  hoveredIndex !== null && hoveredIndex !== activeIndex
+                    ? 'opacity-100 scale-100'
+                    : 'pointer-events-none opacity-0 scale-95'
+                }`}
+            />
+
+            {/* Liquid Glass Sliding Active Capsule */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.25,1.4,0.4,1)]
+                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/5)]
+                lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]
+                [transform:translate3d(calc(var(--active-index)*100%),0,0)]
+                lg:[transform:translate3d(0,calc(var(--active-index)*70px),0)]"
+            >
+              {/* Glossy Liquid Specular Sheen */}
+              <div className="pointer-events-none absolute inset-x-2 top-0.5 h-2.5 rounded-t-full bg-gradient-to-b from-white/25 to-transparent" />
+            </div>
+
+            {tabItems.map(({ id, label, Icon }, index) => {
               const isActive = activeTab === id
               return (
                 <button
                   key={id}
                   data-tour={id === 'logs' ? 'logs-tab' : undefined}
                   type="button"
+                  onMouseEnter={() => setHoveredIndex(index)}
                   onClick={() => openTab(id)}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`relative flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 lg:w-full lg:flex-none ${
+                  className={`group relative z-10 flex h-[54px] w-full flex-col items-center justify-center gap-1 rounded-full px-1 py-1 text-[10px] font-semibold transition-all duration-300 ease-out active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:text-[11px] lg:h-[62px] lg:rounded-[1.4rem] ${
                     isActive
-                      ? 'bg-ink-900 text-white'
-                      : 'text-muted hover:bg-white hover:text-ink-900'
+                      ? 'text-white'
+                      : 'text-slate-600 hover:text-ink-950'
                   }`}
                 >
-                  <Icon className="size-4.5 shrink-0" aria-hidden="true" />
-                  <span className="max-w-full truncate leading-tight">
+                  <Icon
+                    className={`size-4.5 shrink-0 transition-transform duration-300 ease-out sm:size-5 ${
+                      isActive ? 'scale-110' : 'group-hover:scale-110 group-active:scale-95'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span className="max-w-full truncate leading-none tracking-tight">
                     {label}
                   </span>
                   {id === 'history' && trackingNotificationCount > 0 ? (
                     <span
-                      className="absolute right-0 top-0 grid min-w-4 place-items-center rounded-full bg-warn-fg px-1 text-[10px] tabular-nums text-white"
+                      className={`absolute right-1 top-1 grid min-w-4 place-items-center rounded-full px-1 text-[9px] tabular-nums font-bold shadow-xs transition-colors sm:right-2 sm:text-[10px] ${
+                        isActive
+                          ? 'bg-amber-400 text-ink-950 ring-1 ring-white/50'
+                          : 'bg-warn-fg text-white ring-1 ring-white'
+                      }`}
                       aria-label={`${trackingNotificationCount} pesanan perlu dilacak atau ditindaklanjuti`}
                     >
                       {trackingNotificationCount}
@@ -2415,11 +2492,9 @@ async function prepareProfilePhoto(file: File): Promise<string> {
 
 function ProfilePanel({
   user,
-  syncHealthy,
   onLogout,
 }: {
   user: User
-  syncHealthy: boolean
   onLogout: () => void
 }) {
   const { refreshUser } = useAuth()
@@ -2487,41 +2562,6 @@ function ProfilePanel({
       <p className="mt-2 text-sm text-muted">
         Perbarui data cabang yang digunakan untuk pengiriman barang.
       </p>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-line bg-white p-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">
-            Identitas cabang
-          </p>
-          <p className="mt-2 font-display text-lg font-bold text-ink-900">
-            {user.partner_name ?? 'Cabang mitra'}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            PIC {user.partner_pic_name ?? user.full_name}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            {user.partner_address || 'Alamat belum diisi'}
-          </p>
-        </div>
-        <div className="rounded-lg border border-line bg-white p-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">
-            Integrasi data
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <span
-              className={`size-2.5 rounded-full ${syncHealthy ? 'bg-ok' : 'bg-crit'}`}
-              aria-hidden="true"
-            />
-            <p className="font-display text-sm font-bold text-ink-900">
-              {syncHealthy ? 'Tersinkronisasi' : 'Koneksi terganggu'}
-            </p>
-          </div>
-          <p className="mt-1 text-xs text-muted">
-            {syncHealthy
-              ? 'Data stok dan pesanan terhubung dengan server pusat.'
-              : 'Gagal menyinkronkan data dengan server pusat.'}
-          </p>
-        </div>
-      </div>
 
       <form
         className="dashboard-surface mt-6 space-y-5 p-4 sm:p-6"
@@ -2590,7 +2630,7 @@ function ProfilePanel({
           </div>
         </div>
 
-        <div data-tour="profile-section" className="grid gap-5 sm:grid-cols-2">
+        <div data-tour="profile-section" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label
               htmlFor="profile-name"
@@ -2645,7 +2685,7 @@ function ProfilePanel({
               className="mt-2 h-12 w-full rounded-sm border border-line px-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
             />
           </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 lg:col-span-3">
             <label
               htmlFor="profile-address"
               className="block text-sm font-semibold text-ink-900"
@@ -2687,7 +2727,7 @@ function ProfilePanel({
       <button
         type="button"
         onClick={onLogout}
-        className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold text-crit-fg hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+        className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold text-crit-fg transition-colors hover:border-crit/40 hover:bg-crit-bg hover:text-crit-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer"
       >
         <LogOut className="size-4" aria-hidden="true" /> Keluar dari akun
       </button>

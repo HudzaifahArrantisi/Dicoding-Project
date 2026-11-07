@@ -90,6 +90,7 @@
   --font-sans: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
 
   /* Daisuki Named Palette Tokens (docs/design_system.md) */
+  --color-ink-950: #0a0e24;
   --color-ink-900: #141b3d;
   --color-ink-700: #26336b;
   --color-ink-500: #4a5ba8;
@@ -225,7 +226,9 @@
   }
 
   .admin-sidebar {
-    background: #f1f3f7;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
     transition:
       transform 220ms cubic-bezier(0.4, 0, 1, 1),
       visibility 0s linear 220ms;

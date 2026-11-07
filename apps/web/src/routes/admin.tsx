@@ -2777,6 +2777,11 @@ function AdminDashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<AdminTab>('stocks')
+  const [hoveredNavIndex, setHoveredNavIndex] = useState<number | null>(null)
+  const activeNavIndex = Math.max(
+    0,
+    adminNavTabs.findIndex((item) => item.id === tab),
+  )
   useInventoryEvents(user?.role === 'admin', 'admin')
   const [shipmentPage, setShipmentPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -3108,7 +3113,7 @@ function AdminDashboard() {
               <button
                 type="button"
                 onClick={() => { void logout().then(() => navigate({ to: '/login' })).catch((error) => toast.error(getErrorMessage(error))) }}
-                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted hover:bg-ume/5 hover:text-crit-fg"
+                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted transition-colors hover:bg-crit-bg hover:text-crit-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer"
               >
                 <LogOut className="size-4" aria-hidden="true" />
                 <span className="hidden sm:inline">Keluar</span>
@@ -3255,12 +3260,43 @@ function AdminDashboard() {
       </div>
 
       {/* Floating Pill Nav Bar (Mode Mobile) */}
-      <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none bg-gradient-to-t from-[#faf7f2] via-[#faf7f2]/80 to-transparent px-2.5 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none bg-gradient-to-t from-[#f7f8fa] via-[#f7f8fa]/80 to-transparent px-2.5 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
         <nav
-          className="pointer-events-auto mx-auto flex max-w-lg items-center justify-between gap-1 overflow-x-auto rounded-full border border-line/80 bg-white/95 p-1.5 shadow-xl shadow-ink-900/8 backdrop-blur-xl ring-1 ring-black/5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          onMouseLeave={() => setHoveredNavIndex(null)}
+          style={
+            {
+              '--active-index': activeNavIndex,
+              '--hover-index': hoveredNavIndex ?? activeNavIndex,
+            } as React.CSSProperties
+          }
+          className="pointer-events-auto relative mx-auto grid w-full max-w-[460px] grid-cols-7 items-center rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
           aria-label="Menu navigasi admin"
         >
-          {adminNavTabs.map(({ id, shortLabel, Icon }) => {
+          {/* Liquid Glass Gliding Hover Pill */}
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute z-0 rounded-full border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
+              top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/7)]
+              [transform:translate3d(calc(var(--hover-index)*100%),0,0)]
+              ${
+                hoveredNavIndex !== null && hoveredNavIndex !== activeNavIndex
+                  ? 'opacity-100 scale-100'
+                  : 'pointer-events-none opacity-0 scale-95'
+              }`}
+          />
+
+          {/* Liquid Glass Sliding Active Capsule */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-0 rounded-full bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.25,1.4,0.4,1)]
+              top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/7)]
+              [transform:translate3d(calc(var(--active-index)*100%),0,0)]"
+          >
+            {/* Glossy Liquid Specular Sheen */}
+            <div className="pointer-events-none absolute inset-x-1.5 top-0.5 h-2 rounded-t-full bg-gradient-to-b from-white/25 to-transparent" />
+          </div>
+
+          {adminNavTabs.map(({ id, shortLabel, Icon }, index) => {
             const isActive = tab === id
             const badgeCount =
               id === 'orders'
@@ -3274,34 +3310,32 @@ function AdminDashboard() {
               <button
                 key={id}
                 type="button"
+                onMouseEnter={() => setHoveredNavIndex(index)}
                 onClick={() => setTab(id)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`group relative flex flex-1 shrink-0 flex-col items-center justify-center gap-0.5 rounded-full py-1.5 px-1.5 text-[10px] font-semibold transition-all duration-300 ease-out focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ume ${
+                className={`group relative z-10 flex h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1 text-[9.5px] font-semibold transition-all duration-300 ease-out active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:text-[10.5px] ${
                   isActive
-                    ? 'border border-ume/30 bg-ume/15 text-ume shadow-xs backdrop-blur-md font-bold scale-[1.03]'
-                    : 'border border-transparent text-muted hover:border-ume/20 hover:bg-ume/8 hover:text-ume hover:shadow-2xs hover:backdrop-blur-md active:scale-95'
+                    ? 'text-white'
+                    : 'text-slate-600 hover:text-ink-950'
                 }`}
               >
-                {/* Efek kilau kaca atas untuk tab aktif */}
-                {isActive ? (
-                  <span
-                    className="pointer-events-none absolute inset-x-2 top-1 h-[1.5px] rounded-full bg-white/80"
-                    aria-hidden="true"
-                  />
-                ) : null}
                 <Icon
-                  className={`size-4 shrink-0 transition-all duration-300 ease-out ${
-                    isActive
-                      ? 'scale-110 text-ume drop-shadow-xs'
-                      : 'text-muted group-hover:scale-105 group-hover:text-ume'
+                  className={`size-4 shrink-0 transition-transform duration-300 ease-out sm:size-4.5 ${
+                    isActive ? 'scale-110 drop-shadow-xs' : 'group-hover:scale-110 group-active:scale-95'
                   }`}
                   aria-hidden="true"
                 />
-                <span className="leading-tight truncate max-w-[60px] whitespace-nowrap">{shortLabel}</span>
+                <span className="max-w-full truncate leading-none tracking-tight">
+                  {shortLabel}
+                </span>
                 {badgeCount && badgeCount > 0 ? (
                   <span
-                    className={`absolute -right-0.5 -top-0.5 grid min-w-4 h-4 place-items-center rounded-full px-1 text-[9px] font-bold tabular-nums text-white ${
-                      isCritical ? 'bg-crit' : 'bg-ink-900'
+                    className={`absolute -right-0.5 top-0.5 grid min-w-4 h-4 place-items-center rounded-full px-1 text-[9px] tabular-nums font-bold shadow-xs transition-colors sm:right-0.5 sm:text-[10px] ${
+                      isActive
+                        ? 'bg-amber-400 text-ink-950 ring-1 ring-white/50'
+                        : isCritical
+                          ? 'bg-crit text-white ring-1 ring-white'
+                          : 'bg-ink-700 text-white ring-1 ring-white'
                     }`}
                     aria-label={`${badgeCount} item`}
                   >
@@ -3333,11 +3367,29 @@ function AdminSidebar({
   onLogout: () => void
 }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [hoveredOpIndex, setHoveredOpIndex] = useState<number | null>(null)
+  const [hoveredAnalysisIndex, setHoveredAnalysisIndex] = useState<number | null>(null)
+
+  const operationalNavItems = [
+    { id: 'stocks' as const, label: 'Stok cabang', Icon: Boxes },
+    { id: 'orders' as const, label: 'Persetujuan', Icon: ClipboardCheck, count: pendingOrders },
+    { id: 'shipments' as const, label: 'Log pengiriman', Icon: Truck },
+    { id: 'alerts' as const, label: 'Notifikasi', Icon: Bell, count: unread, critical: true },
+    { id: 'partners' as const, label: 'Mitra', Icon: Building2 },
+  ]
+
+  const analysisNavItems = [
+    { id: 'data-science' as const, label: 'Log & Data', Icon: Database },
+    { id: 'ai-insights' as const, label: 'AI Insights', Icon: BrainCircuit },
+  ]
+
+  const activeOpIndex = operationalNavItems.findIndex((item) => item.id === tab)
+  const activeAnalysisIndex = analysisNavItems.findIndex((item) => item.id === tab)
 
   return (
     <aside
       id="admin-sidebar"
-      className={`admin-sidebar sticky top-0 z-20 hidden h-screen shrink-0 overflow-hidden border-r border-line lg:flex ${
+      className={`admin-sidebar sticky top-0 z-20 hidden h-screen shrink-0 overflow-hidden border-r border-white/80 bg-white/75 shadow-[inset_-1px_0_1px_rgba(255,255,255,0.8),4px_0_24px_rgba(15,23,42,0.03)] backdrop-blur-2xl backdrop-saturate-150 lg:flex ${
         collapsed ? 'lg:w-16' : 'lg:w-64'
       }`}
       data-collapsed={collapsed}
@@ -3348,7 +3400,7 @@ function AdminSidebar({
         inert={collapsed ? true : undefined}
       >
         <div className="flex items-center gap-2 lg:pr-11">
-          <span className="grid size-10 shrink-0 place-items-center rounded-md bg-ink-900 text-white">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-ink-900 to-ink-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.2),inset_0_1px_1px_rgba(255,255,255,0.3)]">
             <Boxes className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
@@ -3356,24 +3408,155 @@ function AdminSidebar({
             <p className="text-xs text-muted">Admin Pusat</p>
           </div>
         </div>
-        <nav className="mt-9 flex-1 space-y-1" aria-label="Menu admin">
-          <p className="px-3 pb-2 text-xs font-semibold text-muted">Operasional</p>
-          <TabButton label="Stok cabang" Icon={Boxes} active={tab === 'stocks'} onClick={() => onSelectTab('stocks')} />
-          <TabButton label="Persetujuan" Icon={ClipboardCheck} active={tab === 'orders'} count={pendingOrders} onClick={() => onSelectTab('orders')} />
-          <TabButton label="Log pengiriman" Icon={Truck} active={tab === 'shipments'} onClick={() => onSelectTab('shipments')} />
-          <TabButton label="Notifikasi" Icon={Bell} active={tab === 'alerts'} count={unread} critical onClick={() => onSelectTab('alerts')} />
-          <TabButton label="Mitra" Icon={Building2} active={tab === 'partners'} onClick={() => onSelectTab('partners')} />
-          <p className="px-3 pb-2 pt-6 text-xs font-semibold text-muted">Analisis</p>
-          <TabButton label="Log & Data" Icon={Database} active={tab === 'data-science'} onClick={() => onSelectTab('data-science')} />
-          <TabButton label="AI Insights" Icon={BrainCircuit} active={tab === 'ai-insights'} onClick={() => onSelectTab('ai-insights')} />
+        <nav className="mt-8 flex-1 space-y-6" aria-label="Menu admin">
+          <div>
+            <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-muted/70">Operasional</p>
+            <div
+              onMouseLeave={() => setHoveredOpIndex(null)}
+              style={
+                {
+                  '--active-index': activeOpIndex !== -1 ? activeOpIndex : 0,
+                  '--hover-index': hoveredOpIndex ?? (activeOpIndex !== -1 ? activeOpIndex : 0),
+                } as React.CSSProperties
+              }
+              className="relative flex flex-col gap-1"
+            >
+              {/* Liquid Glass Gliding Hover Pill */}
+              <div
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
+                  [transform:translate3d(0,calc(var(--hover-index)*48px),0)]
+                  ${
+                    hoveredOpIndex !== null && hoveredOpIndex !== activeOpIndex
+                      ? 'opacity-100 scale-100'
+                      : 'pointer-events-none opacity-0 scale-95'
+                  }`}
+              />
+
+              {/* Liquid Glass Sliding Active Capsule */}
+              {activeOpIndex !== -1 ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl bg-gradient-to-r from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.25,1.4,0.4,1)]
+                    [transform:translate3d(0,calc(var(--active-index)*48px),0)]"
+                >
+                  <div className="pointer-events-none absolute inset-x-2 top-0.5 h-2 rounded-t-xl bg-gradient-to-b from-white/25 to-transparent" />
+                </div>
+              ) : null}
+
+              {operationalNavItems.map(({ id, label, Icon, count, critical }, index) => {
+                const isActive = tab === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onMouseEnter={() => setHoveredOpIndex(index)}
+                    onClick={() => onSelectTab(id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    aria-label={label}
+                    title={label}
+                    className={`group relative z-10 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
+                      isActive ? 'text-white' : 'text-slate-600 hover:text-ink-950'
+                    }`}
+                  >
+                    <Icon
+                      className={`size-4.5 shrink-0 transition-transform duration-300 ease-out ${
+                        isActive ? 'scale-110 drop-shadow-xs' : 'group-hover:scale-110 group-active:scale-95'
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {count ? (
+                      <span
+                        className={`grid min-w-5 h-5 place-items-center rounded-full px-1.5 text-xs font-bold tabular-nums shadow-xs transition-colors ${
+                          isActive
+                            ? critical
+                              ? 'bg-rose-500 text-white ring-1 ring-white/50'
+                              : 'bg-white/20 text-white ring-1 ring-white/30 backdrop-blur-xs'
+                            : critical
+                              ? 'bg-crit text-white ring-1 ring-white'
+                              : 'bg-ink-100 text-ink-900'
+                        }`}
+                      >
+                        {count > 99 ? '99+' : count}
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-muted/70">Analisis</p>
+            <div
+              onMouseLeave={() => setHoveredAnalysisIndex(null)}
+              style={
+                {
+                  '--active-index': activeAnalysisIndex !== -1 ? activeAnalysisIndex : 0,
+                  '--hover-index': hoveredAnalysisIndex ?? (activeAnalysisIndex !== -1 ? activeAnalysisIndex : 0),
+                } as React.CSSProperties
+              }
+              className="relative flex flex-col gap-1"
+            >
+              {/* Liquid Glass Gliding Hover Pill */}
+              <div
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
+                  [transform:translate3d(0,calc(var(--hover-index)*48px),0)]
+                  ${
+                    hoveredAnalysisIndex !== null && hoveredAnalysisIndex !== activeAnalysisIndex
+                      ? 'opacity-100 scale-100'
+                      : 'pointer-events-none opacity-0 scale-95'
+                  }`}
+              />
+
+              {/* Liquid Glass Sliding Active Capsule */}
+              {activeAnalysisIndex !== -1 ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl bg-gradient-to-r from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)] transition-transform duration-500 ease-[cubic-bezier(0.25,1.4,0.4,1)]
+                    [transform:translate3d(0,calc(var(--active-index)*48px),0)]"
+                >
+                  <div className="pointer-events-none absolute inset-x-2 top-0.5 h-2 rounded-t-xl bg-gradient-to-b from-white/25 to-transparent" />
+                </div>
+              ) : null}
+
+              {analysisNavItems.map(({ id, label, Icon }, index) => {
+                const isActive = tab === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onMouseEnter={() => setHoveredAnalysisIndex(index)}
+                    onClick={() => onSelectTab(id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    aria-label={label}
+                    title={label}
+                    className={`group relative z-10 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
+                      isActive ? 'text-white' : 'text-slate-600 hover:text-ink-950'
+                    }`}
+                  >
+                    <Icon
+                      className={`size-4.5 shrink-0 transition-transform duration-300 ease-out ${
+                        isActive ? 'scale-110 drop-shadow-xs' : 'group-hover:scale-110 group-active:scale-95'
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </nav>
-        <div className="border-t border-line pt-4">
+        <div className="border-t border-line/60 pt-4">
           <p className="truncate px-3 text-sm font-semibold text-ink-900">{userName}</p>
           <p className="px-3 text-xs text-muted">Admin Pusat</p>
           <button
             type="button"
             onClick={onLogout}
-            className="mt-4 flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm font-medium text-ink-700 hover:bg-white"
+            className="mt-3 flex min-h-11 w-full items-center gap-2 rounded-xl border border-transparent px-3 text-sm font-medium text-slate-600 transition-all duration-200 hover:border-white/80 hover:bg-white/80 hover:text-crit-fg hover:shadow-xs active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer"
             aria-label="Keluar"
             title="Keluar"
           >
@@ -3384,7 +3567,7 @@ function AdminSidebar({
       <button
         type="button"
         onClick={() => setCollapsed((current) => !current)}
-        className="absolute right-3 top-5 hidden size-10 place-items-center rounded-md text-ink-700 hover:bg-white lg:grid"
+        className="absolute right-3 top-5 hidden size-10 place-items-center rounded-xl border border-white/60 bg-white/60 text-ink-700 shadow-2xs backdrop-blur-sm transition-all duration-200 hover:border-white/90 hover:bg-white hover:shadow-xs active:scale-95 lg:grid"
         aria-label={collapsed ? 'Buka sidebar' : 'Tutup sidebar'}
         aria-controls="admin-sidebar"
         aria-expanded={!collapsed}
@@ -3393,43 +3576,6 @@ function AdminSidebar({
         <PanelLeftClose className={`size-5 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
     </aside>
-  )
-}
-
-function TabButton({
-  label,
-  Icon,
-  active,
-  onClick,
-  count,
-  critical = false,
-}: {
-  label: string
-  Icon: typeof Boxes
-  active: boolean
-  onClick: () => void
-  count?: number
-  critical?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      aria-label={label}
-      title={label}
-      className={`flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-sm font-semibold transition-colors duration-150 ${active ? 'border-line bg-white text-ink-900' : 'border-transparent text-ink-700 hover:bg-white hover:text-ink-900'}`}
-    >
-      <Icon className="size-4 shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{label}</span>
-      {count ? (
-        <span
-          className={`rounded-sm px-1.5 py-0.5 text-xs tabular-nums ${critical ? 'bg-crit-bg text-crit-fg' : 'bg-ink-100 text-ink-700'}`}
-        >
-          {count}
-        </span>
-      ) : null}
-    </button>
   )
 }
 
