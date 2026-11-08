@@ -646,6 +646,77 @@ function MitraPortal() {
   )
 }
 
+interface NumericStockInputProps {
+  id?: string
+  value: number
+  onChange: (val: number) => void
+  min?: number
+  max?: number
+  className?: string
+  'aria-label'?: string
+}
+
+function NumericStockInput({
+  id,
+  value,
+  onChange,
+  min = 0,
+  max,
+  className,
+  'aria-label': ariaLabel,
+}: NumericStockInputProps) {
+  const [localVal, setLocalVal] = useState(String(value))
+  const [isFocused, setIsFocused] = useState(false)
+
+  // Sinkronisasi nilai eksternal (misal klik tombol + / -) saat input tidak dalam fokus
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalVal(String(value))
+    }
+  }, [value, isFocused])
+
+  return (
+    <input
+      id={id}
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      aria-label={ariaLabel}
+      value={isFocused ? localVal : String(value)}
+      onFocus={(e) => {
+        setIsFocused(true)
+        // Jika nilai saat ini 0, kosongkan field agar saat mengetik 10 langsung menjadi 10 tanpa tersisa angka 0 di depan
+        setLocalVal(value === 0 ? '' : String(value))
+        e.target.select()
+      }}
+      onBlur={() => {
+        setIsFocused(false)
+        const parsed = Number.parseInt(localVal, 10)
+        let finalVal = Number.isNaN(parsed) ? min : parsed
+        if (finalVal < min) finalVal = min
+        if (max !== undefined && finalVal > max) finalVal = max
+        setLocalVal(String(finalVal))
+        onChange(finalVal)
+      }}
+      onChange={(e) => {
+        const raw = e.target.value.replace(/\D/g, '')
+        // Hapus leading zero jika diikuti angka lain: "010" -> "10", "01" -> "1", namun izinkan "0" mandiri
+        const stripped = raw.replace(/^0+(?=\d)/, '')
+        setLocalVal(stripped)
+        if (stripped === '') {
+          onChange(min)
+        } else {
+          let parsed = Number.parseInt(stripped, 10)
+          if (parsed < min) parsed = min
+          if (max !== undefined && parsed > max) parsed = max
+          onChange(parsed)
+        }
+      }}
+      className={className}
+    />
+  )
+}
+
 interface StocksPanelProps {
   query: ReturnType<typeof useQuery<StockItem[]>>
   centralProductsQuery: ReturnType<typeof useQuery<Product[]>>
@@ -829,98 +900,109 @@ function StocksPanel({
           </div>
         ) : null}
 
-        {/* Laporan stok di bawahnya - satu border menyatu dengan divide-y */}
-        <div className="divide-y divide-line bg-white">
-          {query.data?.map((stock) => {
-            const qty = editedStocks[stock.product_id] ?? stock.current_qty
-            const status = getStockStatus(qty, stock.par_level)
-            const changed = changedIds.has(stock.product_id)
-            return (
-              <article
-                key={stock.product_id}
-                className="p-4 transition-colors hover:bg-paper/30 sm:p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="truncate text-base font-semibold text-ink-900">
-                        {stock.product_name}
-                      </h2>
-                      {changed ? (
-                        <span
-                          className="size-2 shrink-0 rounded-full bg-emerald-600 ring-2 ring-emerald-200"
-                          aria-label="Jumlah diubah"
-                        />
-                      ) : null}
+        {/* Laporan stok dengan Grid Layout */}
+        {query.data && query.data.length > 0 ? (
+          <div className="bg-paper/30 p-4 sm:p-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {query.data.map((stock) => {
+                const qty = editedStocks[stock.product_id] ?? stock.current_qty
+                const status = getStockStatus(qty, stock.par_level)
+                const changed = changedIds.has(stock.product_id)
+                return (
+                  <article
+                    key={stock.product_id}
+                    className={`flex flex-col justify-between rounded-xl border bg-white p-4 shadow-2xs transition-all hover:shadow-xs sm:p-5 ${
+                      changed
+                        ? 'border-emerald-300 ring-1 ring-emerald-200/60 bg-emerald-50/15'
+                        : 'border-line hover:border-ink-300'
+                    }`}
+                  >
+                    <div>
+                      {/* Baris Atas: Nama Produk & Status Badges */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h2
+                              className="font-display text-base font-bold text-ink-900 sm:text-lg truncate"
+                              title={stock.product_name}
+                            >
+                              {stock.product_name}
+                            </h2>
+                            {changed ? (
+                              <span
+                                className="size-2 shrink-0 rounded-full bg-emerald-600 ring-2 ring-emerald-200"
+                                aria-label="Jumlah diubah"
+                                title="Jumlah stok diubah"
+                              />
+                            ) : null}
+                          </div>
+                        </div>
+                        <div
+                          data-tour="stock-status-badge"
+                          className="flex shrink-0 flex-col items-end gap-1"
+                        >
+                          <StockStatusBadge status={status} />
+                          {stock.is_stale ? <StaleBadge /> : null}
+                        </div>
+                      </div>
+
+                      {/* Display Stok Saat Ini */}
+                      <div
+                        className="mt-3 flex items-baseline gap-1.5"
+                        aria-live="polite"
+                      >
+                        <span className="font-display text-3xl font-extrabold tabular-nums text-ink-900">
+                          {qty.toLocaleString('id-ID')}
+                        </span>
+                        <span className="text-xs font-medium text-muted">
+                          /pcs sekarang
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <div
-                    data-tour="stock-status-badge"
-                    className="flex shrink-0 flex-col items-end gap-1"
-                  >
-                    <StockStatusBadge status={status} />
-                    {stock.is_stale ? <StaleBadge /> : null}
-                  </div>
-                </div>
 
-                <div
-                  className="mt-4 flex items-baseline gap-2"
-                  aria-live="polite"
-                >
-                  <span className="font-display text-2xl font-bold tabular-nums text-ink-900">
-                    {qty.toLocaleString('id-ID')}
-                  </span>
-                  <span className="text-sm text-muted">/pcs sekarang </span>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between gap-3 border-t border-line/80 pt-3">
-                  <label
-                    htmlFor={`stock-${stock.product_id}`}
-                    className="text-sm font-medium text-muted"
-                  >
-                    Stok di toko:
-                  </label>
-                  <div
-                    data-tour="daily-report-counter"
-                    className="flex items-center gap-2"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onQtyChange(stock, qty - 1)}
-                      className="grid size-11 place-items-center rounded-md border border-line bg-paper text-ink-900 hover:bg-ink-100 active:scale-95 transition-all"
-                      aria-label={`Kurangi ${stock.product_name}`}
-                    >
-                      <Minus className="size-4" aria-hidden="true" />
-                    </button>
-                    <input
-                      id={`stock-${stock.product_id}`}
-                      type="number"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      min={0}
-                      value={qty}
-                      onChange={(event) =>
-                        onQtyChange(
-                          stock,
-                          Number.parseInt(event.target.value, 10) || 0,
-                        )
-                      }
-                      className="h-11 w-24 rounded-md border border-line bg-white text-center text-lg font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-emerald-600"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => onQtyChange(stock, qty + 1)}
-                      className="grid size-11 place-items-center rounded-md border border-line bg-paper text-ink-900 hover:bg-ink-100 active:scale-95 transition-all"
-                      aria-label={`Tambah ${stock.product_name}`}
-                    >
-                      <Plus className="size-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              </article>
-            )
-          })}
-        </div>
+                    {/* Counter Pengubah Jumlah Stok */}
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line/80 pt-3">
+                      <label
+                        htmlFor={`stock-${stock.product_id}`}
+                        className="text-xs font-semibold text-muted"
+                      >
+                        Stok di toko:
+                      </label>
+                      <div
+                        data-tour="daily-report-counter"
+                        className="flex items-center gap-1.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => onQtyChange(stock, qty - 1)}
+                          className="grid size-11 place-items-center rounded-lg border border-line bg-paper text-ink-900 transition-all hover:bg-ink-100 active:scale-95 cursor-pointer"
+                          aria-label={`Kurangi ${stock.product_name}`}
+                        >
+                          <Minus className="size-4" aria-hidden="true" />
+                        </button>
+                        <NumericStockInput
+                          id={`stock-${stock.product_id}`}
+                          value={qty}
+                          onChange={(val) => onQtyChange(stock, val)}
+                          className="h-11 w-20 sm:w-24 rounded-lg border border-line bg-white text-center text-lg font-bold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-emerald-600"
+                          aria-label={`Jumlah stok ${stock.product_name}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onQtyChange(stock, qty + 1)}
+                          className="grid size-11 place-items-center rounded-lg border border-line bg-paper text-ink-900 transition-all hover:bg-ink-100 active:scale-95 cursor-pointer"
+                          aria-label={`Tambah ${stock.product_name}`}
+                        >
+                          <Plus className="size-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {/* Footer tombol simpan di dalam border yang sama */}
         {query.data && query.data.length > 0 ? (
@@ -2273,21 +2355,16 @@ function EditOrderModal({
                     >
                       <Minus className="size-3.5" />
                     </button>
-                    <input
-                      type="number"
-                      min={0}
-                      inputMode="numeric"
+                    <NumericStockInput
                       value={qty}
-                      onChange={(event) =>
+                      onChange={(val) =>
                         setQuantities((current) => ({
                           ...current,
-                          [item.product_id]: Math.max(
-                            0,
-                            Number.parseInt(event.target.value, 10) || 0,
-                          ),
+                          [item.product_id]: val,
                         }))
                       }
                       className="h-8 w-16 rounded border border-line bg-white px-1 text-center text-sm font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-ink-900"
+                      aria-label={`Jumlah restock ${item.product_name}`}
                     />
                     <button
                       type="button"
