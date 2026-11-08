@@ -2037,7 +2037,7 @@ function AIInsightsPanel({
 
   const productSalesList = useMemo<ProductSalesItem[]>(() => {
     const weeklyFacts = data?.weekly_facts
-    const centralProducts = weeklyFacts?.central_warehouse?.products ?? []
+    const centralProducts = weeklyFacts?.central_warehouse.products ?? []
     const fastMoving = data?.fast_moving_products ?? []
     const totalFastMovingUnits = fastMoving.reduce((sum, item) => sum + item.weekly_consumption, 0)
 
@@ -2124,7 +2124,7 @@ function AIInsightsPanel({
           weekly_consumption: p.weekly_units,
           daily_velocity: groupMatch?.total_daily_velocity ?? Math.round(p.weekly_units / 7),
           turnover_rate: groupMatch?.avg_turnover_rate,
-          top_product: groupMatch?.top_product?.product_name,
+          top_product: groupMatch?.top_product.product_name,
           percentage: p.percentage,
         }
       })
@@ -2137,11 +2137,11 @@ function AIInsightsPanel({
       weekly_consumption: group.total_weekly_units,
       daily_velocity: group.total_daily_velocity,
       turnover_rate: group.avg_turnover_rate,
-      top_product: group.top_product?.product_name,
+      top_product: group.top_product.product_name,
     }))
   }, [data?.weekly_facts?.top_performers_partners, partnerFastMovingGroups])
 
-  const topPartner = topPartnersList[0]
+  const topPartner = topPartnersList.length > 0 ? topPartnersList[0] : undefined
 
   // 3. Data Wilayah Paling Laku
   const topRegionsList = useMemo<RegionRestockItem[]>(() => {
@@ -2192,7 +2192,7 @@ function AIInsightsPanel({
     return []
   }, [data])
 
-  const topRegion = topRegionsList[0]
+  const topRegion = topRegionsList.length > 0 ? topRegionsList[0] : undefined
 
   // 4. Data Mitra Paling Aktif Update Stok
   const partnerActivityList = useMemo<PartnerActivityItem[]>(() => {
@@ -2234,10 +2234,10 @@ function AIInsightsPanel({
     return items
   }, [weeklySummaryQuery.data])
 
-  const topActivePartner = partnerActivityList[0]
+  const topActivePartner = partnerActivityList.length > 0 ? partnerActivityList[0] : undefined
 
   const lastAnalysis =
-    data?.recommendations?.[0]?.generated_at ?? data?.regional_activity?.model_generated_at
+    data?.recommendations[0]?.generated_at ?? data?.regional_activity?.model_generated_at
 
   useEffect(() => {
     const result = runStatus.data
@@ -2328,8 +2328,8 @@ function AIInsightsPanel({
             <AiOverviewCard
               eyebrow="Konsumsi produk"
               title="Produk paling laku"
-              value={topProduct && totalSoldUnits > 0 ? topProduct.product_name : 'Belum ada data penjualan'}
-              metric={topProduct && totalSoldUnits > 0 ? topProduct.weekly_units.toLocaleString('id-ID') + ' pcs terjual · ' + topProduct.share_pct + '% pangsa' : 'Jalankan analisis untuk melihat hasil'}
+              value={totalSoldUnits > 0 ? topProduct.product_name : 'Belum ada data penjualan'}
+              metric={totalSoldUnits > 0 ? topProduct.weekly_units.toLocaleString('id-ID') + ' pcs terjual · ' + topProduct.share_pct + '% pangsa' : 'Jalankan analisis untuk melihat hasil'}
               detail={'4 produk resmi · ' + totalSoldUnits.toLocaleString('id-ID') + ' pcs dalam 7 hari'}
               Icon={Package}
               onClick={() => setActiveModal('products')}
