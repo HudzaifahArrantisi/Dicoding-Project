@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { WeeklyInsights } from '@/components/inventory/weekly-insights'
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   keepPreviousData,
   useMutation,
@@ -13,6 +12,7 @@ import { Dialog } from 'radix-ui'
 import {
   AlertOctagon,
   AlertTriangle,
+  ArrowRight,
   Award,
   BarChart3,
   Bell,
@@ -31,13 +31,14 @@ import {
   Database,
   Download,
   ExternalLink,
-  Factory,
   Filter,
-  Flame,
+  History,
   Loader2,
   LogOut,
+  MapPin,
   MessageSquare,
   Minus,
+  Package,
   PanelLeftClose,
   Pencil,
   Plus,
@@ -49,6 +50,7 @@ import {
   Truck,
   X,
   XCircle,
+  type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -65,15 +67,19 @@ import {
   type PartnerStockGroup,
 } from '@/components/inventory/partner-stock-detail-modal'
 import {
-  PartnerFastMovingModal,
   type PartnerFastMovingGroup,
 } from '@/components/inventory/partner-fast-moving-modal'
-import {
-  PartnerDeficitModal,
-  type PartnerDeficitGroup,
-} from '@/components/inventory/partner-deficit-modal'
 import { PartnerDetailModal } from '@/components/inventory/partner-detail-modal'
-import { RegionalAnalysis } from '@/components/inventory/regional-analysis'
+import {
+  ProductSalesDetailModal,
+  TopPartnersDetailModal,
+  TopRegionsDetailModal,
+  ActiveReportingPartnersModal,
+  type ProductSalesItem,
+  type TopPartnerItem,
+  type RegionRestockItem,
+  type PartnerActivityItem,
+} from '@/components/inventory/ai-insights-modals'
 import {
   OrderStatusBadge,
   StaleBadge,
@@ -1939,6 +1945,56 @@ function PartnerStockLogDialog({
 }
 
 
+function AiOverviewCard({
+  title,
+  eyebrow,
+  value,
+  metric,
+  detail,
+  Icon,
+  onClick,
+  visual,
+}: {
+  title: string
+  eyebrow: string
+  value: string
+  metric: string
+  detail: string
+  Icon: LucideIcon
+  onClick: () => void
+  visual?: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`${title}: ${value}. ${metric}. Lihat rincian`}
+      className="group flex min-w-0 flex-col rounded-xl border border-line bg-white p-4 text-left shadow-2xs transition-[border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-ink-500/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 motion-reduce:transform-none sm:p-5"
+    >
+      <div className="flex w-full items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-[11px] font-semibold text-ink-700">{eyebrow}</span>
+          <h2 className="mt-1 font-display text-base font-semibold text-ink-900 sm:text-lg">{title}</h2>
+        </div>
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-700 ring-1 ring-line">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+      </div>
+      <div className="mt-5 min-w-0 flex-1">
+        <p className="font-display text-xl font-semibold leading-tight text-ink-900 break-words sm:text-2xl">{value}</p>
+        <p className="num mt-2 text-sm font-semibold tabular-nums text-ink-700">{metric}</p>
+        {visual ? <div className="mt-4">{visual}</div> : null}
+      </div>
+      <div className="mt-5 flex w-full items-center justify-between gap-3 border-t border-line pt-3 text-xs">
+        <span className="min-w-0 text-muted">{detail}</span>
+        <span className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-ink-700 group-hover:text-ink-900">
+          Rincian <ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden="true" />
+        </span>
+      </div>
+    </button>
+  )
+}
+
 function AIInsightsPanel({
   data,
   loading,
@@ -1958,12 +2014,64 @@ function AIInsightsPanel({
     queryKey: ['admin-ai-run'],
     queryFn: getAiRunStatus,
   })
-  const [subTab, setSubTab] = useState<'wilayah' | 'laris' | 'defisit' | 'pabrik'>('defisit')
-  const [selectedPartnerGroup, setSelectedPartnerGroup] = useState<PartnerFastMovingGroup | null>(null)
-  const [selectedDeficitGroup, setSelectedDeficitGroup] = useState<PartnerDeficitGroup | null>(null)
-  const kpi = data?.kpi_summary
-  const fastMoving = data?.fast_moving_products ?? []
+
+  const weeklySummaryQuery = useQuery<WeeklySummary>({
+    queryKey: ['admin-weekly-summary'],
+    queryFn: () => getWeeklySummary(),
+  })
+
+  const [activeModal, setActiveModal] = useState<
+    'products' | 'partners' | 'regions' | 'reporting' | null
+  >(null)
+
+  // 1. Data 4 Produk Paling Laku
+  const officialProducts = useMemo(
+    () => [
+      'Seblak Jadul Instan',
+      'Keripik Pisang Rasa Coklat',
+      'Basreng Daun Jeruk',
+      'Makaroni Daun Jeruk',
+    ],
+    [],
+  )
+
+  const productSalesList = useMemo<ProductSalesItem[]>(() => {
+    const weeklyFacts = data?.weekly_facts
+    const centralProducts = weeklyFacts?.central_warehouse?.products ?? []
+    const fastMoving = data?.fast_moving_products ?? []
+    const totalFastMovingUnits = fastMoving.reduce((sum, item) => sum + item.weekly_consumption, 0)
+
+    const list: ProductSalesItem[] = officialProducts.map((name, index) => {
+      const fact = weeklyFacts?.top_selling_products.find((p) => p.product_name === name)
+      const central = centralProducts.find((p) => p.name === name)
+      const fallbackUnits = fastMoving
+        .filter((item) => item.product_name === name)
+        .reduce((sum, item) => sum + item.weekly_consumption, 0)
+
+      const weekly_units = fact?.weekly_units ?? fallbackUnits
+      const category = fact?.category ?? central?.category ?? (name.includes('Seblak') ? 'Makanan Instan' : 'Camilan')
+      const share_pct = fact?.share_pct ?? (totalFastMovingUnits > 0 ? Math.round((weekly_units / totalFastMovingUnits) * 100) : 0)
+
+      return {
+        rank: index + 1,
+        product_name: name,
+        category,
+        weekly_units,
+        share_pct,
+        central_stock: central?.central_stock,
+      }
+    })
+
+    list.sort((a, b) => b.weekly_units - a.weekly_units)
+    return list.map((item, idx) => ({ ...item, rank: idx + 1 }))
+  }, [data, officialProducts])
+
+  const topProduct = productSalesList[0]
+  const totalSoldUnits = productSalesList.reduce((sum, p) => sum + p.weekly_units, 0)
+
+  // 2. Data Mitra Paling Laku
   const partnerFastMovingGroups = useMemo<PartnerFastMovingGroup[]>(() => {
+    const fastMoving = data?.fast_moving_products ?? []
     const map = new Map<string, PartnerFastMovingGroup>()
     for (const item of fastMoving) {
       const existing = map.get(item.partner_id)
@@ -2001,79 +2109,135 @@ function AIInsightsPanel({
 
     groups.sort((a, b) => b.total_weekly_units - a.total_weekly_units)
     return groups
-  }, [fastMoving])
+  }, [data?.fast_moving_products])
 
-  const deficitAnalysis = data?.stockout_deficit_analysis ?? []
-  const partnerDeficitGroups = useMemo<PartnerDeficitGroup[]>(() => {
-    const map = new Map<string, PartnerDeficitGroup>()
-    for (const item of deficitAnalysis) {
+  const topPartnersList = useMemo<TopPartnerItem[]>(() => {
+    const weeklyPerformers = data?.weekly_facts?.top_performers_partners ?? []
+    if (weeklyPerformers.length > 0) {
+      return weeklyPerformers.map((p) => {
+        const groupMatch = partnerFastMovingGroups.find((g) => g.partner_name === p.partner_name)
+        return {
+          partner_id: groupMatch?.partner_id ?? p.partner_name,
+          partner_name: p.partner_name,
+          region: p.region,
+          partner_type: groupMatch?.partner_type,
+          weekly_consumption: p.weekly_units,
+          daily_velocity: groupMatch?.total_daily_velocity ?? Math.round(p.weekly_units / 7),
+          turnover_rate: groupMatch?.avg_turnover_rate,
+          top_product: groupMatch?.top_product?.product_name,
+          percentage: p.percentage,
+        }
+      })
+    }
+
+    return partnerFastMovingGroups.map((group) => ({
+      partner_id: group.partner_id,
+      partner_name: group.partner_name,
+      partner_type: group.partner_type,
+      weekly_consumption: group.total_weekly_units,
+      daily_velocity: group.total_daily_velocity,
+      turnover_rate: group.avg_turnover_rate,
+      top_product: group.top_product?.product_name,
+    }))
+  }, [data?.weekly_facts?.top_performers_partners, partnerFastMovingGroups])
+
+  const topPartner = topPartnersList[0]
+
+  // 3. Data Wilayah Paling Laku
+  const topRegionsList = useMemo<RegionRestockItem[]>(() => {
+    const regActivity = data?.regional_activity?.regions ?? []
+    const hotspots = data?.market_hotspots?.regions ?? []
+    const weeklyHotspots = data?.weekly_facts?.regional_hotspots ?? []
+    const hasLocation = (value: string) => value.trim() !== '' && !/^(tidak diketahui|unknown)$/i.test(value.trim())
+    const locatedRegions = regActivity.filter((region) => hasLocation(region.regency_name) || hasLocation(region.province_name))
+
+    if (locatedRegions.some((region) => region.restock_requests > 0)) {
+      const totalRequests = locatedRegions.reduce((sum, region) => sum + region.restock_requests, 0)
+      return locatedRegions.map((region) => ({
+        region: [region.regency_name, region.province_name].filter(hasLocation).join(', '),
+        province: region.province_name,
+        restock_units: region.restock_requests,
+        partner_count: region.partners.length,
+        percentage: totalRequests > 0 ? Math.round(region.restock_requests / totalRequests * 100) : undefined,
+        metric_label: 'Pengajuan restock',
+        unit_label: 'pengajuan',
+      })).sort((a, b) => b.restock_units - a.restock_units)
+    }
+
+    const locatedHotspots = hotspots.filter((hotspot) => hasLocation(hotspot.region))
+    if (locatedHotspots.some((hotspot) => hotspot.deficit_units > 0)) {
+      const totalDeficit = locatedHotspots.reduce((sum, hotspot) => sum + hotspot.deficit_units, 0)
+      return locatedHotspots.map((h) => ({
+        region: h.region,
+        restock_units: h.deficit_units,
+        partner_count: h.partner_count,
+        percentage: totalDeficit > 0 ? Math.round((h.deficit_units / totalDeficit) * 100) : undefined,
+        metric_label: 'Defisit stok',
+        unit_label: 'pcs',
+      })).sort((a, b) => b.restock_units - a.restock_units)
+    }
+
+    const locatedWeeklyHotspots = weeklyHotspots.filter((hotspot) => hasLocation(hotspot.region) || hasLocation(hotspot.province))
+    if (locatedWeeklyHotspots.some((hotspot) => hotspot.weekly_units > 0)) {
+      return locatedWeeklyHotspots.map((wh) => ({
+        region: [wh.region, wh.province].filter(hasLocation).join(', '),
+        province: wh.province,
+        restock_units: wh.weekly_units,
+        partner_count: wh.active_partners,
+        metric_label: 'Konsumsi mingguan',
+        unit_label: 'pcs',
+      })).sort((a, b) => b.restock_units - a.restock_units)
+    }
+
+    return []
+  }, [data])
+
+  const topRegion = topRegionsList[0]
+
+  // 4. Data Mitra Paling Aktif Update Stok
+  const partnerActivityList = useMemo<PartnerActivityItem[]>(() => {
+    const breakdown = weeklySummaryQuery.data?.partner_daily_log_breakdown ?? []
+    const map = new Map<string, { partner_id: string; partner_name: string; total_logs: number; days: Set<string>; last_day?: string }>()
+
+    for (const item of breakdown) {
       const existing = map.get(item.partner_id)
       if (!existing) {
         map.set(item.partner_id, {
           partner_id: item.partner_id,
           partner_name: item.partner_name,
-          partner_type: item.partner_type,
-          highest_risk_level: item.risk_level,
-          items: [item],
-          total_products: 1,
-          stockout_count: item.current_qty === 0 ? 1 : 0,
-          min_days_of_cover: item.days_of_cover,
-          min_qty: item.current_qty,
-          primary_root_cause_label: item.root_cause_label,
-          primary_action_recommendation: item.action_recommendation,
+          total_logs: item.log_count,
+          days: new Set([item.day]),
+          last_day: item.day,
         })
       } else {
-        existing.items.push(item)
-        existing.total_products += 1
-        if (item.risk_level === 'DARURAT') {
-          existing.highest_risk_level = 'DARURAT'
-        }
-        if (item.current_qty === 0) {
-          existing.stockout_count += 1
-        }
-        if (item.days_of_cover < existing.min_days_of_cover) {
-          existing.min_days_of_cover = item.days_of_cover
-          existing.primary_root_cause_label = item.root_cause_label
-          existing.primary_action_recommendation = item.action_recommendation
-        }
-        if (item.current_qty < existing.min_qty) {
-          existing.min_qty = item.current_qty
-        }
+        existing.total_logs += item.log_count
+        existing.days.add(item.day)
+        existing.last_day = item.day
       }
     }
 
-    const groups = Array.from(map.values())
-    groups.sort((a, b) => {
-      if (a.highest_risk_level !== b.highest_risk_level) {
-        return a.highest_risk_level === 'DARURAT' ? -1 : 1
+    const items: PartnerActivityItem[] = Array.from(map.values()).map((p) => {
+      const active_days = p.days.size
+      const compliance_status: PartnerActivityItem['compliance_status'] =
+        active_days >= 5 ? 'Sangat Disiplin' : active_days >= 3 ? 'Cukup Aktif' : 'Perlu Perhatian'
+      return {
+        partner_id: p.partner_id,
+        partner_name: p.partner_name,
+        total_logs: p.total_logs,
+        active_days,
+        last_report_day: p.last_day,
+        compliance_status,
       }
-      if (a.min_days_of_cover !== b.min_days_of_cover) {
-        return a.min_days_of_cover - b.min_days_of_cover
-      }
-      return b.stockout_count - a.stockout_count
     })
-    return groups
-  }, [deficitAnalysis])
 
-  const factoryForecast = data?.factory_procurement_forecast ?? []
-  const recommendations = data?.recommendations ?? []
-  const hotspots = data?.market_hotspots
-  const urgentBranches = new Set(deficitAnalysis.filter((item) => item.risk_level === 'DARURAT').map((item) => item.partner_id)).size
-  const urgentProducts = factoryForecast.filter((item) => item.urgency === 'CRITICAL').length
-  const lastAnalysis = recommendations[0]?.generated_at ?? data?.regional_activity?.model_generated_at
-  const weeklyFacts = data?.weekly_facts
-  const weeklySales = weeklyFacts?.network_sales.total_sold_7d ?? kpi?.weekly_sales_units
-  const centralHealth = weeklyFacts?.network_sales.central_stock_health_days ?? kpi?.central_stock_health_days
-  const fulfillment = weeklyFacts?.network_sales.restock_fulfillment_rate ?? kpi?.restock_fulfillment_rate
-  const officialProducts = ['Seblak Jadul Instan', 'Keripik Pisang Rasa Coklat', 'Basreng Daun Jeruk', 'Makaroni Daun Jeruk']
-  const topPartners = weeklyFacts?.top_performers_partners ?? hotspots?.top_performers ?? []
-  const fastMovingTotal = fastMoving.reduce((sum, item) => sum + item.weekly_consumption, 0)
-  const sections: Array<{ id: typeof subTab; label: string; count: number }> = [
-    { id: 'wilayah', label: 'Defisit wilayah', count: hotspots?.regions.length ?? 0 },
-    { id: 'defisit', label: 'Risiko cabang', count: partnerDeficitGroups.length },
-    { id: 'laris', label: 'Produk terlaris', count: partnerFastMovingGroups.length },
-    { id: 'pabrik', label: 'Pasokan pusat', count: factoryForecast.length },
-  ]
+    items.sort((a, b) => b.total_logs - a.total_logs || b.active_days - a.active_days)
+    return items
+  }, [weeklySummaryQuery.data])
+
+  const topActivePartner = partnerActivityList[0]
+
+  const lastAnalysis =
+    data?.recommendations?.[0]?.generated_at ?? data?.regional_activity?.model_generated_at
 
   useEffect(() => {
     const result = runStatus.data
@@ -2108,27 +2272,34 @@ function AIInsightsPanel({
   }
 
   return (
-    <section className="dashboard-panel-enter min-w-0 space-y-7" aria-labelledby="ai-insights-title">
-      <div className="flex flex-col gap-5 rounded-xl border border-line bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-        <div>
+    <section className="dashboard-panel-enter min-w-0 space-y-6" aria-labelledby="ai-insights-title">
+      <div className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <p className="dashboard-eyebrow">Perencanaan pasokan</p>
           <h1 id="ai-insights-title" className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl">
-            Saran AI untuk admin
+            AI Insights
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            Lihat cabang yang perlu dibantu, tinjau buffer minimal, lalu rencanakan pasokan pusat. Keputusan pesanan tetap dilakukan admin.
+          <p className="mt-1 max-w-xl text-sm leading-5 text-muted">
+            Konsumsi produk, aktivitas mitra, wilayah, dan laporan stok dalam 7 hari terakhir.
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            {lastAnalysis ? `Analisis ${formatDetailedDateTime(lastAnalysis)}` : 'Analisis belum tersedia'}
+            <span className="mx-1.5" aria-hidden="true">·</span>
+            <span className={data?.model_sync?.synchronized ? 'text-ok-fg' : 'text-warn-fg'}>
+              daisuki.pkl {data?.model_sync?.synchronized ? 'sinkron' : 'belum sinkron'}
+            </span>
           </p>
         </div>
 
-        <div className="flex min-w-0 flex-col items-start gap-2.5 sm:shrink-0 sm:items-end">
-          <button type="button" onClick={onReviewOrders} className="inline-flex min-h-11 items-center rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">
-            Buka persetujuan pesanan
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
+          <button type="button" onClick={onReviewOrders} className="inline-flex min-h-11 items-center rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-700 hover:border-ink-500/40 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">
+            Tinjau pesanan
           </button>
           <button
             type="button"
             onClick={() => void handleRunAiAnalysis()}
             disabled={startingAi || runStatus.data?.status === 'running' || loading}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {startingAi || runStatus.data?.status === 'running' ? (
               <>
@@ -2142,813 +2313,100 @@ function AIInsightsPanel({
               </>
             )}
           </button>
-          {runStatus.data?.status === 'running' ? <span role="status" className="text-xs text-muted">Analisis berjalan di server. Halaman ini akan diperbarui saat selesai.</span> : null}
-          {runStatus.data?.status === 'failed' ? <span role="status" className="text-xs text-crit-fg">Analisis terakhir gagal. Periksa log API sebelum mencoba lagi.</span> : null}
-          <span className="text-xs text-muted">
-            Analisis terakhir: {lastAnalysis
-              ? formatDetailedDateTime(lastAnalysis)
-              : 'Belum tersedia'}
-          </span>
-          <span className={`text-xs font-semibold ${data?.model_sync?.synchronized ? 'text-ok-fg' : 'text-warn-fg'}`}>
-            Model daisuki.pkl {data?.model_sync?.synchronized ? 'sinkron' : 'belum sinkron'}
-            {data?.model_sync?.trained_at ? ` · ${formatDetailedDateTime(data.model_sync.trained_at)}` : ''}
-          </span>
         </div>
       </div>
+      {runStatus.data?.status === 'running' ? <p role="status" className="text-xs text-muted">Analisis berjalan di server. Data akan diperbarui saat selesai.</p> : null}
+      {runStatus.data?.status === 'failed' ? <p role="status" className="text-xs text-crit-fg">Analisis terakhir gagal. Periksa log API.</p> : null}
 
       {error ? <ErrorState message={getErrorMessage(error)} onRetry={onRetry} /> : null}
 
       {loading ? (
-        <LoadingState label="Memuat analisis wilayah dan mitra..." />
+        <LoadingState label="Memuat 4 kategori analisis AI..." />
       ) : error ? null : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Metrik utama AI">
-            {[
-              { label: 'Cabang Darurat', value: urgentBranches.toLocaleString('id-ID'), note: 'Perlu tindakan segera', action: () => setSubTab('defisit'), tone: 'text-crit-fg' },
-              { label: 'Ketahanan Stok Pusat', value: centralHealth == null ? '—' : `${centralHealth} hari`, note: `Produk Perlu Pengadaan: ${urgentProducts}`, action: () => setSubTab('pabrik'), tone: 'text-ink-900' },
-              { label: 'Konsumsi Mingguan', value: weeklySales == null ? '—' : `${weeklySales.toLocaleString('id-ID')} pcs`, note: '7 hari terakhir', action: () => setSubTab('laris'), tone: 'text-ink-900' },
-              { label: 'Restock Disetujui', value: fulfillment == null ? '—' : `${fulfillment}%`, note: 'Dari pengajuan mitra', action: onReviewOrders, tone: 'text-ok-fg' },
-            ].map((metric) => (
-              <button key={metric.label} type="button" onClick={metric.action} className="dashboard-surface min-h-28 p-4 text-left transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
-                <span className="block text-xs font-semibold text-muted">{metric.label}</span>
-                <strong className={`num mt-2 block font-display text-2xl font-semibold tabular-nums ${metric.tone}`}>{metric.value}</strong>
-                <span className="mt-1 block text-xs text-muted">{metric.note}</span>
-              </button>
-            ))}
+          <div className="grid min-w-0 gap-4 md:grid-cols-2" aria-label="Ringkasan analisis AI">
+            <AiOverviewCard
+              eyebrow="Konsumsi produk"
+              title="Produk paling laku"
+              value={topProduct && totalSoldUnits > 0 ? topProduct.product_name : 'Belum ada data penjualan'}
+              metric={topProduct && totalSoldUnits > 0 ? topProduct.weekly_units.toLocaleString('id-ID') + ' pcs terjual · ' + topProduct.share_pct + '% pangsa' : 'Jalankan analisis untuk melihat hasil'}
+              detail={'4 produk resmi · ' + totalSoldUnits.toLocaleString('id-ID') + ' pcs dalam 7 hari'}
+              Icon={Package}
+              onClick={() => setActiveModal('products')}
+              visual={totalSoldUnits > 0 ? (
+                <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-ink-100" role="img" aria-label={productSalesList.map((product) => product.product_name + ' ' + product.share_pct + '%').join(', ')}>
+                  {productSalesList.map((product, index) => (
+                    <span
+                      key={product.product_name}
+                      className={['bg-ink-900', 'bg-ink-700', 'bg-ink-500', 'bg-ink-100'][index]}
+                      style={{ width: product.share_pct + '%' }}
+                      title={product.product_name + ': ' + product.share_pct + '%'}
+                    />
+                  ))}
+                </div>
+              ) : undefined}
+            />
+            <AiOverviewCard
+              eyebrow="Performa cabang"
+              title="Mitra konsumsi tertinggi"
+              value={topPartner?.partner_name ?? 'Belum ada data mitra'}
+              metric={topPartner ? topPartner.weekly_consumption.toLocaleString('id-ID') + ' pcs dalam 7 hari' : 'Belum ada konsumsi tercatat'}
+              detail={topPartner?.region || 'Lihat peringkat seluruh mitra'}
+              Icon={Store}
+              onClick={() => setActiveModal('partners')}
+            />
+            <AiOverviewCard
+              eyebrow="Sebaran wilayah"
+              title="Aktivitas wilayah"
+              value={topRegion?.region ?? 'Belum ada data wilayah'}
+          metric={topRegion ? topRegion.restock_units.toLocaleString('id-ID') + ' ' + (topRegion.unit_label ?? 'kejadian') : 'Belum ada aktivitas wilayah'}
+          detail={topRegionsList.length.toLocaleString('id-ID') + ' wilayah · ' + (topRegion?.metric_label ?? 'aktivitas')}
+              Icon={MapPin}
+              onClick={() => setActiveModal('regions')}
+            />
+            <AiOverviewCard
+              eyebrow="Laporan stok"
+              title="Mitra paling aktif melapor"
+              value={topActivePartner?.partner_name ?? 'Belum ada laporan stok'}
+              metric={topActivePartner ? topActivePartner.total_logs.toLocaleString('id-ID') + ' laporan · ' + topActivePartner.active_days + ' dari 7 hari' : 'Belum ada laporan minggu ini'}
+              detail={partnerActivityList.filter((partner) => partner.active_days >= 5).length.toLocaleString('id-ID') + ' mitra aktif minimal 5 hari'}
+              Icon={History}
+              onClick={() => setActiveModal('reporting')}
+            />
           </div>
-          <RegionalAnalysis
-            activity={data?.regional_activity}
-            fastMovingProducts={fastMoving}
-            deficitAnalysis={deficitAnalysis}
-            naiveBayesAnalysis={data?.naive_bayes_analysis}
-            onReviewOrders={onReviewOrders}
-            sideContent={
-              <div className="space-y-4">
-                <section className="rounded-xl border border-line bg-white p-4" aria-labelledby="top-products-title">
-                  <h3 id="top-products-title" className="font-display text-base font-semibold text-ink-900">Produk Paling Laku</h3>
-                  <p className="mt-0.5 text-xs text-muted">Pangsa konsumsi untuk rencana produksi pabrik</p>
-                  <ol className="mt-3 divide-y divide-line">
-                    {officialProducts.map((name) => {
-                      const product = weeklyFacts?.top_selling_products.find((item) => item.product_name === name)
-                      const fallbackUnits = fastMoving.filter((item) => item.product_name === name).reduce((sum, item) => sum + item.weekly_consumption, 0)
-                      const share = product?.share_pct ?? (fastMovingTotal > 0 ? Math.round(fallbackUnits / fastMovingTotal * 100) : null)
-                      return <li key={name} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                        <span className="min-w-0 font-medium text-ink-900">{name}</span>
-                        <span className="num shrink-0 font-semibold tabular-nums text-ink-900">{share == null ? '—' : `${share}%`}</span>
-                      </li>
-                    })}
-                  </ol>
-                </section>
-                <section className="rounded-xl border border-line bg-white p-4" aria-labelledby="top-partners-title">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 id="top-partners-title" className="font-display text-base font-semibold text-ink-900">Mitra Konsumsi Terbanyak</h3>
-                    <button type="button" onClick={() => setSubTab('laris')} className="min-h-11 text-xs font-semibold text-ink-700 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ink-900">Rincian</button>
-                  </div>
-                  {topPartners.length ? <ol className="divide-y divide-line">
-                    {topPartners.slice(0, 5).map((item, index) => <li key={`${item.partner_name}-${index}`} className="flex justify-between gap-3 py-2.5 text-sm">
-                      <span className="min-w-0 truncate text-ink-900">{index + 1}. {item.partner_name}<span className="block text-xs text-muted">{item.region}</span></span>
-                      <strong className="num shrink-0 tabular-nums text-ink-900">{item.weekly_units.toLocaleString('id-ID')} pcs</strong>
-                    </li>)}
-                  </ol> : <p className="mt-3 text-xs text-muted">Belum ada konsumsi mitra tercatat.</p>}
-                </section>
-              </div>
-            }
+          {/* Rincian tiap kategori analisis */}
+          <ProductSalesDetailModal
+            open={activeModal === 'products'}
+            onOpenChange={(open) => {
+              if (!open) setActiveModal(null)
+            }}
+            products={productSalesList}
+            totalUnits={totalSoldUnits}
           />
 
-          <WeeklyInsights facts={weeklyFacts} modelSync={data?.model_sync} regionalOnly />
+          <TopPartnersDetailModal
+            open={activeModal === 'partners'}
+            onOpenChange={(open) => {
+              if (!open) setActiveModal(null)
+            }}
+            partners={topPartnersList}
+          />
 
-          <div className="space-y-3">
-            <div>
-              <h2 className="font-display text-lg font-semibold text-ink-900">Telusuri analisis</h2>
-              <p className="mt-1 text-sm text-muted">Pilih bagian yang ingin ditinjau lebih lanjut.</p>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-line bg-ink-50 p-1.5 sm:flex sm:flex-wrap" aria-label="Bagian analisis AI">
-              {sections.map((section) => (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => setSubTab(section.id)}
-                  aria-pressed={subTab === section.id}
-                  className={`inline-flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-lg px-2.5 text-left text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:justify-start sm:px-3.5 sm:text-sm ${subTab === section.id
-                    ? 'bg-white text-ink-900 shadow-sm ring-1 ring-line'
-                    : 'text-ink-700 hover:bg-white/70'}`}
-                >
-                  {section.label}
-                  <span className={`rounded-md px-1.5 py-0.5 text-xs tabular-nums ${subTab === section.id ? 'bg-ink-100 text-ink-900' : 'bg-white text-ink-700'}`}>{section.count}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <TopRegionsDetailModal
+            open={activeModal === 'regions'}
+            onOpenChange={(open) => {
+              if (!open) setActiveModal(null)
+            }}
+            regions={topRegionsList}
+          />
 
-          {/* TAB 1: PETA WILAYAH RAWAN */}
-          {subTab === 'wilayah' && (
-            <div className="dashboard-panel-enter space-y-6">
-              {hotspots ? (
-                <section className="dashboard-surface p-3.5 sm:p-5" aria-label="Hotspot pasar mingguan">
-                  <h3 className="font-display text-base font-semibold text-ink-900">Wilayah Defisit Tertinggi</h3>
-                  <div className="mt-3">
-                    <div>
-                      <ol className="mt-2 divide-y divide-line">
-                        {hotspots.regions.map((item) => (
-                          <li key={item.region} className="flex justify-between gap-3 py-2 text-sm">
-                            <span>
-                              <span className="font-medium text-ink-900">{item.region}</span>
-                              <span className="block text-xs text-muted">{item.partner_count} mitra</span>
-                            </span>
-                            <strong className="num font-semibold text-crit-fg tabular-nums">
-                              {item.deficit_units} pcs
-                            </strong>
-                          </li>
-                        ))}
-                      </ol>
-                      {hotspots.regions.length === 0 && (
-                        <p className="mt-2 text-xs text-muted">Belum ada defisit wilayah.</p>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              ) : null}
-            </div>
-          )}
-
-          {/* TAB 2: PRODUK LARIS (PENJUALAN TINGGI) TERAGREGASI PER MITRA */}
-          {subTab === 'laris' && (
-            <div className="dashboard-panel-enter dashboard-surface overflow-hidden">
-              <div className="border-b border-line px-5 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Flame className="h-5 w-5 text-amber-500" />
-                      <h3 className="font-semibold text-ink-900">
-                        Mitra & Produk Paling Laku (Penjualan Tertinggi)
-                      </h3>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted">
-                      Daftar performa penjualan teragregasi per cabang mitra. Klik baris mitra untuk melihat rincian barang paling laku dan rekomendasi buffer AI.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-500/20">
-                      {partnerFastMovingGroups.length} Cabang Mitra Terdeteksi ({fastMoving.length} Item)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {partnerFastMovingGroups.length > 0 ? (
-                <div>
-                  {/* Tampilan Mobile: Kartu per Mitra */}
-                  <div className="divide-y divide-line sm:hidden">
-                    {partnerFastMovingGroups.map((group, index) => (
-                      <article
-                        key={group.partner_id}
-                        className="space-y-3 p-4 transition-colors hover:bg-ink-50/40"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-2.5">
-                            <span
-                              className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                                index === 0
-                                  ? 'bg-amber-500 text-white shadow-xs'
-                                  : index === 1
-                                    ? 'bg-ink-200 text-ink-900'
-                                    : 'bg-ink-100 text-ink-700'
-                              }`}
-                            >
-                              #{index + 1}
-                            </span>
-                            <div>
-                              <h4 className="font-semibold text-ink-900">
-                                {group.partner_name}
-                              </h4>
-                              <p className="text-xs capitalize text-muted">
-                                {group.partner_type}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="rounded-md bg-ink-100 px-2 py-0.5 text-xs font-semibold text-ink-700">
-                            {group.products.length} dari 4 produk
-                          </span>
-                        </div>
-
-                        <dl className="grid grid-cols-2 gap-2 rounded-xl bg-ink-50/70 p-3 text-xs">
-                          <div>
-                            <dt className="text-muted">Total Laku (7 Hari)</dt>
-                            <dd className="num mt-1 font-bold text-ink-900 tabular-nums">
-                              {group.total_weekly_units.toLocaleString('id-ID')} pcs
-                            </dd>
-                            <p className="text-[11px] text-muted">
-                              ~{group.total_daily_velocity} pcs/hari
-                            </p>
-                          </div>
-                          <div>
-                            <dt className="text-muted">Rata-rata Turnover</dt>
-                            <dd className="num mt-1 font-bold text-amber-600 tabular-nums">
-                              {group.avg_turnover_rate}%
-                            </dd>
-                            <p className="text-[11px] text-muted">
-                              {group.total_critical_frequency}x fase kritis
-                            </p>
-                          </div>
-                        </dl>
-
-                        <div className="rounded-lg border border-line bg-white p-2.5 text-xs">
-                          <p className="text-[11px] font-medium text-muted">
-                            Produk Paling Dominan:
-                          </p>
-                          <p className="font-semibold text-ink-900">
-                            {group.top_product.product_name}
-                          </p>
-                          <p className="text-[11px] text-muted">
-                            Terjual {group.top_product.weekly_consumption} pcs (
-                            {Math.round(
-                              (group.top_product.weekly_consumption /
-                                group.total_weekly_units) *
-                                100,
-                            )}
-                            % dari total mitra ini)
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPartnerGroup(group)}
-                          className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink-800 shadow-2xs transition hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
-                        >
-                          Lihat Rincian ({group.products.length} Produk)
-                          <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
-                        </button>
-                      </article>
-                    ))}
-                  </div>
-
-                  {/* Tampilan Desktop: Tabel per Mitra */}
-                  <div className="hidden overflow-x-auto sm:block">
-                    <table className="w-full min-w-[760px] text-left text-sm">
-                      <thead className="bg-ink-50/70 text-xs text-muted">
-                        <tr>
-                          <th className="px-5 py-3 font-semibold">Peringkat & Cabang Mitra</th>
-                          <th className="px-5 py-3 text-right font-semibold">Total Laku (7 Hari)</th>
-                          <th className="px-5 py-3 font-semibold">Produk Paling Dominan</th>
-                          <th className="px-5 py-3 text-center font-semibold">Cakupan Item Laris</th>
-                          <th className="px-5 py-3 text-center font-semibold">Rata-rata Turnover</th>
-                          <th className="px-5 py-3 text-right font-semibold">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {partnerFastMovingGroups.map((group, index) => (
-                          <tr
-                            key={group.partner_id}
-                            onClick={() => setSelectedPartnerGroup(group)}
-                            className="cursor-pointer transition-colors hover:bg-ink-50/40"
-                          >
-                            {/* 1. Peringkat & Mitra */}
-                            <td className="px-5 py-3.5">
-                              <div className="flex items-center gap-3">
-                                <span
-                                  className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                                    index === 0
-                                      ? 'bg-amber-500 text-white shadow-xs'
-                                      : index === 1
-                                        ? 'bg-ink-200 text-ink-900'
-                                        : 'bg-ink-100 text-ink-700'
-                                  }`}
-                                >
-                                  #{index + 1}
-                                </span>
-                                <div>
-                                  <p className="font-semibold text-ink-900 hover:text-ume">
-                                    {group.partner_name}
-                                  </p>
-                                  <p className="text-xs capitalize text-muted">
-                                    {group.partner_type}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* 2. Total Laku 7 Hari */}
-                            <td className="num px-5 py-3.5 text-right tabular-nums">
-                              <p className="font-bold text-ink-900">
-                                {group.total_weekly_units.toLocaleString('id-ID')} pcs
-                              </p>
-                              <p className="text-xs text-muted">
-                                ~{group.total_daily_velocity} pcs/hari
-                              </p>
-                            </td>
-
-                            {/* 3. Produk Paling Dominan */}
-                            <td className="px-5 py-3.5">
-                              <p className="font-semibold text-ink-900">
-                                {group.top_product.product_name}
-                              </p>
-                              <p className="text-xs text-muted">
-                                {group.top_product.weekly_consumption} pcs (
-                                {Math.round(
-                                  (group.top_product.weekly_consumption /
-                                    group.total_weekly_units) *
-                                    100,
-                                )}
-                                % dari total)
-                              </p>
-                            </td>
-
-                            {/* 4. Cakupan Item Laris */}
-                            <td className="px-5 py-3.5 text-center">
-                              <span className="inline-flex items-center gap-1 rounded-md bg-ink-50 px-2.5 py-1 text-xs font-semibold text-ink-800 ring-1 ring-line">
-                                {group.products.length} dari 4 produk
-                              </span>
-                            </td>
-
-                            {/* 5. Turnover & Fase Kritis */}
-                            <td className="px-5 py-3.5 text-center">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                                <Flame className="h-3 w-3 text-amber-600" />
-                                {group.avg_turnover_rate}%
-                              </span>
-                              <p className="mt-0.5 text-[11px] text-muted">
-                                {group.total_critical_frequency}x fase kritis
-                              </p>
-                            </td>
-
-                            {/* 6. Aksi */}
-                            <td className="px-5 py-3.5 text-right">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setSelectedPartnerGroup(group)
-                                }}
-                                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-700 shadow-2xs transition hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
-                              >
-                                Lihat Rincian
-                                <ChevronRight className="size-3.5 text-muted" aria-hidden="true" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <EmptyState
-                  title="Buffer stok cabang memadai"
-                  description="Belum ada cabang yang membutuhkan penyesuaian buffer minimal berdasarkan laju penjualan saat ini."
-                />
-              )}
-
-              {/* Modal Detail Barang Paling Laku per Mitra */}
-              <PartnerFastMovingModal
-                group={selectedPartnerGroup}
-                open={selectedPartnerGroup !== null}
-                onOpenChange={(open) => {
-                  if (!open) setSelectedPartnerGroup(null)
-                }}
-              />
-            </div>
-          )}
-
-          {/* TAB 3: DIAGNOSA DEFISIT CABANG */}
-          {subTab === 'defisit' && (
-            <div className="dashboard-panel-enter dashboard-surface overflow-hidden">
-              <div className="border-b border-line px-5 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-5 w-5 text-crit-fg" />
-                      <h3 className="font-semibold text-ink-900">
-                        Risiko stok cabang
-                      </h3>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted">
-                      Daftar cabang mitra dengan risiko defisit stok. Klik baris mitra untuk melihat rincian masalah per produk dan saran solusi AI.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-crit-bg px-3 py-1 text-xs font-semibold text-crit-fg">
-                      {partnerDeficitGroups.length} cabang mitra
-                    </span>
-                    <span className="text-xs text-muted">
-                      ({deficitAnalysis.length} produk rawan)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {partnerDeficitGroups.length > 0 ? (
-                <div>
-                  <div className="divide-y divide-line sm:hidden">
-                    {partnerDeficitGroups.map((group) => (
-                      <article
-                        key={group.partner_id}
-                        onClick={() => setSelectedDeficitGroup(group)}
-                        className="space-y-3 px-4 py-4 cursor-pointer transition-colors hover:bg-ink-50/50"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h4 className="font-semibold text-ink-900">{group.partner_name}</h4>
-                            {group.partner_type ? (
-                              <p className="mt-0.5 text-xs capitalize text-muted">{group.partner_type}</p>
-                            ) : null}
-                          </div>
-                          <span
-                            className={`shrink-0 rounded px-2 py-1 text-xs font-semibold ${
-                              group.highest_risk_level === 'DARURAT'
-                                ? 'bg-crit-bg text-crit-fg'
-                                : 'bg-warn-bg text-warn-fg'
-                            }`}
-                          >
-                            {group.highest_risk_level === 'DARURAT' ? 'Darurat' : 'Waspada'}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-semibold text-ink-900">
-                            {group.total_products} produk rawan
-                          </span>
-                          {group.stockout_count > 0 ? (
-                            <span className="rounded bg-crit-bg px-1.5 py-0.5 text-[11px] font-semibold text-crit-fg">
-                              {group.stockout_count} habis (0 pcs)
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <div className="flex flex-wrap gap-1">
-                          {group.items.map((it) => (
-                            <span
-                              key={it.product_id}
-                              className={`inline-block rounded border px-1.5 py-0.5 text-[11px] ${
-                                it.current_qty === 0
-                                  ? 'border-crit-fg/20 bg-crit-bg text-crit-fg font-medium'
-                                  : 'border-line bg-paper text-ink-700'
-                              }`}
-                            >
-                              {it.product_name}
-                            </span>
-                          ))}
-                        </div>
-
-                        <dl className="grid grid-cols-2 gap-3 rounded-md bg-ink-50 p-3 text-xs">
-                          <div>
-                            <dt className="text-muted">Sisa stok terendah</dt>
-                            <dd
-                              className={`mt-1 font-semibold tabular-nums ${
-                                group.min_qty === 0
-                                  ? 'text-crit-fg font-bold'
-                                  : 'text-ink-900'
-                              }`}
-                            >
-                              {group.min_qty} pcs
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="text-muted">Cakupan terendah</dt>
-                            <dd
-                              className={`mt-1 font-semibold tabular-nums ${
-                                group.min_days_of_cover < 1
-                                  ? 'text-crit-fg font-bold'
-                                  : 'text-warn-fg'
-                              }`}
-                            >
-                              {group.min_days_of_cover} hari
-                            </dd>
-                          </div>
-                        </dl>
-
-                        <div className="flex items-center justify-between border-t border-line/60 pt-2 text-xs">
-                          <span className="text-muted truncate max-w-[65%]">
-                            Penyebab: <span className="font-medium text-ink-900">{group.primary_root_cause_label}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-1 font-semibold text-ink-700">
-                            <span>Lihat rincian</span>
-                            <span aria-hidden="true">→</span>
-                          </span>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-
-                  <div className="hidden overflow-x-auto sm:block">
-                    <table className="w-full min-w-[720px] text-left text-sm">
-                      <thead className="bg-ink-50/70 text-xs text-muted">
-                        <tr>
-                          <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
-                          <th className="px-5 py-3 font-semibold">Kategori Produk Rawan</th>
-                          <th className="px-5 py-3 text-right font-semibold">Sisa Terendah</th>
-                          <th className="px-5 py-3 text-right font-semibold">Cakupan Terendah</th>
-                          <th className="px-5 py-3 font-semibold">Akar Masalah Utama</th>
-                          <th className="px-5 py-3 text-right font-semibold">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {partnerDeficitGroups.map((group) => (
-                          <tr
-                            key={group.partner_id}
-                            onClick={() => setSelectedDeficitGroup(group)}
-                            className="group cursor-pointer transition-colors hover:bg-ink-50/50"
-                          >
-                            <td className="px-5 py-3.5">
-                              <div className="flex items-center gap-2">
-                                <p className="font-semibold text-ink-900 group-hover:text-ink-700">
-                                  {group.partner_name}
-                                </p>
-                                <span
-                                  className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
-                                    group.highest_risk_level === 'DARURAT'
-                                      ? 'bg-crit-bg text-crit-fg'
-                                      : 'bg-warn-bg text-warn-fg'
-                                  }`}
-                                >
-                                  {group.highest_risk_level}
-                                </span>
-                              </div>
-                              {group.partner_type ? (
-                                <p className="mt-0.5 text-xs capitalize text-muted">
-                                  {group.partner_type}
-                                </p>
-                              ) : null}
-                            </td>
-
-                            <td className="px-5 py-3.5">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-medium text-ink-900">
-                                  {group.total_products} produk rawan
-                                </span>
-                                {group.stockout_count > 0 ? (
-                                  <span className="rounded bg-crit-bg px-1.5 py-0.5 text-[11px] font-semibold text-crit-fg">
-                                    {group.stockout_count} habis (0 pcs)
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {group.items.map((it) => (
-                                  <span
-                                    key={it.product_id}
-                                    className={`inline-block rounded border px-1.5 py-0.5 text-[11px] ${
-                                      it.current_qty === 0
-                                        ? 'border-crit-fg/20 bg-crit-bg text-crit-fg font-medium'
-                                        : 'border-line bg-paper text-ink-700'
-                                    }`}
-                                  >
-                                    {it.product_name}
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
-
-                            <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                              <span
-                                className={
-                                  group.min_qty === 0
-                                    ? 'text-crit-fg font-bold'
-                                    : 'text-ink-900'
-                                }
-                              >
-                                {group.min_qty} pcs
-                              </span>
-                            </td>
-
-                            <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                              <span
-                                className={
-                                  group.min_days_of_cover < 1
-                                    ? 'font-bold text-crit-fg'
-                                    : 'text-warn-fg'
-                                }
-                              >
-                                {group.min_days_of_cover} hari
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-3.5">
-                              <span className="inline-block rounded-md bg-ink-100 px-2 py-0.5 text-xs font-semibold text-ink-800">
-                                {group.primary_root_cause_label}
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-3.5 text-right">
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink-700 group-hover:text-ink-900 group-hover:underline">
-                                <span>Rincian</span>
-                                <span aria-hidden="true">→</span>
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <EmptyState
-                  title="Stok Cabang Aman Terkendali"
-                  description="Tidak ada cabang mitra yang mengalami defisit kritis atau risiko stockout saat ini."
-                />
-              )}
-
-              {/* Modal Detail Risiko Defisit per Mitra */}
-              <PartnerDeficitModal
-                group={selectedDeficitGroup}
-                open={selectedDeficitGroup !== null}
-                onOpenChange={(open) => {
-                  if (!open) setSelectedDeficitGroup(null)
-                }}
-                onReviewOrders={onReviewOrders}
-              />
-            </div>
-          )}
-
-          {/* TAB 4: PENGADAAN PABRIK & REKOMENDASI ALOKASI */}
-          {subTab === 'pabrik' && (
-            <div className="dashboard-panel-enter space-y-6">
-              {/* Proyeksi Pabrik */}
-              <div className="dashboard-surface overflow-hidden">
-                <div className="border-b border-line px-5 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Factory className="h-5 w-5 text-ink-900" />
-                        <h3 className="font-semibold text-ink-900">
-                          Proyeksi Pengadaan & Produksi Pabrik
-                        </h3>
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted">
-                        Kebutuhan pasokan gudang pusat berdasarkan konsumsi seluruh mitra dan estimasi lead time pabrik (5–7 hari).
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700">
-                      Target Buffer: 21 Hari
-                    </span>
-                  </div>
-                </div>
-
-                {factoryForecast.length > 0 ? (
-                  <div>
-                    <div className="divide-y divide-line sm:hidden">
-                      {factoryForecast.map((item) => (
-                        <article key={item.product_id} className="space-y-3 p-4">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <h4 className="min-w-0 flex-1 font-semibold text-ink-900">{item.product_name}</h4>
-                            <span className={`rounded px-2 py-1 text-xs font-semibold ${item.urgency === 'CRITICAL' ? 'bg-crit-bg text-crit-fg' : item.urgency === 'WARNING' ? 'bg-warn-bg text-warn-fg' : 'bg-ok-bg text-ok-fg'}`}>
-                              {item.urgency === 'CRITICAL' ? 'Order segera' : item.urgency === 'WARNING' ? 'Siapkan PO' : 'Aman'}
-                            </span>
-                          </div>
-                          <dl className="grid grid-cols-2 gap-3 rounded-md bg-ink-50 p-3 text-xs">
-                            <div><dt className="text-muted">Stok pusat</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{item.central_stock.toLocaleString('id-ID')} pcs</dd></div>
-                            <div><dt className="text-muted">Konsumsi per minggu</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{item.total_partner_demand_weekly.toLocaleString('id-ID')} pcs</dd></div>
-                            <div><dt className="text-muted">Ketahanan stok</dt><dd className={`num mt-1 font-semibold tabular-nums ${item.urgency === 'CRITICAL' ? 'text-crit-fg' : item.urgency === 'WARNING' ? 'text-warn-fg' : 'text-ok-fg'}`}>{item.estimated_runout_days} hari</dd></div>
-                            <div><dt className="text-muted">Saran pesanan pabrik</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{item.suggested_factory_batch_order > 0 ? `+${item.suggested_factory_batch_order.toLocaleString('id-ID')} pcs` : 'Stok cukup'}</dd></div>
-                          </dl>
-                        </article>
-                      ))}
-                    </div>
-                    <div className="hidden overflow-x-auto sm:block">
-                    <table className="w-full min-w-[720px] text-left text-sm">
-                      <thead className="bg-ink-50/70 text-xs text-muted">
-                        <tr>
-                          <th className="px-5 py-3 font-semibold">Produk</th>
-                          <th className="px-5 py-3 text-right font-semibold">Stok Pusat</th>
-                          <th className="px-5 py-3 text-right font-semibold">Konsumsi Mitra / Minggu</th>
-                          <th className="px-5 py-3 text-right font-semibold">Ketahanan Stok</th>
-                          <th className="px-5 py-3 text-right font-semibold">Saran Pesanan Pabrik</th>
-                          <th className="px-5 py-3 text-center font-semibold">Status Kesiapan</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {factoryForecast.map((item) => (
-                          <tr key={item.product_id} className="hover:bg-ink-50/30">
-                            <td className="px-5 py-3.5 font-medium text-ink-900">
-                              {item.product_name}
-                            </td>
-                            <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
-                              {item.central_stock.toLocaleString('id-ID')} pcs
-                            </td>
-                            <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
-                              {item.total_partner_demand_weekly.toLocaleString('id-ID')} pcs/mgg
-                            </td>
-                            <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                              <span className={item.urgency === 'CRITICAL' ? 'text-crit-fg' : item.urgency === 'WARNING' ? 'text-warn-fg' : 'text-ok-fg'}>
-                                {item.estimated_runout_days} hari
-                              </span>
-                            </td>
-                            <td className="num px-5 py-3.5 text-right tabular-nums">
-                              {item.suggested_factory_batch_order > 0 ? (
-                                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-600/20">
-                                  +{item.suggested_factory_batch_order.toLocaleString('id-ID')} pcs
-                                </span>
-                              ) : (
-                                <span className="text-xs text-muted">Stok Cukup</span>
-                              )}
-                            </td>
-                            <td className="px-5 py-3.5 text-center">
-                              <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                item.urgency === 'CRITICAL'
-                                  ? 'bg-crit-bg text-crit-fg'
-                                  : item.urgency === 'WARNING'
-                                    ? 'bg-warn-bg text-warn-fg'
-                                    : 'bg-ok-bg text-ok-fg'
-                              }`}>
-                                {item.urgency === 'CRITICAL' ? 'Order Segera' : item.urgency === 'WARNING' ? 'Siapkan PO' : 'Aman'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Rekomendasi Alokasi Cabang */}
-              <div className="dashboard-surface overflow-hidden">
-                <div className="border-b border-line px-5 py-4">
-                  <h3 className="font-semibold text-ink-900">Rekomendasi Alokasi Pengiriman Cabang</h3>
-                  <p className="mt-0.5 text-xs text-muted">
-                    Prediksi kebutuhan tujuh hari berdasarkan konsumsi cabang. Persetujuan tetap mengikuti ketersediaan stok pusat.
-                  </p>
-                </div>
-                {recommendations.length ? (
-                  <div>
-                    <div className="divide-y divide-line sm:hidden">
-                      {recommendations.map((row, index) => {
-                        const urgency = row.metadata?.urgency ?? (Number(row.days_of_cover ?? 0) < 2 ? 'CRITICAL' : 'NORMAL')
-                        return (
-                          <article key={`${row.partner_id}-${row.product_id}-${row.generated_at}-${index}`} className="space-y-3 p-4">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div className="min-w-0 flex-1"><h4 className="font-semibold text-ink-900">{row.partner_name}</h4><p className="mt-0.5 text-sm text-muted">{row.product_name}</p></div>
-                              <span className={`rounded px-2 py-1 text-xs font-semibold ${urgency === 'CRITICAL' ? 'bg-crit-bg text-crit-fg' : urgency === 'WARNING' ? 'bg-warn-bg text-warn-fg' : 'bg-ok-bg text-ok-fg'}`}>
-                                {urgency === 'CRITICAL' ? 'Darurat' : urgency === 'WARNING' ? 'Waspada' : 'Normal'}
-                              </span>
-                            </div>
-                            <dl className="grid grid-cols-3 gap-2 rounded-md bg-ink-50 p-3 text-xs">
-                              <div><dt className="text-muted">Disarankan</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{row.suggested_qty} pcs</dd></div>
-                              <div><dt className="text-muted">Prediksi 7 hari</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{row.forecast_qty} pcs</dd></div>
-                              <div><dt className="text-muted">Cakupan</dt><dd className="num mt-1 font-semibold tabular-nums text-ink-900">{row.days_of_cover ?? '—'} hari</dd></div>
-                            </dl>
-                            <p className="text-xs leading-5 text-muted">{row.metadata?.reasoning || 'Rekomendasi berdasarkan cakupan stok cabang.'}</p>
-                          </article>
-                        )
-                      })}
-                    </div>
-                    <div className="hidden overflow-x-auto sm:block">
-                    <table className="w-full min-w-[700px] text-left text-sm">
-                      <thead className="bg-ink-50/70 text-xs text-muted">
-                        <tr>
-                          <th className="px-5 py-3 font-semibold">Cabang</th>
-                          <th className="px-5 py-3 font-semibold">Produk</th>
-                          <th className="px-5 py-3 text-right font-semibold">Disarankan</th>
-                          <th className="px-5 py-3 text-right font-semibold">Prediksi 7 hari</th>
-                          <th className="px-5 py-3 text-right font-semibold">Cakupan</th>
-                          <th className="px-5 py-3 font-semibold">Prioritas</th>
-                          <th className="px-5 py-3 font-semibold">Alasan</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {recommendations.map((row, index) => {
-                          const urgency = row.metadata?.urgency ?? (Number(row.days_of_cover ?? 0) < 2 ? 'CRITICAL' : 'NORMAL')
-                          return (
-                            <tr
-                              key={`${row.partner_id}-${row.product_id}-${row.generated_at}-${index}`}
-                              className="hover:bg-ink-50/30"
-                            >
-                              <td className="px-5 py-3.5 font-medium text-ink-900">{row.partner_name}</td>
-                              <td className="px-5 py-3.5">{row.product_name}</td>
-                              <td className="num px-5 py-3.5 text-right font-semibold text-ink-900 tabular-nums">
-                                {row.suggested_qty} pcs
-                              </td>
-                              <td className="num px-5 py-3.5 text-right tabular-nums">{row.forecast_qty} pcs</td>
-                              <td className="num px-5 py-3.5 text-right tabular-nums text-muted">
-                                {row.days_of_cover ?? '—'} hari
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <span
-                                  className={`rounded-sm px-2 py-1 text-xs font-semibold ${
-                                    urgency === 'CRITICAL' ? 'bg-crit-bg text-crit-fg' : urgency === 'WARNING' ? 'bg-warn-bg text-warn-fg' : 'bg-ok-bg text-ok-fg'
-                                  }`}
-                                >
-                                  {urgency === 'CRITICAL' ? 'Darurat' : urgency === 'WARNING' ? 'Waspada' : 'Normal'}
-                                </span>
-                              </td>
-                              <td className="max-w-64 px-5 py-3.5 text-xs leading-5 text-muted">
-                                {row.metadata?.reasoning || 'Rekomendasi berdasarkan cakupan stok cabang.'}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                    </div>
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="Belum Ada Rekomendasi"
-                    description="Gunakan tombol 'Perbarui saran' untuk menghitung kembali saran alokasi."
-                  />
-                )}
-              </div>
-            </div>
-          )}
+          <ActiveReportingPartnersModal
+            open={activeModal === 'reporting'}
+            onOpenChange={(open) => {
+              if (!open) setActiveModal(null)
+            }}
+            partners={partnerActivityList}
+          />
         </>
       )}
     </section>

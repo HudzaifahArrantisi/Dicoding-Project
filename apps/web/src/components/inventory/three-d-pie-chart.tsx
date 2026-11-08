@@ -82,7 +82,7 @@ export function ThreeDPieChart({
         rank: index + 1,
         index,
         percentage,
-        topColor: slice.color || (donutOnly ? ['var(--color-crit)', 'var(--color-warn)', 'var(--color-ok)'][index % 3] : colors.top),
+        topColor: slice.color || (donutOnly ? ['var(--color-ink-900)', 'var(--color-ink-700)', 'var(--color-ink-500)', 'var(--color-ink-700)'][index % 4] : colors.top),
         sideColor: slice.colorSide || colors.side,
         wallColor: slice.colorWall || colors.wall,
       }
