@@ -2,15 +2,25 @@ import type { WeeklyFacts } from '@/lib/api/weekly-facts'
 
 const num = (value: number) => value.toLocaleString('id-ID')
 
-export function WeeklyInsights({ facts, modelSync }: {
+export function WeeklyInsights({ facts, modelSync, regionalOnly = false }: {
   facts: WeeklyFacts | null | undefined
   modelSync?: { trained_at: string | null; synchronized: boolean }
+  regionalOnly?: boolean
 }) {
-  if (!facts) return <section className="dashboard-surface p-5" aria-label="Ringkasan mingguan"><h2 className="font-display text-lg font-semibold text-ink-900">Ringkasan mingguan belum tersedia</h2><p className="mt-1 text-sm text-muted">Jalankan Perbarui saran untuk menghitung fakta dari laporan stok dan pesanan terbaru.</p></section>
+  if (!facts) return regionalOnly ? null : <section className="dashboard-surface p-5" aria-label="Ringkasan mingguan"><h2 className="font-display text-lg font-semibold text-ink-900">Ringkasan mingguan belum tersedia</h2><p className="mt-1 text-sm text-muted">Jalankan Perbarui saran untuk menghitung fakta dari laporan stok dan pesanan terbaru.</p></section>
   const sales = facts.network_sales
   const generated = new Date(facts.metadata.generated_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
   const maximum = Math.max(1, ...facts.top_performers_partners.map((item) => item.weekly_units))
   const riskStyle: Record<string, string> = { ZONA_MERAH: 'bg-crit-bg text-crit-fg', ZONA_KUNING: 'bg-warn-bg text-warn-fg', ZONA_HIJAU: 'bg-ok-bg text-ok-fg' }
+  const locatedHotspots = facts.regional_hotspots.filter((item) => ![item.region, item.province].every((value) => !value || /tidak diketahui|unknown/i.test(value)))
+  const unlocatedHotspots = facts.regional_hotspots.length - locatedHotspots.length
+  if (regionalOnly) return <section className="dashboard-surface p-4 sm:p-5" aria-label="Fakta operasional mingguan lanjutan">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-base font-semibold text-ink-900">Fakta mingguan lanjutan</h2><p className="text-xs text-muted">Snapshot {generated}</p></div><span className="num text-xs font-semibold tabular-nums text-ink-700">Perubahan konsumsi: {sales.sales_growth_percentage == null ? '—' : `${sales.sales_growth_percentage > 0 ? '+' : ''}${sales.sales_growth_percentage}%`}</span></div>
+    {facts.top_selling_categories.length ? <p className="mt-2 text-xs text-muted">Kategori: {facts.top_selling_categories.map((item) => `${item.category} ${num(item.weekly_units)} pcs`).join(' · ')}</p> : null}
+    <h3 className="mt-4 text-sm font-semibold text-ink-900">Zona risiko wilayah</h3>
+    {unlocatedHotspots > 0 ? <p className="mt-2 rounded-md bg-warn-bg px-3 py-2 text-xs text-warn-fg">{unlocatedHotspots} wilayah belum diatur. Lengkapi lokasi mitra agar prediksi regional akurat.</p> : null}
+    {locatedHotspots.length ? <ul className="mt-2 grid gap-2 md:grid-cols-2">{locatedHotspots.map((item) => <li key={`${item.province}-${item.region}`} className="rounded-md border border-line p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-ink-900">{item.region}, {item.province}</strong><span className={`rounded px-2 py-0.5 text-xs font-semibold ${riskStyle[item.status] ?? 'bg-ink-100 text-ink-700'}`}>{item.status.replaceAll('_', ' ')}</span></div><p className="num mt-1 text-xs tabular-nums text-muted">{num(item.weekly_units)} pcs · {num(item.active_partners)} mitra · risiko puncak {item.stockout_probability}%</p>{item.recommended_action ? <p className="mt-1 text-xs text-muted">{item.recommended_action}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">Belum ada hasil wilayah yang memiliki lokasi.</p>}
+  </section>
   const metrics = [
     ['Konsumsi tercatat', `${num(sales.total_sold_7d)} pcs`, '7 hari terakhir'],
     ['Perubahan konsumsi', sales.sales_growth_percentage === null ? '—' : `${sales.sales_growth_percentage > 0 ? '+' : ''}${sales.sales_growth_percentage}%`, 'Dibanding 7 hari sebelumnya'],

@@ -24,6 +24,7 @@ interface ThreeDPieChartProps {
   onSelectSlice?: (sliceId: string) => void
   pieDepth?: number // 3D extrusion depth, default 34
   className?: string
+  donutOnly?: boolean
 }
 
 // Preset modern colors: Emerald is #1 (highest contributor), followed by Blue, Orange, Purple, Red, Cyan, Amber, Pink
@@ -48,6 +49,7 @@ export function ThreeDPieChart({
   onSelectSlice,
   pieDepth = 34,
   className = '',
+  donutOnly = false,
 }: ThreeDPieChartProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [chartMode, setChartMode] = useState<'3d' | 'donut'>('donut')
@@ -80,12 +82,12 @@ export function ThreeDPieChart({
         rank: index + 1,
         index,
         percentage,
-        topColor: slice.color || colors.top,
+        topColor: slice.color || (donutOnly ? ['var(--color-crit)', 'var(--color-warn)', 'var(--color-ok)'][index % 3] : colors.top),
         sideColor: slice.colorSide || colors.side,
         wallColor: slice.colorWall || colors.wall,
       }
     })
-  }, [sortedInputSlices, totalValue])
+  }, [sortedInputSlices, totalValue, donutOnly])
 
   // Filter only slices with non-zero values for rendering on chart
   const nonZeroSlices = useMemo(() => {
@@ -213,7 +215,7 @@ export function ThreeDPieChart({
 
         <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
           {/* Mode Switcher: 3D Isometrik vs Donut 2D */}
-          <div
+          {!donutOnly ? <div
             className="inline-flex items-center rounded-lg border border-line bg-ink-50/80 p-0.5 text-xs shadow-2xs"
             role="tablist"
             aria-label="Tampilan Diagram"
@@ -246,7 +248,7 @@ export function ThreeDPieChart({
               <PieIcon className="size-3.5" />
               <span>Donut 2D</span>
             </button>
-          </div>
+          </div> : null}
 
           <span className="rounded-full bg-ink-100 px-2.5 py-1 text-[11px] font-semibold text-ink-700">
             Total: {totalValue.toLocaleString('id-ID')} {unitLabel}
@@ -254,7 +256,7 @@ export function ThreeDPieChart({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1.1fr] items-center gap-4 sm:gap-6 rounded-xl border border-line bg-gradient-to-b from-ink-50/50 via-white to-ink-50/30 p-3 sm:p-5 shadow-xs">
+      <div className={`grid grid-cols-1 items-center gap-4 rounded-xl border border-line bg-ink-50/30 p-3 sm:p-5 ${donutOnly ? '' : 'lg:grid-cols-[1.3fr_1.1fr] sm:gap-6'}`}>
         {/* Left: Interactive SVG Chart Canvas */}
         <div className="relative flex items-center justify-center overflow-hidden min-h-[200px] sm:min-h-[280px] w-full">
           {totalValue === 0 ? (
@@ -267,7 +269,7 @@ export function ThreeDPieChart({
                 Seluruh data pada pilihan ini bernilai 0 atau berada dalam batas aman.
               </p>
             </div>
-          ) : chartMode === '3d' ? (
+          ) : !donutOnly && chartMode === '3d' ? (
             /* ========================================================
                3D ISOMETRIC PIE CHART
                ======================================================== */
@@ -576,7 +578,7 @@ export function ThreeDPieChart({
                 return (
                   <div>
                     <span className="font-bold">{target.label}</span>
-                    <span className="ml-1.5 text-emerald-300 font-extrabold">
+                    <span className="ml-1.5 text-ok-bg font-extrabold">
                       {target.value.toLocaleString('id-ID')} {unitLabel} ({pct}%)
                     </span>
                   </div>
@@ -620,7 +622,7 @@ export function ThreeDPieChart({
                     <span
                       className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-extrabold ${
                         slice.rank === 1
-                          ? 'bg-emerald-600 text-white shadow-xs'
+                          ? 'bg-ok text-white shadow-xs'
                           : 'bg-ink-100 text-ink-600'
                       }`}
                     >
@@ -638,7 +640,7 @@ export function ThreeDPieChart({
                           {slice.label}
                         </p>
                         {slice.rank === 1 ? (
-                          <span className="inline-flex items-center rounded px-1.5 py-0.2 text-[9px] font-bold bg-emerald-100 text-emerald-800 shrink-0">
+                          <span className="inline-flex items-center rounded px-1.5 py-0.2 text-[9px] font-bold bg-ok-bg text-ok-fg shrink-0">
                             Terbanyak
                           </span>
                         ) : null}

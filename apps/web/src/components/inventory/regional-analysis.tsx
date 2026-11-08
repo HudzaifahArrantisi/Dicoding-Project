@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Dialog } from 'radix-ui'
 import {
   ArrowUpRight,
@@ -47,6 +47,8 @@ export interface RegionalActivity {
 
 export interface RegionalAnalysisProps {
   activity?: RegionalActivity
+  sideContent?: ReactNode
+  onReviewOrders?: () => void
   fastMovingProducts?: Array<{
     partner_id: string
     partner_name: string
@@ -86,6 +88,14 @@ const zoneStyle: Record<Zone, string> = {
   ZONA_HIJAU: 'bg-ok-bg text-ok-fg border-ok-fg/20',
   BELUM_DIANALISIS: 'bg-ink-100 text-ink-700 border-line',
   PERLU_LOKASI: 'bg-ink-100 text-ink-700 border-line',
+}
+
+const zoneChartColor: Record<Zone, string> = {
+  ZONA_MERAH: 'var(--color-crit)',
+  ZONA_KUNING: 'var(--color-warn)',
+  ZONA_HIJAU: 'var(--color-ok)',
+  BELUM_DIANALISIS: 'var(--color-stale)',
+  PERLU_LOKASI: 'var(--color-stale)',
 }
 
 const zoneBadgeConfig: Record<Zone, { label: string; chip: string; dot: string }> = {
@@ -140,6 +150,8 @@ function cleanRiskDriver(driver?: string | null): string {
 
 export function RegionalAnalysis({
   activity,
+  sideContent,
+  onReviewOrders,
   fastMovingProducts = [],
   naiveBayesAnalysis,
 }: RegionalAnalysisProps) {
@@ -154,7 +166,8 @@ export function RegionalAnalysis({
   const analyzedRegions = regions.filter(
     (region) =>
       region.regional_zone !== 'BELUM_DIANALISIS' &&
-      region.regional_zone !== 'PERLU_LOKASI'
+      region.regional_zone !== 'PERLU_LOKASI' &&
+      formatLocationText(region.regency_name, region.province_name) !== 'Wilayah belum diatur'
   )
 
   const filteredByZone = zone === 'semua' ? regions : regions.filter((region) => region.regional_zone === zone)
@@ -165,6 +178,13 @@ export function RegionalAnalysis({
       : filteredByZone.filter(
           (region) => `${region.province_name}\u0000${region.regency_name}` === regionKey
         )
+  const chartRegions = visibleRegions.filter((region) =>
+    formatLocationText(region.regency_name, region.province_name) !== 'Wilayah belum diatur' &&
+    region.regional_zone !== 'PERLU_LOKASI'
+  )
+  const unlocatedPartners = visibleRegions
+    .filter((region) => formatLocationText(region.regency_name, region.province_name) === 'Wilayah belum diatur')
+    .reduce((count, region) => count + region.partners.length, 0)
 
   const selectedRegion = regions.find(
     (region) => `${region.province_name}\u0000${region.regency_name}` === detailRegionKey
@@ -193,6 +213,7 @@ export function RegionalAnalysis({
               partner.critical_logs > 0 ||
               partner.stockout_logs > 0 ||
               partner.restock_requests > 0 ||
+              (partner.urgent_items?.length ?? 0) > 0 ||
               partner.zone === 'ZONA_MERAH'
           )
         : partners.filter((partner) => partner.partner_id === partnerId)
@@ -241,7 +262,7 @@ export function RegionalAnalysis({
   )
 
   const regionalPieSlices: ThreeDPieSlice[] = useMemo(() => {
-    return visibleRegions
+    return chartRegions
       .map((region) => {
         const key = `${region.province_name}\u0000${region.regency_name}`
         let val = 0
@@ -258,11 +279,12 @@ export function RegionalAnalysis({
           label: cleanLabel,
           sublabel: sub,
           value: val,
+          color: zoneChartColor[region.regional_zone],
           badge: zoneLabel[region.regional_zone],
         }
       })
       .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'id-ID'))
-  }, [visibleRegions, pieMetric])
+  }, [chartRegions, pieMetric])
 
   // Slices for Selected Region's Partners 3D Pie Chart
   const partnerPieSlices: ThreeDPieSlice[] = useMemo(() => {
@@ -280,6 +302,7 @@ export function RegionalAnalysis({
           label: partner.partner_name,
           sublabel: zoneLabel[partner.zone],
           value: val,
+          color: zoneChartColor[partner.zone],
         }
       })
       .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'id-ID'))
@@ -325,9 +348,9 @@ export function RegionalAnalysis({
         </div>
       </div>
 
-      <div className="space-y-4 p-3.5 sm:p-5 sm:space-y-6">
+      <div className="flex flex-col gap-4 p-3.5 sm:p-5">
         {/* KPI Strip */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" aria-label="Ringkasan wilayah terpilih">
+        <div className="order-3 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4" aria-label="Ringkasan wilayah terpilih">
           <div className="rounded-lg bg-ink-50/60 p-2.5 sm:p-3">
             <p className="text-[11px] sm:text-xs font-semibold text-muted">Wilayah Terpantau</p>
             <p className="num mt-0.5 sm:mt-1 font-display text-xl sm:text-2xl font-bold tabular-nums text-ink-900">
@@ -356,7 +379,7 @@ export function RegionalAnalysis({
 
         {/* Naive Bayes Multi-Factor Intelligence Panel */}
         {naiveBayesAnalysis ? (
-          <div className="rounded-xl border border-line bg-white p-3.5 sm:p-5 shadow-2xs">
+          <div className="order-4 rounded-xl border border-line bg-white p-3.5 sm:p-5 shadow-2xs">
             <div className="flex flex-col gap-3.5 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-800 ring-1 ring-line">
@@ -402,9 +425,9 @@ export function RegionalAnalysis({
         ) : null}
 
         {/* Filter Controls Bar */}
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="space-y-1 text-xs font-semibold text-ink-800">
-            Kategori Wilayah
+        <div className="order-0 flex flex-wrap gap-2" aria-label="Filter analisis wilayah">
+          <label className="min-w-[10rem] flex-1 text-xs font-semibold text-ink-800">
+            <span className="sr-only">Kategori Zona</span>
             <select
               className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
               value={zone}
@@ -415,7 +438,7 @@ export function RegionalAnalysis({
                 setPartnerId('semua')
               }}
             >
-              <option value="semua">Semua Kategori Zona</option>
+              <option value="semua">Semua zona</option>
               <option value="ZONA_MERAH">Prioritas Tinggi (Zona Merah)</option>
               <option value="ZONA_KUNING">Perlu Dipantau (Zona Kuning)</option>
               <option value="ZONA_HIJAU">Stabil (Zona Hijau)</option>
@@ -424,8 +447,8 @@ export function RegionalAnalysis({
             </select>
           </label>
 
-          <label className="space-y-1 text-xs font-semibold text-ink-800">
-            Pilih Daerah (Kabupaten / Kota)
+          <label className="min-w-[10rem] flex-1 text-xs font-semibold text-ink-800">
+            <span className="sr-only">Daerah</span>
             <select
               className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
               value={regionKey}
@@ -435,7 +458,7 @@ export function RegionalAnalysis({
                 setPartnerId('semua')
               }}
             >
-              <option value="semua">Semua Daerah</option>
+              <option value="semua">Semua daerah</option>
               {filteredByZone.map((region) => (
                 <option
                   key={`${region.province_name}\u0000${region.regency_name}`}
@@ -447,14 +470,14 @@ export function RegionalAnalysis({
             </select>
           </label>
 
-          <label className="space-y-1 text-xs font-semibold text-ink-800">
-            Filter Mitra Cabang
+          <label className="min-w-[10rem] flex-1 text-xs font-semibold text-ink-800">
+            <span className="sr-only">Mitra Cabang</span>
             <select
               className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
               value={partnerId}
               onChange={(e) => setPartnerId(e.target.value)}
             >
-              <option value="semua">Semua Mitra di Pilihan Ini</option>
+              <option value="semua">Semua mitra</option>
               {partners.map((partner) => (
                 <option key={partner.partner_id} value={partner.partner_id}>
                   {partner.partner_name} · {partner.region_name}
@@ -704,6 +727,7 @@ export function RegionalAnalysis({
                         <ThreeDPieChart
                           slices={partnerPieSlices}
                           unitLabel={pieUnit}
+                          donutOnly
                           legendTitle="Urutan Cabang"
                           selectedId={partnerId !== 'semua' ? partnerId : undefined}
                           onSelectSlice={(id) => setPartnerId(id)}
@@ -1020,8 +1044,9 @@ export function RegionalAnalysis({
         {/* ------------------------------------------------------------- */}
         {/* KONDISI 2: OVERVIEW SEMUA WILAYAH (DIAGRAM 3D PIE DAERAH)     */}
         {/* ------------------------------------------------------------- */}
-        {visibleRegions.length > 0 ? (
-          <div className="space-y-4">
+        {chartRegions.length > 0 || sideContent ? (
+          <div className={`order-2 grid min-w-0 gap-4 ${sideContent ? 'lg:grid-cols-2' : ''}`}>
+          <div className="min-w-0 space-y-4">
             {/* Header & Metric Filter Selector */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-line pb-3">
               <div>
@@ -1081,6 +1106,7 @@ export function RegionalAnalysis({
             <ThreeDPieChart
               slices={regionalPieSlices}
               unitLabel={pieUnit}
+              donutOnly
               selectedId={detailRegionKey}
               onSelectSlice={(id) => {
                 setDetailRegionKey(id)
@@ -1088,10 +1114,13 @@ export function RegionalAnalysis({
               }}
             />
           </div>
+          {sideContent ? <div className="min-w-0">{sideContent}</div> : null}
+          </div>
         ) : null}
 
         {/* Daftar Mitra Cabang yang Perlu Diperiksa */}
-        <div className="pt-2">
+        <div className="order-1 pt-2">
+          {unlocatedPartners > 0 ? <p className="mb-3 rounded-md bg-warn-bg px-3 py-2 text-xs text-warn-fg" role="status">{number(unlocatedPartners)} mitra berada di Wilayah Belum Diatur. Lengkapi lokasi cabang agar masuk analisis wilayah.</p> : null}
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div>
               <h3 className="text-sm font-semibold text-ink-900">
@@ -1199,6 +1228,7 @@ export function RegionalAnalysis({
                           )}
                         </div>
                       </div>
+                      {onReviewOrders ? <button type="button" onClick={onReviewOrders} aria-label={`Tinjau pesanan ${partner.partner_name}`} className="min-h-11 rounded-md border border-line px-3 text-xs font-semibold text-ink-800 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-900">Tinjau pesanan</button> : null}
                     </article>
                   )
                 })}
@@ -1206,11 +1236,12 @@ export function RegionalAnalysis({
 
               {/* TAMPILAN DESKTOP: Grid Multi-Kolom Tabular */}
               <div className="hidden lg:block divide-y divide-line">
-                <div className="grid grid-cols-[2fr_2fr_1.4fr_140px] items-center gap-4 bg-ink-50/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted border-b border-line">
+                <div className="grid grid-cols-[2fr_2fr_1.4fr_140px_110px] items-center gap-4 bg-ink-50/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted border-b border-line">
                   <div>Mitra Cabang & Wilayah</div>
                   <div>Produk Rawan & Saran Buffer</div>
                   <div>Aktivitas Log (7 Hari)</div>
                   <div className="text-right">Status Zona</div>
+                  <div className="text-right">Aksi</div>
                 </div>
 
                 {visiblePartners.map((partner) => {
@@ -1224,7 +1255,7 @@ export function RegionalAnalysis({
                   return (
                     <div
                       key={`d-${partner.partner_id}`}
-                      className="grid grid-cols-[2fr_2fr_1.4fr_140px] items-center gap-4 p-4 hover:bg-ink-50/40 transition-colors"
+                      className="grid grid-cols-[2fr_2fr_1.4fr_140px_110px] items-center gap-4 p-4 hover:bg-ink-50/40 transition-colors"
                     >
                       {/* Kolom 1: Mitra & Lokasi */}
                       <div className="min-w-0">
@@ -1303,6 +1334,7 @@ export function RegionalAnalysis({
                           {badge.label}
                         </span>
                       </div>
+                      {onReviewOrders ? <button type="button" onClick={onReviewOrders} aria-label={`Tinjau pesanan ${partner.partner_name}`} className="min-h-10 rounded-md border border-line px-2 text-xs font-semibold text-ink-800 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-900">Pesanan</button> : null}
                     </div>
                   )
                 })}

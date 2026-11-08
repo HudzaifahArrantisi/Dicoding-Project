@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { WeeklyInsights } from '@/components/inventory/weekly-insights'
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   keepPreviousData,
   useMutation,
@@ -68,6 +68,10 @@ import {
   PartnerFastMovingModal,
   type PartnerFastMovingGroup,
 } from '@/components/inventory/partner-fast-moving-modal'
+import {
+  PartnerDeficitModal,
+  type PartnerDeficitGroup,
+} from '@/components/inventory/partner-deficit-modal'
 import { PartnerDetailModal } from '@/components/inventory/partner-detail-modal'
 import { RegionalAnalysis } from '@/components/inventory/regional-analysis'
 import {
@@ -1956,6 +1960,7 @@ function AIInsightsPanel({
   })
   const [subTab, setSubTab] = useState<'wilayah' | 'laris' | 'defisit' | 'pabrik'>('defisit')
   const [selectedPartnerGroup, setSelectedPartnerGroup] = useState<PartnerFastMovingGroup | null>(null)
+  const [selectedDeficitGroup, setSelectedDeficitGroup] = useState<PartnerDeficitGroup | null>(null)
   const kpi = data?.kpi_summary
   const fastMoving = data?.fast_moving_products ?? []
   const partnerFastMovingGroups = useMemo<PartnerFastMovingGroup[]>(() => {
@@ -1999,15 +2004,73 @@ function AIInsightsPanel({
   }, [fastMoving])
 
   const deficitAnalysis = data?.stockout_deficit_analysis ?? []
+  const partnerDeficitGroups = useMemo<PartnerDeficitGroup[]>(() => {
+    const map = new Map<string, PartnerDeficitGroup>()
+    for (const item of deficitAnalysis) {
+      const existing = map.get(item.partner_id)
+      if (!existing) {
+        map.set(item.partner_id, {
+          partner_id: item.partner_id,
+          partner_name: item.partner_name,
+          partner_type: item.partner_type,
+          highest_risk_level: item.risk_level,
+          items: [item],
+          total_products: 1,
+          stockout_count: item.current_qty === 0 ? 1 : 0,
+          min_days_of_cover: item.days_of_cover,
+          min_qty: item.current_qty,
+          primary_root_cause_label: item.root_cause_label,
+          primary_action_recommendation: item.action_recommendation,
+        })
+      } else {
+        existing.items.push(item)
+        existing.total_products += 1
+        if (item.risk_level === 'DARURAT') {
+          existing.highest_risk_level = 'DARURAT'
+        }
+        if (item.current_qty === 0) {
+          existing.stockout_count += 1
+        }
+        if (item.days_of_cover < existing.min_days_of_cover) {
+          existing.min_days_of_cover = item.days_of_cover
+          existing.primary_root_cause_label = item.root_cause_label
+          existing.primary_action_recommendation = item.action_recommendation
+        }
+        if (item.current_qty < existing.min_qty) {
+          existing.min_qty = item.current_qty
+        }
+      }
+    }
+
+    const groups = Array.from(map.values())
+    groups.sort((a, b) => {
+      if (a.highest_risk_level !== b.highest_risk_level) {
+        return a.highest_risk_level === 'DARURAT' ? -1 : 1
+      }
+      if (a.min_days_of_cover !== b.min_days_of_cover) {
+        return a.min_days_of_cover - b.min_days_of_cover
+      }
+      return b.stockout_count - a.stockout_count
+    })
+    return groups
+  }, [deficitAnalysis])
+
   const factoryForecast = data?.factory_procurement_forecast ?? []
   const recommendations = data?.recommendations ?? []
   const hotspots = data?.market_hotspots
   const urgentBranches = new Set(deficitAnalysis.filter((item) => item.risk_level === 'DARURAT').map((item) => item.partner_id)).size
   const urgentProducts = factoryForecast.filter((item) => item.urgency === 'CRITICAL').length
   const lastAnalysis = recommendations[0]?.generated_at ?? data?.regional_activity?.model_generated_at
+  const weeklyFacts = data?.weekly_facts
+  const weeklySales = weeklyFacts?.network_sales.total_sold_7d ?? kpi?.weekly_sales_units
+  const centralHealth = weeklyFacts?.network_sales.central_stock_health_days ?? kpi?.central_stock_health_days
+  const fulfillment = weeklyFacts?.network_sales.restock_fulfillment_rate ?? kpi?.restock_fulfillment_rate
+  const officialProducts = ['Seblak Jadul Instan', 'Keripik Pisang Rasa Coklat', 'Basreng Daun Jeruk', 'Makaroni Daun Jeruk']
+  const topPartners = weeklyFacts?.top_performers_partners ?? hotspots?.top_performers ?? []
+  const fastMovingTotal = fastMoving.reduce((sum, item) => sum + item.weekly_consumption, 0)
   const sections: Array<{ id: typeof subTab; label: string; count: number }> = [
-    { id: 'wilayah', label: 'Wilayah', count: data?.regional_activity?.regions.length ?? 0 },
-    { id: 'defisit', label: 'Risiko cabang', count: deficitAnalysis.length },
+    { id: 'wilayah', label: 'Defisit wilayah', count: hotspots?.regions.length ?? 0 },
+    { id: 'defisit', label: 'Risiko cabang', count: partnerDeficitGroups.length },
     { id: 'laris', label: 'Produk terlaris', count: partnerFastMovingGroups.length },
     { id: 'pabrik', label: 'Pasokan pusat', count: factoryForecast.length },
   ]
@@ -2058,6 +2121,9 @@ function AIInsightsPanel({
         </div>
 
         <div className="flex min-w-0 flex-col items-start gap-2.5 sm:shrink-0 sm:items-end">
+          <button type="button" onClick={onReviewOrders} className="inline-flex min-h-11 items-center rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">
+            Buka persetujuan pesanan
+          </button>
           <button
             type="button"
             onClick={() => void handleRunAiAnalysis()}
@@ -2083,6 +2149,10 @@ function AIInsightsPanel({
               ? formatDetailedDateTime(lastAnalysis)
               : 'Belum tersedia'}
           </span>
+          <span className={`text-xs font-semibold ${data?.model_sync?.synchronized ? 'text-ok-fg' : 'text-warn-fg'}`}>
+            Model daisuki.pkl {data?.model_sync?.synchronized ? 'sinkron' : 'belum sinkron'}
+            {data?.model_sync?.trained_at ? ` · ${formatDetailedDateTime(data.model_sync.trained_at)}` : ''}
+          </span>
         </div>
       </div>
 
@@ -2092,61 +2162,60 @@ function AIInsightsPanel({
         <LoadingState label="Memuat analisis wilayah dan mitra..." />
       ) : error ? null : (
         <>
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
-            <div className="dashboard-surface overflow-hidden">
-              <div className="border-b border-line bg-ink-50/60 px-4 py-4 sm:px-5 sm:py-5">
-                <p className="text-xs font-semibold text-ink-700">Mulai dari sini</p>
-                <h2 className="mt-1 font-display text-lg font-semibold text-ink-900">Prioritas hari ini</h2>
-                <p className="mt-1 text-sm leading-5 text-muted">Periksa risiko, lalu gunakan saran saat meninjau pesanan mitra.</p>
-              </div>
-              <div className="divide-y divide-line">
-                <button type="button" onClick={() => setSubTab('defisit')} className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:px-5">
-                  <span className="min-w-0"><strong className="block text-sm text-ink-900">Cabang darurat</strong><span className="mt-0.5 block text-xs leading-5 text-muted">Lihat stok, penyebab, dan tindakan yang disarankan</span></span>
-                  <span className={`shrink-0 font-display text-xl font-semibold tabular-nums ${urgentBranches > 0 ? 'text-crit-fg' : 'text-ink-900'}`}>{urgentBranches}</span>
-                </button>
-                <button type="button" onClick={() => setSubTab('pabrik')} className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:px-5">
-                  <span className="min-w-0"><strong className="block text-sm text-ink-900">Produk pusat perlu pengadaan</strong><span className="mt-0.5 block text-xs leading-5 text-muted">Cek ketahanan stok dan saran pesanan pabrik</span></span>
-                  <span className={`shrink-0 font-display text-xl font-semibold tabular-nums ${urgentProducts > 0 ? 'text-crit-fg' : 'text-ink-900'}`}>{urgentProducts}</span>
-                </button>
-              </div>
-            </div>
-            <div className="dashboard-surface px-4 py-5 sm:px-5">
-              <h2 className="font-display text-lg font-semibold text-ink-900">Cara memakai saran AI</h2>
-              <ol className="mt-4 space-y-4">
-                <li className="flex gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">1</span><span className="text-sm leading-5 text-ink-900"><strong className="block">Mitra melaporkan stok</strong><span className="text-muted">Sistem membaca stok dan riwayat pemakaian.</span></span></li>
-                <li className="flex gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">2</span><span className="text-sm leading-5 text-ink-900"><strong className="block">AI menyusun prioritas</strong><span className="text-muted">Risiko cabang dan kebutuhan pasokan dihitung.</span></span></li>
-                <li className="flex gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-100 text-xs font-semibold text-ink-700">3</span><span className="text-sm leading-5 text-ink-900"><strong className="block">Admin memutuskan</strong><span className="text-muted">Tinjau saran sebelum menyetujui pesanan atau mengajukan produksi.</span></span></li>
-              </ol>
-              <button type="button" onClick={onReviewOrders} className="mt-5 inline-flex min-h-11 items-center rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">
-                Buka persetujuan pesanan
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Metrik utama AI">
+            {[
+              { label: 'Cabang Darurat', value: urgentBranches.toLocaleString('id-ID'), note: 'Perlu tindakan segera', action: () => setSubTab('defisit'), tone: 'text-crit-fg' },
+              { label: 'Ketahanan Stok Pusat', value: centralHealth == null ? '—' : `${centralHealth} hari`, note: `Produk Perlu Pengadaan: ${urgentProducts}`, action: () => setSubTab('pabrik'), tone: 'text-ink-900' },
+              { label: 'Konsumsi Mingguan', value: weeklySales == null ? '—' : `${weeklySales.toLocaleString('id-ID')} pcs`, note: '7 hari terakhir', action: () => setSubTab('laris'), tone: 'text-ink-900' },
+              { label: 'Restock Disetujui', value: fulfillment == null ? '—' : `${fulfillment}%`, note: 'Dari pengajuan mitra', action: onReviewOrders, tone: 'text-ok-fg' },
+            ].map((metric) => (
+              <button key={metric.label} type="button" onClick={metric.action} className="dashboard-surface min-h-28 p-4 text-left transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+                <span className="block text-xs font-semibold text-muted">{metric.label}</span>
+                <strong className={`num mt-2 block font-display text-2xl font-semibold tabular-nums ${metric.tone}`}>{metric.value}</strong>
+                <span className="mt-1 block text-xs text-muted">{metric.note}</span>
               </button>
-            </div>
+            ))}
           </div>
+          <RegionalAnalysis
+            activity={data?.regional_activity}
+            fastMovingProducts={fastMoving}
+            deficitAnalysis={deficitAnalysis}
+            naiveBayesAnalysis={data?.naive_bayes_analysis}
+            onReviewOrders={onReviewOrders}
+            sideContent={
+              <div className="space-y-4">
+                <section className="rounded-xl border border-line bg-white p-4" aria-labelledby="top-products-title">
+                  <h3 id="top-products-title" className="font-display text-base font-semibold text-ink-900">Produk Paling Laku</h3>
+                  <p className="mt-0.5 text-xs text-muted">Pangsa konsumsi untuk rencana produksi pabrik</p>
+                  <ol className="mt-3 divide-y divide-line">
+                    {officialProducts.map((name) => {
+                      const product = weeklyFacts?.top_selling_products.find((item) => item.product_name === name)
+                      const fallbackUnits = fastMoving.filter((item) => item.product_name === name).reduce((sum, item) => sum + item.weekly_consumption, 0)
+                      const share = product?.share_pct ?? (fastMovingTotal > 0 ? Math.round(fallbackUnits / fastMovingTotal * 100) : null)
+                      return <li key={name} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                        <span className="min-w-0 font-medium text-ink-900">{name}</span>
+                        <span className="num shrink-0 font-semibold tabular-nums text-ink-900">{share == null ? '—' : `${share}%`}</span>
+                      </li>
+                    })}
+                  </ol>
+                </section>
+                <section className="rounded-xl border border-line bg-white p-4" aria-labelledby="top-partners-title">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 id="top-partners-title" className="font-display text-base font-semibold text-ink-900">Mitra Konsumsi Terbanyak</h3>
+                    <button type="button" onClick={() => setSubTab('laris')} className="min-h-11 text-xs font-semibold text-ink-700 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ink-900">Rincian</button>
+                  </div>
+                  {topPartners.length ? <ol className="divide-y divide-line">
+                    {topPartners.slice(0, 5).map((item, index) => <li key={`${item.partner_name}-${index}`} className="flex justify-between gap-3 py-2.5 text-sm">
+                      <span className="min-w-0 truncate text-ink-900">{index + 1}. {item.partner_name}<span className="block text-xs text-muted">{item.region}</span></span>
+                      <strong className="num shrink-0 tabular-nums text-ink-900">{item.weekly_units.toLocaleString('id-ID')} pcs</strong>
+                    </li>)}
+                  </ol> : <p className="mt-3 text-xs text-muted">Belum ada konsumsi mitra tercatat.</p>}
+                </section>
+              </div>
+            }
+          />
 
-          <WeeklyInsights facts={data?.weekly_facts} modelSync={data?.model_sync} />
-
-          {kpi && !data.weekly_facts ? (
-            <div className="dashboard-surface overflow-hidden">
-              <div className="border-b border-line px-4 py-3 sm:px-5"><h2 className="text-sm font-semibold text-ink-900">Gambaran jaringan, 7 hari terakhir</h2></div>
-              <dl className="grid sm:grid-cols-3 sm:divide-x sm:divide-line">
-                <div className="border-b border-line px-4 py-4 sm:border-b-0 sm:px-5">
-                  <dt className="text-xs font-medium text-muted">Barang terjual</dt>
-                  <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">{kpi.weekly_sales_units.toLocaleString('id-ID')} <span className="text-sm font-normal text-muted">pcs</span></dd>
-                  <p className="mt-1 text-xs text-muted">{kpi.sales_growth_percentage >= 0 ? '+' : ''}{kpi.sales_growth_percentage}% dari 7 hari sebelumnya</p>
-                </div>
-                <div className="border-b border-line px-4 py-4 sm:border-b-0 sm:px-5">
-                  <dt className="text-xs font-medium text-muted">Permintaan terpenuhi</dt>
-                  <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">{kpi.restock_fulfillment_rate}%</dd>
-                  <p className="mt-1 text-xs text-muted">Porsi jumlah yang disetujui dari pengajuan mitra</p>
-                </div>
-                <div className="px-4 py-4 sm:px-5">
-                  <dt className="text-xs font-medium text-muted">Daya tahan stok pusat</dt>
-                  <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-900">{kpi.central_stock_health_days} <span className="text-sm font-normal text-muted">hari</span></dd>
-                  <p className="mt-1 text-xs text-muted">Estimasi berdasarkan laju konsumsi mitra</p>
-                </div>
-              </dl>
-            </div>
-          ) : null}
+          <WeeklyInsights facts={weeklyFacts} modelSync={data?.model_sync} regionalOnly />
 
           <div className="space-y-3">
             <div>
@@ -2174,40 +2243,11 @@ function AIInsightsPanel({
           {/* TAB 1: PETA WILAYAH RAWAN */}
           {subTab === 'wilayah' && (
             <div className="dashboard-panel-enter space-y-6">
-              <RegionalAnalysis
-                activity={data?.regional_activity}
-                fastMovingProducts={fastMoving}
-                deficitAnalysis={deficitAnalysis}
-              />
-
               {hotspots ? (
                 <section className="dashboard-surface p-3.5 sm:p-5" aria-label="Hotspot pasar mingguan">
-                  <h3 className="font-display text-base font-semibold text-ink-900">
-                    Hotspot Pasar Mingguan
-                  </h3>
-                  <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                  <h3 className="font-display text-base font-semibold text-ink-900">Wilayah Defisit Tertinggi</h3>
+                  <div className="mt-3">
                     <div>
-                      <h4 className="text-xs font-bold text-muted uppercase">5 Mitra Konsumsi Terlaris</h4>
-                      <ol className="mt-2 divide-y divide-line">
-                        {hotspots.top_performers.map((item, index) => (
-                          <li key={`${item.partner_name}-${index}`} className="flex justify-between gap-3 py-2 text-sm">
-                            <span>
-                              <span className="font-medium text-ink-900">{item.partner_name}</span>
-                              <span className="block text-xs text-muted">{item.region}</span>
-                            </span>
-                            <strong className="num font-semibold text-ink-900 tabular-nums">
-                              {item.weekly_units} pcs
-                            </strong>
-                          </li>
-                        ))}
-                      </ol>
-                      {hotspots.top_performers.length === 0 && (
-                        <p className="mt-2 text-xs text-muted">Belum ada laporan konsumsi pekan ini.</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <h4 className="text-xs font-bold text-muted uppercase">3 Wilayah Defisit Tertinggi</h4>
                       <ol className="mt-2 divide-y divide-line">
                         {hotspots.regions.map((item) => (
                           <li key={item.region} className="flex justify-between gap-3 py-2 text-sm">
@@ -2482,88 +2522,221 @@ function AIInsightsPanel({
                       </h3>
                     </div>
                     <p className="mt-0.5 text-xs text-muted">
-                      Urutkan penanganan dari stok yang paling mendesak. Tindakan di bawah adalah saran untuk ditinjau admin.
+                      Daftar cabang mitra dengan risiko defisit stok. Klik baris mitra untuk melihat rincian masalah per produk dan saran solusi AI.
                     </p>
                   </div>
-                  <span className="rounded-full bg-crit-bg px-3 py-1 text-xs font-semibold text-crit-fg">
-                    {deficitAnalysis.length} temuan
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-crit-bg px-3 py-1 text-xs font-semibold text-crit-fg">
+                      {partnerDeficitGroups.length} cabang mitra
+                    </span>
+                    <span className="text-xs text-muted">
+                      ({deficitAnalysis.length} produk rawan)
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {deficitAnalysis.length > 0 ? (
+              {partnerDeficitGroups.length > 0 ? (
                 <div>
                   <div className="divide-y divide-line sm:hidden">
-                    {deficitAnalysis.map((item) => (
-                      <article key={`${item.partner_id}-${item.product_id}`} className="space-y-3 px-4 py-4">
+                    {partnerDeficitGroups.map((group) => (
+                      <article
+                        key={group.partner_id}
+                        onClick={() => setSelectedDeficitGroup(group)}
+                        className="space-y-3 px-4 py-4 cursor-pointer transition-colors hover:bg-ink-50/50"
+                      >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0"><h4 className="font-semibold text-ink-900">{item.partner_name}</h4><p className="mt-0.5 text-sm text-muted">{item.product_name}</p></div>
-                          <span className={`shrink-0 rounded px-2 py-1 text-xs font-semibold ${item.risk_level === 'DARURAT' ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'}`}>{item.risk_level === 'DARURAT' ? 'Darurat' : 'Waspada'}</span>
+                          <div className="min-w-0">
+                            <h4 className="font-semibold text-ink-900">{group.partner_name}</h4>
+                            {group.partner_type ? (
+                              <p className="mt-0.5 text-xs capitalize text-muted">{group.partner_type}</p>
+                            ) : null}
+                          </div>
+                          <span
+                            className={`shrink-0 rounded px-2 py-1 text-xs font-semibold ${
+                              group.highest_risk_level === 'DARURAT'
+                                ? 'bg-crit-bg text-crit-fg'
+                                : 'bg-warn-bg text-warn-fg'
+                            }`}
+                          >
+                            {group.highest_risk_level === 'DARURAT' ? 'Darurat' : 'Waspada'}
+                          </span>
                         </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs font-semibold text-ink-900">
+                            {group.total_products} produk rawan
+                          </span>
+                          {group.stockout_count > 0 ? (
+                            <span className="rounded bg-crit-bg px-1.5 py-0.5 text-[11px] font-semibold text-crit-fg">
+                              {group.stockout_count} habis (0 pcs)
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="flex flex-wrap gap-1">
+                          {group.items.map((it) => (
+                            <span
+                              key={it.product_id}
+                              className={`inline-block rounded border px-1.5 py-0.5 text-[11px] ${
+                                it.current_qty === 0
+                                  ? 'border-crit-fg/20 bg-crit-bg text-crit-fg font-medium'
+                                  : 'border-line bg-paper text-ink-700'
+                              }`}
+                            >
+                              {it.product_name}
+                            </span>
+                          ))}
+                        </div>
+
                         <dl className="grid grid-cols-2 gap-3 rounded-md bg-ink-50 p-3 text-xs">
-                          <div><dt className="text-muted">Sisa stok</dt><dd className="mt-1 font-semibold tabular-nums text-ink-900">{item.current_qty} pcs</dd></div>
-                          <div><dt className="text-muted">Perkiraan bertahan</dt><dd className="mt-1 font-semibold tabular-nums text-ink-900">{item.days_of_cover} hari</dd></div>
+                          <div>
+                            <dt className="text-muted">Sisa stok terendah</dt>
+                            <dd
+                              className={`mt-1 font-semibold tabular-nums ${
+                                group.min_qty === 0
+                                  ? 'text-crit-fg font-bold'
+                                  : 'text-ink-900'
+                              }`}
+                            >
+                              {group.min_qty} pcs
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted">Cakupan terendah</dt>
+                            <dd
+                              className={`mt-1 font-semibold tabular-nums ${
+                                group.min_days_of_cover < 1
+                                  ? 'text-crit-fg font-bold'
+                                  : 'text-warn-fg'
+                              }`}
+                            >
+                              {group.min_days_of_cover} hari
+                            </dd>
+                          </div>
                         </dl>
-                        <p className="text-xs text-muted">Penyebab: <span className="font-medium text-ink-900">{item.root_cause_label}</span></p>
-                        <p className="border-l-2 border-ink-700 pl-3 text-sm leading-5 text-ink-900">{item.action_recommendation}</p>
+
+                        <div className="flex items-center justify-between border-t border-line/60 pt-2 text-xs">
+                          <span className="text-muted truncate max-w-[65%]">
+                            Penyebab: <span className="font-medium text-ink-900">{group.primary_root_cause_label}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 font-semibold text-ink-700">
+                            <span>Lihat rincian</span>
+                            <span aria-hidden="true">→</span>
+                          </span>
+                        </div>
                       </article>
                     ))}
                   </div>
+
                   <div className="hidden overflow-x-auto sm:block">
-                  <table className="w-full min-w-[720px] text-left text-sm">
-                    <thead className="bg-ink-50/70 text-xs text-muted">
-                      <tr>
-                        <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
-                        <th className="px-5 py-3 font-semibold">Produk</th>
-                        <th className="px-5 py-3 text-right font-semibold">Sisa Stok</th>
-                        <th className="px-5 py-3 text-right font-semibold">Cakupan Stok</th>
-                        <th className="px-5 py-3 font-semibold">Akar Masalah</th>
-                        <th className="px-5 py-3 font-semibold">Tindakan Solusi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-line">
-                      {deficitAnalysis.map((item) => (
-                        <tr key={`${item.partner_id}-${item.product_id}`} className="hover:bg-ink-50/30">
-                          <td className="px-5 py-3.5">
-                            <p className="font-medium text-ink-900">{item.partner_name}</p>
-                            <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
-                              item.risk_level === 'DARURAT' ? 'bg-crit-bg text-crit-fg' : 'bg-warn-bg text-warn-fg'
-                            }`}>
-                              {item.risk_level}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <p className="font-medium text-ink-900">{item.product_name}</p>
-                            <span className="text-xs text-muted">{item.critical_frequency}x fase kritis</span>
-                          </td>
-                          <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                            <span className={item.current_qty === 0 ? 'text-crit-fg' : 'text-ink-900'}>
-                              {item.current_qty} pcs
-                            </span>
-                          </td>
-                          <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
-                            <span className={item.days_of_cover < 2 ? 'text-crit-fg' : 'text-warn-fg'}>
-                              {item.days_of_cover} hari
-                            </span>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
-                              item.root_cause === 'UNDER_CAPACITY'
-                                ? 'bg-amber-100 text-amber-800'
-                                : item.root_cause === 'LATE_REORDER'
-                                  ? 'bg-rose-100 text-rose-800'
-                                  : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {item.root_cause_label}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3.5 text-xs font-medium text-ink-800">
-                            {item.action_recommendation}
-                          </td>
+                    <table className="w-full min-w-[720px] text-left text-sm">
+                      <thead className="bg-ink-50/70 text-xs text-muted">
+                        <tr>
+                          <th className="px-5 py-3 font-semibold">Cabang Mitra</th>
+                          <th className="px-5 py-3 font-semibold">Kategori Produk Rawan</th>
+                          <th className="px-5 py-3 text-right font-semibold">Sisa Terendah</th>
+                          <th className="px-5 py-3 text-right font-semibold">Cakupan Terendah</th>
+                          <th className="px-5 py-3 font-semibold">Akar Masalah Utama</th>
+                          <th className="px-5 py-3 text-right font-semibold">Aksi</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {partnerDeficitGroups.map((group) => (
+                          <tr
+                            key={group.partner_id}
+                            onClick={() => setSelectedDeficitGroup(group)}
+                            className="group cursor-pointer transition-colors hover:bg-ink-50/50"
+                          >
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-ink-900 group-hover:text-ink-700">
+                                  {group.partner_name}
+                                </p>
+                                <span
+                                  className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+                                    group.highest_risk_level === 'DARURAT'
+                                      ? 'bg-crit-bg text-crit-fg'
+                                      : 'bg-warn-bg text-warn-fg'
+                                  }`}
+                                >
+                                  {group.highest_risk_level}
+                                </span>
+                              </div>
+                              {group.partner_type ? (
+                                <p className="mt-0.5 text-xs capitalize text-muted">
+                                  {group.partner_type}
+                                </p>
+                              ) : null}
+                            </td>
+
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-ink-900">
+                                  {group.total_products} produk rawan
+                                </span>
+                                {group.stockout_count > 0 ? (
+                                  <span className="rounded bg-crit-bg px-1.5 py-0.5 text-[11px] font-semibold text-crit-fg">
+                                    {group.stockout_count} habis (0 pcs)
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {group.items.map((it) => (
+                                  <span
+                                    key={it.product_id}
+                                    className={`inline-block rounded border px-1.5 py-0.5 text-[11px] ${
+                                      it.current_qty === 0
+                                        ? 'border-crit-fg/20 bg-crit-bg text-crit-fg font-medium'
+                                        : 'border-line bg-paper text-ink-700'
+                                    }`}
+                                  >
+                                    {it.product_name}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+
+                            <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
+                              <span
+                                className={
+                                  group.min_qty === 0
+                                    ? 'text-crit-fg font-bold'
+                                    : 'text-ink-900'
+                                }
+                              >
+                                {group.min_qty} pcs
+                              </span>
+                            </td>
+
+                            <td className="num px-5 py-3.5 text-right font-semibold tabular-nums">
+                              <span
+                                className={
+                                  group.min_days_of_cover < 1
+                                    ? 'font-bold text-crit-fg'
+                                    : 'text-warn-fg'
+                                }
+                              >
+                                {group.min_days_of_cover} hari
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-3.5">
+                              <span className="inline-block rounded-md bg-ink-100 px-2 py-0.5 text-xs font-semibold text-ink-800">
+                                {group.primary_root_cause_label}
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-3.5 text-right">
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink-700 group-hover:text-ink-900 group-hover:underline">
+                                <span>Rincian</span>
+                                <span aria-hidden="true">→</span>
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               ) : (
@@ -2572,6 +2745,16 @@ function AIInsightsPanel({
                   description="Tidak ada cabang mitra yang mengalami defisit kritis atau risiko stockout saat ini."
                 />
               )}
+
+              {/* Modal Detail Risiko Defisit per Mitra */}
+              <PartnerDeficitModal
+                group={selectedDeficitGroup}
+                open={selectedDeficitGroup !== null}
+                onOpenChange={(open) => {
+                  if (!open) setSelectedDeficitGroup(null)
+                }}
+                onReviewOrders={onReviewOrders}
+              />
             </div>
           )}
 
