@@ -8,7 +8,7 @@ const followUp = /\b(yang tadi|yang itu)\b|^(berapa|bagaimana|detailnya|lanjut|s
 export type AssistantIntent = MitraTour | "greeting" | "central_stock" | "top_products" | "top_partners" | "top_regions" | "identity" | "out_of_scope";
 const factualIntents = new Set<AssistantIntent>(["central_stock", "top_products", "top_partners", "top_regions"]);
 const tours = new Set<AssistantIntent>(["restock", "stock_report", "delivery", "logs", "profile"]);
-const identityPattern = /\b(siapa kamu|kamu siapa|siapa namamu|nama kamu siapa|perkenalkan diri|perkenalkan dirimu|kamu bot apa|kamu sistem apa|kamu robot apa|tentang kamu|profil ai|apa itu daisuki|apa itu model daisuki|daisuki\.?pkl)\b/i;
+const identityPattern = /\b(siapa(?:\s*kah)?\s+(?:kamu|anda|dirimu|ini|nih)|(?:kamu|anda|dirimu)\s+(?:ini\s+)?siapa(?:\s*kah)?|siapa(?:\s*kah)?\s+nama(?:mu|\s+(?:kamu|anda))|nama(?:mu|\s+(?:kamu|anda))\s+siapa(?:\s*kah)?|perkenalkan\s+diri(?:mu)?|kenalan\s+dong|dengan\s+siapa\s+saya\s+bicara|(?:kamu|anda)\s+(?:sistem|robot|bot|ai)\s+apa|apakah\s+(?:kamu|anda)\s+ai|tentang\s+(?:kamu|anda|asisten|bot)|profil\s+(?:ai|asisten|kamu|anda)|apa\s+itu\s+daisuki(?:\.pkl)?|daisuki\.?pkl)\b/i;
 const factualPatterns: Array<[AssistantIntent, RegExp]> = [
   ["central_stock", /\b(total stok|stok pusat|stok gudang|gudang pusat|persediaan pusat|ketersediaan pusat)\b/i],
   ["top_products", /\b(produk|barang|makanan|kategori)\b.*\b(laris|laku|terjual|populer|tertinggi)\b|\b(laris|laku|terjual)\b.*\b(produk|barang|kategori)\b/i],
@@ -77,26 +77,16 @@ function profileReply(context: MitraContext): string {
 }
 
 function factReply(intent: AssistantIntent, context: MitraContext): string {
-  const facts = context.weeklyFacts;
-  if (!facts) return "Ringkasan mingguan belum tersedia. Minta admin menjalankan Perbarui Saran di tab AI Insights, lalu coba lagi.";
-  const when = new Date(facts.metadata.generated_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" });
-  const stamp = `Data dihitung pada ${when} WIB; stok dan penjualan bisa berubah setelah waktu itu.`;
   if (intent === "central_stock") {
-    const lines = facts.central_warehouse.products.map((item) => `${item.name}: ${number(item.central_stock)} pcs.`);
-    return `Total stok gudang pusat pada snapshot: ${number(facts.central_warehouse.total_stock_units)} pcs.\n${lines.join("\n")}\n${stamp}`;
+    if (!context.stocks.length) return "Data stok gudang pusat untuk produk cabang Anda belum tersedia di sistem kami saat ini. Buka tab Restock untuk mengecek kembali.";
+    return `Stok gudang pusat untuk produk cabang Anda:\n${context.stocks.map((stock) => `${stock.product_name}: ${number(stock.central_stock)} pcs.`).join("\n")}`;
   }
   if (intent === "top_products") {
-    if (!facts.top_selling_products.length) return `Belum ada konsumsi produk yang tercatat untuk 7 hari ini. ${stamp}`;
-    const lines = facts.top_selling_products.map((item) => `${item.rank}. ${item.product_name} (${item.category}): ${number(item.weekly_units)} pcs, ${item.share_pct}%.`);
-    const categories = facts.top_selling_categories.map((item) => `${item.category} ${number(item.weekly_units)} pcs`).join(", ");
-    return `Produk paling laku dalam 7 hari sebelum snapshot:\n${lines.join("\n")}\nKategori: ${categories || "belum ada"}.\n${stamp}`;
+    const ranked = [...context.stocks].filter((stock) => stock.report_count > 0).sort((a, b) => b.sold_7d - a.sold_7d);
+    if (!ranked.length) return "Data konsumsi mingguan cabang Anda belum tersedia di sistem kami saat ini. Isi Laporan Harian untuk mulai mencatat perubahan stok.";
+    return `Produk dengan konsumsi tercatat tertinggi di cabang Anda dalam 7 hari:\n${ranked.map((stock) => `${stock.product_name}: ${number(stock.sold_7d)} pcs.`).join("\n")}`;
   }
-  if (intent === "top_partners") {
-    if (!facts.top_performers_partners.length) return `Belum ada konsumsi mitra yang tercatat untuk 7 hari ini. ${stamp}`;
-    return `Mitra dengan konsumsi tercatat terbesar dalam 7 hari:\n${facts.top_performers_partners.map((item) => `${item.rank}. ${item.partner_name} (${item.region}): ${number(item.weekly_units)} pcs, ${item.percentage}%.`).join("\n")}\n${stamp}`;
-  }
-  if (!facts.regional_hotspots.length) return `Analisis wilayah belum memiliki hasil. ${stamp}`;
-  return `Wilayah menurut konsumsi tercatat dalam 7 hari:\n${[...facts.regional_hotspots].sort((a, b) => b.weekly_units - a.weekly_units).map((item) => `${item.region}, ${item.province}: ${number(item.weekly_units)} pcs dari ${item.active_partners} mitra, ${item.status.replaceAll("_", " ")}, risiko puncak ${item.stockout_probability}%.`).join("\n")}\n${stamp}`;
+  return "Maaf, saya hanya dapat menampilkan data inventaris cabang Anda sendiri.";
 }
 
 export function resolveMitraIntent(message: string, previousIntent: AssistantIntent | null, classified?: { label: string; confidence: number } | null): AssistantIntent | null {
@@ -126,8 +116,8 @@ export function composeMitraReply(message: string, context: MitraContext, model:
       quickReplies: ["Stok saya sekarang berapa?", "Produk mana perlu restock?", "Stok pusat berapa?", "Produk apa paling laku?"],
     };
   }
-  if (intent === "greeting") return { ...base, reply: `Halo, ${context.partner?.name ?? "mitra Daisuki"}! Ada yang ingin kamu cek hari ini? Saya bisa bantu stok toko, restock, pengiriman, dan ringkasan jaringan minggu ini.` };
-  if (factualIntents.has(intent)) return { reply: factReply(intent, context), quickReplies: ["Stok pusat berapa?", "Produk apa paling laku?", "Mitra paling laris?", "Wilayah mana paling aktif?", "Stok saya sekarang berapa?"] };
+  if (intent === "greeting") return { ...base, reply: `Halo, ${context.partner?.name ?? "mitra Daisuki"}! Ada yang ingin kamu cek hari ini? Saya bisa bantu stok toko, restock, pengiriman, dan konsumsi cabang Anda.` };
+  if (factualIntents.has(intent)) return { reply: factReply(intent, context), quickReplies: ["Stok pusat berapa?", "Produk apa paling laku di cabang saya?", "Stok saya sekarang berapa?"] };
   const reply = intent === "stock_report" ? stockReply(message, context)
     : intent === "restock" ? restockReply(message, context, model)
     : intent === "delivery" ? deliveryReply(context)

@@ -1,4 +1,4 @@
-﻿export type MitraTour = "restock" | "stock_report" | "delivery" | "logs" | "profile";
+export type MitraTour = "restock" | "stock_report" | "delivery" | "logs" | "profile";
 
 export interface MitraAssistantReply {
   reply: string;
@@ -6,6 +6,8 @@ export interface MitraAssistantReply {
   tourLabel?: string;
   quickReplies: string[];
 }
+
+export const OUT_OF_SCOPE_REPLY = "Maaf, saya adalah asisten khusus inventaris Daisuki B2B. Saya hanya dapat membantu terkait informasi stok fisik, pesanan restock, dan konsumsi produk cabang Anda.";
 
 const quickReplies = [
   "Bagaimana cara restock barang?",
@@ -39,8 +41,8 @@ const answers: Record<MitraTour, { reply: string; label: string }> = {
 };
 
 const outOfScope = /\b(resep|masak|memasak|coding|kode program|python|javascript|politik|presiden|pemilu|gosip|selebriti|film|cuaca|olahraga|matematika)\b/i;
-const greeting = /^(?:hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|assalamualaikum|permisi)(?: semua| admin| kak)?$/i;
-const identity = /\b(siapa kamu|kamu siapa|siapa namamu|nama kamu siapa|perkenalkan diri|perkenalkan dirimu|kamu bot apa|kamu sistem apa|kamu robot apa|tentang kamu|profil ai|apa itu daisuki|apa itu model daisuki|daisuki\.?pkl)\b/i;
+const greeting = /^(?:hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|assalamualaikum|permisi|tes|test|terima kasih|makasih|thanks|oke|ok)(?: semua| admin| kak)?$/i;
+const identity = /\b(siapa(?:\s*kah)?\s+(?:kamu|anda|dirimu|ini|nih)|(?:kamu|anda|dirimu)\s+(?:ini\s+)?siapa(?:\s*kah)?|siapa(?:\s*kah)?\s+nama(?:mu|\s+(?:kamu|anda))|nama(?:mu|\s+(?:kamu|anda))\s+siapa(?:\s*kah)?|perkenalkan\s+diri(?:mu)?|kenalan\s+dong|dengan\s+siapa\s+saya\s+bicara|(?:kamu|anda)\s+(?:sistem|robot|bot|ai)\s+apa|apakah\s+(?:kamu|anda)\s+ai|tentang\s+(?:kamu|anda|asisten|bot)|profil\s+(?:ai|asisten|kamu|anda)|apa\s+itu\s+daisuki(?:\.pkl)?|daisuki\.?pkl)\b/i;
 const operationalTerms = /\b(daisuki|stok|stock|restock|restok|gudang|produk|barang|pesanan|order|mitra|cabang|toko|jualan|penjualan|terjual|terlaris|laku|konsumsi|daerah|wilayah|zona|resi|pindai|scan|barcode|log|mutasi|profil|pengiriman|seblak|basreng|makaroni|keripik|laporan|lapor|pasokan|buffer)\b/i;
 const intentPatterns: Array<[MitraTour, RegExp]> = [
   ["delivery", /\b(scan|pindai|barcode|qr|resi|terima dus|barang sampai|penerimaan barang|konfirmasi barang|kurir|pengiriman)\b/i],
@@ -54,14 +56,12 @@ export function answerMitraQuestion(message: string): MitraAssistantReply {
   const normalized = message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const base = { quickReplies: [...quickReplies] };
 
-  if (!normalized || outOfScope.test(normalized)) {
-    return { ...base, reply: "Maaf, saya hanya bisa membantu urusan inventaris Daisuki: laporan stok, restock, penerimaan barang, riwayat pesanan, log, dan profil toko. Pilih salah satu topik itu, ya." };
-  }
+  if (!normalized || outOfScope.test(normalized)) return { ...base, reply: OUT_OF_SCOPE_REPLY };
 
   if (identity.test(message) || identity.test(normalized)) {
     return {
       ...base,
-      reply: "Halo! Saya adalah Daisuki AI Assistant, sistem cerdas yang ditenagai langsung oleh artefak model klasifikasi daisuki.pkl dan basis data operasional Daisuki. Saya bertugas mendampingi mitra cabang dalam memantau sisa stok fisik 4 produk resmi, menganalisis laju konsumsi mingguan, mendeteksi risiko stok sebelum kritis, serta membantu perhitungan rekomendasi pengajuan restock ke gudang pusat.",
+      reply: "Saya Daisuki AI Assistant, asisten inventaris mitra. Saya menggunakan model klasifikasi Multinomial Naive Bayes dalam daisuki.pkl dan data operasional PostgreSQL Daisuki untuk membantu memantau stok, konsumsi, serta risiko restock cabang Anda.",
     };
   }
 
@@ -71,16 +71,11 @@ export function answerMitraQuestion(message: string): MitraAssistantReply {
 
   for (const [intent, pattern] of intentPatterns) {
     if (pattern.test(normalized)) {
-      return {
-        ...base,
-        reply: answers[intent].reply,
-        suggestedTour: intent,
-        tourLabel: answers[intent].label,
-      };
+      return { ...base, reply: answers[intent].reply, suggestedTour: intent, tourLabel: answers[intent].label };
     }
   }
 
-  return { ...base, reply: "Maaf, saya hanya bisa membantu urusan inventaris Daisuki: laporan stok, restock, penerimaan barang, riwayat pesanan, log, dan profil toko. Pilih salah satu topik itu, ya." };
+  return { ...base, reply: OUT_OF_SCOPE_REPLY };
 }
 
 export function isOutOfScopeQuestion(message: string): boolean {
@@ -90,5 +85,3 @@ export function isOutOfScopeQuestion(message: string): boolean {
 export function isOperationalQuestion(message: string): boolean {
   return greeting.test(message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()) || identity.test(message) || operationalTerms.test(message);
 }
-
-

@@ -21,10 +21,10 @@ MODEL_OUTPUT_FILE = BASE_DIR / "daisuki.pkl"
 TEMP_MODEL_FILE = BASE_DIR / "daisuki.pkl.tmp"
 
 
-def train_pipeline(texts: list[str], labels: list[str]) -> Pipeline:
+def train_pipeline(texts: list[str], labels: list[str], *, fit_prior: bool = True) -> Pipeline:
     model = Pipeline([
         ("vectorizer", CountVectorizer(ngram_range=(1, 2), lowercase=True, strip_accents="unicode")),
-        ("classifier", MultinomialNB(alpha=1.0)),
+        ("classifier", MultinomialNB(alpha=1.0, fit_prior=fit_prior)),
     ])
     model.fit(texts, labels)
     LOGGER.info("Training selesai")
@@ -54,7 +54,7 @@ def run_retraining_loop() -> bool:
         texts, labels = build_training_samples(records)
         intent_texts, intent_labels = build_intent_samples()
         bundle: dict[str, Any] = {
-            "intent": train_pipeline(intent_texts, intent_labels),
+            "intent": train_pipeline(intent_texts, intent_labels, fit_prior=False),
             "metadata": {
                 "name": "Daisuki AI Assistant",
                 "artifact": "daisuki.pkl",

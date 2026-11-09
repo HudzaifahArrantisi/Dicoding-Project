@@ -9,6 +9,7 @@ import { loadMitraContext } from "./context";
 import { classifyMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { generateLlmReply } from "./llm-client";
 import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
+import { isCrossTenantQuestion, OUT_OF_SCOPE_REPLY, shouldRefuseMitraMessage, TENANT_SCOPE_REPLY } from "./guardrails";
 import { addSessionTurn, buildConversationContext, endSession, getSession, rateSessionTurn, sessionKey, summarizeSession } from "./session-memory";
 
 const emptyModel: ModelResult = { available: false, predictions: [] };
@@ -77,8 +78,12 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const key = sessionKey(user.partnerId, user.userId);
     const turns = await activeTurns(user.partnerId, user.userId);
     const previousIntent = turns[turns.length - 1]?.intent as AssistantIntent | null ?? null;
-    const classified = await classifyMitraMessage(message);
-    const intent = resolveMitraIntent(message, previousIntent, classified);
+    const scopeRefused = shouldRefuseMitraMessage(message, previousIntent);
+    const classified = scopeRefused ? null : await classifyMitraMessage(message);
+    const resolvedIntent = scopeRefused ? null : resolveMitraIntent(message, previousIntent, classified);
+    const crossTenant = isCrossTenantQuestion(message) || resolvedIntent === "top_partners" || resolvedIntent === "top_regions";
+    const refused = scopeRefused || crossTenant;
+    const intent = refused ? null : resolvedIntent;
     const [context, [memory]] = await Promise.all([
       loadMitraContext(user.partnerId),
       db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
@@ -87,22 +92,26 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const model = intent === "restock" || intent === "stock_report"
       ? await predictMitraStocks(context.stocks)
       : emptyModel;
-    const fallback = intent
-      ? composeMitraReply(message, context, model, previousIntent, classified)
-      : answerMitraQuestion(message);
+    const fallback = refused
+      ? { ...answerMitraQuestion(message), reply: crossTenant ? TENANT_SCOPE_REPLY : OUT_OF_SCOPE_REPLY }
+      : intent
+        ? composeMitraReply(message, context, model, previousIntent, classified)
+        : answerMitraQuestion(message);
     let llmReply: string | null = null;
     let grounded = false;
-    try {
-      llmReply = await generateLlmReply({
-        systemPrompt: buildMitraRagPrompt(context, model, previousIntent, {
-          summary: memory?.summary ?? "",
-          recent: buildConversationContext(turns),
-        }),
-        userMessage: message,
-      });
-      grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model));
-    } catch (error) {
-      console.warn("[ASSISTANT] Jawaban 9Router tidak dapat digunakan", error instanceof Error ? error.message : "Error");
+    if (!refused) {
+      try {
+        llmReply = await generateLlmReply({
+          systemPrompt: buildMitraRagPrompt(context, model, previousIntent, {
+            summary: memory?.summary ?? "",
+            recent: buildConversationContext(turns),
+          }),
+          userMessage: message,
+        });
+        grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model));
+      } catch (error) {
+        console.warn("[ASSISTANT] Jawaban 9Router tidak dapat digunakan", error instanceof Error ? error.message : "Error");
+      }
     }
     const response = grounded && llmReply ? { ...fallback, reply: llmReply } : fallback;
     const source = grounded ? "llm" : "fallback";

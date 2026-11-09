@@ -55,3 +55,11 @@ test("prompt memuat identitas resmi model daisuki.pkl", () => {
   expect(prompt).toContain("Daisuki AI Assistant");
 });
 
+test("prompt membatasi domain, kewenangan, dan akses mitra lain", () => {
+  const prompt = buildMitraRagPrompt(context, model);
+  expect(prompt).toContain("asisten khusus inventaris Daisuki B2B");
+  expect(prompt).toContain("Anda baca-saja");
+  expect(prompt).toContain("jangan membandingkan dengan cabang lain");
+  expect(isGroundedLlmReply("FAKTA_JSON berisi data internal", context, model)).toBe(false);
+});
+
