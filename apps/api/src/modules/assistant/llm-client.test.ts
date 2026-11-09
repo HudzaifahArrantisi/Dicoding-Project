@@ -25,10 +25,12 @@ test("9Router mencoba local lalu tunnel dan mengirim pesan terpisah", async () =
   globalThis.fetch = (async (input, init) => {
     urls.push(String(input));
     if (urls.length === 1) throw new Error("local offline");
-    const body = JSON.parse(String(init?.body)) as { model: string; messages: Array<{ role: string; content: string }> };
+    const body = JSON.parse(String(init?.body)) as { model: string; messages: Array<{ role: string; content: string }>; stream: boolean };
     expect(body.model).toBe("opn");
+    expect(body.stream).toBe(true);
+    expect((init?.headers as Record<string, string>).Accept).toContain("text/event-stream");
     expect(body.messages).toEqual([{ role: "system", content: "fakta" }, { role: "user", content: "pesan" }]);
-    return Response.json({ choices: [{ message: { content: "Jawaban dari tunnel" } }] });
+    return new Response('data: {"choices":[{"delta":{"content":"Jawaban "}}]}\n\ndata: {"choices":[{"delta":{"content":"dari tunnel"}}]}\n\ndata: [DONE]\n\n', { headers: { "Content-Type": "text/event-stream" } });
   }) as typeof fetch;
   expect(await generateLlmReply({ systemPrompt: "fakta", userMessage: "pesan" })).toBe("Jawaban dari tunnel");
   expect(urls).toEqual(["http://local-test/v1/chat/completions", "https://tunnel-test/v1/chat/completions"]);

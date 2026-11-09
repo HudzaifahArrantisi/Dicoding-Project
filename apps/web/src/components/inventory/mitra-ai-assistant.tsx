@@ -3,6 +3,7 @@ import { ArrowUp, Loader2, MessageCircle, Sparkles, ThumbsDown, ThumbsUp, Trash2
 import {
   askMitraAssistant,
   clearMitraAssistantHistory,
+  endMitraAssistantSession,
   getMitraAssistantHistory,
   rateMitraAssistantAnswer,
   type MitraAssistantReply,
@@ -65,6 +66,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
   const [error, setError] = useState('')
   const [showConfirmClear, setShowConfirmClear] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [ending, setEnding] = useState(false)
   const nextId = useRef(1)
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -85,6 +87,28 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
       setError(err instanceof Error ? err.message : 'Gagal menghapus percakapan. Coba lagi.')
     } finally {
       setClearing(false)
+    }
+  }
+
+  async function handleEndChat() {
+    if (busy || ending || clearing) return
+    if (!hasMessages) {
+      setOpen(false)
+      return
+    }
+    setEnding(true)
+    setError('')
+    try {
+      await endMitraAssistantSession()
+      nextId.current = 1
+      setMessages([initialGreeting])
+      setReplies(initialReplies)
+      setShowConfirmClear(false)
+      setOpen(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sesi belum bisa diakhiri. Coba lagi.')
+    } finally {
+      setEnding(false)
     }
   }
 
@@ -146,59 +170,91 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
 
   return (
     <div className="font-sans">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-label={open ? 'Tutup asisten Daisuki' : 'Buka asisten Daisuki'}
-        aria-expanded={open}
-        aria-controls="mitra-ai-chat"
-        className="fixed bottom-[calc(6.5rem+env(safe-area-inset-bottom))] right-4 z-40 grid size-14 place-items-center rounded-full border border-ink-700 bg-ink-900 text-white shadow-float transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 md:bottom-6 md:right-6"
-      >
-        {open ? <X className="size-6" aria-hidden="true" /> : <MessageCircle className="size-6" aria-hidden="true" />}
-      </button>
+      {/* Tombol Pemicu Floating (Saat Chat Tertutup) */}
+      {!open ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Buka asisten Daisuki"
+          aria-expanded={false}
+          aria-controls="mitra-ai-chat"
+          className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2.5 rounded-full border border-ink-700/80 bg-ink-950 px-4 py-3 text-white shadow-float transition-all hover:scale-105 hover:bg-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 md:bottom-6 md:right-6"
+        >
+          <span className="relative flex size-3">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
+          </span>
+          <MessageCircle className="size-5" aria-hidden="true" />
+          <span className="font-display text-sm font-semibold tracking-wide">Tanya AI</span>
+        </button>
+      ) : null}
 
+      {/* Backdrop Fokus Transparan (Menyorot Chatbot & Mengurangi Distraksi Halaman) */}
+      {open ? (
+        <div
+          role="presentation"
+          onClick={() => void handleEndChat()}
+          className="fixed inset-0 z-40 bg-ink-950/20 backdrop-blur-[2px] transition-opacity animate-in fade-in-0 duration-200"
+        />
+      ) : null}
+
+      {/* Jendela Chat Utama yang Bersih & Fokus */}
       {open ? (
         <section
           id="mitra-ai-chat"
           aria-label="Percakapan dengan asisten Daisuki"
-          className="fixed inset-x-3 bottom-[calc(11rem+env(safe-area-inset-bottom))] z-40 flex max-h-[min(66dvh,590px)] flex-col overflow-hidden rounded-xl border border-line bg-white shadow-float sm:left-auto sm:right-4 sm:w-[390px] md:bottom-24 md:right-6 md:max-h-[min(75dvh,650px)]"
+          className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] top-16 z-50 flex flex-col overflow-hidden rounded-2xl border border-line/80 bg-white shadow-2xl transition-all sm:inset-x-auto sm:top-auto sm:bottom-6 sm:right-6 sm:h-[min(82dvh,680px)] sm:w-[440px] md:bottom-6 md:right-6 animate-in zoom-in-95 duration-200"
         >
-          <header className="flex items-center gap-3 border-b border-line bg-paper px-4 py-3">
-            <span className="grid size-10 place-items-center rounded-lg bg-ume/10 text-ume" aria-hidden="true"><Sparkles className="size-5" /></span>
-            <div className="min-w-0 flex-1">
-              <h2 className="font-display text-base font-semibold text-ink-900">Daisuki AI Assistant</h2>
-              <p className="text-xs text-muted">Asisten operasional mitra</p>
+          {/* Header Chatbot Bersih */}
+          <header className="flex items-center justify-between border-b border-line/70 bg-white/95 px-4 py-3 backdrop-blur-md">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-white shadow-2xs">
+                <Sparkles className="size-5 text-amber-300" aria-hidden="true" />
+                <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <h2 className="truncate font-display text-base font-bold text-ink-900">
+                    Daisuki AI Assistant
+                  </h2>
+                  <span className="hidden rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 sm:inline border border-emerald-200/60">
+                    Online
+                  </span>
+                </div>
+                <p className="truncate text-xs text-muted">Asisten cerdas stok & pemesanan</p>
+              </div>
             </div>
-            <div className="flex items-center gap-0.5">
+
+            <div className="flex items-center gap-1 shrink-0">
               {hasMessages ? (
                 <button
                   type="button"
                   onClick={() => setShowConfirmClear(true)}
-                  disabled={busy || clearing}
+                  disabled={busy || clearing || ending}
                   aria-label="Hapus percakapan"
                   title="Hapus riwayat chat"
-                  className="grid size-11 place-items-center rounded-md text-muted hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-rose-500"
+                  className="grid size-11 place-items-center rounded-lg text-muted hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-rose-500"
                 >
                   <Trash2 className="size-4" />
                 </button>
               ) : null}
               <button
                 type="button"
-                onClick={() => {
-                  setOpen(false)
-                  setShowConfirmClear(false)
-                }}
-                aria-label="Tutup percakapan"
-                className="grid size-11 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-ink-700"
+                onClick={() => void handleEndChat()}
+                disabled={busy || ending || clearing}
+                aria-label="Akhiri chat dan simpan konteks"
+                title="Akhiri chat dan simpan konteks"
+                className="grid size-11 place-items-center rounded-lg text-ink-600 hover:bg-ink-100 hover:text-ink-900 transition-colors disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700"
               >
-                <X className="size-5" />
+                {ending ? <Loader2 className="size-5 animate-spin" /> : <X className="size-5" />}
               </button>
             </div>
           </header>
 
+          {/* Konfirmasi Hapus Riwayat */}
           {showConfirmClear ? (
-            <div className="border-b border-rose-100 bg-rose-50/90 p-3.5 backdrop-blur-xs animate-in fade-in-50 duration-150">
+            <div className="border-b border-rose-100 bg-rose-50/95 p-3.5 backdrop-blur-xs animate-in fade-in-50 duration-150">
               <div className="flex items-start gap-2.5">
                 <span className="grid size-7 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-700">
                   <Trash2 className="size-3.5" />
@@ -208,14 +264,14 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                     Hapus riwayat percakapan?
                   </p>
                   <p className="mt-0.5 text-[11px] leading-relaxed text-rose-700">
-                    Semua pesan tanya-jawab akan dihapus permanen dari riwayat toko Anda.
+                    Semua pesan dan konteks yang disimpan akan dihapus.
                   </p>
                   <div className="mt-2.5 flex items-center gap-2">
                     <button
                       type="button"
                       disabled={clearing}
                       onClick={() => setShowConfirmClear(false)}
-                      className="inline-flex min-h-11 items-center rounded-md border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-900 hover:bg-rose-100/60 transition-colors focus-visible:outline-2 focus-visible:outline-rose-600"
+                      className="inline-flex min-h-8 items-center rounded-md border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-900 hover:bg-rose-100/60 transition-colors"
                     >
                       Batal
                     </button>
@@ -223,10 +279,10 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                       type="button"
                       disabled={clearing}
                       onClick={() => void handleClearChat()}
-                      className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-rose-600 px-3 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 disabled:opacity-60 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700"
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md bg-rose-600 px-3 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 disabled:opacity-60 transition-colors"
                     >
                       {clearing ? <Loader2 className="size-3 animate-spin" /> : null}
-                      {clearing ? 'Menghapus...' : 'Ya, Hapus Chat'}
+                      {clearing ? 'Menghapus...' : 'Ya, Hapus'}
                     </button>
                   </div>
                 </div>
@@ -234,46 +290,168 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
             </div>
           ) : null}
 
-          <div ref={feedRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite" aria-relevant="additions text">
-            {messages.map((message) => (
-              <div key={message.id} className={`flex ${message.author === 'mitra' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[90%] rounded-lg px-3 py-2.5 text-sm leading-relaxed ${message.author === 'mitra' ? 'bg-ink-700 text-white' : 'border border-line bg-paper text-text'}`}>
-                  {message.author === 'assistant' ? <AssistantMessageText text={message.text} /> : <p className="whitespace-pre-wrap break-words">{message.text}</p>}
-                  {message.source === 'llm' ? <span className="mt-2 inline-flex rounded-sm border border-line bg-white px-1.5 py-0.5 text-[10px] font-semibold text-ink-700">AI · 9Router</span> : null}
-                  {message.tour ? (
-                    <button
-                      type="button"
-                      onClick={() => { setOpen(false); onStartTour(message.tour!) }}
-                      className="mt-3 min-h-11 w-full rounded-md bg-ink-700 px-3 py-2 text-sm font-semibold text-white hover:bg-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                    >
-                      {message.tourLabel ?? 'Mulai panduan langsung'}
-                    </button>
-                  ) : null}
-                  {message.author === 'assistant' && message.interactionId ? (
-                    <div className="mt-2 flex items-center gap-1 border-t border-line pt-2" aria-label="Nilai jawaban">
-                      <span className="mr-auto text-xs text-muted">Membantu?</span>
-                      <button type="button" onClick={() => void rate(message, 1)} aria-label="Jawaban membantu" aria-pressed={message.feedback === 1} className={`grid size-11 place-items-center rounded-md focus-visible:outline-2 focus-visible:outline-ink-700 ${message.feedback === 1 ? 'bg-ok-bg text-ok-fg' : 'text-muted hover:bg-ink-100'}`}><ThumbsUp className="size-4" /></button>
-                      <button type="button" onClick={() => void rate(message, -1)} aria-label="Jawaban tidak membantu" aria-pressed={message.feedback === -1} className={`grid size-11 place-items-center rounded-md focus-visible:outline-2 focus-visible:outline-ink-700 ${message.feedback === -1 ? 'bg-crit-bg text-crit-fg' : 'text-muted hover:bg-ink-100'}`}><ThumbsDown className="size-4" /></button>
+          {/* Feed Pesan (Area Percakapan yang Lega & Kontras) */}
+          <div
+            ref={feedRef}
+            className="min-h-0 flex-1 space-y-3.5 overflow-y-auto bg-slate-50/60 px-4 py-4"
+            aria-live="polite"
+            aria-relevant="additions text"
+          >
+            {messages.map((message) => {
+              const isMitra = message.author === 'mitra'
+
+              return (
+                <div
+                  key={message.id}
+                  className={`flex ${isMitra ? 'justify-end' : 'justify-start items-start gap-2.5'}`}
+                >
+                  {!isMitra ? (
+                    <div className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-900 text-amber-300 shadow-2xs mt-0.5">
+                      <Sparkles className="size-3.5" aria-hidden="true" />
                     </div>
                   ) : null}
+
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-2xs ${
+                      isMitra
+                        ? 'bg-ink-900 text-white rounded-tr-xs'
+                        : 'border border-line/80 bg-white text-ink-900 rounded-tl-xs'
+                    }`}
+                  >
+                    {isMitra ? (
+                      <p className="whitespace-pre-wrap break-words">{message.text}</p>
+                    ) : (
+                      <AssistantMessageText text={message.text} />
+                    )}
+
+                    {/* Badge Sumber AI */}
+                    {message.source === 'llm' ? (
+                      <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-indigo-600">
+                        <Sparkles className="size-3" />
+                        <span>AI · 9Router</span>
+                      </div>
+                    ) : null}
+
+                    {/* Tombol Panduan Cepat (Tour) */}
+                    {message.tour ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(false)
+                          onStartTour(message.tour!)
+                        }}
+                        className="mt-3 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-ink-800 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
+                      >
+                        <span>{message.tourLabel ?? 'Buka Fitur Ini Sekarang'}</span>
+                        <ArrowUp className="size-3.5 rotate-45" />
+                      </button>
+                    ) : null}
+
+                    {/* Feedback Jempol (Sangat Ringkas & Unobtrusive) */}
+                    {!isMitra && message.interactionId ? (
+                      <div
+                        className="mt-2.5 flex items-center justify-between border-t border-line/50 pt-2 text-xs text-muted"
+                        aria-label="Nilai jawaban"
+                      >
+                        <span className="text-[11px]">Jawaban membantu?</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => void rate(message, 1)}
+                            aria-label="Jawaban membantu"
+                            aria-pressed={message.feedback === 1}
+                            className={`grid size-7 place-items-center rounded-md transition-colors ${
+                              message.feedback === 1
+                                ? 'bg-ok-bg text-ok-fg'
+                                : 'hover:bg-slate-100 text-muted hover:text-ink-900'
+                            }`}
+                          >
+                            <ThumbsUp className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void rate(message, -1)}
+                            aria-label="Jawaban tidak membantu"
+                            aria-pressed={message.feedback === -1}
+                            className={`grid size-7 place-items-center rounded-md transition-colors ${
+                              message.feedback === -1
+                                ? 'bg-crit-bg text-crit-fg'
+                                : 'hover:bg-slate-100 text-muted hover:text-ink-900'
+                            }`}
+                          >
+                            <ThumbsDown className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
+              )
+            })}
+
+            {/* Indikator Mengetik AI */}
+            {busy ? (
+              <div className="flex items-center gap-2 text-xs text-muted pl-9" role="status">
+                <Loader2 className="size-3.5 animate-spin text-ink-700" aria-hidden="true" />
+                <span>Menyiapkan jawaban cerdas...</span>
               </div>
-            ))}
-            {busy ? <div className="flex items-center gap-2 text-xs text-muted" role="status"><Loader2 className="size-4 animate-spin" aria-hidden="true" /> Menyiapkan jawaban...</div> : null}
+            ) : null}
           </div>
 
-          <div className="border-t border-line px-4 py-3">
-            <p className="mb-2 text-xs text-muted">Percakapan dan penilaian disimpan untuk membantu memperbaiki jawaban Daisuki.</p>
-            <div className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Pertanyaan cepat">
+          {/* Footer Input & Quick Suggestions */}
+          <div className="border-t border-line/70 bg-white p-3 sm:p-3.5">
+            {/* Quick Reply Pills */}
+            <div
+              className="mb-2.5 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none"
+              aria-label="Pertanyaan cepat"
+            >
               {replies.map((reply) => (
-                <button key={reply} type="button" onClick={() => void send(reply)} disabled={busy} className="min-h-11 shrink-0 rounded-full border border-line bg-white px-3 text-xs font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-ink-700">{reply}</button>
+                <button
+                  key={reply}
+                  type="button"
+                  onClick={() => void send(reply)}
+                  disabled={busy}
+                  className="shrink-0 rounded-full border border-line bg-slate-50/80 px-3 py-1.5 text-xs font-medium text-ink-800 shadow-2xs hover:border-ink-400 hover:bg-white disabled:opacity-50 transition-all cursor-pointer"
+                >
+                  {reply}
+                </button>
               ))}
             </div>
-            {error ? <p className="mb-2 text-sm text-crit-fg" role="alert">{error}</p> : null}
-            <form onSubmit={(event) => { event.preventDefault(); void send(draft) }} className="flex gap-2">
-              <label htmlFor="mitra-ai-input" className="sr-only">Tulis pertanyaan tentang inventaris Daisuki</label>
-              <input ref={inputRef} id="mitra-ai-input" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={500} placeholder="Tanya soal inventaris..." className="min-w-0 min-h-11 flex-1 rounded-md border border-line bg-white px-3 text-base text-text focus-visible:outline-2 focus-visible:outline-ink-700" />
-              <button type="submit" disabled={busy || !draft.trim()} aria-label="Kirim pertanyaan" className="grid size-11 shrink-0 place-items-center rounded-md bg-ink-700 text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"><ArrowUp className="size-5" aria-hidden="true" /></button>
+
+            {error ? (
+              <p className="mb-2 text-xs font-medium text-crit-fg" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            {/* Form Input Pesan Modern */}
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                void send(draft)
+              }}
+              className="relative flex items-center"
+            >
+              <label htmlFor="mitra-ai-input" className="sr-only">
+                Tulis pertanyaan tentang inventaris Daisuki
+              </label>
+              <input
+                ref={inputRef}
+                id="mitra-ai-input"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                maxLength={500}
+                placeholder="Tanya stok, restock, resi..."
+                className="w-full rounded-full border border-line bg-slate-50/70 py-2.5 pl-4 pr-12 text-sm text-ink-900 placeholder:text-muted transition-all focus:bg-white focus:border-ink-700 focus:outline-none focus:ring-2 focus:ring-ink-700/20"
+              />
+              <button
+                type="submit"
+                disabled={busy || !draft.trim()}
+                aria-label="Kirim pertanyaan"
+                className="absolute right-1.5 grid size-8 place-items-center rounded-full bg-ink-900 text-white shadow-xs transition-all hover:bg-ink-800 disabled:opacity-30 disabled:hover:bg-ink-900 cursor-pointer"
+              >
+                <ArrowUp className="size-4" aria-hidden="true" />
+              </button>
             </form>
           </div>
         </section>

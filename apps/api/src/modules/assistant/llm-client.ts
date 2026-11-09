@@ -1,7 +1,23 @@
 type LlmRequest = { systemPrompt: string; userMessage: string };
 
+function readReply(raw: string): string | null {
+  if (raw.trimStart().startsWith("{")) {
+    const payload = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown } }> };
+    const content = payload.choices?.[0]?.message?.content;
+    return typeof content === "string" ? content.trim() || null : null;
+  }
+  let content = "";
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+    const chunk = JSON.parse(line.slice(6)) as { choices?: Array<{ delta?: { content?: unknown } }> };
+    const part = chunk.choices?.[0]?.delta?.content;
+    if (typeof part === "string") content += part;
+  }
+  return content.trim() || null;
+}
+
 const failedUntil = new Map<string, number>();
-const cooldownMs = 30_000;
+const cooldownMs = 5_000;
 
 function configuredEndpoints(): string[] {
   return [process.env.LLM_BASE_URL, process.env.LLM_TUNNEL_URL]
@@ -20,7 +36,7 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
     if ((failedUntil.get(endpoint) ?? 0) > Date.now()) continue;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
-    const attemptTimeout = index === 0 && endpoints.length > 1 ? Math.min(2_500, remaining) : remaining;
+    const attemptTimeout = index === 0 && endpoints.length > 1 ? Math.min(7_500, remaining) : remaining;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -30,20 +46,21 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
           headers: {
             Authorization: `Bearer ${process.env.LLM_API_KEY}`,
             "Content-Type": "application/json",
+            Accept: "text/event-stream, application/json",
           },
           body: JSON.stringify({
             model: process.env.LLM_MODEL || "opn",
             messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }],
             temperature: 0.2,
             max_tokens: 600,
+            stream: true,
           }),
           signal: controller.signal,
         });
         if (!response.ok) throw new Error(`LLM HTTP ${response.status}`);
-        const payload: unknown = await response.json();
-        const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> })?.choices?.[0]?.message?.content;
-        if (typeof content !== "string" || !content.trim()) throw new Error("LLM response kosong");
-        return content.trim();
+        const content = readReply(await response.text());
+        if (!content) throw new Error("LLM response kosong");
+        return content;
       })();
       const timeoutPromise = new Promise<never>((_, reject) => {
         timer = setTimeout(() => { controller.abort(); reject(new Error("LLM timeout")); }, attemptTimeout);
@@ -53,7 +70,7 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
       return content;
     } catch (error) {
       failedUntil.set(endpoint, Date.now() + cooldownMs);
-      console.warn("[ASSISTANT] 9Router tidak tersedia pada endpoint yang dikonfigurasi", error instanceof Error ? error.name : "Error");
+      console.warn(`[ASSISTANT] 9Router ${index === 0 ? "lokal" : "tunnel"} gagal:`, error instanceof Error ? error.message : "Error");
     } finally {
       if (timer) clearTimeout(timer);
     }

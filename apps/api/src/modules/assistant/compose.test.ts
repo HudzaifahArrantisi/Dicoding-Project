@@ -37,6 +37,7 @@ describe('jawaban dengan data mitra', () => {
     expect(composeMitraReply('produk apa yang paling laku', withFacts, emptyModel, null).reply).toContain('25 pcs')
     expect(composeMitraReply('mitra paling laku', withFacts, emptyModel, null).reply).toContain('Toko Uji')
     expect(composeMitraReply('siapa presiden', withFacts, emptyModel, null).reply).toContain('hanya bisa membantu urusan inventaris')
+    expect(composeMitraReply('kamu siapa', withFacts, emptyModel, null).reply).toContain('Daisuki AI Assistant')
   })
   test('stok berasal dari data terbaru dan buffer bukan kapasitas maksimum', () => {
     const answer = composeMitraReply('stok saya sekarang berapa?', context, { available: false, predictions: [] }, null)
@@ -61,6 +62,7 @@ describe('jawaban dengan data mitra', () => {
     expect(answer.reply).toContain('PO-123')
     expect(answer.reply).toContain('verifikasi berhasil')
     expect(resolveMitraIntent('yang tadi bagaimana?', 'delivery')).toBe('delivery')
+    expect(resolveMitraIntent('siapa kamu?', null)).toBe('identity')
     expect(resolveMitraIntent('resep masakan yang tadi', 'delivery')).toBeNull()
   })
 })

@@ -48,4 +48,10 @@ describe('asisten mitra', () => {
     expect(delivery).toContain('setelah verifikasi berhasil')
     expect(delivery).toContain('jumlah yang disetujui')
   })
+
+  test('menjawab pertanyaan tentang identitas diri asisten dengan profil resmi daisuki.pkl', () => {
+    expect(answerMitraQuestion('kamu siapa').reply).toContain('Daisuki AI Assistant')
+    expect(answerMitraQuestion('siapa kamu').reply).toContain('daisuki.pkl')
+    expect(answerMitraQuestion('apa itu daisuki pkl').reply).toContain('Multinomial Naive Bayes')
+  })
 })

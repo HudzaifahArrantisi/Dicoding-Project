@@ -7,6 +7,7 @@ import os
 import pickle
 import sys
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from sklearn.feature_extraction.text import CountVectorizer
@@ -30,7 +31,7 @@ def train_pipeline(texts: list[str], labels: list[str]) -> Pipeline:
     return model
 
 
-def save_model_safely(model: Pipeline | dict[str, Pipeline], dest_path: Path, temp_path: Path) -> None:
+def save_model_safely(model: Pipeline | dict[str, Any], dest_path: Path, temp_path: Path) -> None:
     """Write beside the destination, then atomically replace the old model."""
     try:
         with temp_path.open("wb") as output:
@@ -52,7 +53,29 @@ def run_retraining_loop() -> bool:
         records = fetch_training_records()
         texts, labels = build_training_samples(records)
         intent_texts, intent_labels = build_intent_samples()
-        bundle: dict[str, Pipeline] = {"intent": train_pipeline(intent_texts, intent_labels)}
+        bundle: dict[str, Any] = {
+            "intent": train_pipeline(intent_texts, intent_labels),
+            "metadata": {
+                "name": "Daisuki AI Assistant",
+                "artifact": "daisuki.pkl",
+                "role": "Asisten Inventaris & Restock Mitra B2B Daisuki",
+                "algorithm": "Multinomial Naive Bayes",
+                "specialization": "Klasifikasi Intensi & Prediksi Risiko Stok 4 Produk Resmi",
+                "supported_products": [
+                    "Seblak Jadul Instan",
+                    "Basreng Daun Jeruk",
+                    "Makaroni Daun Jeruk",
+                    "Keripik Pisang Rasa Coklat",
+                ],
+                "identity_bio": (
+                    "Halo! Saya adalah Daisuki AI Assistant, sistem cerdas yang ditenagai langsung "
+                    "oleh artefak model klasifikasi daisuki.pkl dan basis data operasional Daisuki. "
+                    "Saya bertugas mendampingi mitra cabang dalam memantau sisa stok fisik 4 produk resmi, "
+                    "menganalisis laju konsumsi mingguan, mendeteksi risiko stok sebelum kritis, "
+                    "serta membantu perhitungan rekomendasi pengajuan restock ke gudang pusat."
+                ),
+            },
+        }
         if len(set(labels)) >= 2:
             bundle["risk"] = train_pipeline(texts, labels)
         elif MODEL_OUTPUT_FILE.exists():

@@ -8,10 +8,21 @@ export interface ModelPrediction {
   confidence: number;
 }
 
+export interface ModelIdentity {
+  name?: string;
+  artifact?: string;
+  role?: string;
+  algorithm?: string;
+  specialization?: string;
+  supported_products?: string[];
+  identity_bio?: string;
+}
+
 export interface ModelResult {
   available: boolean;
   predictions: ModelPrediction[];
   intent?: { label: string; confidence: number } | null;
+  identity?: ModelIdentity | null;
 }
 
 type WorkerReply = ModelResult & { id: string; error?: string };
@@ -97,7 +108,7 @@ function createWorker() {
               clearTimeout(request.timer);
               workerReady = true;
               if (result.error) request.reject(new Error(result.error));
-              else request.resolve({ available: result.available, predictions: result.predictions, intent: result.intent });
+              else request.resolve({ available: result.available, predictions: result.predictions, intent: result.intent, identity: result.identity });
             }
           } catch (error) {
             console.error("[ASSISTANT] Respons worker model tidak valid", error);

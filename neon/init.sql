@@ -172,6 +172,15 @@ create index if not exists assistant_chat_partner_user_created_idx
   on assistant_chat_events (partner_id, user_id, created_at desc);
 alter table assistant_chat_events enable row level security;
 
+create table if not exists assistant_conversation_memory (
+  partner_id uuid not null references partners(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  summary text not null,
+  updated_at timestamptz not null default now(),
+  primary key (partner_id, user_id)
+);
+alter table assistant_conversation_memory enable row level security;
+
 -- F. Pesanan Restock B2B (Orders)
 create table if not exists orders (
   id uuid primary key default gen_random_uuid(),

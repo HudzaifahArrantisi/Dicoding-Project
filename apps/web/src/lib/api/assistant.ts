@@ -38,3 +38,7 @@ export function rateMitraAssistantAnswer(id: string, rating: -1 | 1): Promise<{ 
 export function clearMitraAssistantHistory(): Promise<{ status: string }> {
   return apiClient.delete<{ status: string }>('/assistant/mitra/history')
 }
+
+export function endMitraAssistantSession(): Promise<{ status: string; remembered: boolean }> {
+  return apiClient.post<{ status: string; remembered: boolean }>('/assistant/mitra/end', {})
+}

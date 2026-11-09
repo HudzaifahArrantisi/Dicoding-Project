@@ -24,6 +24,13 @@ test("prompt memakai fakta mitra dan model tanpa batas stok tetap", () => {
   expect(prompt).not.toContain("40 pcs");
 });
 
+test("memori percakapan dipisah dari fakta operasional terbaru", () => {
+  const prompt = buildMitraRagPrompt(context, model, "restock", { summary: "Mitra ingin memantau produk ini", recent: "Mitra: Bagaimana dengan itu?" });
+  expect(prompt).toContain("MEMORI_PERCAKAPAN");
+  expect(prompt).toContain("bukan bukti angka stok");
+  expect(prompt).toContain("Mitra: Bagaimana dengan itu?");
+});
+
 test("jawaban LLM dengan angka atau PO di luar fakta ditolak", () => {
   expect(isGroundedLlmReply("Basreng Daun Jeruk tersisa 8 pcs. Pesanan PO-TEST-123 sedang dalam pengiriman.", context, model)).toBe(true);
   expect(isGroundedLlmReply("Basreng Daun Jeruk tersisa 99 pcs.", context, model)).toBe(false);
@@ -40,3 +47,11 @@ test("produk di luar empat nama resmi tidak masuk konteks RAG", () => {
   const prompt = buildMitraRagPrompt(mixed, model);
   expect(prompt).not.toContain("Produk Lain");
 });
+
+test("prompt memuat identitas resmi model daisuki.pkl", () => {
+  const prompt = buildMitraRagPrompt(context, model);
+  expect(prompt).toContain('"artifact":"daisuki.pkl"');
+  expect(prompt).toContain('"algorithm":"Multinomial Naive Bayes"');
+  expect(prompt).toContain("Daisuki AI Assistant");
+});
+

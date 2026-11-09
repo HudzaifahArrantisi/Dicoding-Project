@@ -28,6 +28,7 @@ class DaisukiFilter:
         self.model_path = Path(model_path)
         self.model_key = model_key
         self._model: Pipeline | None = None
+        self._metadata: dict[str, Any] = {}
         self._last_loaded_mtime: int | None = None
         self.load_model()
 
@@ -37,6 +38,7 @@ class DaisukiFilter:
             mtime = self.model_path.stat().st_mtime_ns
         except FileNotFoundError:
             self._model = None
+            self._metadata = {}
             self._last_loaded_mtime = None
             LOGGER.warning("Model belum tersedia: %s", self.model_path)
             return
@@ -44,16 +46,23 @@ class DaisukiFilter:
             return
         try:
             with self.model_path.open("rb") as source:
-                model = pickle.load(source)
-            if isinstance(model, dict):
-                model = model.get(self.model_key)
+                raw_payload = pickle.load(source)
+            if isinstance(raw_payload, dict):
+                meta = raw_payload.get("metadata")
+                self._metadata = dict(meta) if isinstance(meta, dict) else {}
+                model = raw_payload.get(self.model_key)
             elif self.model_key != "risk":
                 model = None
+                self._metadata = {}
+            else:
+                model = raw_payload
+                self._metadata = {}
             if model is not None and (not isinstance(model, Pipeline) or not hasattr(model, "predict_proba")):
                 raise ValueError("Artefak model bukan pipeline klasifikasi yang valid")
         except (OSError, pickle.UnpicklingError, ValueError, AttributeError, ImportError) as error:
             LOGGER.error("Gagal memuat model %s: %s", self.model_path, error)
             self._model = None
+            self._metadata = {}
             self._last_loaded_mtime = None
             return
         self._model = model
@@ -64,6 +73,11 @@ class DaisukiFilter:
     def is_ready(self) -> bool:
         self.load_model()
         return self._model is not None
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        self.load_model()
+        return dict(self._metadata)
 
     @property
     def model(self) -> Pipeline:

@@ -153,6 +153,13 @@ export const assistantChatEvents = pgTable("assistant_chat_events", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const assistantConversationMemory = pgTable("assistant_conversation_memory", {
+  partner_id: uuid("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  user_id: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  summary: text("summary").notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.partner_id, table.user_id] })]);
+
 export const orders = pgTable("orders", {
   id: uuid("id").primaryKey().defaultRandom(),
   order_no: text("order_no").notNull().unique(),

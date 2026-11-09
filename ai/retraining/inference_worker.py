@@ -47,6 +47,9 @@ def main() -> None:
                 if intent_classifier.is_ready:
                     prediction = intent_classifier.predict_with_confidence(message)[0]
                     result["intent"] = {"label": prediction["predicted_label"], "confidence": prediction["confidence"]}
+            identity_meta = intent_classifier.metadata or risk_classifier.metadata
+            if identity_meta:
+                result["identity"] = identity_meta
         except (KeyError, TypeError, ValueError, RuntimeError) as error:
             result = {"id": request.get("id") if isinstance(request, dict) else None, "error": str(error)}
         sys.stdout.write(json.dumps(result, ensure_ascii=False) + "\n")

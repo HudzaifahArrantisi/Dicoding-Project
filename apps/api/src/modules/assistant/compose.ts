@@ -5,9 +5,10 @@ import type { ModelResult } from "./model";
 
 const number = (value: number) => value.toLocaleString("id-ID");
 const followUp = /\b(yang tadi|yang itu)\b|^(berapa|bagaimana|detailnya|lanjut|sekarang|terbaru|mana saja)\s*\??$/i;
-export type AssistantIntent = MitraTour | "greeting" | "central_stock" | "top_products" | "top_partners" | "top_regions" | "out_of_scope";
+export type AssistantIntent = MitraTour | "greeting" | "central_stock" | "top_products" | "top_partners" | "top_regions" | "identity" | "out_of_scope";
 const factualIntents = new Set<AssistantIntent>(["central_stock", "top_products", "top_partners", "top_regions"]);
 const tours = new Set<AssistantIntent>(["restock", "stock_report", "delivery", "logs", "profile"]);
+const identityPattern = /\b(siapa kamu|kamu siapa|siapa namamu|nama kamu siapa|perkenalkan diri|perkenalkan dirimu|kamu bot apa|kamu sistem apa|kamu robot apa|tentang kamu|profil ai|apa itu daisuki|apa itu model daisuki|daisuki\.?pkl)\b/i;
 const factualPatterns: Array<[AssistantIntent, RegExp]> = [
   ["central_stock", /\b(total stok|stok pusat|stok gudang|gudang pusat|persediaan pusat|ketersediaan pusat)\b/i],
   ["top_products", /\b(produk|barang|makanan|kategori)\b.*\b(laris|laku|terjual|populer|tertinggi)\b|\b(laris|laku|terjual)\b.*\b(produk|barang|kategori)\b/i],
@@ -101,9 +102,11 @@ function factReply(intent: AssistantIntent, context: MitraContext): string {
 export function resolveMitraIntent(message: string, previousIntent: AssistantIntent | null, classified?: { label: string; confidence: number } | null): AssistantIntent | null {
   if (isOutOfScopeQuestion(message) || !isOperationalQuestion(message) && !followUp.test(message)) return null;
   const normalized = message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  if (identityPattern.test(message) || identityPattern.test(normalized)) return "identity";
   if (/^(hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam)|assalamualaikum|permisi)( semua| admin| kak)?$/.test(normalized)) return "greeting";
   for (const [intent, pattern] of factualPatterns) if (pattern.test(normalized)) return intent;
   if (classified?.label === "out_of_scope" && classified.confidence >= 0.35) return null;
+  if (classified?.label === "identity" && classified.confidence >= 0.35) return "identity";
   if (classified?.confidence && classified.confidence >= 0.35 &&
     (factualIntents.has(classified.label as AssistantIntent) || tours.has(classified.label as AssistantIntent))) {
     return classified.label as AssistantIntent;
@@ -115,6 +118,14 @@ export function composeMitraReply(message: string, context: MitraContext, model:
   const base = answerMitraQuestion(message);
   const intent = resolveMitraIntent(message, previousIntent, classified);
   if (!intent) return base;
+  if (intent === "identity") {
+    const bio = model.identity?.identity_bio ?? base.reply;
+    return {
+      ...base,
+      reply: bio,
+      quickReplies: ["Stok saya sekarang berapa?", "Produk mana perlu restock?", "Stok pusat berapa?", "Produk apa paling laku?"],
+    };
+  }
   if (intent === "greeting") return { ...base, reply: `Halo, ${context.partner?.name ?? "mitra Daisuki"}! Ada yang ingin kamu cek hari ini? Saya bisa bantu stok toko, restock, pengiriman, dan ringkasan jaringan minggu ini.` };
   if (factualIntents.has(intent)) return { reply: factReply(intent, context), quickReplies: ["Stok pusat berapa?", "Produk apa paling laku?", "Mitra paling laris?", "Wilayah mana paling aktif?", "Stok saya sekarang berapa?"] };
   const reply = intent === "stock_report" ? stockReply(message, context)
