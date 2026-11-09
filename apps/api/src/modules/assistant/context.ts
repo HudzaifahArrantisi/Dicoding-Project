@@ -1,7 +1,8 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
-import { orders, partners, products, stockLogs } from "../../db/schema";
+import { orderItems, orders, partners, products, stockLogs } from "../../db/schema";
 import { loadWeeklyFacts } from "./facts";
+import { OFFICIAL_PRODUCTS, isOfficialProduct } from "./official-products";
 
 export interface ModelRecord {
   partner_id: string;
@@ -24,7 +25,7 @@ export interface ModelRecord {
 }
 
 export async function loadMitraContext(partnerId: string) {
-  const [stockRows, [partner], latestOrders, latestLogs, weeklyFacts] = await Promise.all([
+  const [stockRows, [partner], latestOrders, activeOrders, latestLogs, weeklyFacts] = await Promise.all([
     db.execute(sql<ModelRecord>`
       with sales as (
         select product_id,
@@ -68,15 +69,17 @@ export async function loadMitraContext(partnerId: string) {
       from partner_stocks ps
       join partners pa on pa.id = ps.partner_id and pa.is_active = true
       join products pr on pr.id = ps.product_id and pr.is_active = true
+        and pr.name in ('Seblak Jadul Instan', 'Basreng Daun Jeruk', 'Makaroni Daun Jeruk', 'Keripik Pisang Rasa Coklat')
       left join sales s on s.product_id = ps.product_id
       left join critical c on c.product_id = ps.product_id
       left join order_summary os on os.product_id = ps.product_id
       where ps.partner_id = ${partnerId}::uuid
       order by pr.name
     `),
-    db.select({ name: partners.name, pic_name: partners.pic_name, pic_phone: partners.pic_phone, address: partners.address, province_name: partners.province_name, regency_name: partners.regency_name, district_name: partners.district_name, village_name: partners.village_name }).from(partners).where(eq(partners.id, partnerId)).limit(1),
-    db.select({ order_no: orders.order_no, status: orders.status, created_at: orders.created_at, admin_note: orders.admin_note }).from(orders).where(eq(orders.partner_id, partnerId)).orderBy(desc(orders.created_at)).limit(3),
-    db.select({ product_name: products.name, qty_before: stockLogs.qty_before, qty_after: stockLogs.qty_after, source: stockLogs.source, created_at: stockLogs.created_at }).from(stockLogs).innerJoin(products, eq(stockLogs.product_id, products.id)).where(and(eq(stockLogs.partner_id, partnerId), eq(products.is_active, true))).orderBy(desc(stockLogs.created_at)).limit(3),
+    db.select({ name: partners.name, type: partners.type, type_other: partners.type_other, pic_name: partners.pic_name, pic_phone: partners.pic_phone, address: partners.address, province_name: partners.province_name, regency_name: partners.regency_name, district_name: partners.district_name, village_name: partners.village_name }).from(partners).where(eq(partners.id, partnerId)).limit(1),
+    db.select({ id: orders.id, order_no: orders.order_no, status: orders.status, created_at: orders.created_at, admin_note: orders.admin_note }).from(orders).where(eq(orders.partner_id, partnerId)).orderBy(desc(orders.created_at)).limit(3),
+    db.select({ id: orders.id, order_no: orders.order_no, status: orders.status, created_at: orders.created_at, admin_note: orders.admin_note }).from(orders).where(and(eq(orders.partner_id, partnerId), inArray(orders.status, ["diproses", "disetujui", "dalam_pengiriman"]))).orderBy(desc(orders.created_at)).limit(10),
+    db.select({ product_name: products.name, qty_before: stockLogs.qty_before, qty_after: stockLogs.qty_after, source: stockLogs.source, created_at: stockLogs.created_at }).from(stockLogs).innerJoin(products, eq(stockLogs.product_id, products.id)).where(and(eq(stockLogs.partner_id, partnerId), eq(products.is_active, true), inArray(products.name, OFFICIAL_PRODUCTS))).orderBy(desc(stockLogs.created_at)).limit(3),
     loadWeeklyFacts(),
   ]);
   const stocks: ModelRecord[] = Array.from(stockRows, (row) => ({
@@ -98,7 +101,29 @@ export async function loadMitraContext(partnerId: string) {
     has_active_order: row.has_active_order === true,
     updated_at: row.updated_at instanceof Date ? row.updated_at : new Date(String(row.updated_at)),
   }));
-  return { stocks, partner, orders: latestOrders, logs: latestLogs, weeklyFacts };
+  const relevantOrders = [...new Map([...latestOrders, ...activeOrders].map((order) => [order.id, order])).values()];
+  const orderRows = relevantOrders.length ? await db.select({
+    order_id: orderItems.order_id,
+    product_name: products.name,
+    qty_requested: orderItems.qty_requested,
+    qty_approved: orderItems.qty_approved,
+  }).from(orderItems)
+    .innerJoin(products, eq(orderItems.product_id, products.id))
+    .where(and(inArray(orderItems.order_id, relevantOrders.map((order) => order.id)), inArray(products.name, OFFICIAL_PRODUCTS))) : [];
+  const ordersWithItems = relevantOrders.map((order) => ({
+    ...order,
+    items: orderRows.filter((item) => item.order_id === order.id).map(({ product_name, qty_requested, qty_approved }) => ({ product_name, qty_requested, qty_approved })),
+  }));
+  const filteredFacts = weeklyFacts ? {
+    ...weeklyFacts,
+    central_warehouse: {
+      ...weeklyFacts.central_warehouse,
+      products: weeklyFacts.central_warehouse.products.filter((item) => isOfficialProduct(item.name)),
+      total_stock_units: weeklyFacts.central_warehouse.products.filter((item) => isOfficialProduct(item.name)).reduce((total, item) => total + item.central_stock, 0),
+    },
+    top_selling_products: weeklyFacts.top_selling_products.filter((item) => isOfficialProduct(item.product_name)),
+  } : null;
+  return { stocks, partner, orders: ordersWithItems, logs: latestLogs, weeklyFacts: filteredFacts };
 }
 
 export type MitraContext = Awaited<ReturnType<typeof loadMitraContext>>;

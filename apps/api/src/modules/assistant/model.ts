@@ -19,7 +19,9 @@ type Pending = { resolve: (result: ModelResult) => void; reject: (error: Error) 
 
 const retrainingDir = resolve(import.meta.dir, "../../../../../ai/retraining");
 const scriptPath = resolve(retrainingDir, "inference_worker.py");
-let currentWorker: { send: (records: ModelRecord[], message?: string) => Promise<ModelResult>; stop: () => void } | null = null;
+let currentWorker: { send: (records: ModelRecord[], message?: string) => Promise<ModelResult>; stop: () => void; isDead: boolean } | null = null;
+let lastWorkerFailureTime = 0;
+const FAILURE_COOLDOWN_MS = 30_000;
 
 function resolvePythonBinary(): string {
   if (process.env.DAISUKI_PYTHON_BIN) return process.env.DAISUKI_PYTHON_BIN;
@@ -43,13 +45,21 @@ function createWorker() {
   const pending = new Map<string, Pending>();
   const decoder = new TextDecoder();
   let buffer = "";
+  let workerReady = false;
 
   const client = {
+    isDead: false,
     stop() {
+      client.isDead = true;
       if (currentWorker === client) currentWorker = null;
       try { processHandle.kill(); } catch {}
     },
     send(records: ModelRecord[], message?: string): Promise<ModelResult> {
+      if (client.isDead || processHandle.exitCode !== null) {
+        if (currentWorker === client) currentWorker = null;
+        return Promise.reject(new Error("Worker model tidak aktif"));
+      }
+
       const id = crypto.randomUUID();
       return new Promise((resolveResult, reject) => {
         const timer = setTimeout(() => {
@@ -57,7 +67,7 @@ function createWorker() {
           reject(new Error("Prediksi model melewati batas waktu"));
           if (currentWorker === client) currentWorker = null;
           try { processHandle.kill(); } catch {}
-        }, 5_000);
+        }, workerReady ? 5_000 : 15_000);
         pending.set(id, { resolve: resolveResult, reject, timer });
         try {
           processHandle.stdin.write(JSON.stringify({ id, records, message }) + "\n");
@@ -85,6 +95,7 @@ function createWorker() {
             if (request) {
               pending.delete(result.id);
               clearTimeout(request.timer);
+              workerReady = true;
               if (result.error) request.reject(new Error(result.error));
               else request.resolve({ available: result.available, predictions: result.predictions, intent: result.intent });
             }
@@ -101,15 +112,20 @@ function createWorker() {
     const errorDecoder = new TextDecoder();
     for await (const chunk of processHandle.stderr) {
       const message = errorDecoder.decode(chunk).trim();
-      if (message) console.error("[ASSISTANT MODEL]", message.slice(0, 500));
+      if (message) console.error("[ASSISTANT MODEL STDERR]", message.slice(0, 500));
     }
   })().catch(() => undefined);
 
-  void processHandle.exited.then(() => {
+  void processHandle.exited.then((code) => {
+    client.isDead = true;
+    if (code !== 0) {
+      lastWorkerFailureTime = Date.now();
+      console.warn(`[ASSISTANT] Worker model Python berhenti (exit code: ${code}). Cooldown diaktifkan selama 30 detik.`);
+    }
     if (currentWorker === client) currentWorker = null;
     for (const request of pending.values()) {
       clearTimeout(request.timer);
-      request.reject(new Error("Worker model berhenti"));
+      request.reject(new Error(`Worker model berhenti (exit code: ${code})`));
     }
     pending.clear();
   });
@@ -117,11 +133,21 @@ function createWorker() {
   return client;
 }
 
+function getOrStartWorker() {
+  if (currentWorker && !currentWorker.isDead) return currentWorker;
+  if (Date.now() - lastWorkerFailureTime < FAILURE_COOLDOWN_MS) {
+    return null; // Sedang masa cooldown, jangan spawn ulang agar tidak stall
+  }
+  currentWorker = createWorker();
+  return currentWorker;
+}
+
 export async function predictMitraStocks(records: ModelRecord[]): Promise<ModelResult> {
   if (!records.length) return { available: false, predictions: [] };
+  const worker = getOrStartWorker();
+  if (!worker) return { available: false, predictions: [] };
   try {
-    currentWorker ??= createWorker();
-    return await currentWorker.send(records);
+    return await worker.send(records);
   } catch (error) {
     console.error("[ASSISTANT] Prediksi stok belum tersedia", error);
     return { available: false, predictions: [] };
@@ -129,9 +155,10 @@ export async function predictMitraStocks(records: ModelRecord[]): Promise<ModelR
 }
 
 export async function classifyMitraMessage(message: string): Promise<ModelResult["intent"]> {
+  const worker = getOrStartWorker();
+  if (!worker) return null;
   try {
-    currentWorker ??= createWorker();
-    return (await currentWorker.send([], message)).intent ?? null;
+    return (await worker.send([], message)).intent ?? null;
   } catch (error) {
     console.error("[ASSISTANT] Klasifikasi pesan belum tersedia", error);
     return null;

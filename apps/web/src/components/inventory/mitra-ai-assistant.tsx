@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Loader2, MessageCircle, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
 import {
   askMitraAssistant,
@@ -9,7 +9,38 @@ import {
   type MitraTour,
 } from '@/lib/api/assistant'
 
-type ChatMessage = { id: number; author: 'mitra' | 'assistant'; text: string; tour?: MitraTour; tourLabel?: string; interactionId?: string; feedback?: -1 | 1 | null }
+type ChatMessage = { id: number; author: 'mitra' | 'assistant'; text: string; source?: 'llm' | 'fallback'; tour?: MitraTour; tourLabel?: string; interactionId?: string; feedback?: -1 | 1 | null }
+
+function inlineText(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={index} className="font-semibold">{part.slice(2, -2)}</strong>
+      : part,
+  )
+}
+
+function AssistantMessageText({ text }: { text: string }) {
+  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered'; lines: string[] }> = []
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const bullet = /^[-*]\s+(.+)$/.exec(line)
+    const numbered = /^\d+[.)]\s+(.+)$/.exec(line)
+    const kind = bullet ? 'bullets' : numbered ? 'numbered' : 'paragraph'
+    const content = bullet?.[1] ?? numbered?.[1] ?? line
+    const previous = blocks.at(-1)
+    if (previous?.kind === kind) previous.lines.push(content)
+    else blocks.push({ kind, lines: [content] })
+  }
+  return <div className="space-y-2 break-words">
+    {blocks.map((block, index) => block.kind === 'paragraph'
+      ? <p key={index}>{block.lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex ? <br /> : null}{inlineText(line)}</span>)}</p>
+      : block.kind === 'bullets'
+        ? <ul key={index} className="list-disc space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ul>
+        : <ol key={index} className="list-decimal space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ol>,
+    )}
+  </div>
+}
 
 const initialReplies = [
   'Bagaimana cara restock barang?',
@@ -63,7 +94,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
       if (cancelled) return
       const restored = history.flatMap((item) => [
         { id: nextId.current++, author: 'mitra' as const, text: item.message },
-        { id: nextId.current++, author: 'assistant' as const, text: item.reply, tour: item.intent ?? undefined, interactionId: item.id, feedback: item.feedback },
+        { id: nextId.current++, author: 'assistant' as const, text: item.reply, source: item.source, tour: item.intent ?? undefined, interactionId: item.id, feedback: item.feedback },
       ])
       setMessages((current) => current.length === 1 ? [...current, ...restored] : current)
     }).catch(() => undefined)
@@ -89,7 +120,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
     try {
       const result: MitraAssistantReply = await askMitraAssistant(text)
       setMessages((current) => [...current, {
-        id: nextId.current++, author: 'assistant', text: result.reply,
+        id: nextId.current++, author: 'assistant', text: result.reply, source: result.source,
         tour: result.suggestedTour, tourLabel: result.tourLabel,
         interactionId: result.interactionId,
       }])
@@ -147,7 +178,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                   disabled={busy || clearing}
                   aria-label="Hapus percakapan"
                   title="Hapus riwayat chat"
-                  className="grid size-9 place-items-center rounded-md text-muted hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-rose-500"
+                  className="grid size-11 place-items-center rounded-md text-muted hover:bg-rose-50 hover:text-rose-600 transition-colors disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-rose-500"
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -159,7 +190,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                   setShowConfirmClear(false)
                 }}
                 aria-label="Tutup percakapan"
-                className="grid size-9 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-ink-700"
+                className="grid size-11 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-ink-700"
               >
                 <X className="size-5" />
               </button>
@@ -184,7 +215,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                       type="button"
                       disabled={clearing}
                       onClick={() => setShowConfirmClear(false)}
-                      className="inline-flex min-h-8 items-center rounded-md border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-900 hover:bg-rose-100/60 transition-colors focus-visible:outline-2 focus-visible:outline-rose-600"
+                      className="inline-flex min-h-11 items-center rounded-md border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-900 hover:bg-rose-100/60 transition-colors focus-visible:outline-2 focus-visible:outline-rose-600"
                     >
                       Batal
                     </button>
@@ -192,7 +223,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                       type="button"
                       disabled={clearing}
                       onClick={() => void handleClearChat()}
-                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md bg-rose-600 px-3 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 disabled:opacity-60 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700"
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-rose-600 px-3 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 disabled:opacity-60 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700"
                     >
                       {clearing ? <Loader2 className="size-3 animate-spin" /> : null}
                       {clearing ? 'Menghapus...' : 'Ya, Hapus Chat'}
@@ -207,7 +238,8 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
             {messages.map((message) => (
               <div key={message.id} className={`flex ${message.author === 'mitra' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[90%] rounded-lg px-3 py-2.5 text-sm leading-relaxed ${message.author === 'mitra' ? 'bg-ink-700 text-white' : 'border border-line bg-paper text-text'}`}>
-                  <p className="whitespace-pre-wrap">{message.text}</p>
+                  {message.author === 'assistant' ? <AssistantMessageText text={message.text} /> : <p className="whitespace-pre-wrap break-words">{message.text}</p>}
+                  {message.source === 'llm' ? <span className="mt-2 inline-flex rounded-sm border border-line bg-white px-1.5 py-0.5 text-[10px] font-semibold text-ink-700">AI · 9Router</span> : null}
                   {message.tour ? (
                     <button
                       type="button"

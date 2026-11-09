@@ -181,13 +181,21 @@ function MitraPortal() {
     queryKey: ['mitra-stocks'],
     queryFn: () => getStocks(),
     enabled: user?.role === 'mitra',
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
   })
 
   const ordersQuery = useQuery<Order[]>({
     queryKey: ['mitra-orders'],
     queryFn: () => getOrders(),
     enabled: user?.role === 'mitra',
-    refetchInterval: 15_000,
+    refetchInterval: (query) => {
+      // Jika ada pesanan aktif yang diproses atau dalam perjalanan kurir, polling cepat 4 detik
+      const hasActiveOrders = query.state.data?.some(
+        (o) => o.status === 'diproses' || o.status === 'dalam_pengiriman',
+      )
+      return hasActiveOrders ? 4_000 : 10_000
+    },
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   })
@@ -668,7 +676,6 @@ function NumericStockInput({
   const [localVal, setLocalVal] = useState(String(value))
   const [isFocused, setIsFocused] = useState(false)
 
-  // Sinkronisasi nilai eksternal (misal klik tombol + / -) saat input tidak dalam fokus
   useEffect(() => {
     if (!isFocused) {
       setLocalVal(String(value))
@@ -685,7 +692,6 @@ function NumericStockInput({
       value={isFocused ? localVal : String(value)}
       onFocus={(e) => {
         setIsFocused(true)
-        // Jika nilai saat ini 0, kosongkan field agar saat mengetik 10 langsung menjadi 10 tanpa tersisa angka 0 di depan
         setLocalVal(value === 0 ? '' : String(value))
         e.target.select()
       }}
@@ -700,7 +706,6 @@ function NumericStockInput({
       }}
       onChange={(e) => {
         const raw = e.target.value.replace(/\D/g, '')
-        // Hapus leading zero jika diikuti angka lain: "010" -> "10", "01" -> "1", namun izinkan "0" mandiri
         const stripped = raw.replace(/^0+(?=\d)/, '')
         setLocalVal(stripped)
         if (stripped === '') {
@@ -813,7 +818,7 @@ function StocksPanel({
         {centralProductsQuery.data?.length === 0 ? (
           <div className="p-4 sm:p-5">
             <EmptyState
-              title="Stok pusat belum tersedia"
+              title="Stok pusat daisuki belum tersedia"
               description="Admin belum mengaktifkan produk untuk gudang pusat."
             />
           </div>
@@ -1588,10 +1593,6 @@ function OrderHistory({
           >
             Status pesanan
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            Pantau status persetujuan kuantitas dari admin pusat dan
-            konfirmasikan penerimaan saat barang tiba.
-          </p>
         </div>
 
         {allOrders.length > 0 ? (
@@ -1632,7 +1633,7 @@ function OrderHistory({
                 onClick={onOpenOrder}
                 className="min-h-11 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700"
               >
-                Ajukan restock
+                restock
               </button>
             }
           />

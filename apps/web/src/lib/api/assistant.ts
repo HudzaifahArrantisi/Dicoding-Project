@@ -4,6 +4,7 @@ export type MitraTour = 'restock' | 'stock_report' | 'delivery' | 'logs' | 'prof
 
 export interface MitraAssistantReply {
   reply: string
+  source: 'llm' | 'fallback'
   suggestedTour?: MitraTour
   tourLabel?: string
   quickReplies: string[]
@@ -15,6 +16,7 @@ export interface MitraChatHistoryItem {
   id: string
   message: string
   reply: string
+  source: 'llm' | 'fallback'
   intent: MitraTour | null
   feedback: -1 | 1 | null
   created_at: string
