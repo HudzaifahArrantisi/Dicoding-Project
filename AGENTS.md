@@ -166,6 +166,7 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-09
+- **Grafik Analisis Python pada Log & Data**: Menambahkan tombol untuk menjalankan pipeline Python dari API admin, progres tiap skrip, grafik garis konsumsi stok fisik harian 14 hari dari log nyata, serta ringkasan klasifikasi risiko `daisuki.pkl` setelah pelatihan. Status pipeline diperbarui selama proses berjalan.
 - **Perbaikan Error 42703 pada Daftar Mitra**: Menerapkan migrasi `20261109_partner_type_other.sql` pada database Neon yang dipakai API dan memverifikasi kolom `partners.type_other` tersedia sebagai `text`.
 - **Jenis Perusahaan Lainnya Dapat Diisi Manual**: Form Tambah/Ubah Mitra menampilkan input wajib saat kategori `lainnya` dipilih; API memvalidasi dan menyimpan teks pada `partners.type_other`, lalu daftar dan detail mitra menampilkan nilainya. Skema Neon dan migrasi kolom baru turut ditambahkan.
 - **Dinamis Button Simpan Profil Mitra**: Mengubah tombol "Simpan profil" di portal Mitra ([apps/web/src/routes/mitra.tsx](apps/web/src/routes/mitra.tsx)) agar memiliki state dinamis berdasarkan perubahan input form (`hasChanges`). Saat belum ada perubahan data, tombol berstatus nonaktif dengan warna `bg-gray-400 cursor-not-allowed`. Saat terdeteksi perubahan pada nama mitra, PIC, telepon, alamat, wilayah, atau foto profil, tombol otomatis aktif dengan warna hijau `bg-emerald-600 hover:bg-emerald-700 cursor-pointer`.

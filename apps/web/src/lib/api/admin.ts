@@ -204,6 +204,16 @@ export interface AiRunStatus {
   status: 'idle' | 'running' | 'succeeded' | 'failed'
   started_at: string | null
   finished_at: string | null
+  current_step: string | null
+  steps: Array<{ label: string; status: 'running' | 'succeeded' | 'failed' }>
+  chart: {
+    days: Array<{ day: string; units: number }>
+    model: {
+      available: boolean
+      sample_count: number
+      risk_counts: Record<string, number>
+    }
+  } | null
 }
 
 export async function getAiRunStatus(): Promise<AiRunStatus> {

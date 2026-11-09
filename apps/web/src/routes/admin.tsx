@@ -70,6 +70,7 @@ import {
   type PartnerFastMovingGroup,
 } from '@/components/inventory/partner-fast-moving-modal'
 import { PartnerDetailModal } from '@/components/inventory/partner-detail-modal'
+import { AiPipelineChart } from '@/components/inventory/ai-pipeline-chart'
 import {
   ProductSalesDetailModal,
   TopPartnersDetailModal,
@@ -399,12 +400,41 @@ function DataSciencePanel({
   onRetry: () => void
   onExport: () => void
 }) {
+  const queryClient = useQueryClient()
+  const [startingAi, setStartingAi] = useState(false)
+  const activeRun = useRef<string | null>(null)
+  const runStatus = useQuery<AiRunStatus>({
+    queryKey: ['admin-ai-run'],
+    queryFn: getAiRunStatus,
+    refetchInterval: (query) => query.state.data?.status === 'running' ? 1000 : false,
+  })
   const [selectedPartner, setSelectedPartner] = useState<StockLogPartner | null>(null)
   const partnerLogs = useQuery<StockLog[]>({
     queryKey: ['admin-stock-logs-partner', selectedPartner?.partner_id],
     queryFn: () => getPartnerStockLogsById(selectedPartner!.partner_id),
     enabled: selectedPartner !== null,
   })
+
+  useEffect(() => {
+    if (runStatus.data?.status !== 'succeeded' || runStatus.data.started_at !== activeRun.current) return
+    activeRun.current = null
+    onRetry()
+    void queryClient.invalidateQueries({ queryKey: ['admin-ai-insights'] })
+    toast.success('Analisis Python selesai.')
+  }, [runStatus.data, onRetry, queryClient])
+
+  const handleRunAnalysis = async () => {
+    setStartingAi(true)
+    try {
+      const started = await triggerAiInsights()
+      activeRun.current = started.started_at
+      await runStatus.refetch()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setStartingAi(false)
+    }
+  }
 
   return (
     <section className="dashboard-panel-enter space-y-5" aria-labelledby="data-science-title">
@@ -429,6 +459,9 @@ function DataSciencePanel({
         <InsightMetric label="Mitra Aktif Melapor" value={summaryError ? '—' : summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`} detail="Mitra aktif yang mengirim log dalam 7 hari" />
         <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
       </div>
+
+      {runStatus.isError ? <ErrorState message={getErrorMessage(runStatus.error)} onRetry={() => void runStatus.refetch()} /> : null}
+      <AiPipelineChart status={runStatus.data} pending={startingAi} loading={runStatus.isLoading} onRun={() => void handleRunAnalysis()} />
 
       <PartnerDailyLogChart
         summary={summary}
@@ -2067,6 +2100,7 @@ function AIInsightsPanel({
   const runStatus = useQuery<AiRunStatus>({
     queryKey: ['admin-ai-run'],
     queryFn: getAiRunStatus,
+    refetchInterval: (query) => query.state.data?.status === 'running' ? 1000 : false,
   })
 
   const weeklySummaryQuery = useQuery<WeeklySummary>({
