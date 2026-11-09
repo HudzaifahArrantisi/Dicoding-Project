@@ -147,7 +147,7 @@ interface Metrics {
 }
 
 type AdminTab = 'stocks' | 'orders' | 'shipments' | 'alerts' | 'partners' | 'data-science' | 'ai-insights'
-type OrderCategoryTab = 'menunggu' | 'selesai' | 'ditolak'
+type OrderCategoryTab = 'menunggu' | 'dalam_pengiriman' | 'selesai' | 'ditolak'
 
 const adminTabLabels: Record<AdminTab, string> = {
   stocks: 'Stok cabang',
@@ -235,76 +235,130 @@ function ShipmentLogPanel({
       ) : null}
 
       {result?.data.length ? (
-        <div className="dashboard-surface overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 sm:px-5">
-            <h2 className="text-sm font-semibold text-ink-900">Riwayat kirim</h2>
+        <div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
+            <h2 className="text-sm font-semibold text-ink-900">Riwayat Pengiriman</h2>
             <span className="text-xs tabular-nums text-muted">{result.total} pengiriman tercatat</span>
           </div>
-          <div className="divide-y divide-line">
+
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
             {result.data.map((entry) => {
-              const sentAt = new Intl.DateTimeFormat('id-ID', {
+              const dateObj = new Date(entry.shipped_at)
+              const sentAtFull = new Intl.DateTimeFormat('id-ID', {
                 weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
                 hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta',
-              }).format(new Date(entry.shipped_at))
+              }).format(dateObj)
+              const sentAtShort = new Intl.DateTimeFormat('id-ID', {
+                day: 'numeric', month: 'short',
+                hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta',
+              }).format(dateObj)
               const totalQty = entry.items.reduce((sum, item) => sum + (item.qty_approved ?? 0), 0)
+
               return (
-                <article key={entry.id} className="px-4 py-4 sm:px-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <h3 className="font-display text-lg font-semibold text-ink-900">{entry.partner_name}</h3>
-                      <p className="mt-1 text-sm text-muted">Dikirim {sentAt} WIB</p>
-                    </div>
-                    <div className="flex shrink-0 items-start gap-2">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${entry.status === 'selesai' ? 'bg-ok-bg text-ok-fg' : 'bg-ink-50 text-ink-700'}`}>
-                          {entry.status === 'selesai' ? 'Sudah diterima' : 'Dalam pengiriman'}
-                        </span>
-                        {entry.status === 'selesai' && entry.receipt_photo_data_url ? (() => {
-                          const resolvedProofUrl = resolveImageUrl(entry.receipt_photo_data_url) ?? ''
-                          if (!resolvedProofUrl) return null
-                          return (
-                            <a
-                              href={resolvedProofUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => {
-                                if (resolvedProofUrl.startsWith('data:')) {
-                                  e.preventDefault()
-                                  const win = window.open('')
-                                  if (win) {
-                                    win.document.write(
-                                      `<!DOCTYPE html><html><head><title>Bukti Foto Penerimaan Pesanan ${entry.order_no}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body{margin:0;background:#0f172a;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.5);}</style></head><body><img src="${resolvedProofUrl}" alt="Bukti Penerimaan" /></body></html>`
-                                    )
-                                    win.document.close()
-                                  }
-                                }
-                              }}
-                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700 hover:underline transition-colors"
-                              title={`Buka foto bukti penerimaan ${entry.order_no} di tab baru`}
-                            >
-                              <ExternalLink className="size-3 text-blue-500" aria-hidden="true" />
-                              <span>Bukti</span>
-                            </a>
-                          )
-                        })() : null}
+                <article
+                  key={entry.id}
+                  className="rounded-xl border border-line bg-white p-3.5 shadow-2xs transition-all hover:border-ink-400 hover:shadow-xs sm:p-4 flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Header: Nama Mitra, Waktu Kirim & Status Badge */}
+                    <div className="flex items-start justify-between gap-2 border-b border-line/60 pb-2.5">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-display text-sm sm:text-base font-bold text-ink-900">
+                          {entry.partner_name}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-muted flex items-center gap-1.5">
+                          <Clock className="size-3 text-muted shrink-0" aria-hidden="true" />
+                          <span className="sm:hidden">{sentAtShort} WIB</span>
+                          <span className="hidden sm:inline">Dikirim {sentAtFull} WIB</span>
+                        </p>
                       </div>
+
+                      <span
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                          entry.status === 'selesai'
+                            ? 'bg-ok-bg text-ok-fg border border-ok/25'
+                            : 'bg-order-pengiriman-bg text-order-pengiriman border border-order-pengiriman/30'
+                        }`}
+                      >
+                        <Truck className="size-3 shrink-0" aria-hidden="true" />
+                        <span>{entry.status === 'selesai' ? 'Diterima' : 'Dikirim'}</span>
+                      </span>
+                    </div>
+
+                    {/* Ringkasan Barang: Bersih di Mobile & Lengkap di Desktop */}
+                    <div className="mt-2.5">
+                      {/* Tampilan Mobile: Ringkas dan hemat teks */}
+                      <div className="flex sm:hidden items-center justify-between text-xs py-1">
+                        <span className="text-muted">
+                          Muatan: <strong className="font-semibold text-ink-800">{entry.items.length} macam produk</strong>
+                        </span>
+                        <span className="font-semibold tabular-nums text-ink-900">
+                          Total <strong className="font-bold text-order-pengiriman">{totalQty}</strong> pcs
+                        </span>
+                      </div>
+
+                      {/* Tampilan Tablet/Desktop: Chip Rincian Semua Produk */}
+                      <div className="hidden sm:flex flex-wrap gap-1.5 text-xs">
+                        {entry.items.map((item) => (
+                          <span
+                            key={item.product_name}
+                            className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-800 border border-line/70"
+                          >
+                            <span className="truncate max-w-[130px]">{item.product_name}</span>
+                            <strong className="font-bold tabular-nums text-ink-900">
+                              ({item.qty_approved ?? 0})
+                            </strong>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer: Nomor PO, Foto Bukti & Tombol Lihat Pesanan */}
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-line/60 pt-2.5 text-xs">
+                    <span className="font-mono text-[11px] text-muted truncate max-w-[130px] sm:max-w-none">
+                      {entry.order_no}
+                    </span>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {entry.status === 'selesai' && entry.receipt_photo_data_url ? (() => {
+                        const resolvedProofUrl = resolveImageUrl(entry.receipt_photo_data_url) ?? ''
+                        if (!resolvedProofUrl) return null
+                        return (
+                          <a
+                            href={resolvedProofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => {
+                              if (resolvedProofUrl.startsWith('data:')) {
+                                e.preventDefault()
+                                const win = window.open('')
+                                if (win) {
+                                  win.document.write(
+                                    `<!DOCTYPE html><html><head><title>Bukti Foto Penerimaan Pesanan ${entry.order_no}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body{margin:0;background:#0f172a;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.5);}</style></head><body><img src="${resolvedProofUrl}" alt="Bukti Penerimaan" /></body></html>`
+                                  )
+                                  win.document.close()
+                                }
+                              }
+                            }}
+                            className="inline-flex min-h-8 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                            title={`Buka foto bukti penerimaan ${entry.order_no}`}
+                          >
+                            <ExternalLink className="size-3 text-blue-600" aria-hidden="true" />
+                            <span>Bukti</span>
+                          </a>
+                        )
+                      })() : null}
+
                       <button
                         type="button"
                         onClick={() => onViewOrder(entry.id)}
-                        className="inline-flex min-h-11 items-center rounded-md border border-line px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50"
+                        className="inline-flex min-h-8 items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-semibold text-ink-900 hover:bg-paper cursor-pointer transition-colors"
                       >
-                        Lihat pesanan
+                        <span>Lihat pesanan</span>
+                        <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
                       </button>
                     </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line/70 pt-3 text-xs text-ink-700">
-                    {entry.items.map((item) => (
-                      <span key={item.product_name}>{item.product_name} <strong className="tabular-nums">{item.qty_approved ?? 0} {item.product_unit}</strong></span>
-                    ))}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-                    <span className="tabular-nums">Total {totalQty} unit · {entry.items.length} jenis barang</span>
-                    <span className="font-mono text-xs text-ink-600">{entry.order_no}</span>
                   </div>
                 </article>
               )
@@ -1840,7 +1894,7 @@ function PartnerStockLogDialog({
                   <div className="pt-3.5 sm:pt-4">
                     {dayBatches.length === 0 ? (
                       <EmptyState
-                        title="Tidak ada aktivitas stok"
+                        title="Tidak ada aktivitas stok hari ini"
                         description={`Cabang ${partner.partner_name} tidak mencatat perubahan stok fisik pada ${formatDayDate(activeDateObj)}.`}
                       />
                     ) : (
@@ -3263,6 +3317,7 @@ function Metric({
 const emptyPartnerForm = {
   name: '',
   type: 'hotel' as PartnerType,
+  type_other: '',
   address: '',
   pic_name: '',
   phone: '',
@@ -3325,6 +3380,7 @@ function PartnerManagementPanel() {
       ? apiUpdatePartner(editingPartner.id, {
           name: form.name,
           type: form.type,
+          type_other: form.type === 'lainnya' ? form.type_other.trim() : '',
           address: form.address,
           pic_name: form.pic_name,
           phone: form.phone,
@@ -3379,7 +3435,7 @@ function PartnerManagementPanel() {
   const openEdit = (partner: ManagedPartner) => {
     setEditingPartner(partner)
     setForm({
-      name: partner.name, type: partner.type, address: partner.address ?? '',
+      name: partner.name, type: partner.type, type_other: partner.type_other ?? '', address: partner.address ?? '',
       pic_name: partner.pic_name ?? '', phone: partner.pic_phone ?? '',
       username: partner.username ?? '', password: '',
       province_code: partner.province_code ?? '', regency_code: partner.regency_code ?? '',
@@ -3399,6 +3455,7 @@ function PartnerManagementPanel() {
         (p.pic_phone && p.pic_phone.includes(q)) ||
         (p.username && p.username.toLowerCase().includes(q)) ||
         (p.address && p.address.toLowerCase().includes(q)) ||
+        (p.type_other && p.type_other.toLowerCase().includes(q)) ||
         (p.village_name && p.village_name.toLowerCase().includes(q)) ||
         (p.district_name && p.district_name.toLowerCase().includes(q)) ||
         (p.regency_name && p.regency_name.toLowerCase().includes(q)) ||
@@ -3626,8 +3683,8 @@ function PartnerManagementPanel() {
                     >
                       {partner.name}
                     </button>
-                    <span className="rounded-sm bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-700">
-                      {partner.type}
+                    <span className="max-w-full break-words rounded-sm bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-700">
+                      {partner.type === 'lainnya' ? partner.type_other || 'Lainnya' : partner.type}
                     </span>
                     {partner.username ? (
                       <span className="hidden text-xs text-muted md:inline">
@@ -3744,7 +3801,8 @@ function PartnerManagementPanel() {
             </div>
             <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); savePartner.mutate() }}>
               <div className="sm:col-span-2"><label className={labelClass} htmlFor="partner-name">Nama mitra</label><input id="partner-name" className={fieldClass} required minLength={2} maxLength={120} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></div>
-              <div><label className={labelClass} htmlFor="partner-type">Jenis perusahaan</label><select id="partner-type" className={fieldClass} value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as PartnerType })}><option value="hotel">Hotel</option><option value="restoran">Rumah makan / restoran</option><option value="kafe">Kafe</option><option value="minimarket">Minimarket</option><option value="lainnya">Lainnya</option></select></div>
+              <div><label className={labelClass} htmlFor="partner-type">Jenis perusahaan</label><select id="partner-type" className={fieldClass} value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as PartnerType, type_other: event.target.value === 'lainnya' ? form.type_other : '' })}><option value="hotel">Hotel</option><option value="restoran">Rumah makan / restoran</option><option value="kafe">Kafe</option><option value="minimarket">Minimarket</option><option value="lainnya">Lainnya</option></select></div>
+              {form.type === 'lainnya' ? <div className="sm:col-span-2"><label className={labelClass} htmlFor="partner-type-other">Jenis perusahaan lainnya</label><input id="partner-type-other" className={fieldClass} required maxLength={80} value={form.type_other} onChange={(event) => setForm({ ...form, type_other: event.target.value })} placeholder="Tulis jenis perusahaan" /></div> : null}
               <div><label className={labelClass} htmlFor="partner-phone">Nomor telepon</label><input id="partner-phone" className={fieldClass} type="tel" required minLength={8} maxLength={24} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
               <div className="sm:col-span-2"><label className={labelClass} htmlFor="partner-address">Alamat</label><textarea id="partner-address" className={`${fieldClass} min-h-24 py-3`} required minLength={5} maxLength={500} value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></div>
               <div className="sm:col-span-2"><label className={labelClass} htmlFor="partner-pic">Nama PIC mitra</label><input id="partner-pic" className={fieldClass} required minLength={2} maxLength={120} value={form.pic_name} onChange={(event) => setForm({ ...form, pic_name: event.target.value })} /></div>
@@ -4507,10 +4565,14 @@ function OrderPanel({
     () => allOrders.filter((order) => order.status === 'diproses').length,
     [allOrders],
   )
+  const shippingCount = useMemo(
+    () => allOrders.filter((order) => order.status === 'dalam_pengiriman').length,
+    [allOrders],
+  )
   const completedCount = useMemo(
     () =>
       allOrders.filter((order) =>
-        ['disetujui', 'dalam_pengiriman', 'selesai'].includes(order.status),
+        ['disetujui', 'selesai'].includes(order.status),
       ).length,
     [allOrders],
   )
@@ -4526,9 +4588,12 @@ function OrderPanel({
     if (activeCategory === 'menunggu') {
       return allOrders.filter((order) => order.status === 'diproses')
     }
+    if (activeCategory === 'dalam_pengiriman') {
+      return allOrders.filter((order) => order.status === 'dalam_pengiriman')
+    }
     if (activeCategory === 'selesai') {
       return allOrders.filter((order) =>
-        ['disetujui', 'dalam_pengiriman', 'selesai'].includes(order.status),
+        ['disetujui', 'selesai'].includes(order.status),
       )
     }
     return allOrders.filter((order) =>
@@ -4562,7 +4627,7 @@ function OrderPanel({
             }`}
         >
           <Clock className={`size-4 ${activeCategory === 'menunggu' ? 'text-amber-600' : 'text-muted'}`} aria-hidden="true" />
-          <span>Menunggu Persetujuan</span>
+          <span>Mitra Menunggu Persetujuan</span>
           {pendingCount > 0 ? (
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${activeCategory === 'menunggu'
@@ -4577,6 +4642,28 @@ function OrderPanel({
 
         <button
           type="button"
+          onClick={() => setActiveCategory('dalam_pengiriman')}
+          className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'dalam_pengiriman'
+              ? 'border border-blue-300/90 bg-blue-50/95 text-blue-950 shadow-xs'
+              : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
+            }`}
+        >
+          <Truck className={`size-4 ${activeCategory === 'dalam_pengiriman' ? 'text-blue-600' : 'text-muted'}`} aria-hidden="true" />
+          <span>Dalam Pengiriman</span>
+          {shippingCount > 0 ? (
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${activeCategory === 'dalam_pengiriman'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'bg-order-pengiriman-bg text-order-pengiriman border border-order-pengiriman/30'
+                }`}
+            >
+              {shippingCount}
+            </span>
+          ) : null}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveCategory('selesai')}
           className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'selesai'
               ? 'border border-emerald-300/90 bg-emerald-50/95 text-emerald-950 shadow-xs'
@@ -4584,7 +4671,7 @@ function OrderPanel({
             }`}
         >
           <CheckCircle2 className={`size-4 ${activeCategory === 'selesai' ? 'text-emerald-600' : 'text-muted'}`} aria-hidden="true" />
-          <span>Setelah persetujuan</span>
+          <span>Selesai / Disetujui</span>
           {completedCount > 0 ? (
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${activeCategory === 'selesai'
@@ -4635,14 +4722,18 @@ function OrderPanel({
             title={
               activeCategory === 'menunggu'
                 ? 'Tidak ada pesanan menunggu persetujuan'
-                : activeCategory === 'selesai'
-                  ? 'Belum ada pesanan disetujui atau selesai'
-                  : 'Tidak ada pesanan yang ditolak'
+                : activeCategory === 'dalam_pengiriman'
+                  ? 'Tidak ada pesanan dalam pengiriman'
+                  : activeCategory === 'selesai'
+                    ? 'Belum ada pesanan disetujui atau selesai'
+                    : 'Tidak ada pesanan yang ditolak'
             }
             description={
               activeCategory === 'menunggu'
                 ? 'Semua permintaan restock dari mitra cabang telah diproses.'
-                : 'Ubah kategori tab di atas untuk memeriksa daftar pesanan lainnya.'
+                : activeCategory === 'dalam_pengiriman'
+                  ? 'Saat ini belum ada armada logistik atau pengiriman barang yang sedang menuju cabang.'
+                  : 'Ubah kategori tab di atas untuk memeriksa daftar pesanan lainnya.'
             }
           />
         </div>
@@ -6614,14 +6705,15 @@ function AlertPanel({
                       type="button"
                       onClick={() => {
                         const targetCategory: OrderCategoryTab =
-                          parsed.matchedOrder?.status === 'selesai' ||
-                          parsed.matchedOrder?.status === 'dalam_pengiriman' ||
-                          parsed.matchedOrder?.status === 'disetujui'
-                            ? 'selesai'
-                            : parsed.matchedOrder?.status === 'ditolak' ||
-                              parsed.matchedOrder?.status === 'dibatalkan'
-                              ? 'ditolak'
-                              : 'menunggu'
+                          parsed.matchedOrder?.status === 'dalam_pengiriman'
+                            ? 'dalam_pengiriman'
+                            : parsed.matchedOrder?.status === 'selesai' ||
+                                parsed.matchedOrder?.status === 'disetujui'
+                              ? 'selesai'
+                              : parsed.matchedOrder?.status === 'ditolak' ||
+                                  parsed.matchedOrder?.status === 'dibatalkan'
+                                ? 'ditolak'
+                                : 'menunggu'
                         if (parsed.relatedOrderId) {
                           onViewOrderDetail(parsed.relatedOrderId, targetCategory)
                         } else {

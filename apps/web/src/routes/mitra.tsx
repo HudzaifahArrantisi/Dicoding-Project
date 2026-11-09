@@ -84,11 +84,11 @@ const tabItems: Array<{
   label: string
   Icon: typeof Store
 }> = [
-  { id: 'stocks', label: 'Stok', Icon: Store },
+  { id: 'stocks', label: 'Stok saya', Icon: Store },
   { id: 'order', label: 'Pesan', Icon: PackagePlus },
   { id: 'history', label: 'Lacak', Icon: Truck },
   { id: 'logs', label: 'Log Stok', Icon: History },
-  { id: 'profile', label: 'Cabang', Icon: UserRound },
+  { id: 'profile', label: 'Profil', Icon: UserRound },
 ]
 
 function errorMessage(error: unknown) {
@@ -1526,7 +1526,7 @@ function OrderHistory({
     | 'dalam_pengiriman'
     | 'selesai'
     | 'ditolak'
-  >('semua')
+  >('diproses')
 
   const allOrders = query.data ?? []
   const selectedOrder =
@@ -1598,7 +1598,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={onOpenOrder}
-            className="mt-2 inline-flex min-h-11 items-center justify-center gap-1.5 self-start rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 sm:mt-0 sm:self-auto"
+            className="mt-2 inline-flex min-h-11 items-center justify-center gap-1.5 self-start rounded-md bg-gray-400 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 sm:mt-0 sm:self-auto"
           >
             <PackagePlus className="size-4" />
             <span>Ajukan Restock Baru</span>
@@ -2788,7 +2788,7 @@ function ProfilePanel({
         <button
           type="submit"
           disabled={saveProfile.isPending || isProcessingPhoto}
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-gray-400 px-5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto"
         >
           {saveProfile.isPending || isProcessingPhoto ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />

@@ -38,6 +38,7 @@ export const partners = pgTable("partners", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   type: partnerTypeEnum("type").notNull(),
+  type_other: text("type_other"),
   address: text("address"),
   pic_name: text("pic_name"),
   pic_phone: text("pic_phone"),

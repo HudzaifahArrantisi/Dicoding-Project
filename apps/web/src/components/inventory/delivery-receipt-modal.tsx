@@ -688,9 +688,6 @@ export function DeliveryReceiptModal({
               <Dialog.Title className="font-display text-xl font-bold text-ink-900">
                 {afterShipment ? 'Barang Dikirim · Cetak Dokumen' : 'Cetak Resi / Surat Jalan'}
               </Dialog.Title>
-              <Dialog.Description className="mt-1 text-xs text-muted sm:text-sm">
-                Pilih format dokumen sesuai kebutuhan pencetakan (Kertas A4 resmi atau Struk Thermal).
-              </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
@@ -749,9 +746,6 @@ export function DeliveryReceiptModal({
             {/* Card Preview Dokumen */}
             <div className="rounded-xl border border-line bg-ink-50/70 p-4 sm:p-6 overflow-hidden">
               <div className="mb-3 flex items-center justify-between text-xs text-muted">
-                <span className="font-semibold text-ink-700">
-                  Pratinjau ({printFormat === 'surat_jalan' ? 'Kertas A4 / Surat Jalan' : 'Kertas Thermal 80 mm'})
-                </span>
                 {order.delivery_code ? (
                   <button
                     type="button"
@@ -851,25 +845,6 @@ export function DeliveryReceiptModal({
                       ) : (
                         <div className="h-10 w-28 rounded bg-ink-100 animate-pulse" />
                       )}
-                    </div>
-                  </div>
-
-                  {/* Kolom Tanda Tangan */}
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px] border-t border-line pt-2">
-                    <div>
-                      <p className="text-muted">Gudang Pusat</p>
-                      <div className="h-8"></div>
-                      <p className="font-bold border-t border-line mx-2 pt-1 text-ink-900">( Admin )</p>
-                    </div>
-                    <div>
-                      <p className="text-muted">Kurir Pengantar</p>
-                      <div className="h-8"></div>
-                      <p className="font-bold border-t border-line mx-2 pt-1 text-ink-900">( Ekspedisi )</p>
-                    </div>
-                    <div>
-                      <p className="text-muted">Penerima Cabang</p>
-                      <div className="h-8"></div>
-                      <p className="font-bold border-t border-line mx-2 pt-1 text-ink-900">( PIC Mitra )</p>
                     </div>
                   </div>
                 </div>

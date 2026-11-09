@@ -16,6 +16,7 @@ export interface PartnerListResponse {
 export interface CreatePartnerPayload {
   name: string
   type: PartnerType
+  type_other?: string
   address?: string
   pic_name?: string
   pic_phone?: string

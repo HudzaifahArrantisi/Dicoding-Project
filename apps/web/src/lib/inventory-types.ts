@@ -100,6 +100,7 @@ export interface ManagedPartner {
   id: string
   name: string
   type: PartnerType
+  type_other: string | null
   address: string | null
   pic_name: string | null
   pic_phone: string | null

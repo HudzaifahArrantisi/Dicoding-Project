@@ -43,6 +43,7 @@ create table if not exists partners (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   type partner_type not null,
+  type_other text,
   address text,
   pic_name text,
   pic_phone text,
@@ -69,6 +70,7 @@ alter table partners add column if not exists district_name text;
 alter table partners add column if not exists village_code text;
 alter table partners add column if not exists village_name text;
 alter table partners add column if not exists profile_photo text;
+alter table partners add column if not exists type_other text;
 
 -- Index optimasi pencarian & filter mitra
 create index if not exists partners_active_name_idx on partners (is_active, name);

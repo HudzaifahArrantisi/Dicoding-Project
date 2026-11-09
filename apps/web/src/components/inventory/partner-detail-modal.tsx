@@ -62,8 +62,8 @@ export function PartnerDetailModal({
                   <Dialog.Title className="truncate font-display text-base font-bold text-ink-900 sm:text-lg">
                     {partner.name}
                   </Dialog.Title>
-                  <span className="rounded-sm bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-700">
-                    {partner.type}
+                  <span className="max-w-full break-words rounded-sm bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-700">
+                    {partner.type === 'lainnya' ? partner.type_other || 'Lainnya' : partner.type}
                   </span>
                 </div>
                 <Dialog.Description className="mt-0.5 text-xs text-muted truncate">

@@ -159,6 +159,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
             COALESCE(p.pic_name, '') ILIKE ${`%${search}%`} OR
             COALESCE(p.pic_phone, '') ILIKE ${`%${search}%`} OR
             COALESCE(p.address, '') ILIKE ${`%${search}%`} OR
+            COALESCE(p.type_other, '') ILIKE ${`%${search}%`} OR
             COALESCE(p.province_name, '') ILIKE ${`%${search}%`} OR
             COALESCE(p.regency_name, '') ILIKE ${`%${search}%`} OR
             COALESCE(p.district_name, '') ILIKE ${`%${search}%`} OR
@@ -173,6 +174,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         id: string;
         name: string;
         type: string;
+        type_other: string | null;
         address: string | null;
         pic_name: string | null;
         pic_phone: string | null;
@@ -191,6 +193,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
           p.id,
           p.name,
           p.type,
+          p.type_other,
           p.address,
           p.pic_name,
           p.pic_phone,
@@ -246,6 +249,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         id: row.id,
         name: row.name,
         type: row.type,
+        type_other: row.type_other,
         address: row.address,
         pic_name: row.pic_name,
         pic_phone: row.pic_phone,
@@ -300,6 +304,11 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       const picName = body.pic_name.trim();
       const phone = body.phone.trim();
       const username = body.username.toLowerCase().trim();
+      const typeOther = body.type === "lainnya" ? body.type_other?.trim() : null;
+      if (body.type === "lainnya" && (!typeOther || typeOther.length > 80)) {
+        set.status = 422;
+        return { error: "Isi jenis perusahaan lainnya (maksimal 80 karakter)" };
+      }
       if (!name || !address || !picName || !phone || !/^[a-z0-9._-]{3,40}$/.test(username)) {
         set.status = 422;
         return { error: "Lengkapi data mitra dan gunakan username 3–40 karakter (huruf kecil, angka, titik, garis bawah, atau tanda hubung)" };
@@ -334,6 +343,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
           const [created] = await tx.insert(partners).values({
             name,
             type: body.type,
+            type_other: typeOther,
             address,
             pic_name: picName,
             pic_phone: phone,
@@ -370,6 +380,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       body: t.Object({
         name: t.String({ minLength: 2, maxLength: 120 }),
         type: t.Union([t.Literal("hotel"), t.Literal("restoran"), t.Literal("kafe"), t.Literal("minimarket"), t.Literal("lainnya")]),
+        type_other: t.Optional(t.String({ maxLength: 80 })),
         address: t.String({ minLength: 5, maxLength: 500 }),
         pic_name: t.String({ minLength: 2, maxLength: 120 }),
         phone: t.String({ minLength: 8, maxLength: 24 }),
@@ -393,6 +404,10 @@ export const adminModule = new Elysia({ prefix: "/admin" })
     const address = body.address.trim();
     const picName = body.pic_name.trim();
     const phone = body.phone.trim();
+    const typeOther = body.type === "lainnya" ? body.type_other?.trim() : null;
+    if (body.type === "lainnya" && (!typeOther || typeOther.length > 80)) {
+      set.status = 422; return { error: "Isi jenis perusahaan lainnya (maksimal 80 karakter)" };
+    }
     if (name.length < 2 || address.length < 5 || picName.length < 2 || !/^\+?[0-9][0-9 ()-]{7,23}$/.test(phone)) {
       set.status = 422; return { error: "Periksa nama mitra, alamat, PIC, dan nomor telepon" };
     }
@@ -410,7 +425,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
     }
     const updated = await db.transaction(async (tx) => {
       const [partner] = await tx.update(partners).set({
-        name, type: body.type, address, pic_name: picName, pic_phone: phone, ...region,
+        name, type: body.type, type_other: typeOther, address, pic_name: picName, pic_phone: phone, ...region,
       }).where(eq(partners.id, params.id)).returning({ id: partners.id });
       if (!partner) return false;
       await tx.update(users).set({ full_name: picName }).where(eq(users.partner_id, params.id));
@@ -427,6 +442,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
     body: t.Object({
       name: t.String({ minLength: 2, maxLength: 120 }),
       type: t.Union([t.Literal("hotel"), t.Literal("restoran"), t.Literal("kafe"), t.Literal("minimarket"), t.Literal("lainnya")]),
+      type_other: t.Optional(t.String({ maxLength: 80 })),
       address: t.String({ minLength: 5, maxLength: 500 }),
       pic_name: t.String({ minLength: 2, maxLength: 120 }),
       phone: t.String({ minLength: 8, maxLength: 24 }),
