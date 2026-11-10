@@ -10,3 +10,5 @@
 Perubahan kamus JSON dibaca pada proses API berikutnya. Tambah contoh intent pada berkas per topik di `mega_data_word/intent/training/`, lalu jalankan `python retraining/refresh_identity.py` untuk memperbarui classifier lokal tanpa mengubah model risiko. Daftar dokumen RAG yang boleh dibaca mitra diatur oleh `mainbrain/corporate_knowledge/rag_policy.json`.
 
 Seluruh dependensi Python dipasang dengan `python -m pip install -r requirements.txt` dari folder `ai/`.
+
+Handoff CSV Data Science menggunakan `raw_references/csv/cleaned_inventory_summary.csv`. Saat training, analisis agregat ditulis ke `raw_references/csv/ai_analysis_summary.csv` dan dokumen privat mainbrain. Lihat `raw_references/csv/README.md` untuk kontrak kolom dan batas akses.

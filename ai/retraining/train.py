@@ -18,6 +18,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from source import build_intent_samples, build_training_samples, fetch_training_records
 from doc_loader import scan_and_generate_mainbrain
+from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, prepare_handoff
 
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
@@ -59,6 +60,13 @@ def save_model_safely(model: Pipeline | dict[str, Any], dest_path: Path, temp_pa
 
 def run_retraining_loop() -> bool:
     try:
+        csv_texts: list[str] = []
+        csv_labels: list[str] = []
+        if is_fresh_handoff(CSV_HANDOFF):
+            csv_texts, csv_labels, product_count = prepare_handoff()
+            LOGGER.info("Data Science CSV: %d pasangan mitra-produk, %d produk; ringkasan privat disiapkan", len(csv_texts), product_count)
+        elif CSV_HANDOFF.is_file():
+            LOGGER.warning("CSV Data Science lebih dari 7 hari atau bertanggal masa depan; training risiko memakai PostgreSQL")
         LOGGER.info("Memulai pemindaian dokumen di ai/data/raw_references/...")
         mainbrain_stats = scan_and_generate_mainbrain()
         LOGGER.info(
@@ -69,14 +77,21 @@ def run_retraining_loop() -> bool:
         )
 
         # 2. Pipeline Klasifikasi Operasional Database & Intent
-        records = fetch_training_records()
-        texts, labels = build_training_samples(records)
+        if csv_texts:
+            texts, labels = csv_texts, csv_labels
+            training_source = "data_science_csv"
+        else:
+            records = fetch_training_records()
+            texts, labels = build_training_samples(records)
+            training_source = "postgresql"
         intent_texts, intent_labels = build_intent_samples()
         bundle: dict[str, Any] = {
             "intent": train_pipeline(intent_texts, intent_labels, fit_prior=False),
             "mainbrain_meta": {
                 "total_documents": mainbrain_stats["total"],
                 "converted_markdowns": mainbrain_stats["success"],
+                "training_input_source": training_source,
+                "training_input_samples": len(texts),
             },
             "metadata": {
                 "name": "Daisuki AI Assistant",
@@ -90,11 +105,13 @@ def run_retraining_loop() -> bool:
         }
         if len(set(labels)) >= 2:
             bundle["risk"] = train_pipeline(texts, labels)
+            bundle["mainbrain_meta"]["risk_model_source"] = training_source
         elif MODEL_OUTPUT_FILE.exists():
             from filter import DaisukiFilter
             previous = DaisukiFilter(MODEL_OUTPUT_FILE, model_key="risk")
             if previous.is_ready:
                 bundle["risk"] = previous.model
+                bundle["mainbrain_meta"]["risk_model_source"] = "retained_previous"
         if "risk" not in bundle:
             LOGGER.warning("Data stok hanya satu kelas; model intent tetap dilatih, prediksi risiko belum tersedia")
         LOGGER.info("Training intent dari %d frasa dan risiko dari %d pasangan mitra-produk", len(intent_texts), len(texts))

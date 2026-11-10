@@ -28,14 +28,14 @@ test("konteks aktif terbatas dan ringkasan tujuan mengabaikan sapaan", () => {
   endSession(key);
 });
 
-test("tujuan mitra tetap tersimpan saat 9Router tidak aktif", async () => {
-  const enabled = process.env.LLM_ENABLED;
-  process.env.LLM_ENABLED = "false";
+test("ringkasan sesi disimpan tanpa menunggu 9Router", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() => { throw new Error("9Router tidak boleh dipanggil saat menutup sesi"); }) as unknown as typeof fetch;
   try {
-    const summary = await summarizeSession([turn("1", "Saya ingin memantau stok Basreng Daun Jeruk")], "");
+    const summary = await summarizeSession([turn("1", "Saya ingin memantau stok Basreng Daun Jeruk")], "Preferensi sebelumnya");
     expect(summary).toContain("Saya ingin memantau stok Basreng Daun Jeruk");
+    expect(summary).toContain("Preferensi sebelumnya");
   } finally {
-    if (enabled === undefined) delete process.env.LLM_ENABLED;
-    else process.env.LLM_ENABLED = enabled;
+    globalThis.fetch = originalFetch;
   }
 });

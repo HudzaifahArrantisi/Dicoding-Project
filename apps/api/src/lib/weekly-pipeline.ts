@@ -1,8 +1,14 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { publishInventoryChange } from "../realtime";
 
 const root = resolve(import.meta.dir, "../../../..");
+const handoffCsv = resolve(root, "ai/data/raw_references/csv/cleaned_inventory_summary.csv");
+function hasFreshHandoff(): boolean {
+  if (!existsSync(handoffCsv)) return false;
+  const age = Date.now() - statSync(handoffCsv).mtimeMs;
+  return age >= 0 && age <= 7 * 24 * 60 * 60 * 1000;
+}
 const python = process.env.DAISUKI_PYTHON_BIN || process.env.PYTHON_EXECUTABLE ||
   (existsSync(resolve(root, "ai/.venv/Scripts/python.exe")) ? resolve(root, "ai/.venv/Scripts/python.exe") :
   existsSync(resolve(root, "ai/.venv/bin/python")) ? resolve(root, "ai/.venv/bin/python") :
@@ -24,6 +30,7 @@ type PipelineChart = {
 };
 type PipelineStatus = {
   status: "idle" | "running" | "succeeded" | "failed";
+  training_source: "data_science_csv" | "postgresql" | null;
   started_at: string | null;
   finished_at: string | null;
   current_step: string | null;
@@ -32,6 +39,7 @@ type PipelineStatus = {
 };
 let pipelineStatus: PipelineStatus = {
   status: "idle",
+  training_source: null,
   started_at: null,
   finished_at: null,
   current_step: null,
@@ -54,6 +62,7 @@ export function runWeeklyPipeline(): Promise<void> {
   if (running) return running;
   pipelineStatus = {
     status: "running", started_at: new Date().toISOString(), finished_at: null,
+    training_source: hasFreshHandoff() ? "data_science_csv" : "postgresql",
     current_step: null, steps: [], chart: null,
   };
   publishInventoryChange({ partnerId: null, topics: ["ai"] });

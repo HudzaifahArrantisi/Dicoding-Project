@@ -114,6 +114,15 @@ Jalankan perintah berikut dari folder `ai/` setelah dependensi terpasang. Perint
    ```
    Tambahkan frasa di `data/mega_data_word/intent/training/` sebelum menjalankan perintah ini. Model risiko stok lama tetap dipertahankan. Restart API agar kamus JSON dan dokumen publik yang dicache dimuat ulang.
 
+### Handoff CSV dari Data Science
+
+1. Tim Data Science menghasilkan `data-science/data/cleaned_inventory_summary.csv` dengan `python data-science/src/clean_logs.py` dari root repository, atau mengekspor CSV dengan [kolom yang sama](data/raw_references/csv/README.md).
+2. Dari root repository, salin hasil yang sudah ditinjau: `Copy-Item data-science/data/cleaned_inventory_summary.csv ai/data/raw_references/csv/cleaned_inventory_summary.csv`.
+3. Admin menekan **Perbarui analisis & model** di tab Log & Data, atau AI Engineer menjalankan `python retraining/train.py` dari folder `ai/`.
+4. Jika waktu modifikasi CSV tidak lebih dari 7 hari, training menggunakannya untuk model risiko `data/mainbrain/models/daisuki.pkl`. Ringkasan agregat per produk dibuat di `data/raw_references/csv/ai_analysis_summary.csv` dan diekstrak ke `data/mainbrain/context_embeddings/ai_analysis_summary.md` sebagai dokumen privat. CSV yang lebih lama dilewati dan training memakai PostgreSQL.
+
+Model `.pkl` menyimpan classifier intent dan risiko; dokumen RAG perusahaan tetap dibaca terpisah. Dokumen privat hasil CSV tidak otomatis tersedia untuk chatbot mitra. Jika ada pengetahuan agregat yang layak dibagikan, buat versi `*.public.md` yang sudah diperiksa dan daftarkan di `data/mainbrain/corporate_knowledge/rag_policy.json`, lalu restart API.
+
 ---
 
 ## 7. Akses dan Keamanan

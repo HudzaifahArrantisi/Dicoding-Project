@@ -202,6 +202,7 @@ export async function getAiInsights(): Promise<AIInsights> {
  */
 export interface AiRunStatus {
   status: 'idle' | 'running' | 'succeeded' | 'failed'
+  training_source: 'data_science_csv' | 'postgresql' | null
   started_at: string | null
   finished_at: string | null
   current_step: string | null

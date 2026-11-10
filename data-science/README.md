@@ -59,6 +59,14 @@ python data-science/src/clean_logs.py
 
 Script menulis `data/cleaned_inventory_summary.csv`. Untuk mendapatkan `current_qty` dan `par_level` aktual, isi `DATABASE_URL` pada `data-science/.env` dengan akun `ds_readonly`; tanpa koneksi, script membuat ringkasan berdasarkan log CSV dan memakai stok tertinggi yang tercatat sebagai perkiraan par level.
 
+Untuk menyerahkan hasil yang sudah diperiksa kepada AI Engineer, salin CSV dari root repository:
+
+```powershell
+Copy-Item data-science/data/cleaned_inventory_summary.csv ai/data/raw_references/csv/cleaned_inventory_summary.csv
+```
+
+Pipeline AI memvalidasi format dan empat produk resmi sebelum memakai CSV untuk training risiko. Ringkasan analisis tanpa identitas cabang disimpan terpisah; CSV cabang tidak dipublikasikan ke chatbot mitra.
+
 ## 7. Aturan
 - Jangan pernah meng-commit data mentah klien ke repositori git.
 - Jangan meng-commit file model berukuran besar (`.pkl`, `.joblib`, `.pt`, dsb.).
