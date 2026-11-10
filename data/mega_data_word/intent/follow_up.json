@@ -1,0 +1,1 @@
+{"category":"intent","name":"follow_up","version":"1.0.0","exact_phrases":["berapa","bagaimana","detailnya","lanjut","sekarang","terbaru","mana saja"],"regex_patterns":["\\b(?:yang tadi|yang itu)\\b","^(?:berapa|bagaimana|detailnya|lanjut|sekarang|terbaru|mana saja)\\s*\\??$"]}

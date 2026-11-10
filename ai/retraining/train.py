@@ -1,10 +1,11 @@
 """Retrain the Daisuki text classifier from live AI Insights source tables,
-and automatically process all documents in ai/data/ into ai/data/mainbrain/*.md.
+and process data/raw_references/ into data/mainbrain/context_embeddings/.
 """
 
 from __future__ import annotations
 
 import logging
+import json
 import os
 import pickle
 import sys
@@ -20,14 +21,13 @@ from doc_loader import scan_and_generate_mainbrain
 
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_OUTPUT_FILE = BASE_DIR / "daisuki.pkl"
-TEMP_MODEL_FILE = BASE_DIR / "daisuki.pkl.tmp"
-IDENTITY_BIO = (
-    "Saya Daisuki AI Assistant, asisten AI untuk mitra Daisuki. "
-    "Saya membantu Anda memeriksa stok, pesanan restock, dan panduan aplikasi "
-    "berdasarkan data cabang Anda. Model klasifikasi Multinomial Naive Bayes "
-    "dalam daisuki.pkl membantu mengenali pertanyaan dan risiko stok."
-)
+MODEL_OUTPUT_FILE = BASE_DIR.parents[1] / "data" / "mainbrain" / "models" / "daisuki.pkl"
+TEMP_MODEL_FILE = MODEL_OUTPUT_FILE.with_name("daisuki.pkl.tmp")
+CORPORATE_DIR = BASE_DIR.parents[1] / "data" / "mainbrain" / "corporate_knowledge"
+with (CORPORATE_DIR / "assistant_copy.json").open(encoding="utf-8") as source:
+    IDENTITY_BIO = json.load(source)["identity_reply"]
+with (CORPORATE_DIR / "business_rules.json").open(encoding="utf-8") as source:
+    OFFICIAL_PRODUCTS = json.load(source)["official_products"]
 
 
 def train_pipeline(texts: list[str], labels: list[str], *, fit_prior: bool = True) -> Pipeline:
@@ -59,8 +59,7 @@ def save_model_safely(model: Pipeline | dict[str, Any], dest_path: Path, temp_pa
 
 def run_retraining_loop() -> bool:
     try:
-        # 1. Pipeline Universal Document Ingestion: Scan ai/data/ -> generate ai/data/mainbrain/*.md
-        LOGGER.info("Memulai pemindaian dan pembuatan Mainbrain dari dokumen di ai/data/...")
+        LOGGER.info("Memulai pemindaian dokumen di data/raw_references/...")
         mainbrain_stats = scan_and_generate_mainbrain()
         LOGGER.info(
             "Hasil Mainbrain Generator: %d berhasil dikonversi ke Markdown, %d gagal dari %d dokumen.",
@@ -85,12 +84,7 @@ def run_retraining_loop() -> bool:
                 "role": "Asisten Inventaris & Restock Mitra B2B Daisuki",
                 "algorithm": "Multinomial Naive Bayes",
                 "specialization": "Klasifikasi Intensi & Prediksi Risiko Stok 4 Produk Resmi",
-                "supported_products": [
-                    "Seblak Jadul Instan",
-                    "Basreng Daun Jeruk",
-                    "Makaroni Daun Jeruk",
-                    "Keripik Pisang Rasa Coklat",
-                ],
+                "supported_products": OFFICIAL_PRODUCTS,
                 "identity_bio": IDENTITY_BIO,
             },
         }

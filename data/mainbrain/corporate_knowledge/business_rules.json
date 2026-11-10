@@ -1,0 +1,10 @@
+{
+  "category": "corporate_knowledge",
+  "name": "business_rules",
+  "version": "1.0.0",
+  "official_products": ["Seblak Jadul Instan", "Basreng Daun Jeruk", "Makaroni Daun Jeruk", "Keripik Pisang Rasa Coklat"],
+  "allowed_order_statuses": ["diproses", "disetujui", "dalam_pengiriman", "selesai", "ditolak", "dibatalkan"],
+  "stock_thresholds": {"AMAN_MIN_RATIO": 0.5, "WASPADA_MIN_RATIO": 0.2},
+  "forbidden_ceiling_terms": ["kapasitas rak", "kapasitas maksimal", "maksimal stok", "max stock", "plafon stok", "/40", "sisa stok / par"],
+  "mutation_claim_verbs": ["sudah mengubah", "telah mengubah", "sudah menambah", "telah menambah", "sudah membuat", "telah membuat", "sudah mengajukan", "telah mengajukan", "sudah menyetujui", "telah menyetujui", "sudah membatalkan", "telah membatalkan"]
+}

@@ -1,21 +1,22 @@
 """
 Pembangun Master System Prompt dengan Guardrails Lengkap.
 Menggabungkan fakta operasional, memori, aturan domain, dan basis pengetahuan perusahaan.
-Membaca dokumen publik dari ai/data/mainbrain/*.public.md untuk referensi RAG.
+Membaca dokumen publik dari data/mainbrain/context_embeddings/*.public.md.
 """
 
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional
+from .rules import OFFICIAL_PRODUCTS, ALLOWED_ORDER_STATUSES
 
 AI_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = AI_DIR / "data"
-MAINBRAIN_DIR = DATA_DIR / "mainbrain"
-COMPANY_KNOWLEDGE_FILE = DATA_DIR / "company_knowledge.json"
+DATA_DIR = AI_DIR.parent / "data" / "mainbrain"
+MAINBRAIN_DIR = DATA_DIR / "context_embeddings"
+COMPANY_KNOWLEDGE_FILE = DATA_DIR / "corporate_knowledge" / "company_knowledge.json"
 
 
 def load_company_knowledge() -> Dict[str, Any]:
-    """Membaca basis pengetahuan perusahaan dari ai/data/company_knowledge.json."""
+    """Membaca basis pengetahuan perusahaan dari data/mainbrain/corporate_knowledge/."""
     if COMPANY_KNOWLEDGE_FILE.exists():
         try:
             with open(COMPANY_KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
@@ -59,6 +60,8 @@ def build_system_prompt(
     company_profile = knowledge.get("company_profile", {})
     sop_procedures = knowledge.get("sop_procedures", {})
     mainbrain_docs = load_mainbrain_context()
+    product_lines = "\n".join(f"  {index}. {name}" for index, name in enumerate(OFFICIAL_PRODUCTS, start=1))
+    order_statuses = ", ".join(ALLOWED_ORDER_STATUSES)
 
     return f"""Anda adalah "Daisuki AI Assistant", asisten operasional resmi untuk platform B2B Inventory & Order Management Daisuki. Anda melayani mitra cabang yang sedang terautentikasi di portal mitra.
 
@@ -95,10 +98,7 @@ Mendampingi mitra dalam memantau sisa stok fisik cabang, memahami analisis laju 
   Jika data operasional bernilai null atau belum tercatat di FAKTA_JSON, sampaikan jujur bahwa data belum tersedia di sistem.
 - 4 PRODUK RESMI SAJA:
   Hanya boleh menyebut 4 produk resmi dengan nama lengkap:
-  1. Seblak Jadul Instan
-  2. Basreng Daun Jeruk
-  3. Makaroni Daun Jeruk
-  4. Keripik Pisang Rasa Coklat
+{product_lines}
 - IDENTITAS SISTEM:
   Jika mitra menanyakan identitas Anda, jelaskan sesuai reference.model_identity bahwa Anda ditenagai oleh model klasifikasi daisuki.pkl, kumpulan dokumen mainbrain, dan database PostgreSQL Daisuki.
 
@@ -115,7 +115,7 @@ Mendampingi mitra dalam memantau sisa stok fisik cabang, memahami analisis laju 
   * "Waspada": Sisa stok > 20% hingga 50% buffer minimal.
   * "Kritis": Sisa stok <= 20% buffer minimal (rekomendasikan restock).
 - STATUS PESANAN (ORDER STATE MACHINE):
-  Status pesanan hanya: diproses, disetujui, dalam_pengiriman, selesai, ditolak, dibatalkan. Stok cabang HANYA bertambah saat pesanan berstatus "selesai" (setelah verifikasi resi).
+  Status pesanan hanya: {order_statuses}. Stok cabang HANYA bertambah saat pesanan berstatus "selesai" (setelah verifikasi resi).
 - BATASAN RESTOCK PUSAT:
   Pengajuan restock hanya dibatasi oleh sisa stok gudang pusat (central_stock_available).
 - PREDIKSI RISIKO MODEL (daisuki.pkl):
@@ -143,8 +143,8 @@ KNOWLEDGE BASE RESMI PERUSAHAAN & SOP:
 Profil Perusahaan: {json.dumps(company_profile, ensure_ascii=False)}
 Prosedur SOP Aplikasi: {json.dumps(sop_procedures, ensure_ascii=False)}
 
-DOKUMEN MAINBRAIN TEREKSTRAK (DARI DOKUMEN DI AI/DATA):
-{mainbrain_docs if mainbrain_docs else "(Belum ada dokumen tambahan diekstrak di ai/data/mainbrain/)"}
+DOKUMEN MAINBRAIN TEREKSTRAK (DARI DATA/RAW_REFERENCES):
+{mainbrain_docs if mainbrain_docs else "(Belum ada dokumen publik tambahan di mainbrain.)"}
 
 DATA OPERASIONAL REALTIME CABANG (FAKTA_JSON):
 {json.dumps(facts, ensure_ascii=False, indent=2)}

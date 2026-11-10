@@ -1,4 +1,5 @@
-import { apiClient } from './client'
+import { apiClient, apiFetch } from './client'
+import { readAssistantSse } from './assistant-sse'
 
 export type MitraTour = 'restock' | 'stock_report' | 'delivery' | 'logs' | 'profile'
 
@@ -22,8 +23,20 @@ export interface MitraChatHistoryItem {
   created_at: string
 }
 
-export function askMitraAssistant(message: string): Promise<MitraAssistantReply> {
-  return apiClient.post<MitraAssistantReply>('/assistant/mitra/chat', { message })
+export async function askMitraAssistant(message: string): Promise<MitraAssistantReply> {
+  const response = await apiFetch('/assistant/mitra/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ message }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(body?.error ?? `Permintaan gagal (${response.status})`)
+  }
+  if (!response.headers.get('Content-Type')?.includes('text/event-stream')) {
+    return response.json() as Promise<MitraAssistantReply>
+  }
+  return readAssistantSse<MitraAssistantReply>(response)
 }
 
 export async function getMitraAssistantHistory(): Promise<MitraChatHistoryItem[]> {

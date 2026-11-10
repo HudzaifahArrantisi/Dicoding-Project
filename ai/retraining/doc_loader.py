@@ -1,8 +1,8 @@
 """
 Universal Document Ingestion & Mainbrain Generator.
-Membaca seluruh dokumen mentah (PDF, DOCX, JSON, MD, TXT, CSV) di ai/data/,
+Membaca dokumen mentah (PDF, DOCX, JSON, MD, TXT, CSV) di data/raw_references/,
 membersihkan teks, mengekstrak ringkasan/fakta penting, dan menghasilkan
-output file Markdown (.md) terstruktur 1-to-1 di ai/data/mainbrain/.
+output file Markdown (.md) di data/mainbrain/context_embeddings/.
 """
 
 from __future__ import annotations
@@ -17,13 +17,13 @@ from typing import Any, Dict, List, Tuple
 LOGGER = logging.getLogger(__name__)
 
 # Direktori target
-AI_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = AI_DIR / "data"
-MAINBRAIN_DIR = DATA_DIR / "mainbrain"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+RAW_DIR = DATA_DIR / "raw_references"
+MAINBRAIN_DIR = DATA_DIR / "mainbrain" / "context_embeddings"
 
 
 def ensure_mainbrain_dir() -> Path:
-    """Memastikan folder ai/data/mainbrain tersedia."""
+    """Memastikan folder konteks mainbrain tersedia."""
     MAINBRAIN_DIR.mkdir(parents=True, exist_ok=True)
     return MAINBRAIN_DIR
 
@@ -35,7 +35,7 @@ def sanitize_filename(name: str) -> str:
 
 
 def extract_text_from_pdf(file_path: Path) -> str:
-    """Ekstraksi teks dari file PDF menggunakan pypdf (dengan fallback gracefully)."""
+    """Ekstraksi teks PDF hanya bila parser tersedia."""
     try:
         from pypdf import PdfReader
         reader = PdfReader(str(file_path))
@@ -46,17 +46,11 @@ def extract_text_from_pdf(file_path: Path) -> str:
                 pages_text.append(f"### Bagian Halaman {i + 1}\n{page_text.strip()}")
         return "\n\n".join(pages_text)
     except ImportError:
-        LOGGER.warning("Library 'pypdf' belum terpasang. Menjalankan fallback teks mentah untuk %s", file_path.name)
-        try:
-            with open(file_path, "rb") as f:
-                content = f.read().decode("latin-1", errors="ignore")
-                printable = "".join(ch for ch in content if ch.isprintable() or ch in "\n\r\t")
-                return printable[:5000]
-        except Exception as err:
-            return f"[Gagal membaca PDF tanpa library pypdf: {err}]"
+        LOGGER.warning("Library 'pypdf' belum terpasang; PDF %s dilewati", file_path.name)
+        return ""
     except Exception as err:
         LOGGER.error("Gagal membaca file PDF %s: %s", file_path.name, err)
-        return f"[Error mengekstrak PDF {file_path.name}: {err}]"
+        return ""
 
 
 def extract_text_from_docx(file_path: Path) -> str:
@@ -146,8 +140,7 @@ def extract_text_from_plain(file_path: Path) -> str:
 
 def process_single_file(file_path: Path) -> Tuple[bool, Path | None, str]:
     """
-    Memproses 1 file dokumen dari ai/data/ dan mengekspor hasilnya
-    menjadi 1 file Markdown di ai/data/mainbrain/{stem}.md
+    Memproses 1 file referensi dan mengekspor Markdown ke context_embeddings/.
     """
     ext = file_path.suffix.lower()
     content = ""
@@ -175,7 +168,7 @@ def process_single_file(file_path: Path) -> Tuple[bool, Path | None, str]:
         return False, None, f"Format tidak didukung: {ext}"
 
     if not content or not content.strip():
-        content = "_Dokumen ini kosong atau teks tidak dapat diekstraksi._"
+        return False, None, "Teks dokumen tidak dapat diekstraksi"
 
     # Buat header metadata standar Mainbrain
     stem_clean = sanitize_filename(file_path.stem)
@@ -201,11 +194,6 @@ def process_single_file(file_path: Path) -> Tuple[bool, Path | None, str]:
     try:
         with open(output_path, "w", encoding="utf-8") as out:
             out.write(md_document.strip() + "\n")
-        is_private = any(k in file_path.name.lower() for k in ["pribadi", "private", "internal", "rahasia", "secret"])
-        if not is_private:
-            public_path = MAINBRAIN_DIR / f"{stem_clean}.public.md"
-            with open(public_path, "w", encoding="utf-8") as out:
-                out.write(md_document.strip() + "\n")
         return True, output_path, "SUKSES"
     except Exception as err:
         LOGGER.error("Gagal menulis mainbrain output %s: %s", output_filename, err)
@@ -214,17 +202,16 @@ def process_single_file(file_path: Path) -> Tuple[bool, Path | None, str]:
 
 def scan_and_generate_mainbrain() -> Dict[str, Any]:
     """
-    Memindai semua file di ai/data/ (selain folder mainbrain itu sendiri),
-    mengekstrak teksnya, dan membuatkan output 1 file .md per dokumen di ai/data/mainbrain/.
+    Memindai subfolder raw_references, mengekstrak teks, dan menulis Markdown.
     """
     ensure_mainbrain_dir()
-    if not DATA_DIR.exists():
-        LOGGER.warning("Folder ai/data belum dibuat.")
+    if not RAW_DIR.exists():
+        LOGGER.warning("Folder data/raw_references belum dibuat.")
         return {"total": 0, "success": 0, "failed": 0, "files": []}
 
-    # Ambil semua file di ai/data/ secara langsung (tidak masuk ke folder mainbrain)
     candidate_files = [
-        f for f in DATA_DIR.iterdir()
+        f for folder in ("pdf", "docs", "csv")
+        for f in (RAW_DIR / folder).glob("*")
         if f.is_file() and not f.name.startswith(".") and f.name.lower() != "readme.md"
     ]
 
@@ -253,7 +240,7 @@ def scan_and_generate_mainbrain() -> Dict[str, Any]:
 
 def collect_mainbrain_knowledge_snippets(max_tokens: int = 15000) -> str:
     """
-    Mengumpulkan file Markdown publik dari ai/data/mainbrain/
+    Mengumpulkan file Markdown publik dari data/mainbrain/context_embeddings/
     menjadi satu konteks ringkasan terstruktur untuk diinjeksikan ke prompt RAG.
     """
     ensure_mainbrain_dir()

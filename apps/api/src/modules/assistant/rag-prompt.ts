@@ -26,6 +26,8 @@ export function buildMitraRagFacts(context: MitraContext, model: ModelResult, pr
           stock_status: getStockStatus(stock.current_qty, stock.par_level),
           report_stale: isStale(stock.updated_at),
           consumption_7d: stock.sold_7d,
+          consumption_prev_7d: stock.sold_prev_7d,
+          consumption_30d: stock.sold_30d,
           average_daily_consumption: daily,
           days_of_supply: daily && daily > 0 ? Math.round(stock.current_qty / daily * 10) / 10 : null,
           central_stock_available: stock.central_stock,
@@ -33,6 +35,12 @@ export function buildMitraRagFacts(context: MitraContext, model: ModelResult, pr
           model_confidence: prediction?.confidence ?? null,
         };
       }),
+      totals: {
+        total_current_stock: context.stocks.reduce((acc, s) => acc + s.current_qty, 0),
+        total_consumption_7d: context.stocks.reduce((acc, s) => acc + s.sold_7d, 0),
+        total_consumption_prev_7d: context.stocks.reduce((acc, s) => acc + s.sold_prev_7d, 0),
+        total_consumption_30d: context.stocks.reduce((acc, s) => acc + s.sold_30d, 0),
+      },
       active_orders: context.orders.filter((order) => ["diproses", "disetujui", "dalam_pengiriman"].includes(order.status)).map((order) => ({
         order_no: order.order_no,
         status: order.status,
@@ -64,6 +72,8 @@ export function buildMitraRagFacts(context: MitraContext, model: ModelResult, pr
       official_products: OFFICIAL_PRODUCTS,
       official_product_count: OFFICIAL_PRODUCTS.length,
       consumption_period_days: 7,
+      previous_period_days: 14,
+      monthly_period_days: 30,
       stale_after_hours: 24,
       stock_has_fixed_maximum: false,
       stock_status_thresholds_percent: { aman_above: 50, waspada_above: 20, kritis_at_or_below: 20 },

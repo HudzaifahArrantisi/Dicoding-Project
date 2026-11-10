@@ -1,6 +1,6 @@
 # Profil Perusahaan Daisuki
 
-Sumber: `ai/data/company_knowledge.json`. Dokumen ini memuat informasi perusahaan yang dapat dibaca mitra.
+Sumber: `data/mainbrain/corporate_knowledge/company_knowledge.json`. Dokumen ini memuat informasi perusahaan yang dapat dibaca mitra.
 
 Daisuki Snack & Food B2B tercatat sebagai PT Daisuki Pangan Indonesia. Tahun berdiri yang tercatat adalah 2023. Kantor pusat tercatat di Surabaya, Jawa Timur. Pendiri yang tercatat adalah Tim Pendiri Daisuki Indonesia (Inisiatif Kuliner Nusantara).
 

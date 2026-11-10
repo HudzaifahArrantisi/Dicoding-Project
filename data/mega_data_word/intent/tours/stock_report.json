@@ -1,0 +1,1 @@
+{"category":"tour","name":"stock_report","version":"1.0.0","exact_phrases":[],"regex_patterns":["\\b(?:lapor stok|laporan stok|stok harian|stok fisik|sisa stok|stok toko|stok cabang|stok saya|stok sekarang|stok di toko|stok\\w*|status stok|aman|waspada|kritis|buffer|tutup toko|belum update)\\b"]}

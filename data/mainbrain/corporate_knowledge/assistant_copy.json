@@ -1,0 +1,17 @@
+{
+  "category": "corporate_knowledge", "name": "assistant_copy", "version": "1.0.0",
+  "out_of_scope_reply": "Maaf, saya adalah asisten khusus inventaris Daisuki B2B. Saya hanya dapat membantu terkait stok fisik, pesanan restock, profil Daisuki, dan panduan operasional aplikasi cabang Anda.",
+  "identity_reply": "Saya Daisuki AI Assistant, asisten AI untuk mitra Daisuki. Saya membantu Anda memeriksa stok, pesanan restock, dan panduan aplikasi berdasarkan data cabang Anda. Model klasifikasi Multinomial Naive Bayes dalam daisuki.pkl membantu mengenali pertanyaan dan risiko stok.",
+  "developer_reply": "Saya Daisuki AI Assistant, asisten inventaris mitra yang dikembangkan untuk PT Daisuki Pangan Indonesia oleh Hudzaifah Ar-Rantisi. Saya ditenagai model klasifikasi Multinomial Naive Bayes (daisuki.pkl) serta data operasional PostgreSQL Daisuki untuk membantu memantau stok, konsumsi, serta risiko restock cabang Anda.",
+  "developer_profile_reply": "Pengembang sistem inventaris dan AI Daisuki yang tercatat adalah Hudzaifah Ar-Rantisi.",
+  "tenant_scope_reply": "Mohon maaf, demi menjaga kerahasiaan dan privasi bisnis antar-mitra Daisuki, saya tidak memiliki akses ke informasi sisa stok, data operasional, maupun alamat cabang mitra lainnya.",
+  "greeting_reply": "Halo! Kabar saya baik dan siap mendampingi Anda memantau stok fisik, pesanan restock, penerimaan barang, dan operasional toko Daisuki Anda. Ada yang ingin kamu cek atau tanyakan hari ini?",
+  "quick_replies": ["Bagaimana cara restock barang?", "Bagaimana cara lapor stok harian?", "Bagaimana cara konfirmasi barang sampai (scan resi)?", "Bagaimana cara membaca status stok & log?", "Bagaimana cara melengkapi profil toko?"],
+  "tours": {
+    "restock": {"reply": "Buka Restock/Pesan, cek stok gudang pusat, lalu pilih produk dan jumlah sesuai kebutuhan toko. Tambahkan catatan bila perlu, kemudian kirim pengajuan. Jumlah pesanan dibatasi stok gudang pusat yang tersedia, bukan kapasitas toko. Admin pusat dapat menyetujui penuh atau sebagian sebelum barang dikirim.", "label": "Mulai panduan restock"},
+    "stock_report": {"reply": "Buka Stok, cocokkan angka setiap produk dengan sisa fisik di toko, lalu tekan Simpan Laporan Stok. Angka stok toko tidak punya batas maksimum. Buffer minimal hanya membantu menunjukkan kapan stok perlu diperhatikan. Aman berarti di atas 50% buffer, Waspada di atas 20% sampai 50%, dan Kritis 20% atau kurang. Jika lebih dari 24 jam belum diperbarui, laporan ditandai belum update.", "label": "Mulai panduan laporan stok"},
+    "delivery": {"reply": "Buka Riwayat dan pilih pesanan berstatus Dalam Pengiriman. Saat dus fisik tiba, tekan Konfirmasi Barang Sampai, lalu pindai barcode atau masukkan kode resi yang tertera pada kiriman. Stok toko baru bertambah sebesar jumlah yang disetujui setelah verifikasi berhasil dan status menjadi Selesai.", "label": "Mulai panduan penerimaan barang"},
+    "logs": {"reply": "Di Riwayat, lihat status dan catatan admin pada setiap pesanan: Diproses, Disetujui, Dalam Pengiriman, lalu Selesai. Pesanan juga bisa Ditolak atau Dibatalkan sebelum pengiriman. Tab Log mencatat perubahan stok dari laporan fisik dan penerimaan restock. Gunakan filter untuk mencari catatan tertentu.", "label": "Mulai panduan riwayat dan log"},
+    "profile": {"reply": "Buka Profil untuk memeriksa nama penanggung jawab toko, nomor telepon, dan alamat. Lengkapi wilayah dari provinsi sampai desa atau kelurahan agar data tujuan pengiriman akurat, lalu simpan perubahan.", "label": "Mulai panduan profil toko"}
+  }
+}

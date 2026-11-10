@@ -1,9 +1,18 @@
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { getStopwords, matchSopSelection, matchesWordPack, matchesWordPattern } from "./word-loader";
+import { assistantCopy } from "./assistant-copy";
 
-const dataDir = resolve(import.meta.dir, "../../../../../ai/data");
-const mainbrainDir = resolve(dataDir, "mainbrain");
-const companyFile = resolve(dataDir, "company_knowledge.json");
+const dataDir = resolve(import.meta.dir, "../../../../../data/mainbrain");
+const mainbrainDir = resolve(dataDir, "context_embeddings");
+const companyFile = resolve(dataDir, "corporate_knowledge/company_knowledge.json");
+const companyData: Promise<{ company_profile?: unknown; sop_procedures?: unknown }> = readFile(companyFile, "utf8")
+  .then((text) => JSON.parse(text)).catch(() => ({}));
+const publicDocuments = readdir(mainbrainDir)
+  .then(async (names) => Promise.all(names.filter((name) => name.endsWith(".public.md")).slice(0, 20)
+    .map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, 20_000) }))))
+  .catch(() => [] as Array<{ name: string; content: string }>);
+const publicIndex = publicDocuments.then(indexMainbrain);
 
 type SopStep = { step_number: number; name: string; action: string };
 type Sop = { title: string; steps: SopStep[]; important_notes?: string[] };
@@ -13,14 +22,10 @@ export type CompanyKnowledge = {
   documents: Array<{ source: string; excerpt: string }>;
 };
 
-const companyQuestion = /\b(?:perusahaan|pendiri|founder|founding|sejarah|visi|misi|legalitas|badan hukum|kantor pusat|jam operasional|profil tim|tim pengembang|siapa yang membuat|tentang daisuki|(?:developer|pengembang|pembuat|programmer)(?:mu|nya)?|creator|author|hudzaifah|rantisi)\b/i;
-const sopQuestion = /\b(?:sop|panduan|tutorial|langkah|prosedur)\b|\b(?:cara|bagaimana|gimana)\b.{0,60}\b(?:scan|pindai|barcode|resi|lapor|input|restock|ajukan|pengajuan|pesan|stok fisik|profil)\b/i;
-const followUp = /\b(?:yang tadi|itu|tersebut|lebih detail|lanjut|siapa saja|kapan|di mana)\b/i;
-
 export function knowledgeIntent(message: string, previousIntent: string | null): "company" | "sop" | null {
-  if (companyQuestion.test(message)) return "company";
-  if (sopQuestion.test(message)) return "sop";
-  if (followUp.test(message) && (previousIntent === "company" || previousIntent === "sop")) return previousIntent;
+  if (matchesWordPack("intent/company", message)) return "company";
+  if (matchesWordPack("intent/sop", message)) return "sop";
+  if (matchesWordPattern("intent/company", "follow_up_patterns", message) && (previousIntent === "company" || previousIntent === "sop")) return previousIntent;
   return null;
 }
 
@@ -34,35 +39,51 @@ function cleanProfile(raw: unknown): Record<string, unknown> | null {
 function selectSop(raw: unknown, message: string): Sop | null {
   if (!raw || typeof raw !== "object") return null;
   const all = raw as Record<string, Sop>;
-  const key = /(?:resi|barcode|pindai|scan|barang sampai|penerimaan)/i.test(message) ? "scan_barcode_delivery"
-    : /(?:restock|restok|ajukan|pengajuan|pesan)/i.test(message) ? "restock_order_submission"
-      : /(?:lapor|laporan|stok fisik|harian|cek stok)/i.test(message) ? "daily_stock_reporting"
-      : /(?:profil|alamat|pic)/i.test(message) ? "profile_update"
-        : "restock_order_submission";
+  const key = matchSopSelection(message);
   const source = all[key];
   if (!source || !Array.isArray(source.steps)) return null;
-  return { title: source.title, steps: source.steps.filter((step) => Number.isInteger(step.step_number) && typeof step.action === "string").slice(0, 8), important_notes: source.important_notes?.filter((note) => !/40 pcs|dipotong saat admin/i.test(note)).slice(0, 3) };
+  return { title: source.title, steps: source.steps.filter((step) => Number.isInteger(step.step_number) && typeof step.action === "string").slice(0, 8), important_notes: source.important_notes?.filter((note) => !matchesWordPattern("intent/sop", "excluded_note_patterns", note)).slice(0, 3) };
 }
 
-export function selectMainbrainExcerpts(query: string, files: Array<{ name: string; content: string }>): Array<{ source: string; excerpt: string }> {
-  const words = [...new Set(query.toLowerCase().match(/[\p{L}]{4,}/gu) ?? [])];
-  return files.filter((file) => file.name.endsWith(".public.md"))
-    .flatMap((file) => file.content.split(/\n\s*\n/).filter((part) => part.length >= 40).map((part) => ({ source: file.name, excerpt: part.slice(0, 1200), score: words.filter((word) => part.toLowerCase().includes(word)).length })))
-    .filter((part) => part.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map(({ source, excerpt }) => ({ source, excerpt }));
+type IndexedExcerpt = { source: string; excerpt: string };
+type MainbrainIndex = { excerpts: IndexedExcerpt[]; terms: Map<string, Map<number, number>> };
+
+function words(text: string): string[] {
+  return (text.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).filter((word) => !getStopwords().has(word));
+}
+
+function indexMainbrain(files: Array<{ name: string; content: string }>): MainbrainIndex {
+  const excerpts: IndexedExcerpt[] = [];
+  const terms = new Map<string, Map<number, number>>();
+  for (const file of files.filter((item) => item.name.endsWith(".public.md"))) {
+    for (const part of file.content.split(/\n\s*\n/).filter((item) => item.length >= 40)) {
+      const excerpt = part.slice(0, 1200);
+      const index = excerpts.push({ source: file.name, excerpt }) - 1;
+      for (const word of new Set(words(excerpt))) {
+        const postings = terms.get(word) ?? new Map<number, number>();
+        postings.set(index, (postings.get(index) ?? 0) + 1);
+        terms.set(word, postings);
+      }
+    }
+  }
+  return { excerpts, terms };
+}
+
+function searchMainbrain(query: string, index: MainbrainIndex): IndexedExcerpt[] {
+  const scores = new Map<number, number>();
+  for (const word of new Set(words(query))) {
+    for (const [id, weight] of index.terms.get(word) ?? []) scores.set(id, (scores.get(id) ?? 0) + weight);
+  }
+  return [...scores].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => index.excerpts[id]);
+}
+
+export function selectMainbrainExcerpts(query: string, files: Array<{ name: string; content: string }>): IndexedExcerpt[] {
+  return searchMainbrain(query, indexMainbrain(files));
 }
 
 export async function loadCompanyKnowledge(message: string, intent: "company" | "sop"): Promise<CompanyKnowledge> {
-  let raw: { company_profile?: unknown; sop_procedures?: unknown } = {};
-  try { raw = JSON.parse(await readFile(companyFile, "utf8")); } catch { /* source unavailable */ }
-  let documents: Array<{ source: string; excerpt: string }> = [];
-  try {
-    const names = (await readdir(mainbrainDir)).filter((name) => name.endsWith(".public.md")).slice(0, 20);
-    const files = await Promise.all(names.map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, 20_000) })));
-    documents = selectMainbrainExcerpts(message, files);
-  } catch { /* public mainbrain not populated */ }
+  const [raw, index] = await Promise.all([companyData, publicIndex]);
+  const documents = searchMainbrain(message, index);
   return {
     company: intent === "company" ? cleanProfile(raw.company_profile) : null,
     sop: intent === "sop" ? selectSop(raw.sop_procedures, message) : null,
@@ -77,15 +98,13 @@ export function composeKnowledgeReply(knowledge: CompanyKnowledge, intent: "comp
   }
   const company = knowledge.company;
   if (!company) return "Data profil perusahaan belum tersedia di sistem kami saat ini.";
-  if (/\b(?:tim|pengembang|biografi|siapa saja|developer(?:mu|nya)?|programmer|hudzaifah|rantisi)\b/i.test(message)) {
-    const devDoc = knowledge.documents.find((d) => /hudzaifah|rantisi|developer/i.test(d.source) || /hudzaifah|rantisi/i.test(d.excerpt));
-    if (devDoc) {
-      return `Pengembang sistem inventaris & AI Daisuki adalah Hudzaifah Ar-Rantisi (Full-Stack Developer & Cyber Security Enthusiast). Pendiri perusahaan yang tercatat: ${company.founder ?? "Tim Pendiri Daisuki Indonesia"}.`;
-    }
-    return `Pengembang sistem adalah Hudzaifah Ar-Rantisi. Pendiri yang tercatat: ${company.founder ?? "Tim Pendiri Daisuki Indonesia"}.`;
+  if (matchesWordPattern("intent/company", "developer_patterns", message)) {
+    const devDoc = knowledge.documents.find((d) => matchesWordPattern("intent/company", "developer_document_patterns", d.source) || matchesWordPattern("intent/company", "developer_document_patterns", d.excerpt));
+    return devDoc ? `${assistantCopy.developer_profile_reply} Pendiri perusahaan yang tercatat: ${company.founder ?? "belum tersedia"}.`
+      : `Profil pengembang belum tersedia dalam dokumen publik. Pendiri yang tercatat: ${company.founder ?? "belum tersedia"}.`;
   }
-  if (/\b(?:pendiri|founder)\b/i.test(message)) return `Pendiri yang tercatat: ${company.founder ?? "belum tersedia"}.`;
-  if (/\b(?:jam|operasional)\b/i.test(message)) {
+  if (matchesWordPattern("intent/company", "founder_patterns", message)) return `Pendiri yang tercatat: ${company.founder ?? "belum tersedia"}.`;
+  if (matchesWordPattern("intent/company", "hours_patterns", message)) {
     const hours = company.operating_hours as Record<string, string> | undefined;
     return hours ? `Jam kantor: ${hours.office}. Jam gudang dan pengiriman: ${hours.warehouse_delivery}.` : "Data jam operasional belum tersedia di sistem kami saat ini.";
   }

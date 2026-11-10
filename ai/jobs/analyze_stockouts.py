@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_PATH = ROOT / "data-science" / "data" / "cleaned_inventory_summary.csv"
-RISK_OUTPUT = ROOT / "ai" / "data" / "stockout_risks.csv"
+RISK_OUTPUT = ROOT / "data" / "mainbrain" / "context_embeddings" / "stockout_risks.csv"
 
 
 def load_summary() -> list[dict[str, str]]:

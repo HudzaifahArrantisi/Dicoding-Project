@@ -1,0 +1,1 @@
+{"category":"guardrail","name":"tenant_scope","version":"1.0.0","exact_phrases":[],"regex_patterns":["\\b(?:mitra|cabang|toko)\\s+(?:lain|lainnya|selain|sebelah|paling\\s+(?:laris|aktif)|terlaris|(?:nomor|no\\.?\\s*)?\\d+)\\b","\\bbandingkan\\b.{0,40}\\b(?:mitra|cabang|toko)\\b"]}

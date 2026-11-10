@@ -1,0 +1,1 @@
+{"category":"tour","name":"restock","version":"1.0.0","exact_phrases":[],"regex_patterns":["\\b(?:restock\\w*|pesan barang|pesanan baru|ajukan pesanan|tambah pesanan|stok gudang|stok pusat|gudang pusat|pengajuan barang)\\b"]}

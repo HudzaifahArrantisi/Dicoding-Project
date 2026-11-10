@@ -138,7 +138,13 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       model_results: { intent: classified, stocks: model.predictions, response_source: source, session_active: true },
     }).returning({ id: assistantChatEvents.id });
     addSessionTurn(key, { id: saved.id, message, reply: response.reply, intent, source, feedback: null, created_at: new Date() });
-    return { ...response, interactionId: saved.id, modelAvailable: model.available, source };
+    const payload = { ...response, interactionId: saved.id, modelAvailable: model.available, source };
+    if (headers.accept?.includes("text/event-stream")) {
+      return new Response(`data: ${JSON.stringify(payload)}\n\n`, {
+        headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+      });
+    }
+    return payload;
   },
   { body: t.Object({ message: t.String({ minLength: 1, maxLength: 500 }) }) },
 ).patch(

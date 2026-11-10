@@ -15,8 +15,8 @@ from pathlib import Path
 import psycopg
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_JSON = ROOT / "ai" / "data" / "regional_stockout_insights.json"
-DATA_DIR = ROOT / "ai" / "data"
+OUTPUT_JSON = ROOT / "data" / "mainbrain" / "context_embeddings" / "regional_stockout_insights.json"
+DATA_DIR = ROOT / "data" / "mainbrain" / "context_embeddings"
 LEAD_TIME_DAYS = 6
 
 

@@ -1,0 +1,1 @@
+{"category":"tour","name":"profile","version":"1.0.0","exact_phrases":[],"regex_patterns":["\\b(?:profil\\w*|profile\\w*|pic|penanggung jawab|nomor telepon|alamat toko|wilayah\\w*|provinsi|kelurahan|desa)\\b"]}

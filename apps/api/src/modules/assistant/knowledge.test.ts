@@ -15,6 +15,7 @@ describe('asisten mitra', () => {
     ['scan resi di dus', 'delivery'],
     ['lihat log mutasi', 'logs'],
     ['ubah profil toko', 'profile'],
+    ['totalkan haisl logs saya di minggukemaren', 'logs'],
   ] as const)('mengenali %s', (question, tour) => {
     const answer = answerMitraQuestion(question)
     expect(answer.suggestedTour).toBe(tour)

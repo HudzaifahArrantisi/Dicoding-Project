@@ -10,6 +10,8 @@ test("sapaan, identitas, dan pertanyaan stok tetap boleh diproses", () => {
   expect(shouldRefuseMitraMessage("halo apa kabar?", null)).toBe(false);
   expect(shouldRefuseMitraMessage("siapa developermu?", null)).toBe(false);
   expect(shouldRefuseMitraMessage("Berapa stok cabang saya?", null)).toBe(false);
+  expect(shouldRefuseMitraMessage("totalkan haisl logs saya  di minggukemaren", null)).toBe(false);
+  expect(shouldRefuseMitraMessage("lihat logs cabang saya", null)).toBe(false);
   expect(shouldRefuseMitraMessage("yang tadi bagaimana?", "stock_report")).toBe(false);
 });
 

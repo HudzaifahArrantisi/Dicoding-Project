@@ -1,0 +1,1 @@
+{"category":"guardrail","name":"out_of_scope","version":"1.0.0","exact_phrases":[],"regex_patterns":["\\b(?:resep|masak|memasak|rendang|coding|kode program|python|javascript|politik|presiden|pemilu|gosip|selebriti|film|cuaca|olahraga|matematika|lelucon|joke|fotosintesis|kompetitor)\\b"]}

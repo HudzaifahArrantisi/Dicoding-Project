@@ -1,0 +1,1 @@
+{"category":"tour","name":"delivery","version":"1.0.0","exact_phrases":[],"regex_patterns":["\\b(?:scan\\w*|pindai\\w*|barcode\\w*|qr|resi\\w*|terima dus|barang sampai|penerimaan barang|konfirmasi barang|kurir\\w*|pengiriman\\w*)\\b"]}
