@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-const root = resolve(import.meta.dir, "../../../../../data/mega_data_word");
+const root = resolve(import.meta.dir, "../../../../../ai/data/mega_data_word");
 type WordFile = { category: string; name: string; version: string; exact_phrases?: string[]; regex_patterns?: string[]; [key: string]: unknown };
 type Matcher = { exact: Set<string>; pattern: RegExp | null; raw: WordFile };
 

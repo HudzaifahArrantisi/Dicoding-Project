@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { getStopwords, matchSopSelection, matchesWordPack, matchesWordPattern } from "./word-loader";
 import { assistantCopy } from "./assistant-copy";
 
-const dataDir = resolve(import.meta.dir, "../../../../../data/mainbrain");
+const dataDir = resolve(import.meta.dir, "../../../../../ai/data/mainbrain");
 const mainbrainDir = resolve(dataDir, "context_embeddings");
 const companyFile = resolve(dataDir, "corporate_knowledge/company_knowledge.json");
 type RagPolicy = { approved_sources: string[]; max_documents: number; max_chars_per_document: number; max_excerpts: number; blocked_content_patterns: string[] };

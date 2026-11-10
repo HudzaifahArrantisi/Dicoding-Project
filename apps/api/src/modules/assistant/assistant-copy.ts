@@ -13,5 +13,5 @@ type Copy = {
   tours: Record<MitraTour, { reply: string; label: string }>;
 };
 
-const path = resolve(import.meta.dir, "../../../../../data/mainbrain/corporate_knowledge/assistant_copy.json");
+const path = resolve(import.meta.dir, "../../../../../ai/data/mainbrain/corporate_knowledge/assistant_copy.json");
 export const assistantCopy = JSON.parse(readFileSync(path, "utf8")) as Copy;

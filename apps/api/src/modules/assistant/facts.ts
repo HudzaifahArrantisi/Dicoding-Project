@@ -2,8 +2,8 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "../../../../../");
-const factsPath = resolve(root, "data/mainbrain/context_embeddings/weekly_operational_facts.json");
-const modelPath = process.env.DAISUKI_MODEL_PATH || resolve(root, "data/mainbrain/models/daisuki.pkl");
+const factsPath = resolve(root, "ai/data/mainbrain/context_embeddings/weekly_operational_facts.json");
+const modelPath = process.env.DAISUKI_MODEL_PATH || resolve(root, "ai/data/mainbrain/models/daisuki.pkl");
 
 export interface WeeklyFacts {
   metadata: { generated_at: string; period_days: number; model_version: string; regional_generated_at?: string };

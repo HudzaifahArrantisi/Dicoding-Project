@@ -6,7 +6,7 @@ import type { ModelRecord } from './context'
 
 afterAll(() => stopMitraModelWorker())
 
-const modelPath = resolve(import.meta.dir, '../../../../../data/mainbrain/models/daisuki.pkl')
+const modelPath = resolve(import.meta.dir, '../../../../../ai/data/mainbrain/models/daisuki.pkl')
 const python = process.env.DAISUKI_PYTHON_BIN || 'python'
 
 test.skipIf(!existsSync(modelPath) || !Bun.which(python))('memakai daisuki.pkl untuk menilai data stok mitra', async () => {

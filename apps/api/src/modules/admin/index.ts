@@ -846,7 +846,7 @@ type RegionalModel = {
 };
 
 async function loadRegionalModel(): Promise<RegionalModel | null> {
-  const path = resolve(import.meta.dir, "../../../../../data/mainbrain/context_embeddings/regional_stockout_insights.json");
+  const path = resolve(import.meta.dir, "../../../../../ai/data/mainbrain/context_embeddings/regional_stockout_insights.json");
   try {
     const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
     if (!parsed || typeof parsed !== "object" || !("regional_rankings" in parsed) ||
