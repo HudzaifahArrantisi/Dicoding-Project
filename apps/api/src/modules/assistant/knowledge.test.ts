@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { answerMitraQuestion } from './knowledge'
 
 describe('asisten mitra', () => {
-  test.each(['hi', 'Hai!', 'halo', 'Selamat pagi', 'permisi'])('membalas sapaan %s', (question) => {
+  test.each(['hi', 'Hai!', 'halo', 'Selamat pagi', 'permisi', 'gimana kabar anda', 'apa kabar', 'halo apa kabar'])('membalas sapaan %s', (question) => {
     const answer = answerMitraQuestion(question)
     expect(answer.reply).toContain('Halo!')
     expect(answer.suggestedTour).toBeUndefined()

@@ -1,4 +1,5 @@
 export type MitraTour = "restock" | "stock_report" | "delivery" | "logs" | "profile";
+import { DAISUKI_AI_IDENTITY_REPLY, isAssistantIdentityQuestion } from "./identity";
 
 export interface MitraAssistantReply {
   reply: string;
@@ -41,8 +42,9 @@ const answers: Record<MitraTour, { reply: string; label: string }> = {
 };
 
 const outOfScope = /\b(resep|masak|memasak|coding|kode program|python|javascript|politik|presiden|pemilu|gosip|selebriti|film|cuaca|olahraga|matematika)\b/i;
-const greeting = /^(?:hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|assalamualaikum|permisi|tes|test|terima kasih|makasih|thanks|oke|ok)(?: semua| admin| kak)?$/i;
-const identity = /\b(siapa(?:\s*kah)?\s+(?:kamu|anda|dirimu|ini|nih)|(?:kamu|anda|dirimu)\s+(?:ini\s+)?siapa(?:\s*kah)?|siapa(?:\s*kah)?\s+nama(?:mu|\s+(?:kamu|anda))|nama(?:mu|\s+(?:kamu|anda))\s+siapa(?:\s*kah)?|perkenalkan\s+diri(?:mu)?|kenalan\s+dong|dengan\s+siapa\s+saya\s+bicara|(?:kamu|anda)\s+(?:sistem|robot|bot|ai)\s+apa|apakah\s+(?:kamu|anda)\s+ai|tentang\s+(?:kamu|anda|asisten|bot)|profil\s+(?:ai|asisten|kamu|anda)|apa\s+itu\s+daisuki(?:\.pkl)?|daisuki\.?pkl)\b/i;
+const greeting = /^(?:hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat (?:pagi|siang|sore|malam|datang)|assalamualaikum|permisi|tes|test|terima kasih|makasih|thanks|oke|ok)(?: semua| admin| kak)?$/i;
+const chitChat = /\b(?:apa\s+kabar|gimana\s+kabar|bagaimana\s+kabar|kabarmu|kabarnya|kabar\s+anda|sehat|lagi\s+(?:apa|ngapain)|sedang\s+apa)\b/i;
+const identity = /\b(siapa(?:\s*kah)?\s+(?:kamu|anda|dirimu|ini|nih)|(?:kamu|anda|dirimu)\s+(?:ini\s+)?siapa(?:\s*kah)?|siapa(?:\s*kah)?\s+nama(?:mu|\s+(?:kamu|anda))|nama(?:mu|\s+(?:kamu|anda))\s+siapa(?:\s*kah)?|perkenalkan\s+diri(?:mu)?|kenalan\s+dong|dengan\s+siapa\s+saya\s+bicara|(?:kamu|anda)\s+(?:sistem|robot|bot|ai)\s+apa|apakah\s+(?:kamu|anda)\s+ai|tentang\s+(?:kamu|anda|asisten|bot)|profil\s+(?:ai|asisten|kamu|anda)|apa\s+itu\s+daisuki(?:\.pkl)?|daisuki\.?pkl|siapa\s+(?:developer|pengembang|pembuat|programmer)|(?:developer|pengembang|pembuat|programmer)\s+(?:kamu|anda|daisuki)|siapa\s+(?:hudzaifah|rantisi))\b/i;
 const operationalTerms = /\b(daisuki|stok|stock|restock|restok|gudang|produk|barang|pesanan|order|mitra|cabang|toko|jualan|penjualan|terjual|terlaris|laku|konsumsi|daerah|wilayah|zona|resi|pindai|scan|barcode|log|mutasi|profil|pengiriman|seblak|basreng|makaroni|keripik|laporan|lapor|pasokan|buffer)\b/i;
 const intentPatterns: Array<[MitraTour, RegExp]> = [
   ["delivery", /\b(scan|pindai|barcode|qr|resi|terima dus|barang sampai|penerimaan barang|konfirmasi barang|kurir|pengiriman)\b/i],
@@ -58,21 +60,26 @@ export function answerMitraQuestion(message: string): MitraAssistantReply {
 
   if (!normalized || outOfScope.test(normalized)) return { ...base, reply: OUT_OF_SCOPE_REPLY };
 
+  if (isAssistantIdentityQuestion(message)) return { ...base, reply: DAISUKI_AI_IDENTITY_REPLY };
+
   if (identity.test(message) || identity.test(normalized)) {
     return {
       ...base,
-      reply: "Saya Daisuki AI Assistant, asisten inventaris mitra. Saya menggunakan model klasifikasi Multinomial Naive Bayes dalam daisuki.pkl dan data operasional PostgreSQL Daisuki untuk membantu memantau stok, konsumsi, serta risiko restock cabang Anda.",
+      reply: "Saya Daisuki AI Assistant, asisten inventaris mitra yang dikembangkan untuk PT Daisuki Pangan Indonesia oleh Hudzaifah Ar-Rantisi. Saya ditenagai model klasifikasi Multinomial Naive Bayes (daisuki.pkl) serta data operasional PostgreSQL Daisuki untuk membantu memantau stok, konsumsi, serta risiko restock cabang Anda.",
     };
-  }
-
-  if (greeting.test(normalized)) {
-    return { ...base, reply: "Halo! Ada yang ingin kamu cek soal toko Daisuki? Saya bisa bantu lihat stok, prioritas restock, pesanan, penerimaan barang, log, atau profil toko. Pilih pertanyaan cepat di bawah atau tulis pertanyaanmu." };
   }
 
   for (const [intent, pattern] of intentPatterns) {
     if (pattern.test(normalized)) {
       return { ...base, reply: answers[intent].reply, suggestedTour: intent, tourLabel: answers[intent].label };
     }
+  }
+
+  if (greeting.test(normalized) || chitChat.test(normalized) || chitChat.test(message)) {
+    return {
+      ...base,
+      reply: "Halo! Kabar saya baik dan siap mendampingi Anda memantau stok fisik, pesanan restock, penerimaan barang, dan operasional toko Daisuki Anda. Ada yang ingin kamu cek atau tanyakan hari ini?",
+    };
   }
 
   return { ...base, reply: OUT_OF_SCOPE_REPLY };
@@ -83,5 +90,6 @@ export function isOutOfScopeQuestion(message: string): boolean {
 }
 
 export function isOperationalQuestion(message: string): boolean {
-  return greeting.test(message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()) || identity.test(message) || operationalTerms.test(message);
+  const normalized = message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return greeting.test(normalized) || chitChat.test(message) || isAssistantIdentityQuestion(message) || identity.test(message) || operationalTerms.test(message);
 }

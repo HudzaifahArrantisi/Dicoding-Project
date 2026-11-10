@@ -2,6 +2,7 @@ import { getStockStatus, isStale } from "@daisuki/shared";
 import type { MitraContext, ModelRecord } from "./context";
 import { answerMitraQuestion, isOperationalQuestion, isOutOfScopeQuestion, type MitraAssistantReply, type MitraTour } from "./knowledge";
 import type { ModelResult } from "./model";
+import { DAISUKI_AI_IDENTITY_REPLY, isAssistantIdentityQuestion } from "./identity";
 
 const number = (value: number) => value.toLocaleString("id-ID");
 const followUp = /\b(yang tadi|yang itu)\b|^(berapa|bagaimana|detailnya|lanjut|sekarang|terbaru|mana saja)\s*\??$/i;
@@ -104,7 +105,7 @@ function factReply(intent: AssistantIntent, context: MitraContext, message: stri
 export function resolveMitraIntent(message: string, previousIntent: AssistantIntent | null, classified?: { label: string; confidence: number } | null): AssistantIntent | null {
   if (isOutOfScopeQuestion(message) || !isOperationalQuestion(message) && !followUp.test(message)) return null;
   const normalized = message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  if (identityPattern.test(message) || identityPattern.test(normalized)) return "identity";
+  if (isAssistantIdentityQuestion(message) || identityPattern.test(message) || identityPattern.test(normalized)) return "identity";
   if (/^(hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam)|assalamualaikum|permisi)( semua| admin| kak)?$/.test(normalized)) return "greeting";
   for (const [intent, pattern] of factualPatterns) if (pattern.test(normalized)) return intent;
   if (classified?.label === "out_of_scope" && classified.confidence >= 0.35) return null;
@@ -121,10 +122,9 @@ export function composeMitraReply(message: string, context: MitraContext, model:
   const intent = resolveMitraIntent(message, previousIntent, classified);
   if (!intent) return base;
   if (intent === "identity") {
-    const bio = model.identity?.identity_bio ?? base.reply;
     return {
       ...base,
-      reply: bio,
+      reply: isAssistantIdentityQuestion(message) ? DAISUKI_AI_IDENTITY_REPLY : base.reply,
       quickReplies: ["Stok saya sekarang berapa?", "Produk mana perlu restock?", "Stok pusat berapa?", "Produk apa paling laku?"],
     };
   }

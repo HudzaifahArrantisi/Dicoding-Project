@@ -5,6 +5,10 @@ test("sapaan, identitas, dan pertanyaan stok tetap boleh diproses", () => {
   expect(shouldRefuseMitraMessage("tes", null)).toBe(false);
   expect(shouldRefuseMitraMessage("terima kasih", null)).toBe(false);
   expect(shouldRefuseMitraMessage("siapa kamu?", null)).toBe(false);
+  expect(shouldRefuseMitraMessage("gimana kabar anda", null)).toBe(false);
+  expect(shouldRefuseMitraMessage("apa kabar", null)).toBe(false);
+  expect(shouldRefuseMitraMessage("halo apa kabar?", null)).toBe(false);
+  expect(shouldRefuseMitraMessage("siapa developermu?", null)).toBe(false);
   expect(shouldRefuseMitraMessage("Berapa stok cabang saya?", null)).toBe(false);
   expect(shouldRefuseMitraMessage("yang tadi bagaimana?", "stock_report")).toBe(false);
 });

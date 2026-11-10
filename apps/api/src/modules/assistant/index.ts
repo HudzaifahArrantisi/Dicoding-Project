@@ -9,6 +9,7 @@ import { loadMitraContext } from "./context";
 import { classifyMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
 import { composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge } from "./company-knowledge";
+import { isAssistantIdentityQuestion } from "./identity";
 import { generateLlmReply } from "./llm-client";
 import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
 import { isCrossTenantQuestion, OUT_OF_SCOPE_REPLY, shouldRefuseMitraMessage, TENANT_SCOPE_REPLY } from "./guardrails";
@@ -82,12 +83,13 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const previousIntent = turns[turns.length - 1]?.intent as AssistantIntent | null ?? null;
     const scopeRefused = shouldRefuseMitraMessage(message, previousIntent);
     const knowledgeTopic = scopeRefused ? null : knowledgeIntent(message, previousIntent);
+    const identityQuestion = !scopeRefused && isAssistantIdentityQuestion(message);
     const contextPromise = loadMitraContext(user.partnerId);
     const memoryPromise = db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
       .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId))).limit(1);
     const knowledgePromise = knowledgeTopic ? loadCompanyKnowledge(message, knowledgeTopic) : Promise.resolve(null);
-    const classified = scopeRefused || knowledgeTopic ? null : await withinModelBudget(classifyMitraMessage(message), 500, null);
-    const resolvedIntent = scopeRefused ? null : knowledgeTopic ?? resolveMitraIntent(message, previousIntent, classified);
+    const classified = scopeRefused || knowledgeTopic || identityQuestion ? null : await withinModelBudget(classifyMitraMessage(message), 500, null);
+    const resolvedIntent = scopeRefused ? null : identityQuestion ? "identity" : knowledgeTopic ?? resolveMitraIntent(message, previousIntent, classified);
     const crossTenant = isCrossTenantQuestion(message) || resolvedIntent === "top_partners";
     const refused = scopeRefused || crossTenant;
     const intent = refused ? null : resolvedIntent;
@@ -113,7 +115,8 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
           }, knowledge ?? undefined),
           userMessage: message,
         });
-        grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model, knowledge ?? undefined));
+        grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model, knowledge ?? undefined)
+          && (!identityQuestion || /\bDaisuki AI(?: Assistant)?\b/i.test(llmReply)));
       } catch (error) {
         console.warn("[ASSISTANT] Jawaban 9Router tidak dapat digunakan", error instanceof Error ? error.message : "Error");
       }

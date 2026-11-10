@@ -4,7 +4,7 @@ import { knowledgeIntent } from "./company-knowledge";
 export { OUT_OF_SCOPE_REPLY } from "./knowledge";
 export const TENANT_SCOPE_REPLY = "Mohon maaf, demi menjaga kerahasiaan dan privasi bisnis antar-mitra Daisuki, saya tidak memiliki akses ke informasi sisa stok, data operasional, maupun alamat cabang mitra lainnya.";
 
-const courtesy = /^(?:hi|hai|halo|hello|pagi|siang|sore|malam|selamat (?:pagi|siang|sore|malam)|tes|test|permisi|terima kasih|makasih|thanks|oke|ok)[.!?\s]*$/i;
+const courtesy = /\b(?:hi|hai|halo|helo|hello|pagi|siang|sore|malam|selamat\s+(?:pagi|siang|sore|malam|datang)|tes|test|permisi|terima\s+kasih|makasih|thanks|oke|ok|assalamualaikum|kabar|kabarmu|kabarnya|kabar\s+anda|apa\s+kabar|gimana\s+kabar|bagaimana\s+kabar|sehat|lagi\s+(?:apa|ngapain)|sedang\s+apa|bisa\s+bantu|tolong|siapa\s+(?:kamu|anda|dirimu|developer|pengembang|pembuat|hudzaifah)|apa\s+itu\s+daisuki)\b/i;
 const followUp = /\b(?:yang tadi|yang itu|produk itu|pesanan itu|lanjut|detailnya|bagaimana dengan itu)\b|^(?:berapa|bagaimana|sekarang|terbaru)\s*\??$/i;
 const injection = /\b(?:abaikan|lupakan)\s+(?:(?:semua|seluruh)\s+)?(?:instruksi|aturan|perintah)|\bignore\s+(?:all\s+)?(?:previous\s+)?(?:instructions|rules)|\b(?:developer|pengembang)\s+mode|\b(?:system\s+prompt|prompt\s+sistem|instruksi\s+sistem|token\s+jwt|api[_ -]?key|kunci\s+api|skema\s+database)\b/i;
 const unrelated = /\b(?:lelucon|joke|resep|memasak|politik|pemilu|matematika|fotosintesis|kompetitor)\b/i;

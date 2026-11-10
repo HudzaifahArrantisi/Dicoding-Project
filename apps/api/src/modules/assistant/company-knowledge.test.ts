@@ -22,6 +22,8 @@ test("retrieval mainbrain hanya membaca dokumen yang ditandai untuk mitra", () =
 
 test("pertanyaan profil dan panduan dikenali tanpa mengubah pertanyaan stok", () => {
   expect(knowledgeIntent("siapa pendiri Daisuki?", null)).toBe("company");
+  expect(knowledgeIntent("siapa developermu?", null)).toBe("company");
+  expect(knowledgeIntent("siapa Hudzaifah?", null)).toBe("company");
   expect(knowledgeIntent("bagaimana cara scan resi?", null)).toBe("sop");
   expect(knowledgeIntent("berapa stok saya?", null)).toBeNull();
   expect(knowledgeIntent("siapa saja?", "company")).toBe("company");

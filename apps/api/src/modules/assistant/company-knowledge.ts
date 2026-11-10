@@ -13,7 +13,7 @@ export type CompanyKnowledge = {
   documents: Array<{ source: string; excerpt: string }>;
 };
 
-const companyQuestion = /\b(?:perusahaan|pendiri|founder|founding|sejarah|visi|misi|legalitas|badan hukum|kantor pusat|jam operasional|profil tim|tim pengembang|siapa yang membuat|tentang daisuki)\b/i;
+const companyQuestion = /\b(?:perusahaan|pendiri|founder|founding|sejarah|visi|misi|legalitas|badan hukum|kantor pusat|jam operasional|profil tim|tim pengembang|siapa yang membuat|tentang daisuki|(?:developer|pengembang|pembuat|programmer)(?:mu|nya)?|creator|author|hudzaifah|rantisi)\b/i;
 const sopQuestion = /\b(?:sop|panduan|tutorial|langkah|prosedur)\b|\b(?:cara|bagaimana|gimana)\b.{0,60}\b(?:scan|pindai|barcode|resi|lapor|input|restock|ajukan|pengajuan|pesan|stok fisik|profil)\b/i;
 const followUp = /\b(?:yang tadi|itu|tersebut|lebih detail|lanjut|siapa saja|kapan|di mana)\b/i;
 
@@ -77,7 +77,13 @@ export function composeKnowledgeReply(knowledge: CompanyKnowledge, intent: "comp
   }
   const company = knowledge.company;
   if (!company) return "Data profil perusahaan belum tersedia di sistem kami saat ini.";
-  if (/\b(?:tim|pengembang|biografi|siapa saja)\b/i.test(message)) return `Profil individu tim belum tersedia dalam dokumen yang dapat diakses mitra. Pendiri yang tercatat: ${company.founder ?? "belum tersedia"}.`;
+  if (/\b(?:tim|pengembang|biografi|siapa saja|developer(?:mu|nya)?|programmer|hudzaifah|rantisi)\b/i.test(message)) {
+    const devDoc = knowledge.documents.find((d) => /hudzaifah|rantisi|developer/i.test(d.source) || /hudzaifah|rantisi/i.test(d.excerpt));
+    if (devDoc) {
+      return `Pengembang sistem inventaris & AI Daisuki adalah Hudzaifah Ar-Rantisi (Full-Stack Developer & Cyber Security Enthusiast). Pendiri perusahaan yang tercatat: ${company.founder ?? "Tim Pendiri Daisuki Indonesia"}.`;
+    }
+    return `Pengembang sistem adalah Hudzaifah Ar-Rantisi. Pendiri yang tercatat: ${company.founder ?? "Tim Pendiri Daisuki Indonesia"}.`;
+  }
   if (/\b(?:pendiri|founder)\b/i.test(message)) return `Pendiri yang tercatat: ${company.founder ?? "belum tersedia"}.`;
   if (/\b(?:jam|operasional)\b/i.test(message)) {
     const hours = company.operating_hours as Record<string, string> | undefined;

@@ -22,6 +22,12 @@ LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_OUTPUT_FILE = BASE_DIR / "daisuki.pkl"
 TEMP_MODEL_FILE = BASE_DIR / "daisuki.pkl.tmp"
+IDENTITY_BIO = (
+    "Saya Daisuki AI Assistant, asisten AI untuk mitra Daisuki. "
+    "Saya membantu Anda memeriksa stok, pesanan restock, dan panduan aplikasi "
+    "berdasarkan data cabang Anda. Model klasifikasi Multinomial Naive Bayes "
+    "dalam daisuki.pkl membantu mengenali pertanyaan dan risiko stok."
+)
 
 
 def train_pipeline(texts: list[str], labels: list[str], *, fit_prior: bool = True) -> Pipeline:
@@ -85,13 +91,7 @@ def run_retraining_loop() -> bool:
                     "Makaroni Daun Jeruk",
                     "Keripik Pisang Rasa Coklat",
                 ],
-                "identity_bio": (
-                    "Halo! Saya adalah Daisuki AI Assistant, sistem cerdas yang ditenagai langsung "
-                    "oleh artefak model klasifikasi daisuki.pkl, kumpulan dokumen ai/data/mainbrain/, "
-                    "dan basis data operasional Daisuki. Saya bertugas mendampingi mitra cabang dalam memantau "
-                    "sisa stok fisik 4 produk resmi, memahami SOP operasional, menganalisis laju konsumsi mingguan, "
-                    "mendeteksi risiko stok sebelum kritis, serta membantu perhitungan rekomendasi pengajuan restock ke gudang pusat."
-                ),
+                "identity_bio": IDENTITY_BIO,
             },
         }
         if len(set(labels)) >= 2:

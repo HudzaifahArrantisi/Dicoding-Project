@@ -135,7 +135,11 @@ INTENT_EXAMPLES: dict[str, list[str]] = {
         "apa itu daisuki pkl", "apa itu model daisuki", "model apa yang kamu gunakan",
         "bagaimana cara kerjamu", "kamu robot apa", "anda robot apa",
         "kamu dibuat oleh siapa", "kamu bot apa", "anda bot apa",
-        "tentang kamu", "tentang anda", "profil ai", "profil asisten"
+        "tentang kamu", "tentang anda", "profil ai", "profil asisten",
+        "siapakah dia", "siapa kah dia", "dia siapa", "dirinya apa",
+        "diri nya apa", "chatbot ini siapa", "asisten ini siapa",
+        "siapa chatbot ini", "siapa asisten ini", "kamu ini apa",
+        "identitasmu apa", "apa identitasmu", "apa nama ai ini",
     ],
     "restock": ["bagaimana cara restock barang", "mau pesan barang ke pusat", "ajukan pesanan baru", "alur minta stok ke gudang", "butuh restok produk", "produk mana perlu restock", "rekomendasi jumlah pesanan", "cara pesan seblak untuk toko"],
     "stock_report": ["bagaimana cara lapor stok harian", "update stok toko saat tutup", "laporan fisik cabang", "sisa stok saya berapa", "stok toko sekarang", "status stok cabang", "cara simpan laporan harian", "cek buffer minimal toko"],

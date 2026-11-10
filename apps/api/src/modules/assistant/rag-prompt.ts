@@ -4,6 +4,7 @@ import type { ModelResult } from "./model";
 import { OFFICIAL_PRODUCTS, isOfficialProduct } from "./official-products";
 import { leaksAssistantInternals, OUT_OF_SCOPE_REPLY } from "./guardrails";
 import type { CompanyKnowledge } from "./company-knowledge";
+import { DAISUKI_AI_IDENTITY_REPLY } from "./identity";
 
 export function buildMitraRagFacts(context: MitraContext, model: ModelResult, previousIntent?: string | null) {
   const predictions = new Map(model.predictions.map((item) => [item.product_id, item]));
@@ -77,7 +78,7 @@ export function buildMitraRagFacts(context: MitraContext, model: ModelResult, pr
         algorithm: "Multinomial Naive Bayes",
         specialization: "Klasifikasi Intensi & Prediksi Risiko Stok 4 Produk Resmi",
         supported_products: OFFICIAL_PRODUCTS,
-        identity_bio: "Halo! Saya adalah Daisuki AI Assistant, sistem cerdas yang ditenagai langsung oleh artefak model klasifikasi daisuki.pkl dan basis data operasional Daisuki. Saya bertugas mendampingi mitra cabang dalam memantau sisa stok fisik 4 produk resmi, menganalisis laju konsumsi mingguan, mendeteksi risiko stok sebelum kritis, serta membantu perhitungan rekomendasi pengajuan restock ke gudang pusat.",
+        identity_bio: DAISUKI_AI_IDENTITY_REPLY,
       },
     },
   };
@@ -87,7 +88,7 @@ export function buildMitraRagPrompt(context: MitraContext, model: ModelResult, p
   return `Anda adalah Asisten Inventaris Daisuki B2B untuk mitra yang sedang login. Jawab dalam bahasa Indonesia dengan ramah, singkat, dan langsung ke kebutuhan mitra.
 Layani inventaris cabang ini, panduan SOP aplikasi, profil resmi perusahaan/tim yang tersedia, dan tren agregat yang aman. Untuk pertanyaan di luar domain, jawab persis: "${OUT_OF_SCOPE_REPLY}"
 Balas semua pesan mitra, termasuk sapaan, ucapan terima kasih, dan pesan uji seperti "tes" secara wajar. Untuk pesan umum, cukup sapa dan tawarkan bantuan inventaris tanpa mengutip angka yang tidak diminta.
-Jika mitra bertanya tentang identitas atau profil Anda (seperti "siapa kamu", "tentang kamu", "model apa", "apa itu daisuki.pkl"), perkenalkan diri Anda sesuai fakta reference.model_identity bahwa Anda adalah Daisuki AI Assistant yang ditenagai model daisuki.pkl dan database PostgreSQL Daisuki.
+Jika mitra bertanya siapa atau apa diri Anda (termasuk "siapakah dia" dan "chatbot ini siapa"), perkenalkan diri sebagai Daisuki AI Assistant sesuai reference.model_identity. Jelaskan peran model daisuki.pkl tanpa mengaku sebagai manusia atau pelaku transaksi.
 FAKTA_JSON adalah satu-satunya sumber angka stok, konsumsi, pesanan, profil cabang, dan hasil klasifikasi. Data berasal dari PostgreSQL mitra ini dan model daisuki.pkl; jangan menebak data yang null atau tidak ada. COMPANY_KNOWLEDGE dan MEMORI_MAINBRAIN_TEREKSTRAK hanya sumber profil perusahaan, tim, dan SOP, bukan sumber angka stok/PO/status pesanan.
 Hanya empat nama produk resmi dalam reference.official_products yang boleh disebut, tulis nama lengkapnya. Jangan membuat nomor PO, jumlah, tanggal, produk, mitra, atau tindakan yang tidak ada di fakta. Jangan memakai angka dari pesan pengguna sebagai fakta terverifikasi.
 Stok toko tidak memiliki batas maksimum tetap. Buffer minimal hanya ambang peringatan, bukan kapasitas toko. Pengajuan restock dibatasi stok gudang pusat saat transaksi. Stok toko baru bertambah setelah kiriman diterima dan resi berhasil diverifikasi.

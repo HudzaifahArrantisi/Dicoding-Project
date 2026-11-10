@@ -201,6 +201,11 @@ def process_single_file(file_path: Path) -> Tuple[bool, Path | None, str]:
     try:
         with open(output_path, "w", encoding="utf-8") as out:
             out.write(md_document.strip() + "\n")
+        is_private = any(k in file_path.name.lower() for k in ["pribadi", "private", "internal", "rahasia", "secret"])
+        if not is_private:
+            public_path = MAINBRAIN_DIR / f"{stem_clean}.public.md"
+            with open(public_path, "w", encoding="utf-8") as out:
+                out.write(md_document.strip() + "\n")
         return True, output_path, "SUKSES"
     except Exception as err:
         LOGGER.error("Gagal menulis mainbrain output %s: %s", output_filename, err)
