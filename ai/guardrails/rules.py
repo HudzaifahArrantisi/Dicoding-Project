@@ -4,10 +4,10 @@ Source of Truth: CLAUDE.md & packages/shared/src/index.ts
 """
 
 OFFICIAL_PRODUCTS = [
-    "Dimsum Ayam Original",
-    "Dimsum Udang",
-    "Dimsum Nori",
-    "Dimsum Mentai Panggang",
+    "Seblak Jadul Instan",
+    "Basreng Daun Jeruk",
+    "Makaroni Daun Jeruk",
+    "Keripik Pisang Rasa Coklat",
 ]
 
 ALLOWED_ORDER_STATUSES = [

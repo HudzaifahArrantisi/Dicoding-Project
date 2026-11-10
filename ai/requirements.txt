@@ -6,3 +6,5 @@ httpx
 psycopg[binary]
 python-dotenv
 python-telegram-bot
+pypdf
+python-docx

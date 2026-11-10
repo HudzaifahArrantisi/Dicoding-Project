@@ -7,7 +7,7 @@ export interface MitraAssistantReply {
   quickReplies: string[];
 }
 
-export const OUT_OF_SCOPE_REPLY = "Maaf, saya adalah asisten khusus inventaris Daisuki B2B. Saya hanya dapat membantu terkait informasi stok fisik, pesanan restock, dan konsumsi produk cabang Anda.";
+export const OUT_OF_SCOPE_REPLY = "Maaf, saya adalah asisten khusus inventaris Daisuki B2B. Saya hanya dapat membantu terkait stok fisik, pesanan restock, profil Daisuki, dan panduan operasional aplikasi cabang Anda.";
 
 const quickReplies = [
   "Bagaimana cara restock barang?",

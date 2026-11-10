@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { MitraContext } from "./context";
 import type { ModelResult } from "./model";
 import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
+import type { CompanyKnowledge } from "./company-knowledge";
 
 const context = {
   partner: { name: "Toko A", type: "kafe", type_other: null, pic_name: "Sari", pic_phone: null, address: null, province_name: null, regency_name: "Bandung", district_name: null, village_name: null },
@@ -59,7 +60,30 @@ test("prompt membatasi domain, kewenangan, dan akses mitra lain", () => {
   const prompt = buildMitraRagPrompt(context, model);
   expect(prompt).toContain("asisten khusus inventaris Daisuki B2B");
   expect(prompt).toContain("Anda baca-saja");
-  expect(prompt).toContain("jangan membandingkan dengan cabang lain");
+  expect(prompt).toContain("jangan mengungkap identitas atau data cabang lain");
   expect(isGroundedLlmReply("FAKTA_JSON berisi data internal", context, model)).toBe(false);
+});
+
+test("fakta perusahaan boleh dikutip tanpa mengubah sumber stok", () => {
+  const knowledge: CompanyKnowledge = { company: { legal_entity: "PT Daisuki Pangan Indonesia", founding_year: 2023 }, sop: null, documents: [] };
+  const prompt = buildMitraRagPrompt(context, model, null, undefined, knowledge);
+  expect(prompt).toContain('"founding_year":2023');
+  expect(isGroundedLlmReply("Daisuki berdiri pada 2023.", context, model, knowledge)).toBe(true);
+  expect(isGroundedLlmReply("Sisa stok Anda 2023 pcs.", context, model, knowledge)).toBe(false);
+});
+
+test("snapshot wilayah hanya menyertakan kelompok agregat yang cukup besar", () => {
+  const mixed = { ...context, weeklyFacts: {
+    metadata: { generated_at: new Date().toISOString(), period_days: 7, model_version: "test" },
+    top_selling_products: [{ rank: 1, product_name: "Basreng Daun Jeruk", category: "Camilan", weekly_units: 70, share_pct: 50 }],
+    regional_hotspots: [
+      { region: "Wilayah A", province: "Jawa Barat", active_partners: 4, weekly_units: 80, status: "aman" },
+      { region: "Wilayah Pribadi", province: "Jawa Barat", active_partners: 1, weekly_units: 12, status: "kritis" },
+    ],
+  } } as unknown as MitraContext;
+  const prompt = buildMitraRagPrompt(mixed, model);
+  expect(prompt).toContain("Wilayah A");
+  expect(prompt).not.toContain("Wilayah Pribadi");
+  expect(prompt).toContain('"weekly_units":70');
 });
 

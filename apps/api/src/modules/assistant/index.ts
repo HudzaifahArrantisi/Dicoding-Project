@@ -8,6 +8,7 @@ import { composeMitraReply, resolveMitraIntent, type AssistantIntent } from "./c
 import { loadMitraContext } from "./context";
 import { classifyMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
+import { composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge } from "./company-knowledge";
 import { generateLlmReply } from "./llm-client";
 import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
 import { isCrossTenantQuestion, OUT_OF_SCOPE_REPLY, shouldRefuseMitraMessage, TENANT_SCOPE_REPLY } from "./guardrails";
@@ -80,21 +81,25 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const turns = await activeTurns(user.partnerId, user.userId);
     const previousIntent = turns[turns.length - 1]?.intent as AssistantIntent | null ?? null;
     const scopeRefused = shouldRefuseMitraMessage(message, previousIntent);
+    const knowledgeTopic = scopeRefused ? null : knowledgeIntent(message, previousIntent);
     const contextPromise = loadMitraContext(user.partnerId);
     const memoryPromise = db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
       .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId))).limit(1);
-    const classified = scopeRefused ? null : await withinModelBudget(classifyMitraMessage(message), 500, null);
-    const resolvedIntent = scopeRefused ? null : resolveMitraIntent(message, previousIntent, classified);
-    const crossTenant = isCrossTenantQuestion(message) || resolvedIntent === "top_partners" || resolvedIntent === "top_regions";
+    const knowledgePromise = knowledgeTopic ? loadCompanyKnowledge(message, knowledgeTopic) : Promise.resolve(null);
+    const classified = scopeRefused || knowledgeTopic ? null : await withinModelBudget(classifyMitraMessage(message), 500, null);
+    const resolvedIntent = scopeRefused ? null : knowledgeTopic ?? resolveMitraIntent(message, previousIntent, classified);
+    const crossTenant = isCrossTenantQuestion(message) || resolvedIntent === "top_partners";
     const refused = scopeRefused || crossTenant;
     const intent = refused ? null : resolvedIntent;
-    const [context, [memory]] = await Promise.all([contextPromise, memoryPromise]);
+    const [context, [memory], knowledge] = await Promise.all([contextPromise, memoryPromise, knowledgePromise]);
     const model = intent === "restock" || intent === "stock_report"
       ? await withinModelBudget(predictMitraStocks(context.stocks), 800, emptyModel)
       : emptyModel;
     const fallback = refused
       ? { ...answerMitraQuestion(message), reply: crossTenant ? TENANT_SCOPE_REPLY : OUT_OF_SCOPE_REPLY }
-      : intent
+      : knowledgeTopic && knowledge
+        ? { ...answerMitraQuestion(message), reply: composeKnowledgeReply(knowledge, knowledgeTopic, message) }
+        : intent
         ? composeMitraReply(message, context, model, previousIntent, classified)
         : answerMitraQuestion(message);
     let llmReply: string | null = null;
@@ -105,10 +110,10 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
           systemPrompt: buildMitraRagPrompt(context, model, previousIntent, {
             summary: memory?.summary ?? "",
             recent: buildConversationContext(turns),
-          }),
+          }, knowledge ?? undefined),
           userMessage: message,
         });
-        grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model));
+        grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model, knowledge ?? undefined));
       } catch (error) {
         console.warn("[ASSISTANT] Jawaban 9Router tidak dapat digunakan", error instanceof Error ? error.message : "Error");
       }

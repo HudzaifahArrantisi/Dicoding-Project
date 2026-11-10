@@ -5,7 +5,7 @@ import type { ModelResult } from "./model";
 
 const number = (value: number) => value.toLocaleString("id-ID");
 const followUp = /\b(yang tadi|yang itu)\b|^(berapa|bagaimana|detailnya|lanjut|sekarang|terbaru|mana saja)\s*\??$/i;
-export type AssistantIntent = MitraTour | "greeting" | "central_stock" | "top_products" | "top_partners" | "top_regions" | "identity" | "out_of_scope";
+export type AssistantIntent = MitraTour | "greeting" | "central_stock" | "top_products" | "top_partners" | "top_regions" | "identity" | "out_of_scope" | "company" | "sop";
 const factualIntents = new Set<AssistantIntent>(["central_stock", "top_products", "top_partners", "top_regions"]);
 const tours = new Set<AssistantIntent>(["restock", "stock_report", "delivery", "logs", "profile"]);
 const identityPattern = /\b(siapa(?:\s*kah)?\s+(?:kamu|anda|dirimu|ini|nih)|(?:kamu|anda|dirimu)\s+(?:ini\s+)?siapa(?:\s*kah)?|siapa(?:\s*kah)?\s+nama(?:mu|\s+(?:kamu|anda))|nama(?:mu|\s+(?:kamu|anda))\s+siapa(?:\s*kah)?|perkenalkan\s+diri(?:mu)?|kenalan\s+dong|dengan\s+siapa\s+saya\s+bicara|(?:kamu|anda)\s+(?:sistem|robot|bot|ai)\s+apa|apakah\s+(?:kamu|anda)\s+ai|tentang\s+(?:kamu|anda|asisten|bot)|profil\s+(?:ai|asisten|kamu|anda)|apa\s+itu\s+daisuki(?:\.pkl)?|daisuki\.?pkl)\b/i;
@@ -76,15 +76,27 @@ function profileReply(context: MitraContext): string {
   return `Profil ${partner.name}: PIC ${partner.pic_name || "belum diisi"}; nomor telepon ${partner.pic_phone ? "sudah diisi" : "belum diisi"}; wilayah ${region || "belum lengkap"}. Periksa alamat dan lengkapi wilayah di tab Profil agar tujuan pengiriman jelas.`;
 }
 
-function factReply(intent: AssistantIntent, context: MitraContext): string {
+function factReply(intent: AssistantIntent, context: MitraContext, message: string): string {
   if (intent === "central_stock") {
     if (!context.stocks.length) return "Data stok gudang pusat untuk produk cabang Anda belum tersedia di sistem kami saat ini. Buka tab Restock untuk mengecek kembali.";
     return `Stok gudang pusat untuk produk cabang Anda:\n${context.stocks.map((stock) => `${stock.product_name}: ${number(stock.central_stock)} pcs.`).join("\n")}`;
   }
   if (intent === "top_products") {
+    if (/\b(?:jaringan|seluruh|semua|nasional|daisuki)\b/i.test(message) && !/\b(?:cabang|toko)\s+saya\b/i.test(message)) {
+      const products = context.weeklyFacts?.top_selling_products ?? [];
+      return products.length
+        ? `Performa produk Daisuki dari ringkasan jaringan terbaru:\n${products.map((item) => `${item.product_name}: ${number(item.weekly_units)} pcs dalam periode ringkasan.`).join("\n")}`
+        : "Ringkasan performa produk jaringan belum tersedia di sistem kami saat ini.";
+    }
     const ranked = [...context.stocks].filter((stock) => stock.report_count > 0).sort((a, b) => b.sold_7d - a.sold_7d);
     if (!ranked.length) return "Data konsumsi mingguan cabang Anda belum tersedia di sistem kami saat ini. Isi Laporan Harian untuk mulai mencatat perubahan stok.";
     return `Produk dengan konsumsi tercatat tertinggi di cabang Anda dalam 7 hari:\n${ranked.map((stock) => `${stock.product_name}: ${number(stock.sold_7d)} pcs.`).join("\n")}`;
+  }
+  if (intent === "top_regions") {
+    const regions = context.weeklyFacts?.regional_hotspots.filter((item) => item.active_partners >= 3) ?? [];
+    return regions.length
+      ? `Tren wilayah agregat dari ringkasan terbaru:\n${regions.map((item) => `${item.region}, ${item.province}: ${number(item.weekly_units)} pcs konsumsi tercatat.`).join("\n")}`
+      : "Tren wilayah agregat yang aman untuk ditampilkan belum tersedia di sistem kami saat ini.";
   }
   return "Maaf, saya hanya dapat menampilkan data inventaris cabang Anda sendiri.";
 }
@@ -117,7 +129,7 @@ export function composeMitraReply(message: string, context: MitraContext, model:
     };
   }
   if (intent === "greeting") return { ...base, reply: `Halo, ${context.partner?.name ?? "mitra Daisuki"}! Ada yang ingin kamu cek hari ini? Saya bisa bantu stok toko, restock, pengiriman, dan konsumsi cabang Anda.` };
-  if (factualIntents.has(intent)) return { reply: factReply(intent, context), quickReplies: ["Stok pusat berapa?", "Produk apa paling laku di cabang saya?", "Stok saya sekarang berapa?"] };
+  if (factualIntents.has(intent)) return { reply: factReply(intent, context, message), quickReplies: ["Stok pusat berapa?", "Produk apa paling laku di cabang saya?", "Stok saya sekarang berapa?"] };
   const reply = intent === "stock_report" ? stockReply(message, context)
     : intent === "restock" ? restockReply(message, context, model)
     : intent === "delivery" ? deliveryReply(context)

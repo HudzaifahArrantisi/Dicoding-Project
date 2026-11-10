@@ -1,4 +1,6 @@
-"""Retrain the Daisuki text classifier from live AI Insights source tables."""
+"""Retrain the Daisuki text classifier from live AI Insights source tables,
+and automatically process all documents in ai/data/ into ai/data/mainbrain/*.md.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from source import build_intent_samples, build_training_samples, fetch_training_records
+from doc_loader import scan_and_generate_mainbrain
 
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
@@ -50,11 +53,26 @@ def save_model_safely(model: Pipeline | dict[str, Any], dest_path: Path, temp_pa
 
 def run_retraining_loop() -> bool:
     try:
+        # 1. Pipeline Universal Document Ingestion: Scan ai/data/ -> generate ai/data/mainbrain/*.md
+        LOGGER.info("Memulai pemindaian dan pembuatan Mainbrain dari dokumen di ai/data/...")
+        mainbrain_stats = scan_and_generate_mainbrain()
+        LOGGER.info(
+            "Hasil Mainbrain Generator: %d berhasil dikonversi ke Markdown, %d gagal dari %d dokumen.",
+            mainbrain_stats["success"],
+            mainbrain_stats["failed"],
+            mainbrain_stats["total"],
+        )
+
+        # 2. Pipeline Klasifikasi Operasional Database & Intent
         records = fetch_training_records()
         texts, labels = build_training_samples(records)
         intent_texts, intent_labels = build_intent_samples()
         bundle: dict[str, Any] = {
             "intent": train_pipeline(intent_texts, intent_labels, fit_prior=False),
+            "mainbrain_meta": {
+                "total_documents": mainbrain_stats["total"],
+                "converted_markdowns": mainbrain_stats["success"],
+            },
             "metadata": {
                 "name": "Daisuki AI Assistant",
                 "artifact": "daisuki.pkl",
@@ -69,10 +87,10 @@ def run_retraining_loop() -> bool:
                 ],
                 "identity_bio": (
                     "Halo! Saya adalah Daisuki AI Assistant, sistem cerdas yang ditenagai langsung "
-                    "oleh artefak model klasifikasi daisuki.pkl dan basis data operasional Daisuki. "
-                    "Saya bertugas mendampingi mitra cabang dalam memantau sisa stok fisik 4 produk resmi, "
-                    "menganalisis laju konsumsi mingguan, mendeteksi risiko stok sebelum kritis, "
-                    "serta membantu perhitungan rekomendasi pengajuan restock ke gudang pusat."
+                    "oleh artefak model klasifikasi daisuki.pkl, kumpulan dokumen ai/data/mainbrain/, "
+                    "dan basis data operasional Daisuki. Saya bertugas mendampingi mitra cabang dalam memantau "
+                    "sisa stok fisik 4 produk resmi, memahami SOP operasional, menganalisis laju konsumsi mingguan, "
+                    "mendeteksi risiko stok sebelum kritis, serta membantu perhitungan rekomendasi pengajuan restock ke gudang pusat."
                 ),
             },
         }

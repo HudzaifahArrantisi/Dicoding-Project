@@ -15,6 +15,8 @@ test("topik luar, jailbreak, dan data cabang lain ditolak", () => {
   expect(shouldRefuseMitraMessage("Apa itu fotosintesis?", null)).toBe(true);
   expect(isCrossTenantQuestion("Mitra paling laris siapa?" )).toBe(true);
   expect(shouldRefuseMitraMessage("Bandingkan cabang saya dengan mitra lain", null)).toBe(true);
+  expect(shouldRefuseMitraMessage("Berapa stok mitra 3?", null)).toBe(true);
+  expect(shouldRefuseMitraMessage("Wilayah mana paling aktif?", null)).toBe(false);
 });
 
 test("jawaban yang mengungkap detail internal diblokir", () => {

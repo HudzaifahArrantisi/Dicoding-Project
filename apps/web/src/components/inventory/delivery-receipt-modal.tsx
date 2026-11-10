@@ -710,18 +710,41 @@ export function DeliveryReceiptModal({
               </p>
             ) : null}
 
-            {/* Pilihan Format Cetak (Segmented Control) */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted">
-                Pilih Format Cetak:
-              </span>
-              <div className="inline-flex rounded-lg border border-line bg-paper p-1">
+            {/* Pilihan Format Cetak & Salin Kode (Unified Action Toolbar) */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-line bg-paper/60 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted">
+                  No. SJ:
+                </span>
+                {order.delivery_code ? (
+                  <button
+                    type="button"
+                    onClick={handleCopyCode}
+                    title="Klik untuk menyalin kode surat jalan"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink-900 shadow-2xs transition hover:bg-ink-50 hover:border-ink-400 cursor-pointer"
+                  >
+                    {copiedCode ? (
+                      <Check className="size-3.5 text-ok" />
+                    ) : (
+                      <Copy className="size-3.5 text-muted" />
+                    )}
+                    <span className="font-mono tracking-tight">{order.delivery_code}</span>
+                    <span className="text-[10px] font-normal text-muted">
+                      ({copiedCode ? 'Tersalin' : 'Salin'})
+                    </span>
+                  </button>
+                ) : (
+                  <span className="font-mono text-xs text-muted">-</span>
+                )}
+              </div>
+
+              <div className="inline-flex rounded-lg border border-line bg-white p-1 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setPrintFormat('surat_jalan')}
                   className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                     printFormat === 'surat_jalan'
-                      ? 'bg-white text-ink-900 shadow-xs'
+                      ? 'bg-ink-900 text-white shadow-xs'
                       : 'text-ink-600 hover:text-ink-900'
                   }`}
                 >
@@ -733,7 +756,7 @@ export function DeliveryReceiptModal({
                   onClick={() => setPrintFormat('thermal')}
                   className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
                     printFormat === 'thermal'
-                      ? 'bg-white text-ink-900 shadow-xs'
+                      ? 'bg-ink-900 text-white shadow-xs'
                       : 'text-ink-600 hover:text-ink-900'
                   }`}
                 >
@@ -744,107 +767,196 @@ export function DeliveryReceiptModal({
             </div>
 
             {/* Card Preview Dokumen */}
-            <div className="rounded-xl border border-line bg-ink-50/70 p-4 sm:p-6 overflow-hidden">
-              <div className="mb-3 flex items-center justify-between text-xs text-muted">
-                {order.delivery_code ? (
-                  <button
-                    type="button"
-                    onClick={handleCopyCode}
-                    className="inline-flex items-center gap-1 font-semibold text-ume hover:underline cursor-pointer"
-                  >
-                    {copiedCode ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
-                    <span>{copiedCode ? 'Tersalin' : `Salin Kode: ${order.delivery_code}`}</span>
-                  </button>
-                ) : null}
-              </div>
-
+            <div className="rounded-xl border border-line bg-ink-100/60 p-4 sm:p-6 overflow-hidden">
               {/* Tampilan Preview: A4 Surat Jalan */}
               {printFormat === 'surat_jalan' ? (
-                <div className="mx-auto w-full max-w-xl rounded-lg border border-line bg-white p-5 sm:p-6 text-xs text-ink-900 shadow-xs">
-                  {/* Kop */}
-                  <div className="flex items-start justify-between border-b-2 border-ink-900 pb-3">
+                <div className="mx-auto w-full max-w-2xl rounded-lg border border-line/80 bg-white p-6 sm:p-8 text-xs text-ink-900 shadow-md">
+                  {/* Kop Resmi Surat Jalan */}
+                  <div className="flex items-start justify-between border-b-2 border-ink-900 pb-3.5">
                     <div>
-                      <h3 className="font-display text-lg font-extrabold tracking-tight text-ink-900">
-                        DAISUKI
-                      </h3>
-                      <p className="text-[11px] font-semibold text-ink-600">
+                      <div className="flex items-center gap-2">
+                        <span className="font-display text-xl font-extrabold tracking-tight text-ink-900">
+                          DAISUKI
+                        </span>
+                        <span className="rounded bg-ink-900 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                          DISTRIBUTION
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs font-medium text-ink-700">
                         B2B Inventory & Order Management System
                       </p>
-                      <p className="text-[10px] text-muted">Gudang Distribusi Pusat</p>
+                      <p className="text-[11px] text-muted">
+                        Gudang Distribusi Pusat · Surat Penyerahan Barang Resmi
+                      </p>
                     </div>
                     <div className="text-right">
-                      <span className="font-display text-sm font-extrabold uppercase text-ink-900">
+                      <span className="font-display text-base font-extrabold uppercase tracking-wide text-ink-900">
                         SURAT JALAN
                       </span>
-                      <p className="text-[10px] text-muted">DELIVERY NOTE</p>
+                      <p className="text-[10px] font-semibold tracking-wider text-muted uppercase">DELIVERY NOTE</p>
+                      <span className="mt-1 inline-block rounded border border-order-pengiriman/30 bg-order-pengiriman-bg/50 px-2 py-0.5 text-[10px] font-bold uppercase text-order-pengiriman">
+                        Dalam Pengiriman
+                      </span>
                     </div>
                   </div>
 
-                  {/* Info Box */}
-                  <div className="mt-3 grid grid-cols-2 gap-3 text-[11px]">
-                    <div className="rounded border border-line bg-ink-50/50 p-2.5 space-y-1">
-                      <p className="font-bold uppercase text-[9px] text-muted">Informasi Pengiriman</p>
-                      <p><span className="text-muted">No. SJ:</span> <strong className="tabular-nums">{order.delivery_code || order.order_no}</strong></p>
-                      <p><span className="text-muted">No. PO:</span> <strong className="tabular-nums">{order.order_no}</strong></p>
-                      <p><span className="text-muted">Tanggal:</span> <span className="tabular-nums">{shippedDate}</span></p>
+                  {/* Info Box: 2 Kolom Rapi */}
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-lg border border-line bg-paper/50 p-3 space-y-1.5">
+                      <p className="font-bold uppercase tracking-wider text-[10px] text-muted">
+                        Informasi Pengiriman
+                      </p>
+                      <div className="space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-muted">No. Surat Jalan:</span>
+                          <strong className="font-mono text-ink-900">{order.delivery_code || order.order_no}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted">No. Pesanan (PO):</span>
+                          <strong className="font-mono text-ink-900">{order.order_no}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted">Tanggal Kirim:</span>
+                          <span className="tabular-nums text-ink-800">{shippedDate}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="rounded border border-line bg-ink-50/50 p-2.5 space-y-1">
-                      <p className="font-bold uppercase text-[9px] text-muted">Tujuan Mitra</p>
-                      <p><span className="text-muted">Penerima:</span> <strong>{order.partner_name}</strong> ({partnerTypeLabel})</p>
-                      <p className="truncate"><span className="text-muted">Alamat:</span> {order.partner_address || '-'}</p>
+
+                    <div className="rounded-lg border border-line bg-paper/50 p-3 space-y-1.5">
+                      <p className="font-bold uppercase tracking-wider text-[10px] text-muted">
+                        Tujuan Penerima (Mitra)
+                      </p>
+                      <div className="space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-muted">Mitra Cabang:</span>
+                          <strong className="text-ink-900">{order.partner_name}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted">Tipe Cabang:</span>
+                          <span className="font-medium text-ink-800">{partnerTypeLabel || 'Mitra'}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted">Alamat:</span>{' '}
+                          <span className="text-ink-800">{order.partner_address || 'Alamat cabang terdaftar'}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Tabel Preview */}
-                  <table className="mt-3 w-full border-collapse text-[11px]">
+                  {/* Catatan Admin jika ada */}
+                  {order.admin_note || order.note ? (
+                    <div className="mt-2.5 rounded border border-line/70 bg-amber-50/60 px-3 py-2 text-xs text-amber-950">
+                      <span className="font-bold text-amber-900">Catatan Pengiriman:</span>{' '}
+                      <span>{order.admin_note || order.note}</span>
+                    </div>
+                  ) : null}
+
+                  {/* Tabel Muatan Barang */}
+                  <table className="mt-3.5 w-full border-collapse text-xs">
                     <thead>
-                      <tr className="border-y border-ink-300 bg-paper text-ink-800">
-                        <th className="py-1.5 px-2 text-left font-bold w-8">No</th>
-                        <th className="py-1.5 px-2 text-left font-bold">Produk</th>
-                        <th className="py-1.5 px-2 text-center font-bold w-16">Satuan</th>
-                        <th className="py-1.5 px-2 text-right font-bold w-20">Kuantitas</th>
+                      <tr className="border-y border-ink-300 bg-ink-50 text-ink-900">
+                        <th className="py-2 px-2.5 text-center font-bold w-10">No</th>
+                        <th className="py-2 px-2.5 text-left font-bold">Nama Produk / Barang</th>
+                        <th className="py-2 px-2.5 text-center font-bold w-20">Satuan</th>
+                        <th className="py-2 px-2.5 text-right font-bold w-24">Jumlah</th>
+                        <th className="py-2 px-2.5 text-center font-bold w-20">Cek Fisik</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
                       {shippedItems.map((item, idx) => (
-                        <tr key={item.id}>
-                          <td className="py-1.5 px-2 text-muted tabular-nums">{idx + 1}</td>
-                          <td className="py-1.5 px-2 font-medium">{item.product_name}</td>
-                          <td className="py-1.5 px-2 text-center text-muted">{item.product_unit}</td>
-                          <td className="py-1.5 px-2 text-right font-bold tabular-nums">{item.qty_approved}</td>
+                        <tr key={item.id} className="hover:bg-paper/40">
+                          <td className="py-2 px-2.5 text-center text-muted tabular-nums">{idx + 1}</td>
+                          <td className="py-2 px-2.5 font-semibold text-ink-900">{item.product_name}</td>
+                          <td className="py-2 px-2.5 text-center text-muted">{item.product_unit}</td>
+                          <td className="py-2 px-2.5 text-right font-bold tabular-nums text-ink-900">
+                            {item.qty_approved}
+                          </td>
+                          <td className="py-2 px-2.5 text-center font-mono text-muted text-[11px]">[ &nbsp; ]</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="border-t-2 border-ink-900 font-bold bg-paper/60">
-                        <td colSpan={3} className="py-2 px-2 text-right">TOTAL DIKIRIM:</td>
-                        <td className="py-2 px-2 text-right tabular-nums text-ink-900">{total} pcs</td>
+                      <tr className="border-t-2 border-ink-900 font-bold bg-paper/80">
+                        <td colSpan={3} className="py-2.5 px-2.5 text-right uppercase tracking-wider text-muted">
+                          Total Muatan Dikirim:
+                        </td>
+                        <td className="py-2.5 px-2.5 text-right tabular-nums text-ink-900 text-sm">
+                          {total} pcs
+                        </td>
+                        <td className="py-2.5 px-2.5 text-center text-[10px] font-semibold text-ok-fg">
+                          Lengkap [✓]
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
 
-                  {/* QR & Barcode Section */}
-                  <div className="mt-3 flex items-center justify-between gap-3 rounded border border-dashed border-ink-300 p-2.5 bg-paper/30">
-                    <div className="flex items-center gap-2.5">
+                  {/* QR Code & Barcode Verifikasi */}
+                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-dashed border-ink-300 p-3 bg-paper/40">
+                    <div className="flex items-center gap-3">
                       {qr ? (
-                        <img src={qr} alt="QR Code Verifikasi" className="size-16 shrink-0 rounded bg-white p-1 border border-line" />
+                        <img
+                          src={qr}
+                          alt="QR Code Verifikasi"
+                          className="size-20 shrink-0 rounded-md bg-white p-1 border border-line shadow-2xs"
+                        />
                       ) : (
-                        <div className="size-16 shrink-0 rounded bg-ink-100 flex items-center justify-center text-[9px] text-muted">QR...</div>
+                        <div className="size-20 shrink-0 rounded-md bg-ink-100 flex items-center justify-center text-[10px] text-muted">
+                          Memuat QR...
+                        </div>
                       )}
                       <div>
-                        <p className="font-bold text-[11px] text-ink-900">QR Konfirmasi Penerimaan</p>
-                        <p className="text-[10px] text-muted leading-tight">Mitra memindai kode ini via aplikasi saat barang tiba.</p>
+                        <p className="font-bold text-xs text-ink-900">
+                          QR Verifikasi Penerimaan Barang
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted leading-relaxed">
+                          PIC cabang mitra wajib memindai QR Code ini via portal Daisuki Mitra saat dus tiba di lokasi untuk menambah stok toko.
+                        </p>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
+
+                    <div className="text-center sm:text-right shrink-0">
                       {barcodeSvgHtml ? (
                         <div
-                          className="scale-90 origin-right"
+                          className="scale-95 origin-center sm:origin-right"
                           dangerouslySetInnerHTML={{ __html: barcodeSvgHtml }}
                         />
                       ) : (
                         <div className="h-10 w-28 rounded bg-ink-100 animate-pulse" />
                       )}
+                      <p className="text-[10px] font-mono text-muted mt-0.5">
+                        {order.delivery_code || '-'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3 Kolom Tanda Tangan Serah Terima */}
+                  <div className="mt-5 grid grid-cols-3 gap-3 border-t border-line/80 pt-4 text-center">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                        Diserahkan Oleh,
+                      </p>
+                      <div className="h-14" />
+                      <p className="border-t border-ink-300 pt-1 font-semibold text-ink-900 text-xs">
+                        Admin Gudang Pusat
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                        Pengemudi / Kurir,
+                      </p>
+                      <div className="h-14" />
+                      <p className="border-t border-ink-300 pt-1 font-semibold text-ink-900 text-xs">
+                        Ekspedisi Logistik
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                        Diterima Oleh,
+                      </p>
+                      <div className="h-14" />
+                      <p className="border-t border-ink-300 pt-1 font-semibold text-ink-900 text-xs">
+                        PIC Cabang Mitra
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -938,7 +1050,7 @@ export function DeliveryReceiptModal({
               type="button"
               onClick={handlePrint}
               disabled={!qr || Boolean(error)}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ume px-6 text-sm font-semibold text-white shadow-xs hover:bg-ume/90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-6 text-sm font-semibold text-white shadow-2xs hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               <Printer className="size-4" aria-hidden="true" />
               <span>

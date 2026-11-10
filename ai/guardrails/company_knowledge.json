@@ -1,0 +1,199 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DaisukiCompanyKnowledgeBase",
+  "description": "Basis pengetahuan resmi perusahaan Daisuki, profil, visi, katalog 4 produk resmi, SOP operasional mitra, alur resi/barcode, dan aturan perlindungan data multi-tenant.",
+  "company_profile": {
+    "brand_name": "Daisuki Snack & Food B2B",
+    "legal_entity": "PT Daisuki Pangan Indonesia",
+    "founding_year": 2023,
+    "founder": "Tim Pendiri Daisuki Indonesia (Inisiatif Kuliner Nusantara)",
+    "headquarters": "Surabaya, Jawa Timur, Indonesia",
+    "business_model": "B2B (Business-to-Business) Food & Beverage Supply Chain",
+    "description": "Daisuki adalah produsen dan distributor makanan ringan/camilan khas Indonesia berkualitas premium yang memasok jaringan mitra ritel, hotel, kafe, restoran, minimarket, dan toko oleh-oleh.",
+    "vision": "Menjadi rantai pasok makanan ringan khas Indonesia nomor satu yang terpercaya, konsisten, dan transparan melalui digitalisasi inventaris modern.",
+    "mission": [
+      "Menjamin ketersediaan stok camilan berkualitas tinggi tanpa hambatan rantai pasok.",
+      "Mendukung pertumbuhan bisnis mitra ritel dan horeka melalui koordinasi stok cerdas dan terprediksi.",
+      "Mengintegrasikan teknologi AI dan analitik data untuk pencegahan kehabisan stok (zero stockout)."
+    ],
+    "operating_hours": {
+      "office": "Senin - Jumat: 08:00 - 17:00 WIB",
+      "warehouse_delivery": "Senin - Sabtu: 07:00 - 16:00 WIB",
+      "partner_app_support": "Setiap hari (24/7 online)"
+    }
+  },
+  "official_products": [
+    {
+      "sku": "DSK-SB-001",
+      "name": "Seblak Jadul Instan",
+      "category": "Camilan Berkuah / Instan",
+      "price_b2b": 12000,
+      "description": "Seblak instan otentik dengan racikan kencur alami, aneka kerupuk kenyal khas Bandung, dan sambal pedas daun jeruk sedap."
+    },
+    {
+      "sku": "DSK-BR-002",
+      "name": "Basreng Daun Jeruk",
+      "category": "Camilan Kering / Renyah",
+      "price_b2b": 10000,
+      "description": "Bakso goreng renyah bumbu cabai rawit merah berpadu irisan daun jeruk segar beraroma khas gurih pedas."
+    },
+    {
+      "sku": "DSK-MK-003",
+      "name": "Makaroni Daun Jeruk",
+      "category": "Camilan Kering / Renyah",
+      "price_b2b": 8500,
+      "description": "Makaroni spiral gurih dengan tingkat kerenyahan renyah gurih pedas taburan daun jeruk."
+    },
+    {
+      "sku": "DSK-KP-004",
+      "name": "Keripik Pisang Rasa Coklat",
+      "category": "Camilan Manis",
+      "price_b2b": 15000,
+      "description": "Keripik pisang kepok renyah dengan balutan cokelat lumer tebal khas oleh-oleh modern."
+    }
+  ],
+  "sop_procedures": {
+    "scan_barcode_delivery": {
+      "title": "SOP Penerimaan Barang & Scan Resi Barcode Pengiriman",
+      "summary": "Prosedur wajib mitra saat menerima paket dus kiriman logistik Daisuki dari gudang pusat.",
+      "steps": [
+        {
+          "step_number": 1,
+          "name": "Terima Paket Dus & Cek Fisik",
+          "action": "Terima dus paket dari kurir logistik Daisuki. Pastikan segel kemasan dan dus dalam kondisi baik tidak rusak atau basah."
+        },
+        {
+          "step_number": 2,
+          "name": "Buka Menu Lacak di Portal Mitra",
+          "action": "Login ke portal Mitra, buka tab 'Lacak'. Cari pesanan yang berstatus 'Dalam Pengiriman' (ikon truk)."
+        },
+        {
+          "step_number": 3,
+          "name": "Tekan Tombol Scan Barcode",
+          "action": "Klik kartu pesanan terkait, lalu tekan tombol 'Scan Barcode'."
+        },
+        {
+          "step_number": 4,
+          "name": "Pindai Barcode / Ketik Nomor Resi",
+          "action": "Kamera scanner akan aktif. Arahkan kamera ke Barcode / QR Code pada Surat Jalan. Jika kamera terkendala, ketikkan kode resi yang tertera pada surat jalan di kolom input."
+        },
+        {
+          "step_number": 5,
+          "name": "Verifikasi & Stok Bertambah Otomatis",
+          "action": "Setelah resi terverifikasi, sistem otomatis mengubah status pesanan menjadi 'Selesai'. Sisa stok fisik toko Anda akan bertambah seketika sebesar jumlah yang disetujui (qty_approved)."
+        }
+      ],
+      "important_notes": [
+        "Stok toko tidak akan bertambah sebelum resi kurir discan dan diverifikasi.",
+        "Kuantitas yang masuk ke stok toko adalah qty_approved dari admin pusat, bukan qty awal yang diminta jika ada penyesuaian alokasi gudang."
+      ]
+    },
+    "daily_stock_reporting": {
+      "title": "SOP Pelaporan Stok Fisik Harian (Tutup Toko)",
+      "summary": "Prosedur penghitungan dan input sisa stok harian untuk mendeteksi laju konsumsi dan mencegah stok kritis.",
+      "steps": [
+        {
+          "step_number": 1,
+          "name": "Hitung Sisa Fisik di Rak Toko",
+          "action": "Saat toko tutup atau pergantian shift sore, hitung sisa fisik 4 produk resmi yang ada di rak dan etalase toko."
+        },
+        {
+          "step_number": 2,
+          "name": "Buka Menu Stok Saya di Portal Mitra",
+          "action": "Buka tab 'Stok Saya' pada aplikasi portal mitra."
+        },
+        {
+          "step_number": 3,
+          "name": "Masukkan Angka Sisa Fisik",
+          "action": "Gunakan tombol counter minus/plus atau ketik langsung angka sisa fisik pada kartu masing-masing produk."
+        },
+        {
+          "step_number": 4,
+          "name": "Simpan Laporan Stok",
+          "action": "Tekan tombol 'Simpan Laporan Stok Fisik'. Laporan akan memperbarui log mutasi dan status kesehatan stok."
+        }
+      ],
+      "important_notes": [
+        "Cabang mitra tidak memiliki batas maksimum stok. Buffer minimal hanya ambang peringatan dini.",
+        "Laporan yang tidak diperbarui lebih dari 24 jam akan diberi status 'Belum Update' (Stale)."
+      ]
+    },
+    "restock_order_submission": {
+      "title": "SOP Pengajuan Pesanan Restock ke Gudang Pusat",
+      "summary": "Prosedur pemesanan pasokan tambahan ketika stok mendekati batas buffer minimal.",
+      "steps": [
+        {
+          "step_number": 1,
+          "name": "Buka Menu Restock",
+          "action": "Pilih tab menu 'Restock' pada portal mitra."
+        },
+        {
+          "step_number": 2,
+          "name": "Cek Stok Gudang Pusat",
+          "action": "Perhatikan kolom 'Stok Pusat'. Pemesanan dibatasi oleh ready stock yang tersedia di gudang pusat saat transaksi."
+        },
+        {
+          "step_number": 3,
+          "name": "Pilih Kuantitas & Catatan",
+          "action": "Tentukan jumlah pcs per produk yang ingin dipesan. Tambahkan catatan bila ada permintaan khusus (misal: pengiriman hari Sabtu)."
+        },
+        {
+          "step_number": 4,
+          "name": "Kirim Pengajuan (Generate PO)",
+          "action": "Tekan tombol 'Kirim Pengajuan Restock'. Sistem akan membuat nomor pesanan resmi dengan status 'Diproses'."
+        }
+      ],
+      "important_notes": [
+        "Admin pusat akan mereview PO dan dapat menyetujui penuh atau menyetujui parsial tergantung alokasi logistik.",
+        "Stok gudang pusat direservasi saat mitra mengajukan pesanan. Persetujuan parsial mengembalikan selisih yang tidak disetujui."
+      ]
+    },
+    "profile_update": {
+      "title": "SOP Pembaruan Profil Cabang & PIC",
+      "summary": "Prosedur melengkapi data penanggung jawab dan alamat kirim armada.",
+      "steps": [
+        {
+          "step_number": 1,
+          "name": "Buka Menu Profil",
+          "action": "Klik tab 'Profil' di navigasi portal mitra."
+        },
+        {
+          "step_number": 2,
+          "name": "Lengkapi Data PIC & Alamat Wilayah",
+          "action": "Pastikan Nama Toko, Nama PIC, No Telepon WhatsApp aktif, Alamat Jalan, Provinsi, Kota/Kabupaten, Kecamatan, dan Kelurahan terisi lengkap."
+        },
+        {
+          "step_number": 3,
+          "name": "Simpan Perubahan",
+          "action": "Tombol 'Simpan profil' akan aktif hijau saat terdeteksi perubahan. Klik tombol untuk menyimpan."
+        }
+      ]
+    }
+  },
+  "security_and_tenant_boundary": {
+    "rules": [
+      {
+        "id": "SEC-01",
+        "name": "Isolasi Data Antar Mitra (Tenant Isolation)",
+        "principle": "Mitra HANYA boleh mengakses data cabang sendiri.",
+        "prohibited_actions": [
+          "Menanyakan sisa stok cabang mitra lain (contoh: 'berapa stok mitra 3?')",
+          "Menanyakan alamat, nama PIC, no telepon mitra cabang lain",
+          "Meminta perbandingan penjualan atau omset cabang tertentu"
+        ],
+        "system_response_policy": "Tolak secara tegas dan profesional dengan menyatakan bahwa data operasional antar cabang bersifat rahasia dan dilindungi oleh kebijakan privasi perusahaan."
+      },
+      {
+        "id": "SEC-02",
+        "name": "Asisten Bersifat Baca Saja (Read-Only AI)",
+        "principle": "AI tidak boleh mengeksekusi mutasi langsung pada database.",
+        "prohibited_actions": [
+          "Mengklaim sudah mengubah angka stok",
+          "Mengklaim sudah membuatkan pesanan PO",
+          "Mengklaim sudah membatalkan pesanan"
+        ],
+        "system_response_policy": "Berikan panduan langkah-langkah ke form UI terkait agar mitra melakukan aksi secara resmi lewat antarmuka."
+      }
+    ]
+  }
+}
