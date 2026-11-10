@@ -6,6 +6,8 @@ import { shouldRefuseMitraMessage } from "./guardrails";
 test("kamus eksternal mengenali salam, identitas, produk, dan panduan", () => {
   expect(isGreeting("halo")).toBe(true);
   expect(isIdentityQuery("siapa kah anda")).toBe(true);
+  expect(isIdentityQuery("kamu membantu apa")).toBe(true);
+  expect(shouldRefuseMitraMessage("kamu membantu apa", null)).toBe(false);
   expect(getProductAliases().get("Seblak Jadul Instan")).toContain("seblak");
   expect(matchTourIntent("stok seblak sisa berapa")).toBe("stock_report");
   expect(answerMitraQuestion("stok seblak sisa berapa").suggestedTour).toBe("stock_report");

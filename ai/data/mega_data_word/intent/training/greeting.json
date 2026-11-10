@@ -1,0 +1,18 @@
+{
+  "category": "training",
+  "name": "greeting",
+  "version": "1.0.0",
+  "intent": "greeting",
+  "phrases": [
+    "selamat pagi daisuki",
+    "halo asisten daisuki",
+    "hai chatbot daisuki",
+    "permisi saya mau bertanya",
+    "terima kasih sudah membantu",
+    "makasih ya asisten",
+    "apa kabar asisten",
+    "gimana kabar kamu",
+    "tes chatbot",
+    "selamat sore asisten"
+  ]
+}

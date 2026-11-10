@@ -28,6 +28,26 @@ function load(): Map<string, Matcher> {
 }
 
 const packs = load();
+function loadTrainingPhrases(): Map<string, string> {
+  const phrases = new Map<string, string>();
+  const add = (intent: string, values: string[]) => {
+    for (const value of values) {
+      const key = normalize(value);
+      const existing = phrases.get(key);
+      if (existing && existing !== intent) throw new Error(`Frasa training ambigu: ${value}`);
+      phrases.set(key, intent);
+    }
+  };
+  const base = packs.get("training/training_examples")?.raw.intents as Record<string, string[]>;
+  for (const [intent, values] of Object.entries(base)) add(intent, values);
+  const directory = resolve(root, "intent/training");
+  for (const name of readdirSync(directory).filter((file) => file.endsWith(".json"))) {
+    const data = JSON.parse(readFileSync(resolve(directory, name), "utf8")) as { intent: string; phrases: string[] };
+    add(data.intent, data.phrases);
+  }
+  return phrases;
+}
+const trainingPhrases = loadTrainingPhrases();
 const compiled = new Map<string, RegExp | null>();
 for (const [name, entry] of packs) {
   for (const [field, value] of Object.entries(entry.raw)) {
@@ -55,6 +75,7 @@ function extra(name: string, field: string): RegExp | null {
 }
 
 export function matchesWordPack(name: string, text: string): boolean { return matches(name, text); }
+export function matchTrainingPhrase(text: string): string | null { return trainingPhrases.get(normalize(text)) ?? null; }
 export function matchesWordPattern(name: string, field: string, text: string): boolean {
   return extra(name, field)?.test(text) ?? false;
 }
@@ -67,27 +88,34 @@ export function matchSopSelection(text: string): string {
   }
   return "restock_order_submission";
 }
-export function isGreeting(text: string): boolean { return matches("intent/greetings", normalize(text)); }
+export function isGreeting(text: string): boolean { return matches("intent/greetings", normalize(text)) || matchTrainingPhrase(text) === "greeting"; }
 export function isChitChat(text: string): boolean {
   return extra("intent/greetings", "chit_chat_patterns")?.test(text) ?? false;
 }
-export function isIdentityQuery(text: string): boolean { return matches("intent/identity", text); }
+export function isIdentityQuery(text: string): boolean { return matches("intent/identity", text) || matchTrainingPhrase(text) === "identity"; }
 export function isDeveloperQuery(text: string): boolean {
   return extra("intent/identity", "developer_patterns")?.test(text) ?? false;
 }
-export function isOutOfScope(text: string): boolean { return matches("guardrail/out_of_scope", text); }
+export function isOutOfScope(text: string): boolean { return matches("guardrail/out_of_scope", text) || matchTrainingPhrase(text) === "out_of_scope"; }
 export function isInjection(text: string): boolean { return matches("guardrail/prompt_injections", text); }
 export function isSystemProbe(text: string): boolean { return matches("guardrail/system_probe", text); }
 export function isCrossTenant(text: string): boolean { return matches("guardrail/tenant_scope", text); }
-export function isOperational(text: string): boolean { return matches("intent/operational", text); }
+export function isOperational(text: string): boolean {
+  const trained = matchTrainingPhrase(text);
+  return matches("intent/operational", text) || Boolean(trained && trained !== "out_of_scope");
+}
 export function isFollowUp(text: string): boolean { return matches("intent/follow_up", text); }
 export function matchTourIntent(text: string): "delivery" | "restock" | "stock_report" | "logs" | "profile" | null {
+  const trained = matchTrainingPhrase(text);
+  if (trained === "delivery" || trained === "restock" || trained === "stock_report" || trained === "logs" || trained === "profile") return trained;
   for (const name of ["delivery", "restock", "stock_report", "logs", "profile"] as const) {
     if (matches(`tour/${name}`, text)) return name;
   }
   return null;
 }
 export function matchFactualIntent(text: string): "central_stock" | "top_products" | "top_partners" | "top_regions" | null {
+  const trained = matchTrainingPhrase(text);
+  if (trained === "central_stock" || trained === "top_products" || trained === "top_partners" || trained === "top_regions") return trained;
   const intents = pack("intent/factual").raw.intents as Record<string, string[]>;
   for (const name of ["central_stock", "top_products", "top_partners", "top_regions"] as const) {
     const key = `intent/factual/intent:${name}`;

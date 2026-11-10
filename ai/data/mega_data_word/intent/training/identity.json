@@ -1,0 +1,18 @@
+{
+  "category": "training",
+  "name": "identity",
+  "version": "1.0.0",
+  "intent": "identity",
+  "phrases": [
+    "siapa asisten inventaris ini",
+    "apa nama chatbot daisuki",
+    "perkenalkan diri kamu",
+    "kamu membantu apa",
+    "apa tugasmu di aplikasi mitra",
+    "model apa yang digunakan asisten",
+    "apa fungsi daisuki.pkl",
+    "apakah kamu manusia atau ai",
+    "siapa yang menjawab chat saya",
+    "jelaskan identitas daisuki ai"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "category": "training",
+  "name": "logs",
+  "version": "1.0.0",
+  "intent": "logs",
+  "phrases": [
+    "lihat log stok cabang saya",
+    "tampilkan riwayat perubahan stok",
+    "totalkan hasil logs saya minggu kemarin",
+    "berapa konsumsi minggu sebelumnya",
+    "lihat catatan admin pada pesanan",
+    "riwayat penerimaan barang toko saya",
+    "kapan pesanan terakhir disetujui",
+    "cek laporan yang tersimpan di log",
+    "ringkas mutasi stok tujuh hari terakhir",
+    "berapa total penurunan stok pada log"
+  ]
+}

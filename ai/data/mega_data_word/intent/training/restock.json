@@ -1,0 +1,18 @@
+{
+  "category": "training",
+  "name": "restock",
+  "version": "1.0.0",
+  "intent": "restock",
+  "phrases": [
+    "saya perlu ajukan restock",
+    "bagaimana membuat pesanan pasokan",
+    "produk mana perlu dipesan lagi",
+    "berapa saran pasokan untuk toko saya",
+    "cek risiko kehabisan stok sebelum restock",
+    "cara mengajukan beberapa produk sekaligus",
+    "apakah stok gudang cukup untuk pesanan saya",
+    "saya ingin ubah pesanan yang masih diproses",
+    "kapan sebaiknya pesan ke gudang pusat",
+    "bagaimana membatalkan pengajuan yang belum dikirim"
+  ]
+}

@@ -5,9 +5,11 @@ Membaca dokumen publik dari data/mainbrain/context_embeddings/*.public.md.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .rules import OFFICIAL_PRODUCTS, ALLOWED_ORDER_STATUSES
+from .data_loader import load_json
 
 AI_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = AI_DIR.parent / "data" / "mainbrain"
@@ -30,14 +32,19 @@ def load_mainbrain_context(max_chars: int = 8000) -> str:
     """Membaca potongan dokumen Markdown yang disetujui untuk mitra."""
     if not MAINBRAIN_DIR.exists():
         return ""
-    md_files = sorted(list(MAINBRAIN_DIR.glob("*.public.md")))
+    policy = load_json("mainbrain/corporate_knowledge/rag_policy.json")
+    approved = set(policy["approved_sources"])
+    blocked = [re.compile(pattern, re.IGNORECASE) for pattern in policy["blocked_content_patterns"]]
+    md_files = sorted(file for file in MAINBRAIN_DIR.glob("*.public.md") if file.name in approved)[: policy["max_documents"]]
     if not md_files:
         return ""
     snippets = []
     for f in md_files:
         try:
             with open(f, "r", encoding="utf-8", errors="ignore") as file:
-                text = file.read().strip()
+                text = file.read(policy["max_chars_per_document"]).strip()
+                if any(pattern.search(text) for pattern in blocked):
+                    continue
                 if len(text) > 2000:
                     text = text[:2000] + "\n...[dipotong untuk efisiensi token]"
                 snippets.append(text)

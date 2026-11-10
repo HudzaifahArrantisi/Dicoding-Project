@@ -1,0 +1,22 @@
+{
+  "category": "corporate_knowledge",
+  "name": "rag_policy",
+  "version": "1.0.0",
+  "approved_sources": [
+    "company-profile.public.md",
+    "company_knowledge.public.md",
+    "CV-Hudzaifah_Ar-Rantisi.public.md",
+    "inventory_rules.public.md",
+    "partner_workflows.public.md",
+    "assistant_identity.public.md"
+  ],
+  "max_documents": 20,
+  "max_chars_per_document": 20000,
+  "max_excerpts": 3,
+  "blocked_content_patterns": [
+    "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}",
+    "\\b(?:08\\d{8,12}|\\+62\\d{8,13})\\b",
+    "\\bsk-[A-Za-z0-9-]{10,}\\b",
+    "postgres(?:ql)?://"
+  ]
+}

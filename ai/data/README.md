@@ -7,4 +7,4 @@
 - `mainbrain/session_memory/`: dokumentasi memori; ringkasan percakapan nyata disimpan terisolasi di PostgreSQL.
 - `mega_data_word/`: pola intent, guardrail, alias produk, dan contoh training.
 
-Perubahan kamus JSON dibaca pada proses API berikutnya. Tambah contoh pada `mega_data_word/intent/training_examples.json`, lalu jalankan `python ai/retraining/refresh_identity.py` untuk memperbarui classifier lokal tanpa mengubah model risiko.
+Perubahan kamus JSON dibaca pada proses API berikutnya. Tambah contoh intent pada berkas per topik di `mega_data_word/intent/training/`, lalu jalankan `python ai/retraining/refresh_identity.py` untuk memperbarui classifier lokal tanpa mengubah model risiko. Daftar dokumen RAG yang boleh dibaca mitra diatur oleh `mainbrain/corporate_knowledge/rag_policy.json`.

@@ -1,0 +1,18 @@
+{
+  "category": "training",
+  "name": "out_of_scope",
+  "version": "1.0.0",
+  "intent": "out_of_scope",
+  "phrases": [
+    "bagaimana cara membuat rendang",
+    "siapa presiden sekarang",
+    "buatkan program python umum",
+    "ceritakan gosip artis",
+    "berapa hasil matematika acak",
+    "prediksi cuaca besok pagi",
+    "beri resep makanan rumahan",
+    "jelaskan pertandingan olahraga",
+    "film apa yang sedang populer",
+    "buat lelucon yang lucu"
+  ]
+}

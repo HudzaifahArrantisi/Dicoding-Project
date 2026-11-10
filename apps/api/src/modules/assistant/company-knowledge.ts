@@ -1,4 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getStopwords, matchSopSelection, matchesWordPack, matchesWordPattern } from "./word-loader";
 import { assistantCopy } from "./assistant-copy";
@@ -6,11 +7,19 @@ import { assistantCopy } from "./assistant-copy";
 const dataDir = resolve(import.meta.dir, "../../../../../data/mainbrain");
 const mainbrainDir = resolve(dataDir, "context_embeddings");
 const companyFile = resolve(dataDir, "corporate_knowledge/company_knowledge.json");
+type RagPolicy = { approved_sources: string[]; max_documents: number; max_chars_per_document: number; max_excerpts: number; blocked_content_patterns: string[] };
+const ragPolicy = JSON.parse(readFileSync(resolve(dataDir, "corporate_knowledge/rag_policy.json"), "utf8")) as RagPolicy;
+const approvedSources = new Set(ragPolicy.approved_sources.filter((name) => name.endsWith(".public.md")));
+const blockedContent = ragPolicy.blocked_content_patterns.map((pattern) => new RegExp(pattern, "i"));
+export function filterRagDocuments(files: Array<{ name: string; content: string }>): Array<{ name: string; content: string }> {
+  return files.filter((file) => approvedSources.has(file.name) && !blockedContent.some((pattern) => pattern.test(file.content)));
+}
 const companyData: Promise<{ company_profile?: unknown; sop_procedures?: unknown }> = readFile(companyFile, "utf8")
   .then((text) => JSON.parse(text)).catch(() => ({}));
 const publicDocuments = readdir(mainbrainDir)
-  .then(async (names) => Promise.all(names.filter((name) => name.endsWith(".public.md")).slice(0, 20)
-    .map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, 20_000) }))))
+  .then(async (names) => Promise.all(names.filter((name) => approvedSources.has(name)).slice(0, ragPolicy.max_documents)
+    .map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, ragPolicy.max_chars_per_document) }))))
+  .then(filterRagDocuments)
   .catch(() => [] as Array<{ name: string; content: string }>);
 const publicIndex = publicDocuments.then(indexMainbrain);
 
@@ -74,7 +83,7 @@ function searchMainbrain(query: string, index: MainbrainIndex): IndexedExcerpt[]
   for (const word of new Set(words(query))) {
     for (const [id, weight] of index.terms.get(word) ?? []) scores.set(id, (scores.get(id) ?? 0) + weight);
   }
-  return [...scores].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => index.excerpts[id]);
+  return [...scores].sort((a, b) => b[1] - a[1]).slice(0, ragPolicy.max_excerpts).map(([id]) => index.excerpts[id]);
 }
 
 export function selectMainbrainExcerpts(query: string, files: Array<{ name: string; content: string }>): IndexedExcerpt[] {

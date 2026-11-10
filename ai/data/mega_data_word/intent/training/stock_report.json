@@ -1,0 +1,18 @@
+{
+  "category": "training",
+  "name": "stock_report",
+  "version": "1.0.0",
+  "intent": "stock_report",
+  "phrases": [
+    "berapa sisa stok seblak di cabang saya",
+    "lihat stok fisik basreng di toko",
+    "cek sisa makaroni daun jeruk",
+    "stok keripik pisang saya masih ada",
+    "bagaimana lapor stok fisik harian",
+    "berapa buffer minimal toko saya",
+    "produk cabang mana yang kritis",
+    "kapan laporan stok terakhir diperbarui",
+    "tampilkan konsumsi stok tujuh hari",
+    "cek stoknya di cabang saya"
+  ]
+}

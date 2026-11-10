@@ -120,10 +120,28 @@ def build_training_samples(records: list[Mapping[str, Any]]) -> tuple[list[str],
 
 
 def load_intent_examples() -> dict[str, list[str]]:
-    path = ROOT / "data" / "mega_data_word" / "intent" / "training_examples.json"
+    intent_dir = ROOT / "data" / "mega_data_word" / "intent"
+    path = intent_dir / "training_examples.json"
     with path.open(encoding="utf-8") as source:
         data = json.load(source)
-    return data["intents"]
+    examples = {intent: list(phrases) for intent, phrases in data["intents"].items()}
+    for phrase_file in sorted((intent_dir / "training").glob("*.json")):
+        with phrase_file.open(encoding="utf-8") as source:
+            supplement = json.load(source)
+        intent = supplement.get("intent")
+        phrases = supplement.get("phrases")
+        if intent not in examples or not isinstance(phrases, list) or not all(isinstance(value, str) and value.strip() for value in phrases):
+            raise ValueError(f"Dataset intent tidak valid: {phrase_file.name}")
+        examples[intent].extend(phrases)
+    normalized = {intent: list(dict.fromkeys(phrase.strip().casefold() for phrase in phrases)) for intent, phrases in examples.items()}
+    owners: dict[str, str] = {}
+    for intent, phrases in normalized.items():
+        for phrase in phrases:
+            previous = owners.get(phrase)
+            if previous and previous != intent:
+                raise ValueError(f"Frasa training ambigu: {phrase}")
+            owners[phrase] = intent
+    return normalized
 
 
 def build_intent_samples() -> tuple[list[str], list[str]]:

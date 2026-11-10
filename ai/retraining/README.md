@@ -4,7 +4,7 @@
 
 Setiap pasangan mitra-produk menjadi satu sampel teks berisi stok saat ini, buffer minimal, konsumsi, frekuensi kritis, dan status pesanan. Label `urgent_restock`, `regular_order`, dan `normal` diturunkan dari aturan risiko stok yang sejalan dengan AI Insights. Label ini adalah *pseudo-label* dari data operasional, bukan keputusan manusia yang sudah diverifikasi.
 
-`data/mainbrain/models/daisuki.pkl` berisi dua pipeline Scikit-Learn: `intent` untuk maksud pertanyaan Daisuki, dan `risk` untuk prioritas restock. Contoh intent di `data/mega_data_word/intent/training_examples.json` adalah korpus berlabel yang dikurasi, bukan fakta angka. Bila data stok hanya menghasilkan satu kelas, pipeline intent tetap dilatih dan pipeline risiko lama dipertahankan bila tersedia. Model ini pengklasifikasi, bukan LLM pembuat teks.
+`data/mainbrain/models/daisuki.pkl` berisi dua pipeline Scikit-Learn: `intent` untuk maksud pertanyaan Daisuki, dan `risk` untuk prioritas restock. Contoh intent berasal dari `data/mega_data_word/intent/training_examples.json` dan berkas per label di `data/mega_data_word/intent/training/`; keduanya adalah korpus frasa berlabel, bukan fakta angka. Jalankan `python ai/retraining/refresh_identity.py` dari root repo untuk memperbarui classifier intent tanpa melatih ulang model risiko. Bila data stok hanya menghasilkan satu kelas, pipeline intent tetap dilatih dan pipeline risiko lama dipertahankan bila tersedia. Model ini pengklasifikasi, bukan LLM pembuat teks.
 
 ```powershell
 cd ai\retraining

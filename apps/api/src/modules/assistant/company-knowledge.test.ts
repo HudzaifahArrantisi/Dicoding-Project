@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts } from "./company-knowledge";
+import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts } from "./company-knowledge";
 
 test("profil dan SOP perusahaan dibaca dari sumber terstruktur", async () => {
   const company = await loadCompanyKnowledge("siapa pendiri Daisuki", "company");
@@ -18,6 +18,15 @@ test("retrieval mainbrain hanya membaca dokumen yang ditandai untuk mitra", () =
   ]);
   expect(results).toHaveLength(1);
   expect(results[0].source).toBe("profil.public.md");
+});
+
+test("kebijakan RAG hanya menerima sumber terdaftar tanpa data kontak", () => {
+  const files = filterRagDocuments([
+    { name: "inventory_rules.public.md", content: "Buffer minimal adalah ambang peringatan." },
+    { name: "assistant_identity.public.md", content: "Hubungi admin@example.com." },
+    { name: "dokumen-baru.public.md", content: "Dokumen ini belum disetujui." },
+  ]);
+  expect(files.map((file) => file.name)).toEqual(["inventory_rules.public.md"]);
 });
 
 test("pertanyaan profil dan panduan dikenali tanpa mengubah pertanyaan stok", () => {

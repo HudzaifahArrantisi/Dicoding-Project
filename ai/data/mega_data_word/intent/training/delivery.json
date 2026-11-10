@@ -1,0 +1,18 @@
+{
+  "category": "training",
+  "name": "delivery",
+  "version": "1.0.0",
+  "intent": "delivery",
+  "phrases": [
+    "barang kiriman sudah sampai toko",
+    "bagaimana memindai barcode kardus",
+    "cara verifikasi kode resi pengiriman",
+    "kamera pemindai resi tidak terbuka",
+    "kapan stok bertambah setelah penerimaan",
+    "pesanan saya sedang dalam pengiriman",
+    "cek status paket dari gudang pusat",
+    "apa yang dilakukan saat menerima dus",
+    "bagaimana konfirmasi penerimaan barang",
+    "saya mau scan surat jalan"
+  ]
+}

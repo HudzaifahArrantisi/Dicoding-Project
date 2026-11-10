@@ -244,7 +244,12 @@ def collect_mainbrain_knowledge_snippets(max_tokens: int = 15000) -> str:
     menjadi satu konteks ringkasan terstruktur untuk diinjeksikan ke prompt RAG.
     """
     ensure_mainbrain_dir()
-    md_files = sorted(list(MAINBRAIN_DIR.glob("*.public.md")))
+    policy_path = DATA_DIR / "mainbrain" / "corporate_knowledge" / "rag_policy.json"
+    with policy_path.open(encoding="utf-8") as source:
+        policy = json.load(source)
+    approved = set(policy["approved_sources"])
+    blocked = [re.compile(pattern, re.IGNORECASE) for pattern in policy["blocked_content_patterns"]]
+    md_files = sorted(file for file in MAINBRAIN_DIR.glob("*.public.md") if file.name in approved)[: policy["max_documents"]]
     if not md_files:
         return ""
 
@@ -253,6 +258,8 @@ def collect_mainbrain_knowledge_snippets(max_tokens: int = 15000) -> str:
         try:
             with open(md_path, "r", encoding="utf-8") as f:
                 content = f.read().strip()
+                if any(pattern.search(content) for pattern in blocked):
+                    continue
                 # Batasi per file jika terlalu besar agar prompt tetap hemat token
                 if len(content) > 3000:
                     content = content[:3000] + "\n\n_... [Rincian dokumen dipotong untuk optimasi token]_"
