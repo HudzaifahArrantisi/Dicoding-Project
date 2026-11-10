@@ -17,6 +17,7 @@ import { adminNotificationModule } from "./modules/notifications/admin";
 import { adminModule } from "./modules/admin";
 import { regionModule } from "./modules/regions";
 import { assistantModule } from "./modules/assistant";
+import { warmMitraModelWorker } from "./modules/assistant/model";
 import { realtimeModule } from "./realtime";
 import { runWeeklyPipeline } from "./lib/weekly-pipeline";
 
@@ -242,5 +243,7 @@ export const app = new Elysia()
 console.log(
   `[${new Date().toLocaleTimeString()}] 🚀 Daisuki API berjalan di port ${app.server?.port} (host: 0.0.0.0)`,
 );
+
+warmMitraModelWorker();
 
 export type App = typeof app;

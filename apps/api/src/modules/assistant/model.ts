@@ -33,6 +33,8 @@ const scriptPath = resolve(retrainingDir, "inference_worker.py");
 let currentWorker: { send: (records: ModelRecord[], message?: string) => Promise<ModelResult>; stop: () => void; isDead: boolean } | null = null;
 let lastWorkerFailureTime = 0;
 const FAILURE_COOLDOWN_MS = 30_000;
+const COLD_WORKER_TIMEOUT_MS = 30_000;
+const READY_WORKER_TIMEOUT_MS = 8_000;
 
 function resolvePythonBinary(): string {
   if (process.env.DAISUKI_PYTHON_BIN) return process.env.DAISUKI_PYTHON_BIN;
@@ -57,11 +59,13 @@ function createWorker() {
   const decoder = new TextDecoder();
   let buffer = "";
   let workerReady = false;
+  let intentionalStop = false;
 
   const client = {
     isDead: false,
     stop() {
       client.isDead = true;
+      intentionalStop = true;
       if (currentWorker === client) currentWorker = null;
       try { processHandle.kill(); } catch {}
     },
@@ -78,7 +82,7 @@ function createWorker() {
           reject(new Error("Prediksi model melewati batas waktu"));
           if (currentWorker === client) currentWorker = null;
           try { processHandle.kill(); } catch {}
-        }, workerReady ? 5_000 : 15_000);
+        }, workerReady ? READY_WORKER_TIMEOUT_MS : COLD_WORKER_TIMEOUT_MS);
         pending.set(id, { resolve: resolveResult, reject, timer });
         try {
           processHandle.stdin.write(JSON.stringify({ id, records, message }) + "\n");
@@ -129,7 +133,7 @@ function createWorker() {
 
   void processHandle.exited.then((code) => {
     client.isDead = true;
-    if (code !== 0) {
+    if (code !== 0 && !intentionalStop) {
       lastWorkerFailureTime = Date.now();
       console.warn(`[ASSISTANT] Worker model Python berhenti (exit code: ${code}). Cooldown diaktifkan selama 30 detik.`);
     }
@@ -149,30 +153,47 @@ function getOrStartWorker() {
   if (Date.now() - lastWorkerFailureTime < FAILURE_COOLDOWN_MS) {
     return null; // Sedang masa cooldown, jangan spawn ulang agar tidak stall
   }
-  currentWorker = createWorker();
-  return currentWorker;
+  try {
+    currentWorker = createWorker();
+    return currentWorker;
+  } catch (error) {
+    lastWorkerFailureTime = Date.now();
+    throw error;
+  }
 }
 
 export async function predictMitraStocks(records: ModelRecord[]): Promise<ModelResult> {
   if (!records.length) return { available: false, predictions: [] };
-  const worker = getOrStartWorker();
-  if (!worker) return { available: false, predictions: [] };
   try {
+    const worker = getOrStartWorker();
+    if (!worker) return { available: false, predictions: [] };
     return await worker.send(records);
   } catch (error) {
-    console.error("[ASSISTANT] Prediksi stok belum tersedia", error);
+    console.warn("[ASSISTANT] Prediksi stok belum tersedia:", error instanceof Error ? error.message : "Error");
     return { available: false, predictions: [] };
   }
 }
 
 export async function classifyMitraMessage(message: string): Promise<ModelResult["intent"]> {
-  const worker = getOrStartWorker();
-  if (!worker) return null;
   try {
+    const worker = getOrStartWorker();
+    if (!worker) return null;
     return (await worker.send([], message)).intent ?? null;
   } catch (error) {
-    console.error("[ASSISTANT] Klasifikasi pesan belum tersedia", error);
+    console.warn("[ASSISTANT] Klasifikasi pesan belum tersedia:", error instanceof Error ? error.message : "Error");
     return null;
+  }
+}
+
+export function warmMitraModelWorker(): void {
+  try {
+    const worker = getOrStartWorker();
+    if (!worker) return;
+    void worker.send([], "halo").catch((error) => {
+      console.warn("[ASSISTANT] Pemanasan model belum berhasil:", error instanceof Error ? error.message : "Error");
+    });
+  } catch (error) {
+    console.warn("[ASSISTANT] Worker model belum dapat dimulai:", error instanceof Error ? error.message : "Error");
   }
 }
 

@@ -7,6 +7,7 @@ import { answerMitraQuestion, type MitraTour } from "./knowledge";
 import { composeMitraReply, resolveMitraIntent, type AssistantIntent } from "./compose";
 import { loadMitraContext } from "./context";
 import { classifyMitraMessage, predictMitraStocks, type ModelResult } from "./model";
+import { withinModelBudget } from "./model-budget";
 import { generateLlmReply } from "./llm-client";
 import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
 import { isCrossTenantQuestion, OUT_OF_SCOPE_REPLY, shouldRefuseMitraMessage, TENANT_SCOPE_REPLY } from "./guardrails";
@@ -79,18 +80,17 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const turns = await activeTurns(user.partnerId, user.userId);
     const previousIntent = turns[turns.length - 1]?.intent as AssistantIntent | null ?? null;
     const scopeRefused = shouldRefuseMitraMessage(message, previousIntent);
-    const classified = scopeRefused ? null : await classifyMitraMessage(message);
+    const contextPromise = loadMitraContext(user.partnerId);
+    const memoryPromise = db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
+      .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId))).limit(1);
+    const classified = scopeRefused ? null : await withinModelBudget(classifyMitraMessage(message), 500, null);
     const resolvedIntent = scopeRefused ? null : resolveMitraIntent(message, previousIntent, classified);
     const crossTenant = isCrossTenantQuestion(message) || resolvedIntent === "top_partners" || resolvedIntent === "top_regions";
     const refused = scopeRefused || crossTenant;
     const intent = refused ? null : resolvedIntent;
-    const [context, [memory]] = await Promise.all([
-      loadMitraContext(user.partnerId),
-      db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
-        .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId))).limit(1),
-    ]);
+    const [context, [memory]] = await Promise.all([contextPromise, memoryPromise]);
     const model = intent === "restock" || intent === "stock_report"
-      ? await predictMitraStocks(context.stocks)
+      ? await withinModelBudget(predictMitraStocks(context.stocks), 800, emptyModel)
       : emptyModel;
     const fallback = refused
       ? { ...answerMitraQuestion(message), reply: crossTenant ? TENANT_SCOPE_REPLY : OUT_OF_SCOPE_REPLY }

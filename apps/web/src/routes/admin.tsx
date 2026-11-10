@@ -5348,148 +5348,101 @@ function ApprovalDialog({
                     const invalid =
                       !Number.isInteger(qty) || qty < 0 || qty > max
                     const isFull = qty === item.qty_requested
-                    const isPartial = qty > 0 && qty < item.qty_requested
                     const isZero = qty === 0
 
                     return (
                       <div
                         key={item.id}
-                        className="overflow-hidden rounded-lg border border-line bg-white shadow-2xs transition hover:border-ink-300"
+                        className="rounded-xl border border-line bg-white p-3.5 sm:p-4 shadow-2xs transition hover:border-ink-300"
                       >
-                        {/* Header Item: Nomor, Nama Produk, Satuan & Status Kondisi Cabang */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-paper/60 px-3.5 py-2.5 sm:px-4">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="flex size-6 shrink-0 items-center justify-center rounded bg-ink-100 font-display text-xs font-bold tabular-nums text-ink-700">
-                              {index + 1}
-                            </span>
-                            <h4 className="truncate font-display text-sm sm:text-base font-bold text-ink-900">
-                              {item.product_name}
-                            </h4>
-                            <span className="rounded bg-line/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">
-                              {item.product_unit}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* 4 Kolom Perbandingan: Sisa Cabang | Stok Pusat | Diminta Mitra | Persetujuan Admin */}
-                        <div className="grid grid-cols-2 gap-2.5 p-3.5 sm:gap-3 sm:p-4 lg:grid-cols-4 items-stretch">
-                          {/* 1. Sisa di Cabang Mitra */}
-                          <div className="rounded-lg border border-line/70 bg-paper/40 p-3">
-                            <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">
-                              Sisa Stok diCabang
-                            </span>
-                            <div className="mt-1 flex items-baseline gap-1">
-                              <span className="font-display text-xl font-bold tabular-nums text-ink-900">
-                                {currentQty}
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          {/* Info Produk & Kondisi Stok */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="flex size-6 shrink-0 items-center justify-center rounded bg-ink-100 font-display text-xs font-bold tabular-nums text-ink-700">
+                                {index + 1}
                               </span>
-                              <span className="text-xs text-muted">
-                                {item.product_unit}
-                              </span>
-                            </div>
-                            <div className="mt-2">{stockStatus ? <StockStatusBadge status={stockStatus} /> : <span className="text-xs text-muted">Status belum tersedia</span>}</div>
-                          </div>
-
-                          {/* 2. Stok Gudang Pusat */}
-                          <div className="rounded-lg border border-line/70 bg-paper/40 p-3">
-                            <div className="flex items-center justify-between">
-                              <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">
-                                Stok Pusat Bebas
-                              </span>
-                              <span
-                                className={`text-[10px] font-bold ${
-                                  availableForOrder >= item.qty_requested
-                                    ? 'text-ok-fg'
-                                    : 'text-crit'
-                                }`}
-                              >
-                                {availableForOrder >= item.qty_requested
-                                  ? <><Check className="mr-1 inline size-3.5" aria-hidden="true" />Cukup</>
-                                  : <><AlertTriangle className="mr-1 inline size-3.5" aria-hidden="true" />Terbatas</>}
-                              </span>
-                            </div>
-                            <div className="mt-1 flex items-baseline gap-1">
-                              <span className="font-display text-xl font-bold tabular-nums text-ink-900">
-                                {item.central_stock.toLocaleString('id-ID')}
-                              </span>
-                              <span className="text-xs text-muted">{item.product_unit}</span>
-                            </div>
-                            <p className="mt-1 truncate text-[11px] text-muted">
-                              {order.status === 'disetujui'
-                                ? `${item.qty_approved ?? 0} ${item.product_unit} sudah dialokasikan untuk pesanan ini`
-                                : availableForOrder >= item.qty_requested
-                                  ? 'Tersedia untuk disetujui'
-                                  : `Hanya ada ${availableForOrder} ${item.product_unit} untuk pesanan ini`}
-                            </p>
-                          </div>
-
-                          {/* 3. Permintaan Mitra */}
-                          <div className="rounded-lg border border-ink-200 bg-ink-50/50 p-3">
-                            <div className="flex items-center justify-between">
-                              <span className="block text-[11px] font-bold uppercase tracking-wider text-ink-800">
-                                Diminta Mitra
-                              </span>
-                              <span className="rounded bg-ink-700/10 px-1 py-0.2 text-[9px] font-bold text-ink-700">
-                                PO
-                              </span>
-                            </div>
-                            <div className="mt-1 flex items-baseline gap-1">
-                              <span className="font-display text-xl font-bold tabular-nums text-ink-900">
-                                +{item.qty_requested}
-                              </span>
-                              <span className="text-xs font-semibold text-ink-700">
-                                {item.product_unit}
-                              </span>
-                            </div>
-                            <p className="mt-1 truncate text-[11px] text-muted">
-                              Jumlah diajukan cabang
-                            </p>
-                          </div>
-
-                          {/* 4. Persetujuan Admin */}
-                          <div className="col-span-2 lg:col-span-1 flex flex-col justify-between rounded-lg border border-line bg-white p-3 shadow-2xs">
-                            <div className="flex items-center justify-between gap-1.5">
-                              <span className="block text-[11px] font-bold uppercase tracking-wider text-ink-900">
-                                Disetujui Admin
-                              </span>
-                              {editable ? (
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      onApprovedChange(order.id, item.product_id, max)
-                                    }
-                                    title={`Setujui penuh (${max} ${item.product_unit})`}
-                                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase transition-colors ${
-                                      isFull
-                                        ? 'bg-ink-900 text-white'
-                                        : 'border border-line bg-paper text-ink-700 hover:bg-ink-100'
-                                    }`}
-                                  >
-                                    Penuh
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      onApprovedChange(order.id, item.product_id, 0)
-                                    }
-                                    title="Tolak item ini (0)"
-                                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase transition-colors ${
-                                      isZero
-                                        ? 'bg-crit text-white'
-                                        : 'border border-line bg-paper text-crit hover:bg-crit-bg/20'
-                                    }`}
-                                  >
-                                    0
-                                  </button>
-                                </div>
+                              <h4 className="truncate font-display text-sm sm:text-base font-bold text-ink-900">
+                                {item.product_name}
+                              </h4>
+                              {stockStatus ? (
+                                <StockStatusBadge status={stockStatus} />
                               ) : null}
                             </div>
 
-                            {editable ? (
-                              <div className="mt-2 space-y-1">
-                                <div className="flex items-center gap-2">
-                                  {/* Stepper Input */}
-                                  <div className="inline-flex shrink-0 items-center rounded-md border border-line bg-white shadow-2xs">
+                            {/* Baris Ringkasan Fakta Stok (Sisa Cabang, Stok Pusat, Estimasi Tiba) */}
+                            <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
+                              <span>
+                                Sisa Cabang:{' '}
+                                <strong className="font-semibold tabular-nums text-ink-800">
+                                  {currentQty} {item.product_unit}
+                                </strong>
+                              </span>
+                              <span>•</span>
+                              <span>
+                                Stok Pusat:{' '}
+                                <strong className="font-semibold tabular-nums text-ink-800">
+                                  {item.central_stock.toLocaleString('id-ID')} {item.product_unit}
+                                </strong>
+                                {availableForOrder >= item.qty_requested ? (
+                                  <span className="ml-1 text-[11px] font-semibold text-ok-fg">
+                                    (Cukup)
+                                  </span>
+                                ) : (
+                                  <span className="ml-1 text-[11px] font-semibold text-crit">
+                                    (Terbatas: sisa {availableForOrder})
+                                  </span>
+                                )}
+                              </span>
+                              <span>•</span>
+                              <span>
+                                Estimasi Tiba:{' '}
+                                <strong className="font-semibold tabular-nums text-ink-800">
+                                  {projectedQty} {item.product_unit}
+                                </strong>
+                                {projectedStatus ? (
+                                  <span
+                                    className={`ml-1 font-semibold ${
+                                      projectedStatus === 'kritis'
+                                        ? 'text-crit'
+                                        : projectedStatus === 'waspada'
+                                          ? 'text-warn-fg'
+                                          : 'text-ok-fg'
+                                    }`}
+                                  >
+                                    ({projectedStatus === 'aman'
+                                      ? 'Aman'
+                                      : projectedStatus === 'waspada'
+                                        ? 'Waspada'
+                                        : 'Kritis'})
+                                  </span>
+                                ) : null}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Area Keputusan: Diminta Mitra & Kontrol Persetujuan Admin */}
+                          <div className="flex items-center justify-between gap-3 border-t border-line/60 pt-2.5 sm:gap-4 lg:border-t-0 lg:pt-0 shrink-0">
+                            {/* Diminta Mitra */}
+                            <div className="text-left lg:text-right">
+                              <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">
+                                Diminta
+                              </span>
+                              <span className="font-display text-base font-bold tabular-nums text-ink-900 sm:text-lg">
+                                +{item.qty_requested}{' '}
+                                <span className="text-xs font-normal text-muted">
+                                  {item.product_unit}
+                                </span>
+                              </span>
+                            </div>
+
+                            <div className="hidden text-muted/40 sm:block text-sm font-bold">→</div>
+
+                            {/* Kontrol Persetujuan Admin */}
+                            <div className="flex items-center gap-2">
+                              {editable ? (
+                                <>
+                                  <div className="inline-flex items-center rounded-lg border border-line bg-white shadow-2xs">
                                     <button
                                       type="button"
                                       aria-label="Kurangi kuantitas"
@@ -5501,7 +5454,7 @@ function ApprovalDialog({
                                           Math.max(0, qty - 1),
                                         )
                                       }
-                                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-l-md text-ink-700 hover:bg-ink-100 disabled:opacity-30"
+                                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-l-lg text-ink-700 hover:bg-ink-100 disabled:opacity-30 cursor-pointer"
                                     >
                                       <Minus className="size-3.5" />
                                     </button>
@@ -5533,75 +5486,67 @@ function ApprovalDialog({
                                           Math.min(max, qty + 1),
                                         )
                                       }
-                                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-r-md text-ink-700 hover:bg-ink-100 disabled:opacity-30"
+                                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-r-lg text-ink-700 hover:bg-ink-100 disabled:opacity-30 cursor-pointer"
                                     >
                                       <Plus className="size-3.5" />
                                     </button>
                                   </div>
 
-                                  <span className="text-xs font-semibold text-muted">
-                                    {item.product_unit}
+                                  {/* Tombol Cepat: Penuh & 0 */}
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onApprovedChange(order.id, item.product_id, max)
+                                      }
+                                      title={`Setujui penuh (${max} ${item.product_unit})`}
+                                      className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                                        isFull
+                                          ? 'bg-ink-900 text-white shadow-2xs'
+                                          : 'border border-line bg-paper text-ink-700 hover:bg-ink-100'
+                                      }`}
+                                    >
+                                      Penuh
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onApprovedChange(order.id, item.product_id, 0)
+                                      }
+                                      title="Tolak item ini (0)"
+                                      className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                                        isZero
+                                          ? 'bg-crit text-white shadow-2xs'
+                                          : 'border border-line bg-paper text-crit hover:bg-crit-bg/20'
+                                      }`}
+                                    >
+                                      0
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-right">
+                                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">
+                                    Disetujui
+                                  </span>
+                                  <span className="font-display text-base font-bold tabular-nums text-ink-900 sm:text-lg">
+                                    {item.qty_approved ?? 0}{' '}
+                                    <span className="text-xs font-normal text-muted">
+                                      {item.product_unit}
+                                    </span>
                                   </span>
                                 </div>
-
-                                {invalid ? (
-                                  <p className="text-[10px] font-bold text-crit" role="alert">
-                                    0 - {max} {item.product_unit}
-                                  </p>
-                                ) : null}
-                              </div>
-                            ) : (
-                              <div className="mt-1 flex items-baseline gap-1">
-                                <span className="font-display text-xl font-bold tabular-nums text-ink-900">
-                                  {item.qty_approved ?? 0}
-                                </span>
-                                <span className="text-xs text-muted">{item.product_unit}</span>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Baris 3: Status Alokasi & Proyeksi Dampak Setelah Barang Tiba (Clean Micro-Footer) */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 bg-paper/40 px-3.5 py-2 sm:px-4 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted">Status Alokasi:</span>
-                            {isFull ? (
-                              <span className="inline-flex items-center gap-1 font-semibold text-ok-fg">
-                                <CheckCircle2 className="size-3.5 text-ok" /> Disetujui Penuh ({qty} {item.product_unit})
-                              </span>
-                            ) : isPartial ? (
-                              <span className="inline-flex items-center gap-1 font-semibold text-warn-fg">
-                                <AlertTriangle className="size-3.5 text-warn" /> Disetujui Sebagian ({qty}/{item.qty_requested} {item.product_unit})
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 font-semibold text-crit-fg">
-                                <XCircle className="size-3.5 text-crit" /> Ditolak (0 {item.product_unit})
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="text-muted">
-                            Estimasi stok cabang setelah tiba:{' '}
-                            <strong className="font-bold tabular-nums text-ink-900">
-                              {projectedQty} {item.product_unit}
-                            </strong>{' '}
-                            {projectedStatus ? <>·{' '}<span
-                              className={`font-semibold ${
-                                projectedStatus === 'kritis'
-                                  ? 'text-crit'
-                                  : projectedStatus === 'waspada'
-                                    ? 'text-warn-fg'
-                                    : 'text-ok-fg'
-                              }`}
-                            >
-                              {projectedStatus === 'aman'
-                                ? 'Aman'
-                                : projectedStatus === 'waspada'
-                                  ? 'Waspada'
-                                  : 'Kritis'}
-                            </span></> : null}
-                          </div>
-                        </div>
+                        {/* Peringatan jika kuantitas di luar batas */}
+                        {invalid ? (
+                          <p className="mt-2 text-xs font-bold text-crit" role="alert">
+                            Kuantitas harus antara 0 sampai {max} {item.product_unit} (stok pusat tersedia).
+                          </p>
+                        ) : null}
                       </div>
                     )
                   },
