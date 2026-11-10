@@ -13,7 +13,7 @@ from typing import TypedDict
 from sklearn.pipeline import Pipeline
 
 LOGGER = logging.getLogger(__name__)
-MODEL_FILE = Path(__file__).resolve().parents[2] / "data" / "mainbrain" / "models" / "daisuki.pkl"
+MODEL_FILE = Path(__file__).resolve().parents[1] / "data" / "mainbrain" / "models" / "daisuki.pkl"
 
 
 class Prediction(TypedDict):

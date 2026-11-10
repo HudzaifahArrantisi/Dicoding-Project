@@ -1,6 +1,6 @@
 # Aturan inventaris cabang Daisuki
 
-Sumber: aturan bisnis pada `data/mainbrain/corporate_knowledge/business_rules.json` dan panduan proyek. Dokumen ini dapat digunakan chatbot mitra untuk menjelaskan kebijakan umum, bukan sebagai sumber angka stok terkini.
+Sumber: aturan bisnis pada `ai/data/mainbrain/corporate_knowledge/business_rules.json` dan panduan proyek. Dokumen ini dapat digunakan chatbot mitra untuk menjelaskan kebijakan umum, bukan sebagai sumber angka stok terkini.
 
 Cabang mitra tidak memiliki batas atas stok fisik. Buffer minimal adalah ambang peringatan dini, bukan kapasitas maksimum. Status aman berlaku ketika sisa stok di atas setengah buffer; waspada ketika di atas seperlima sampai setengah buffer; kritis ketika paling banyak seperlima buffer.
 

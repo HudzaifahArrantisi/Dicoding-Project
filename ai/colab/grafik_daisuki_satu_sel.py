@@ -63,7 +63,7 @@ def build_charts(facts, regional):
 if __name__ == "__main__":
     from google.colab import files
 
-    print("Unggah dua berkas dari data/mainbrain/context_embeddings: weekly_operational_facts.json dan regional_stockout_insights.json")
+    print("Unggah dua berkas dari ai/data/mainbrain/context_embeddings: weekly_operational_facts.json dan regional_stockout_insights.json")
     uploaded = files.upload()
     names = ("weekly_operational_facts.json", "regional_stockout_insights.json")
     missing = [name for name in names if name not in uploaded]

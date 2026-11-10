@@ -7,7 +7,7 @@ import psycopg
 
 from company_analytics import get_db_url
 
-OUTPUT = Path(__file__).resolve().parents[1] / "market_hotspot_digest.json"
+OUTPUT = Path(__file__).resolve().parents[1] / "data" / "mainbrain" / "context_embeddings" / "market_hotspot_digest.json"
 
 
 def run() -> dict:

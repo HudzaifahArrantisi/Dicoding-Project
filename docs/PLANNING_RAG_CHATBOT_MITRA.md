@@ -1,6 +1,6 @@
 # Rencana Implementasi (Planning): Integrasi RAG & 9Router Proxy AI Local pada Chatbot Mitra
 
-Dokumen ini adalah cetak biru teknis (*technical blueprint*) untuk meng-upgrade sistem Chatbot Asisten Mitra Daisuki dari sistem berbasis template statis menjadi **Sistem RAG (Retrieval-Augmented Generation)** modern yang ditenagai oleh **9Router Proxy** (Local / Tunnel Endpoint) dengan basis data terpusat dari **PostgreSQL** dan model **`data/mainbrain/models/daisuki.pkl`**.
+Dokumen ini adalah cetak biru teknis (*technical blueprint*) untuk meng-upgrade sistem Chatbot Asisten Mitra Daisuki dari sistem berbasis template statis menjadi **Sistem RAG (Retrieval-Augmented Generation)** modern yang ditenagai oleh **9Router Proxy** (Local / Tunnel Endpoint) dengan basis data terpusat dari **PostgreSQL** dan model **`ai/data/mainbrain/models/daisuki.pkl`**.
 
 ---
 

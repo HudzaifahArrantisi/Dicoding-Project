@@ -100,6 +100,8 @@ daisuki-inventory/
 │   └── shared/        # Shared package (@daisuki/shared): enums, types, state machines
 ├── data-science/      # Python workspace: EDA, ROP/safety stock modeling, synthetic data
 ├── ai/                # Python workspace: batch restock jobs, LLM assistant, Telegram bot
+│   ├── data/          # Raw references, RAG knowledge, intent dictionary, analytics, model
+│   └── requirements.txt # Shared Python dependencies
 ├── neon/
 │   └── init.sql       # Authoritative unified SQL schema, constraints, roles, and seed data for Neon DB
 └── docs/
@@ -161,6 +163,7 @@ daisuki-inventory/
 ## Catatan Perubahan Harian (Daily Changelog)
 
 ### 2026-11-10
+- **Seluruh Aset AI Dipusatkan di `ai/data/`**: Memindahkan referensi mentah, kamus intent, pengetahuan RAG, snapshot analitik, dan model lokal dari root `data/` ke `ai/data/`; memindahkan digest analitik dari root `ai/` ke `ai/data/mainbrain/context_embeddings/`. Semua path API, worker Python, guardrail, retraining, dan job analitik diperbarui. `ai/requirements.txt` menjadi daftar dependensi tunggal termasuk `matplotlib`; requirements retraining menunjuk ke daftar itu. README setup AI diperbaiki untuk perintah dari folder `ai/`. Validasi: tes asisten 51/51, guardrail Python 10/10, smoke test retraining, dan typecheck lulus.
 - **Penambahan Korpus Pelatihan dan Kebijakan RAG Mitra**: Menambahkan tujuh berkas frasa intent di `data/mega_data_word/intent/training/` (70 frasa baru; total 213), tiga dokumen pengetahuan publik untuk aturan stok, SOP mitra, dan identitas asisten, serta `rag_policy.json` untuk daftar sumber RAG yang disetujui dan penyaringan konten sensitif. Loader TypeScript dan Python memakai berkas intent yang sama; classifier intent `daisuki.pkl` lokal diperbarui tanpa melatih ulang model risiko. Panduan lokasi data dan cara pembaruan model ditambahkan. Validasi: 51/51 tes asisten, 10/10 tes guardrail Python, dan typecheck lulus.
 - **Sentralisasi Dependensi & Dokumentasi Workspace AI (`ai/requirements.txt` & `ai/README.md`)**: Merestrukturisasi dependensi Python workspace AI ke `ai/requirements.txt` (termasuk `scikit-learn`, `numpy`, `pandas`, `psycopg[binary]`, `python-dotenv`, `pypdf`, `python-docx`, `httpx`, dan `python-telegram-bot`). Menyediakan dokumentasi lengkap peran tiap library, panduan setup multi-shell (PowerShell, CMD, Git Bash/Linux), dan perintah operasional utama (`train.py`, `test_guardrails.py`, `inference_worker.py`) di `ai/README.md`.
 - **Pemisahan Data Chatbot ke Workspace `/data`**: Memindahkan PDF referensi, dokumen mainbrain, snapshot analitik, profil perusahaan, dan artefak lokal `daisuki.pkl` ke hierarki root `data/`. Kamus intent, filter keamanan, alias produk, contoh training, aturan bisnis, dan teks cadangan kini berada di JSON/TXT terpisah. API memakai loader `Set` dan RegExp terkompilasi yang dicache saat proses hidup; dokumen publik diindeks berdasarkan kata untuk retrieval RAG. Pipeline Python membaca sumber yang sama. Seluruh pembaca model, snapshot, dan dokumen diperbarui ke path baru. Ekstraksi tidak otomatis memublikasikan PDF; tanpa `pypdf`, PDF dilewati agar byte mentah tidak masuk mainbrain. Memori percakapan tetap terisolasi di PostgreSQL. Respons yang sudah lolos guardrail dikirim ke UI melalui SSE. Uji asisten 50/50, pembaca SSE 1/1, guardrail Python 10/10, dan typecheck lulus.

@@ -1,8 +1,8 @@
 """
 Universal Document Ingestion & Mainbrain Generator.
-Membaca dokumen mentah (PDF, DOCX, JSON, MD, TXT, CSV) di data/raw_references/,
+Membaca dokumen mentah (PDF, DOCX, JSON, MD, TXT, CSV) di ai/data/raw_references/,
 membersihkan teks, mengekstrak ringkasan/fakta penting, dan menghasilkan
-output file Markdown (.md) di data/mainbrain/context_embeddings/.
+output file Markdown (.md) di ai/data/mainbrain/context_embeddings/.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Tuple
 LOGGER = logging.getLogger(__name__)
 
 # Direktori target
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 RAW_DIR = DATA_DIR / "raw_references"
 MAINBRAIN_DIR = DATA_DIR / "mainbrain" / "context_embeddings"
 
@@ -206,7 +206,7 @@ def scan_and_generate_mainbrain() -> Dict[str, Any]:
     """
     ensure_mainbrain_dir()
     if not RAW_DIR.exists():
-        LOGGER.warning("Folder data/raw_references belum dibuat.")
+        LOGGER.warning("Folder ai/data/raw_references belum dibuat.")
         return {"total": 0, "success": 0, "failed": 0, "files": []}
 
     candidate_files = [
@@ -240,7 +240,7 @@ def scan_and_generate_mainbrain() -> Dict[str, Any]:
 
 def collect_mainbrain_knowledge_snippets(max_tokens: int = 15000) -> str:
     """
-    Mengumpulkan file Markdown publik dari data/mainbrain/context_embeddings/
+    Mengumpulkan file Markdown publik dari ai/data/mainbrain/context_embeddings/
     menjadi satu konteks ringkasan terstruktur untuk diinjeksikan ke prompt RAG.
     """
     ensure_mainbrain_dir()

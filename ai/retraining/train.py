@@ -1,5 +1,5 @@
 """Retrain the Daisuki text classifier from live AI Insights source tables,
-and process data/raw_references/ into data/mainbrain/context_embeddings/.
+and process ai/data/raw_references/ into ai/data/mainbrain/context_embeddings/.
 """
 
 from __future__ import annotations
@@ -21,9 +21,9 @@ from doc_loader import scan_and_generate_mainbrain
 
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_OUTPUT_FILE = BASE_DIR.parents[1] / "data" / "mainbrain" / "models" / "daisuki.pkl"
+MODEL_OUTPUT_FILE = BASE_DIR.parent / "data" / "mainbrain" / "models" / "daisuki.pkl"
 TEMP_MODEL_FILE = MODEL_OUTPUT_FILE.with_name("daisuki.pkl.tmp")
-CORPORATE_DIR = BASE_DIR.parents[1] / "data" / "mainbrain" / "corporate_knowledge"
+CORPORATE_DIR = BASE_DIR.parent / "data" / "mainbrain" / "corporate_knowledge"
 with (CORPORATE_DIR / "assistant_copy.json").open(encoding="utf-8") as source:
     IDENTITY_BIO = json.load(source)["identity_reply"]
 with (CORPORATE_DIR / "business_rules.json").open(encoding="utf-8") as source:
@@ -59,7 +59,7 @@ def save_model_safely(model: Pipeline | dict[str, Any], dest_path: Path, temp_pa
 
 def run_retraining_loop() -> bool:
     try:
-        LOGGER.info("Memulai pemindaian dokumen di data/raw_references/...")
+        LOGGER.info("Memulai pemindaian dokumen di ai/data/raw_references/...")
         mainbrain_stats = scan_and_generate_mainbrain()
         LOGGER.info(
             "Hasil Mainbrain Generator: %d berhasil dikonversi ke Markdown, %d gagal dari %d dokumen.",

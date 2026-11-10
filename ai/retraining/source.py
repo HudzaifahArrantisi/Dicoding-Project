@@ -120,7 +120,7 @@ def build_training_samples(records: list[Mapping[str, Any]]) -> tuple[list[str],
 
 
 def load_intent_examples() -> dict[str, list[str]]:
-    intent_dir = ROOT / "data" / "mega_data_word" / "intent"
+    intent_dir = ROOT / "ai" / "data" / "mega_data_word" / "intent"
     path = intent_dir / "training_examples.json"
     with path.open(encoding="utf-8") as source:
         data = json.load(source)

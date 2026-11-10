@@ -1,6 +1,6 @@
 # Panduan operasional portal mitra Daisuki
 
-Sumber: SOP pada `data/mainbrain/corporate_knowledge/company_knowledge.json`. Dokumen ini menjelaskan alur aplikasi. Fakta tentang pesanan tertentu tetap diambil dari database cabang yang sedang login.
+Sumber: SOP pada `ai/data/mainbrain/corporate_knowledge/company_knowledge.json`. Dokumen ini menjelaskan alur aplikasi. Fakta tentang pesanan tertentu tetap diambil dari database cabang yang sedang login.
 
 ## Melaporkan stok fisik
 

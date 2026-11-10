@@ -12,8 +12,8 @@ import psycopg
 from company_analytics import get_db_url
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "data" / "mainbrain" / "context_embeddings" / "weekly_operational_facts.json"
-REGIONAL = ROOT / "data" / "mainbrain" / "context_embeddings" / "regional_stockout_insights.json"
+OUTPUT = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings" / "weekly_operational_facts.json"
+REGIONAL = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings" / "regional_stockout_insights.json"
 MODEL_VERSION = "daisuki-nb-3.0"
 
 

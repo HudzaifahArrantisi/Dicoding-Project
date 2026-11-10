@@ -1,7 +1,7 @@
 """
 Pembangun Master System Prompt dengan Guardrails Lengkap.
 Menggabungkan fakta operasional, memori, aturan domain, dan basis pengetahuan perusahaan.
-Membaca dokumen publik dari data/mainbrain/context_embeddings/*.public.md.
+Membaca dokumen publik dari ai/data/mainbrain/context_embeddings/*.public.md.
 """
 
 import json
@@ -12,13 +12,13 @@ from .rules import OFFICIAL_PRODUCTS, ALLOWED_ORDER_STATUSES
 from .data_loader import load_json
 
 AI_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = AI_DIR.parent / "data" / "mainbrain"
+DATA_DIR = AI_DIR / "data" / "mainbrain"
 MAINBRAIN_DIR = DATA_DIR / "context_embeddings"
 COMPANY_KNOWLEDGE_FILE = DATA_DIR / "corporate_knowledge" / "company_knowledge.json"
 
 
 def load_company_knowledge() -> Dict[str, Any]:
-    """Membaca basis pengetahuan perusahaan dari data/mainbrain/corporate_knowledge/."""
+    """Membaca basis pengetahuan perusahaan dari ai/data/mainbrain/corporate_knowledge/."""
     if COMPANY_KNOWLEDGE_FILE.exists():
         try:
             with open(COMPANY_KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
