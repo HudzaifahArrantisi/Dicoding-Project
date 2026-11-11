@@ -163,6 +163,7 @@ daisuki-inventory/
 ## Catatan Perubahan Harian (Daily Changelog)
 
 ### 2026-11-12
+- **Analisis seluruh mitra dan empat artefak kategori**: Data Science tidak lagi bergantung pada mitra yang memiliki log; query membentuk seluruh mitra aktif × produk resmi dan memberi nilai nol untuk periode tanpa laporan. Run menghasilkan empat JSON kategori untuk kartu produk, mitra, wilayah, dan disiplin pelaporan. Modal AI Insights menampilkan file kategori sebelum Admin melanjutkan analisis AI.
 - **Flow Admin akhir minggu untuk Data Science dan AI Insights**: Admin kini dapat membuat laporan Data Science langsung dari tab Log & Data, meninjau JSON/CSV/Markdown pada modal AI Insights, lalu melanjutkan pemrosesan AI dari file run yang sama. Progres job Naive Bayes, evaluasi, alokasi, training `daisuki.pkl`, grafik, dan validasi ditampilkan per langkah. API artifact preview dan otorisasi Admin untuk membuat/memproses run ditambahkan.
 
 ### 2026-11-11

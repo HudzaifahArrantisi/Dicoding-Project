@@ -34,14 +34,20 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     if (!run) { set.status = 404; return { error: "Run tidak ditemukan" }; }
     const directory = dataScienceRunDir(params.id);
     try {
-      const [json, csv, markdown, manifest] = await Promise.all([
+      const [json, csv, markdown, manifest, products, partners, regions, reporting] = await Promise.all([
         readFile(`${directory}/weekly_analytics_summary.json`, "utf8"),
         readFile(`${directory}/cleaned_inventory_summary.csv`, "utf8"),
         readFile(`${directory}/weekly_analytics_report.md`, "utf8"),
         readFile(`${directory}/manifest.json`, "utf8"),
+        readFile(`${directory}/category_products.json`, "utf8"),
+        readFile(`${directory}/category_partners.json`, "utf8"),
+        readFile(`${directory}/category_regions.json`, "utf8"),
+        readFile(`${directory}/category_reporting.json`, "utf8"),
       ]);
       return { status: run.status, manifest: JSON.parse(manifest), json: JSON.parse(json),
-        csv_preview: csv.split(/\r?\n/).slice(0, 16).join("\n"), markdown };
+        csv_preview: csv.split(/\r?\n/).slice(0, 16).join("\n"), markdown,
+        categories: { products: JSON.parse(products), partners: JSON.parse(partners),
+          regions: JSON.parse(regions), reporting: JSON.parse(reporting) } };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") { set.status = 404; return { error: "Artefak laporan belum tersedia" }; }
       throw error;

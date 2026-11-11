@@ -58,7 +58,7 @@ def fetch_rows(start: datetime, end: datetime) -> tuple[list[dict], list[dict], 
             cursor.execute("""SELECT p.id::text AS partner_id, p.name AS partner_name,
                 p.type::text AS partner_type, coalesce(nullif(p.province_name, ''), 'Tidak diketahui') AS province_name,
                 coalesce(nullif(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
-                ps.product_id::text AS product_id, pr.name AS product_name, pr.sku AS product_sku,
+                pr.id::text AS product_id, pr.name AS product_name, pr.sku AS product_sku,
                 coalesce(ps.current_qty, 0) AS current_qty, coalesce(ps.par_level, 0) AS par_level, ps.updated_at
                 FROM partners p CROSS JOIN products pr
                 LEFT JOIN partner_stocks ps ON ps.partner_id=p.id AND ps.product_id=pr.id

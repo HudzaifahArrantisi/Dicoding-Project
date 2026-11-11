@@ -39,6 +39,7 @@ export function AnalysisRunPreviewModal({
               <FileCard icon={<FileText className="size-4" />} label="CSV handoff" value="Preview 15 baris pertama" />
               <FileCard icon={<FileText className="size-4" />} label="Laporan Markdown" value="Ringkasan eksekutif" />
             </div>
+            <section className="rounded-lg border border-line p-4"><h3 className="text-sm font-semibold text-ink-900">Empat file kategori AI Insights</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{(['products', 'partners', 'regions', 'reporting'] as const).map((key) => <div key={key} className="flex items-center justify-between rounded-md bg-ink-50 px-3 py-2 text-xs"><span className="font-mono">category_{key}.json</span><span className="text-muted">{artifacts.categories[key]?.items.length ?? 0} baris</span></div>)}</div></section>
             <div className="grid gap-4 lg:grid-cols-2">
               <Preview title="weekly_analytics_summary.json"><pre className="max-h-72 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-ink-700">{JSON.stringify(artifacts.json, null, 2).slice(0, 12000)}</pre></Preview>
               <Preview title="weekly_analytics_report.md"><pre className="max-h-72 overflow-auto whitespace-pre-wrap text-xs leading-5 text-ink-700">{artifacts.markdown}</pre></Preview>

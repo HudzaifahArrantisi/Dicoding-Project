@@ -168,6 +168,7 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-12
+- **Analisis seluruh mitra dan empat artefak kategori**: Agregator Data Science kini membentuk matriks seluruh mitra aktif × empat produk resmi, sehingga mitra tanpa log pada periode tetap muncul dengan konsumsi nol dan status pelaporan perlu perhatian. Setiap run menulis `category_products.json`, `category_partners.json`, `category_regions.json`, dan `category_reporting.json` selain JSON/CSV/Markdown gabungan. Modal AI Insights menampilkan jumlah baris keempat file tersebut sebelum proses Naive Bayes dan training dilanjutkan. Validasi fixture Data Science, typecheck, dan tes RAG/privasi lulus.
 - **Flow Admin akhir minggu untuk Data Science dan AI Insights**: Tombol Log & Data **Perbarui analisis Data Science** kini membuat run laporan tujuh hari terakhir dan mengarahkan Admin ke AI Insights. Tombol **Buka alur analisis** menampilkan modal JSON, CSV, dan Markdown yang sudah dihasilkan; **Lanjutkan dengan hasil file** menjalankan Naive Bayes, evaluasi, alokasi, training `daisuki.pkl`, grafik, validasi, dan publikasi dengan progres per langkah. Endpoint artifact preview dan izin Admin untuk membuat/memproses run ditambahkan. Typecheck, build sebelumnya, serta tes RAG/privasi lulus.
 
 #### 2026-11-11

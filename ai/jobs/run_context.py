@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REPORTS = ROOT / "data-science" / "reports"
 STAGES = ROOT / "ai" / "data" / "private" / "runs"
 ARTIFACTS = ("weekly_analytics_summary.json", "cleaned_inventory_summary.csv", "weekly_analytics_report.md")
+CATEGORY_ARTIFACTS = ("category_products.json", "category_partners.json", "category_regions.json", "category_reporting.json")
 
 
 def run_id() -> str | None:
@@ -43,7 +44,7 @@ def verify_manifest() -> dict | None:
     if manifest.get("run_id") != identifier or manifest.get("schema_version") != 1:
         raise ValueError("Identitas atau versi manifest Data Science tidak valid")
     hashes = manifest.get("sha256", {})
-    for name in ARTIFACTS:
+    for name in (*ARTIFACTS, *CATEGORY_ARTIFACTS):
         digest = hashlib.sha256((path / name).read_bytes()).hexdigest()
         if hashes.get(name) != digest:
             raise ValueError(f"Checksum artefak Data Science tidak cocok: {name}")

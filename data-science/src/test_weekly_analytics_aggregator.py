@@ -37,6 +37,8 @@ class WeeklyAnalyticsTests(unittest.TestCase):
         self.assertEqual(report["products"][0]["share_pct"], 100)
         self.assertEqual(report["regions"][0]["restock_frequency"], 1)
         self.assertEqual(report["partners"][0]["active_days"], 2)
+        self.assertEqual({item["partner_id"] for item in report["partners"]}, {"m1", "m2"})
+        self.assertEqual(next(item for item in report["partners"] if item["partner_id"] == "m2")["log_count"], 0)
         self.assertEqual(len(report["daily_reporting"]), 7)
         self.assertEqual(report["daily_reporting"][1]["log_count"], 1)
         self.assertEqual(report["warehouse"][0]["central_stock"], 30)
@@ -47,6 +49,8 @@ class WeeklyAnalyticsTests(unittest.TestCase):
             self.assertTrue((Path(directory) / "weekly_analytics_summary.json").is_file())
             self.assertTrue((Path(directory) / "cleaned_inventory_summary.csv").is_file())
             self.assertTrue((Path(directory) / "weekly_analytics_report.md").is_file())
+            for name in ("category_products.json", "category_partners.json", "category_regions.json", "category_reporting.json"):
+                self.assertTrue((Path(directory) / name).is_file())
 
 
 if __name__ == "__main__":

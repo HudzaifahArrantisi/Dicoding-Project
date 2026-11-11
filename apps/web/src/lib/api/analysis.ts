@@ -21,6 +21,7 @@ export interface AnalysisArtifacts {
   json: Record<string, unknown>
   csv_preview: string
   markdown: string
+  categories: Record<'products' | 'partners' | 'regions' | 'reporting', { category: string; items: unknown[] }>
 }
 
 export async function getAnalysisRuns() {
