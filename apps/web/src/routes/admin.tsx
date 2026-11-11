@@ -71,6 +71,7 @@ import {
 } from '@/components/inventory/partner-fast-moving-modal'
 import { PartnerDetailModal } from '@/components/inventory/partner-detail-modal'
 import { AiPipelineChart } from '@/components/inventory/ai-pipeline-chart'
+import { AnalysisRunPreviewModal } from '@/components/inventory/analysis-run-preview-modal'
 import {
   ProductSalesDetailModal,
   TopPartnersDetailModal,
@@ -119,6 +120,12 @@ import {
   type WeeklySummary,
   type AIInsights,
   type AiRunStatus,
+  getAnalysisRuns,
+  getAnalysisArtifacts,
+  createAnalysisRun,
+  actionAnalysisRun,
+  type AnalysisRun,
+  type AnalysisArtifacts,
   type ReceiptProofData,
   type StockLogPartner,
   EMPTY_ALERT_ORDERS,
@@ -388,6 +395,7 @@ function DataSciencePanel({
   totalPartners,
   onRetry,
   onExport,
+  onAnalysisCreated,
 }: {
   summary?: WeeklySummary
   summaryLoading: boolean
@@ -398,15 +406,11 @@ function DataSciencePanel({
   totalPartners: number
   onRetry: () => void
   onExport: () => void
+  onAnalysisCreated: () => void
 }) {
   const queryClient = useQueryClient()
   const [startingAi, setStartingAi] = useState(false)
-  const activeRun = useRef<string | null>(null)
-  const runStatus = useQuery<AiRunStatus>({
-    queryKey: ['admin-ai-run'],
-    queryFn: getAiRunStatus,
-    refetchInterval: (query) => query.state.data?.status === 'running' ? 1000 : false,
-  })
+  const [analysisRun, setAnalysisRun] = useState<string | null>(null)
   const [selectedPartner, setSelectedPartner] = useState<StockLogPartner | null>(null)
   const partnerLogs = useQuery<StockLog[]>({
     queryKey: ['admin-stock-logs-partner', selectedPartner?.partner_id],
@@ -414,18 +418,16 @@ function DataSciencePanel({
     enabled: selectedPartner !== null,
   })
 
-  useEffect(() => {
-    if (runStatus.data?.status !== 'succeeded' || runStatus.data.started_at !== activeRun.current) return
-    activeRun.current = null
-    onRetry()
-    void queryClient.invalidateQueries({ queryKey: ['admin-ai-insights'] })
-    toast.success('Analisis Python selesai.')
-  }, [runStatus.data, onRetry, queryClient])
-
   const handleRunAnalysis = async () => {
     setStartingAi(true)
     try {
-      window.location.assign('/analysis')
+      const end = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+      const start = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10)
+      const created = await createAnalysisRun(start, end)
+      setAnalysisRun(created.id)
+      await queryClient.invalidateQueries({ queryKey: ['analysis-runs'] })
+      toast.success('Laporan Data Science selesai dibuat. Buka AI Insights untuk meninjau file.')
+      onAnalysisCreated()
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -457,8 +459,8 @@ function DataSciencePanel({
         <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
       </div>
 
-      {runStatus.isError ? <ErrorState message={getErrorMessage(runStatus.error)} onRetry={() => void runStatus.refetch()} /> : null}
-      <AiPipelineChart status={runStatus.data} pending={startingAi} loading={runStatus.isLoading} onRun={() => void handleRunAnalysis()} />
+      <AiPipelineChart status={undefined} pending={startingAi} loading={false} onRun={() => void handleRunAnalysis()} buttonLabel="Perbarui analisis Data Science" />
+      {analysisRun ? <p className="text-xs text-ok-fg" role="status">Run terbaru siap ditinjau di tab AI Insights: {analysisRun}</p> : null}
 
       <PartnerDailyLogChart
         summary={summary}
@@ -2094,6 +2096,18 @@ function AIInsightsPanel({
 }) {
   const [startingAi, setStartingAi] = useState(false)
   const activeRun = useRef<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const analysisRuns = useQuery<{ runs: AnalysisRun[]; active_run_id: string | null }>({
+    queryKey: ['analysis-runs'],
+    queryFn: getAnalysisRuns,
+    refetchInterval: (query) => query.state.data?.runs.some((run) => run.status === 'processing' || run.status === 'creating') ? 1500 : false,
+  })
+  const selectedAnalysisRun = analysisRuns.data?.runs.find((run) => ['draft', 'approved', 'processing'].includes(run.status)) ?? analysisRuns.data?.runs[0] ?? null
+  const artifacts = useQuery<AnalysisArtifacts>({
+    queryKey: ['analysis-artifacts', selectedAnalysisRun?.id],
+    queryFn: () => getAnalysisArtifacts(selectedAnalysisRun!.id),
+    enabled: previewOpen && selectedAnalysisRun !== null,
+  })
   const runStatus = useQuery<AiRunStatus>({
     queryKey: ['admin-ai-run'],
     queryFn: getAiRunStatus,
@@ -2346,7 +2360,23 @@ function AIInsightsPanel({
   const handleRunAiAnalysis = async () => {
     setStartingAi(true)
     try {
-      window.location.assign('/analysis')
+      await analysisRuns.refetch()
+      setPreviewOpen(true)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setStartingAi(false)
+    }
+  }
+
+  const handleContinueWithArtifacts = async () => {
+    if (!selectedAnalysisRun) return
+    setStartingAi(true)
+    try {
+      await actionAnalysisRun(selectedAnalysisRun.id, 'process')
+      await analysisRuns.refetch()
+      await artifacts.refetch()
+      toast.success('Analisis AI dimulai. Progres akan tampil di modal ini.')
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -2488,6 +2518,15 @@ function AIInsightsPanel({
               if (!open) setActiveModal(null)
             }}
             partners={partnerActivityList}
+          />
+          <AnalysisRunPreviewModal
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+            run={selectedAnalysisRun}
+            artifacts={artifacts.data}
+            loading={artifacts.isLoading || analysisRuns.isLoading}
+            continuing={startingAi || selectedAnalysisRun?.status === 'processing'}
+            onContinue={() => void handleContinueWithArtifacts()}
           />
         </>
       )}
@@ -2963,6 +3002,7 @@ function AdminDashboard() {
                 void logPartners.refetch()
               }}
               onExport={() => void exportRawLogs()}
+              onAnalysisCreated={() => setTab('ai-insights')}
             />
           ) : null}
           {tab === 'ai-insights' ? (

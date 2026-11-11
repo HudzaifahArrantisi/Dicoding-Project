@@ -145,6 +145,8 @@ Model `.pkl` menyimpan classifier intent dan risiko; dokumen RAG perusahaan teta
 4. AI Engineer menekan **Proses laporan** pada run yang disetujui. Job risiko, evaluasi historis, alokasi draft, fakta dashboard, training `daisuki.pkl`, grafik, dan validasi berjalan berurutan. Artefak tahap berada di `ai/data/private/runs/<run_id>/`.
 5. Setelah semua valid, API mengaktifkan run, menulis rekomendasi dengan stok pusat terkini, dan memuat ulang worker model chatbot. Dashboard dan chatbot membaca versi aktif yang sama. Admin dapat mengaktifkan kembali run terbit sebelumnya di `/analysis`.
 
+Di dashboard Admin, alur yang sama tersedia langsung di tab **Log & Data** dan **AI Insights**. Tombol **Perbarui analisis Data Science** membuat laporan tujuh hari terakhir dan otomatis membuka tab AI Insights. Tombol **Buka alur analisis** menampilkan modal berisi JSON, CSV, dan Markdown hasil laporan. Setelah Admin memeriksa file, tombol **Lanjutkan dengan hasil file** menjalankan seluruh tahap AI dan menampilkan progres per langkah. Admin tidak perlu berpindah ke halaman role tim untuk alur akhir minggu ini.
+
 Status, langkah, kesalahan, waktu publikasi, dan pelaku disimpan di PostgreSQL `analysis_runs` serta `audit_logs`. Jadwal Senin 05.00 WIB hanya membuat draft mingguan; pengingat harian 09.00 WIB muncul jika draft atau run yang disetujui belum dilanjutkan. Proses yang terputus saat API dimulai ulang ditandai gagal agar tidak terlihat terus berjalan.
 
 **CLI manual untuk verifikasi run** (dari root repo, pakai Python pada `ai/.venv`):
