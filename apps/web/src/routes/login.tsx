@@ -102,7 +102,7 @@ function LoginPage() {
             <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
               <div>
                 <p className="mb-2 text-sm font-medium text-ink-900">
-                  Isi cepat akun 
+                  akun demo cepat
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {DEMO_ACCOUNTS.map((account) => (
@@ -127,7 +127,7 @@ function LoginPage() {
                   htmlFor="email"
                   className="mb-2 block text-sm font-medium text-ink-900"
                 >
-                  Email atau username
+                  Email kalian
                 </label>
                 <input
                   id="email"
@@ -135,7 +135,7 @@ function LoginPage() {
                   autoComplete="username"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="Email atau username"
+                  placeholder="Email"
                   className="min-h-12 w-full rounded-lg border border-[#858e9d] bg-white px-4 text-base text-text placeholder:text-[#687080] focus-visible:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
                   required
                   aria-describedby={error ? 'login-error' : undefined}
