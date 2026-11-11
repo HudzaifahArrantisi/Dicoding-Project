@@ -9,4 +9,5 @@ export * from './notifications'
 export * from './admin'
 export * from './regions'
 export * from './assistant'
+export * from './analysis'
 

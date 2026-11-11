@@ -8,8 +8,8 @@ import { retryTransientRead } from "../lib/db-retry";
 
 const production = env.NODE_ENV === "production";
 const cookieName = production ? "__Host-daisuki_session" : "daisuki_session";
-const idleMs = { admin: 30 * 60_000, mitra: 2 * 60 * 60_000 } as const;
-const absoluteMs = { admin: 8 * 60 * 60_000, mitra: 24 * 60 * 60_000 } as const;
+const idleMs = { admin: 30 * 60_000, mitra: 2 * 60 * 60_000, data_science: 30 * 60_000, ai_engineer: 30 * 60_000 } as const;
+const absoluteMs = { admin: 8 * 60 * 60_000, mitra: 24 * 60 * 60_000, data_science: 8 * 60 * 60_000, ai_engineer: 8 * 60 * 60_000 } as const;
 const recentSessionTouches = new Map<string, number>();
 
 function hashToken(token: string): string {
@@ -30,7 +30,7 @@ export function sessionCookie(token: string | null): string {
 
 export interface AuthUser {
   userId: string;
-  role: "admin" | "mitra";
+  role: "admin" | "mitra" | "data_science" | "ai_engineer";
   partnerId: string | null;
   email: string;
   fullName: string;

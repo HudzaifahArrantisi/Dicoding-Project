@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AnalysisRouteImport } from './routes/analysis'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MitraRouteImport } from './routes/mitra'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalysisRoute = AnalysisRouteImport.update({
+  id: '/analysis',
+  path: '/analysis',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -38,12 +44,14 @@ const MitraRoute = MitraRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analysis': typeof AnalysisRoute
   '/login': typeof LoginRoute
   '/mitra': typeof MitraRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analysis': typeof AnalysisRoute
   '/login': typeof LoginRoute
   '/mitra': typeof MitraRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analysis': typeof AnalysisRoute
   '/login': typeof LoginRoute
   '/mitra': typeof MitraRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/login' | '/mitra'
+  fullPaths: '/' | '/admin' | '/analysis' | '/login' | '/mitra'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/login' | '/mitra'
-  id: '__root__' | '/' | '/admin' | '/login' | '/mitra'
+  to: '/' | '/admin' | '/analysis' | '/login' | '/mitra'
+  id: '__root__' | '/' | '/admin' | '/analysis' | '/login' | '/mitra'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AnalysisRoute: typeof AnalysisRoute
   LoginRoute: typeof LoginRoute
   MitraRoute: typeof MitraRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analysis': {
+      id: '/analysis'
+      path: '/analysis'
+      fullPath: '/analysis'
+      preLoaderRoute: typeof AnalysisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AnalysisRoute: AnalysisRoute,
   LoginRoute: LoginRoute,
   MitraRoute: MitraRoute,
 }

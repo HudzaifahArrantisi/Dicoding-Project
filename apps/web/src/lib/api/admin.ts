@@ -24,6 +24,7 @@ export interface WeeklySummary {
 
 export interface AIInsights {
   weekly_facts?: WeeklyFacts | null
+  model_evaluation?: { source_run_id: string; calibrated: boolean; decision: string; evaluation_samples: number; evaluation_events: number } | null
   model_sync?: { trained_at: string | null; synchronized: boolean }
   regional_activity?: RegionalActivity
   engine_status?: {

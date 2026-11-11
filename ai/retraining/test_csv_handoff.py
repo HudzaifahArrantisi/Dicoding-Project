@@ -61,7 +61,7 @@ class CsvHandoffTests(unittest.TestCase):
         ])
         model = Path(self.directory.name) / "daisuki.pkl"
         with (patch.object(train, "CSV_HANDOFF", self.source),
-              patch.object(train, "prepare_handoff", side_effect=lambda: prepare_handoff(self.source, self.output)),
+              patch.object(train, "prepare_handoff", side_effect=lambda path: prepare_handoff(path, self.output)),
               patch.object(train, "scan_and_generate_mainbrain", return_value={"total": 2, "success": 2, "failed": 0}),
               patch.object(train, "MODEL_OUTPUT_FILE", model),
               patch.object(train, "TEMP_MODEL_FILE", model.with_suffix(".pkl.tmp"))):

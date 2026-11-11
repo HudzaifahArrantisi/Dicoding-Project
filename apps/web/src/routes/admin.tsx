@@ -105,7 +105,6 @@ import {
   exportStockLogs,
   getAiInsights,
   getAiRunStatus,
-  triggerAiInsights,
   getPartners,
   createPartner as apiCreatePartner,
   updatePartner as apiUpdatePartner,
@@ -426,9 +425,7 @@ function DataSciencePanel({
   const handleRunAnalysis = async () => {
     setStartingAi(true)
     try {
-      const started = await triggerAiInsights()
-      activeRun.current = started.started_at
-      await runStatus.refetch()
+      window.location.assign('/analysis')
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -2349,9 +2346,7 @@ function AIInsightsPanel({
   const handleRunAiAnalysis = async () => {
     setStartingAi(true)
     try {
-      const started = await triggerAiInsights()
-      activeRun.current = started.started_at
-      await runStatus.refetch()
+      window.location.assign('/analysis')
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -2372,8 +2367,10 @@ function AIInsightsPanel({
           </p>
           <p className="mt-2 text-xs text-muted">
             {lastAnalysis ? `Analisis ${formatDetailedDateTime(lastAnalysis)}` : 'Analisis belum tersedia'}
+            {data?.weekly_facts?.metadata.start_date ? ` · Periode ${data.weekly_facts.metadata.start_date} sampai ${data.weekly_facts.metadata.end_date} · Model ${data.weekly_facts.metadata.model_version} · Run ${data.weekly_facts.metadata.source_run_id?.slice(0, 8) ?? 'lama'}` : ''}
             <span className="mx-1.5" aria-hidden="true">·</span>
          </p>
+          {data?.model_evaluation && <p className="mt-1 text-xs text-muted">Evaluasi historis: {data.model_evaluation.evaluation_samples} sampel uji, {data.model_evaluation.evaluation_events} kejadian. {data.model_evaluation.calibrated ? 'Model terkalibrasi.' : 'Skor model belum terkalibrasi; prioritas pasokan mengikuti aturan stok.'}</p>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
@@ -2394,7 +2391,7 @@ function AIInsightsPanel({
             ) : (
               <>
                 <RotateCcw className="size-4" aria-hidden="true" />
-                <span>Perbarui saran</span>
+                <span>Buka alur analisis</span>
               </>
             )}
           </button>
@@ -2412,9 +2409,9 @@ function AIInsightsPanel({
           <div className="grid min-w-0 gap-4 md:grid-cols-2" aria-label="Ringkasan analisis AI">
             <AiOverviewCard
               eyebrow="Konsumsi produk"
-              title="Produk paling laku"
-              value={totalSoldUnits > 0 ? topProduct.product_name : 'Belum ada data penjualan'}
-              metric={totalSoldUnits > 0 ? topProduct.weekly_units.toLocaleString('id-ID') + ' pcs terjual · ' + topProduct.share_pct + '% pangsa' : 'Jalankan analisis untuk melihat hasil'}
+              title="Konsumsi produk tertinggi"
+              value={totalSoldUnits > 0 ? topProduct.product_name : 'Belum ada data konsumsi'}
+              metric={totalSoldUnits > 0 ? topProduct.weekly_units.toLocaleString('id-ID') + ' pcs berkurang · ' + topProduct.share_pct + '% pangsa' : 'Buat laporan untuk melihat hasil'}
               detail={'4 produk resmi · ' + totalSoldUnits.toLocaleString('id-ID') + ' pcs dalam 7 hari'}
               Icon={Package}
               onClick={() => setActiveModal('products')}

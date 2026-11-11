@@ -11,6 +11,7 @@ import pickle
 import sys
 from pathlib import Path
 from typing import Any
+import hashlib
 
 import psycopg
 from sklearn.feature_extraction.text import CountVectorizer
@@ -20,9 +21,12 @@ from source import build_intent_samples
 from doc_loader import scan_and_generate_mainbrain
 from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, prepare_handoff
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jobs"))
+from run_context import run_id, source_file, stage_dir, verify_manifest
+
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_OUTPUT_FILE = BASE_DIR.parent / "data" / "mainbrain" / "models" / "daisuki.pkl"
+MODEL_OUTPUT_FILE = (stage_dir() / "daisuki.pkl") if run_id() else BASE_DIR.parent / "data" / "mainbrain" / "models" / "daisuki.pkl"
 TEMP_MODEL_FILE = MODEL_OUTPUT_FILE.with_name("daisuki.pkl.tmp")
 CORPORATE_DIR = BASE_DIR.parent / "data" / "mainbrain" / "corporate_knowledge"
 with (CORPORATE_DIR / "assistant_copy.json").open(encoding="utf-8") as source:
@@ -62,9 +66,12 @@ def run_retraining_loop() -> bool:
     try:
         csv_texts: list[str] = []
         csv_labels: list[str] = []
-        if not is_fresh_handoff(CSV_HANDOFF):
+        handoff = source_file("cleaned_inventory_summary.csv") if run_id() else CSV_HANDOFF
+        if run_id():
+            verify_manifest()
+        elif not is_fresh_handoff(handoff):
             raise ValueError("CSV laporan Data Science belum ada atau sudah kedaluwarsa; jalankan agregator lebih dulu")
-        csv_texts, csv_labels, product_count = prepare_handoff()
+        csv_texts, csv_labels, product_count = prepare_handoff(handoff)
         LOGGER.info("Data Science CSV: %d pasangan mitra-produk, %d produk", len(csv_texts), product_count)
         LOGGER.info("Memulai pemindaian dokumen di ai/data/raw_references/...")
         mainbrain_stats = scan_and_generate_mainbrain()
@@ -86,6 +93,8 @@ def run_retraining_loop() -> bool:
                 "converted_markdowns": mainbrain_stats["success"],
                 "training_input_source": training_source,
                 "training_input_samples": len(texts),
+                "source_run_id": run_id(),
+                "training_input_sha256": hashlib.sha256(handoff.read_bytes()).hexdigest(),
             },
             "metadata": {
                 "name": "Daisuki AI Assistant",

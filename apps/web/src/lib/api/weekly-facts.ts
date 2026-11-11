@@ -1,5 +1,5 @@
 export interface WeeklyFacts {
-  metadata: { generated_at: string; period_days: number; model_version: string; regional_generated_at?: string }
+  metadata: { generated_at: string; period_days: number; model_version: string; start_date?: string; end_date?: string; source_run_id?: string; regional_generated_at?: string }
   central_warehouse: { total_stock_units: number; products: Array<{ id: string; name: string; central_stock: number; category: string }> }
   network_sales: {
     total_sold_7d: number; total_sold_prev_7d: number; sales_growth_percentage: number | null

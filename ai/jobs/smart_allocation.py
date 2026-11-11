@@ -4,9 +4,11 @@ import csv
 import json
 import math
 import os
+import sys
 from pathlib import Path
 
 import psycopg
+from run_context import source_file, stage_dir, run_id
 
 try:
     from dotenv import load_dotenv
@@ -21,9 +23,9 @@ except ImportError:
                 os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA_PATH = ROOT / "data-science" / "reports" / "cleaned_inventory_summary.csv"
-SOURCE_PATH = ROOT / "data-science" / "reports" / "weekly_analytics_summary.json"
-RISK_PATH = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings" / "regional_item_risks.json"
+DATA_PATH = source_file("cleaned_inventory_summary.csv")
+SOURCE_PATH = source_file("weekly_analytics_summary.json")
+RISK_PATH = stage_dir() / "regional_item_risks.json"
 MODEL_VERSION = "v2.0-deep-naive-bayes"
 LEAD_TIME_DAYS = 7
 
@@ -38,16 +40,23 @@ def load_risks() -> dict[tuple[str, str], dict]:
     risks = json.loads(RISK_PATH.read_text(encoding="utf-8"))
     if risks.get("source_generated_at") != source.get("metadata", {}).get("generated_at"):
         raise ValueError("Skor risiko tidak cocok dengan laporan Data Science terbaru")
+    if run_id() and risks.get("source_run_id") != run_id():
+        raise ValueError("Skor risiko berasal dari run lain")
     return {(item["partner_id"], item["product_id"]): item for item in risks["items"]}
 
 
 def allocate_recommendations() -> int:
+    draft = bool(run_id() and "--publish" not in sys.argv)
     load_dotenv(ROOT / "ai" / ".env")
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         raise RuntimeError("DATABASE_URL wajib di ai/.env untuk menyimpan rekomendasi.")
     rows = read_rows()
     risks = load_risks()
+    if run_id():
+        evaluation = json.loads((stage_dir() / "model_evaluation.json").read_text(encoding="utf-8"))
+        if evaluation.get("source_run_id") != run_id():
+            raise ValueError("Evaluasi model berasal dari run lain")
     if not rows:
         print("Dataset bersih kosong; tidak ada rekomendasi untuk disimpan.")
         return 0
@@ -59,8 +68,9 @@ def allocate_recommendations() -> int:
             remaining_stock = {product_id: int(stock) for product_id, stock in cursor.fetchall()}
             if any((row["partner_id"], row["product_id"]) not in risks for row in rows):
                 raise ValueError("Skor risiko mitra-produk belum lengkap")
-            ranked = sorted(rows, key=lambda row: (-risks[(row["partner_id"], row["product_id"])]["stockout_probability"], float(row["days_of_cover"] or 0)))
+            ranked = sorted(rows, key=lambda row: (float(row["days_of_cover"] or 0), int(float(row["current_qty"]))))
             generated = 0
+            preview = []
             for row in ranked:
                 product_id = row["product_id"]
                 current = int(float(row["current_qty"]))
@@ -71,17 +81,27 @@ def allocate_recommendations() -> int:
                 available = remaining_stock.get(product_id, 0)
                 suggested = min(demand, available)
                 remaining_stock[product_id] = available - suggested
+                priority_rule = current <= safety * 0.2 or float(row["days_of_cover"] or 0) <= LEAD_TIME_DAYS
+                preview.append({"partner_id": row["partner_id"], "partner_name": row["partner_name"],
+                                "product_id": product_id, "product_name": row["product_name"],
+                                "forecast_qty": round(adu * LEAD_TIME_DAYS), "days_of_cover": float(row["days_of_cover"]),
+                                "suggested_qty": suggested, "priority_rule": priority_rule,
+                                "stockout_probability": risks[(row["partner_id"], product_id)]["stockout_probability"]})
+                if draft:
+                    generated += 1
+                    continue
                 cursor.execute("""
                     INSERT INTO restock_recommendations
-                        (partner_id, product_id, forecast_qty, suggested_qty, days_of_cover, model_version, generated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        (partner_id, product_id, forecast_qty, suggested_qty, days_of_cover, model_version, metadata, generated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, jsonb_build_object('source_run_id', %s::text), NOW())
                     ON CONFLICT (partner_id, product_id) DO UPDATE SET
                         forecast_qty = EXCLUDED.forecast_qty,
                         suggested_qty = EXCLUDED.suggested_qty,
                         days_of_cover = EXCLUDED.days_of_cover,
                         model_version = EXCLUDED.model_version,
+                        metadata = EXCLUDED.metadata,
                         generated_at = NOW()
-                """, (row["partner_id"], product_id, round(adu * LEAD_TIME_DAYS), suggested, float(row["days_of_cover"]), MODEL_VERSION))
+                """, (row["partner_id"], product_id, round(adu * LEAD_TIME_DAYS), suggested, float(row["days_of_cover"]), MODEL_VERSION, run_id()))
                 generated += 1
                 if risks[(row["partner_id"], product_id)]["risk_level"] == "TINGGI" and suggested > 0:
                     cursor.execute("""
@@ -99,7 +119,9 @@ def allocate_recommendations() -> int:
                         )
                     """, (row["partner_id"], f"Prioritas Suplai: {row['partner_name']}", f"{row['partner_name']} sering kehabisan {row['product_name']}. Disarankan kirim {suggested} pcs.", row["partner_id"], f"Prioritas Suplai: {row['partner_name']}", f"%kehabisan {row['product_name']}.%"))
             connection.commit()
-    print(f"Rekomendasi upsert: {generated}; versi model: {MODEL_VERSION}")
+    if draft:
+        (stage_dir() / "allocation_preview.json").write_text(json.dumps({"source_run_id": run_id(), "items": preview}, ensure_ascii=False), encoding="utf-8")
+    print(f"Rekomendasi {'draft' if draft else 'upsert'}: {generated}; versi model: {MODEL_VERSION}")
     return generated
 
 

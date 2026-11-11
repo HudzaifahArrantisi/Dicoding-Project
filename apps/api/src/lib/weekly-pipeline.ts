@@ -1,106 +1,33 @@
-import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { publishInventoryChange } from "../realtime";
+import { desc } from "drizzle-orm";
+import { db } from "../db/client";
+import { analysisRuns } from "../db/schema";
+import { activeRunId, aiRunDir } from "./analysis-artifacts";
 
-const root = resolve(import.meta.dir, "../../../..");
-const python = process.env.DAISUKI_PYTHON_BIN || process.env.PYTHON_EXECUTABLE ||
-  (existsSync(resolve(root, "ai/.venv/Scripts/python.exe")) ? resolve(root, "ai/.venv/Scripts/python.exe") :
-  existsSync(resolve(root, "ai/.venv/bin/python")) ? resolve(root, "ai/.venv/bin/python") :
-  process.platform === "win32" ? "python" : "python3");
-const jobs = [
-  { path: "data-science/src/weekly_analytics_aggregator.py", label: "Agregasi laporan Data Science" },
-  { path: "ai/jobs/regional_stockout_naive_bayes.py", label: "Risiko wilayah" },
-  { path: "ai/jobs/smart_allocation.py", label: "Rekomendasi restock" },
-  { path: "ai/jobs/weekly_facts_aggregator.py", label: "Ringkasan AI" },
-  { path: "ai/retraining/train.py", label: "Pelatihan daisuki.pkl" },
-  { path: "ai/retraining/chart_data.py", label: "Grafik konsumsi dan klasifikasi" },
-] as const;
+type Chart = { days: Array<{ day: string; units: number }>;
+  model: { available: boolean; sample_count: number; risk_counts: Record<string, number> } };
 
-let running: Promise<void> | null = null;
-type PipelineChart = {
-  days: Array<{ day: string; units: number }>;
-  model: { available: boolean; sample_count: number; risk_counts: Record<string, number> };
-};
-type PipelineStatus = {
-  status: "idle" | "running" | "succeeded" | "failed";
-  training_source: "data_science_csv" | "postgresql" | null;
-  started_at: string | null;
-  finished_at: string | null;
-  current_step: string | null;
-  steps: Array<{ label: string; status: "running" | "succeeded" | "failed" }>;
-  chart: PipelineChart | null;
-};
-let pipelineStatus: PipelineStatus = {
-  status: "idle",
-  training_source: null,
-  started_at: null,
-  finished_at: null,
-  current_step: null,
-  steps: [],
-  chart: null,
-};
-
-export function getWeeklyPipelineStatus(): PipelineStatus {
-  return { ...pipelineStatus };
-}
-
-export function startWeeklyPipeline(): PipelineStatus {
-  if (!running) {
-    void runWeeklyPipeline().catch((error) => console.error("[WEEKLY AI]", error));
-  }
-  return getWeeklyPipelineStatus();
-}
-
-export function runWeeklyPipeline(): Promise<void> {
-  if (running) return running;
-  pipelineStatus = {
-    status: "running", started_at: new Date().toISOString(), finished_at: null,
-    training_source: "data_science_csv",
-    current_step: null, steps: [], chart: null,
-  };
-  publishInventoryChange({ partnerId: null, topics: ["ai"] });
-  running = (async () => {
-    for (const job of jobs) {
-      pipelineStatus.current_step = job.label;
-      pipelineStatus.steps.push({ label: job.label, status: "running" });
-      publishInventoryChange({ partnerId: null, topics: ["ai"] });
-      try {
-        const child = Bun.spawn([python, resolve(root, job.path)], {
-          cwd: root,
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        const [code, stdout, stderr] = await Promise.all([
-          child.exited,
-          new Response(child.stdout).text(),
-          new Response(child.stderr).text(),
-        ]);
-        if (code !== 0) throw new Error(`${job.path} gagal (${code}): ${stderr.trim() || stdout.trim()}`);
-        if (job.path === "ai/retraining/chart_data.py") {
-          const chart = JSON.parse(stdout.trim()) as PipelineChart;
-          if (!Array.isArray(chart.days) || !chart.model || typeof chart.model.available !== "boolean") {
-            throw new Error("Format data grafik dari Python tidak valid");
-          }
-          pipelineStatus.chart = chart;
-        }
-        console.log(`[WEEKLY AI] ${job.path}: ${job.path.endsWith("chart_data.py") ? "data grafik siap" : stdout.trim()}`);
-        pipelineStatus.steps[pipelineStatus.steps.length - 1].status = "succeeded";
-      } catch (error) {
-        pipelineStatus.steps[pipelineStatus.steps.length - 1].status = "failed";
-        throw error;
-      }
-      publishInventoryChange({ partnerId: null, topics: ["ai"] });
+export async function getWeeklyPipelineStatus() {
+  const rows = await db.select().from(analysisRuns).orderBy(desc(analysisRuns.created_at)).limit(20);
+  const activeId = activeRunId();
+  const active = rows.find((row) => row.id === activeId);
+  const current = rows.find((row) => row.status === "processing") ?? active ?? rows[0];
+  let chart: Chart | null = null;
+  if (activeId) {
+    try {
+      chart = JSON.parse(await readFile(resolve(aiRunDir(activeId), "chart_data.json"), "utf8")) as Chart;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-  })()
-    .then(() => {
-      pipelineStatus = { ...pipelineStatus, status: "succeeded", current_step: null, finished_at: new Date().toISOString() };
-      publishInventoryChange({ partnerId: null, topics: ["ai"] });
-    })
-    .catch((error) => {
-      pipelineStatus = { ...pipelineStatus, status: "failed", current_step: null, finished_at: new Date().toISOString() };
-      publishInventoryChange({ partnerId: null, topics: ["ai"] });
-      throw error;
-    })
-    .finally(() => { running = null; });
-  return running;
+  }
+  return {
+    status: current?.status === "processing" ? "running" : current?.status === "failed" ? "failed" : active ? "succeeded" : "idle",
+    training_source: current ? "data_science_csv" : null,
+    started_at: current?.created_at.toISOString() ?? null,
+    finished_at: current?.published_at?.toISOString() ?? null,
+    current_step: current?.current_step ?? null,
+    steps: current?.steps ?? [],
+    chart,
+  };
 }

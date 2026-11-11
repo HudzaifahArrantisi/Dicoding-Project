@@ -56,5 +56,5 @@ export function isOrderStatus(value: string): value is OrderStatus {
   return ORDER_STATUSES.includes(value as OrderStatus);
 }
 
-export type UserRole = "admin" | "mitra";
+export type UserRole = "admin" | "mitra" | "data_science" | "ai_engineer";
 export type PartnerType = "hotel" | "restoran" | "kafe" | "minimarket";

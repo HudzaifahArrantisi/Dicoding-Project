@@ -1,10 +1,11 @@
 import type { AiRunStatus } from '@/lib/api'
 
-export function AiPipelineChart({ status, pending, loading, onRun }: {
+export function AiPipelineChart({ status, pending, loading, onRun, buttonLabel = 'Buka alur analisis' }: {
   status?: AiRunStatus
   pending: boolean
   loading: boolean
   onRun: () => void
+  buttonLabel?: string
 }) {
   const days = status?.chart?.days ?? []
   const width = 680
@@ -31,7 +32,7 @@ export function AiPipelineChart({ status, pending, loading, onRun }: {
           <p className="mt-1 text-sm text-muted">Perbarui grafik dan model dari CSV Data Science yang tersedia, atau data PostgreSQL.</p>
         </div>
         <button type="button" onClick={onRun} disabled={pending || status?.status === 'running'} className="inline-flex min-h-11 items-center justify-center rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-not-allowed disabled:opacity-50">
-          {pending || status?.status === 'running' ? 'Analisis berjalan...' : 'Perbarui analisis & model'}
+          {pending || status?.status === 'running' ? 'Analisis berjalan...' : buttonLabel}
         </button>
       </div>
 

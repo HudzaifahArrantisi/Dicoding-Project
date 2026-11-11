@@ -1,4 +1,4 @@
-# Data Science — Daisuki Inventory
+﻿# Data Science â€” Daisuki Inventory
 
 ## 1. Tujuan
 Data Science mengekstrak log PostgreSQL secara baca saja, menghitung metrik operasional, dan menyerahkan artefak bertanggal kepada AI. Inferensi Naive Bayes dan penulisan rekomendasi tetap dikerjakan di `ai/`.
@@ -77,19 +77,14 @@ Output eksperimen ini tidak menjadi input tombol **Perbarui analisis**. Handoff 
 
 ## 10. Serah Terima Mingguan ke AI Engineer
 
-Tim Data Science menyiapkan **satu periode laporan yang sama** untuk ketiga artefak. Contoh berikut mencakup 2 sampai 8 November 2026, termasuk kedua tanggal:
+Masuk sebagai `data_science` lalu buka `/analysis`. Pilih rentang tanggal inklusif (maksimal 31 hari) dan tekan **Buat laporan**. API menjalankan `weekly_analytics_aggregator.py` dengan `--run-id`, memvalidasi empat produk resmi, pasangan mitra-produk unik, angka nonnegatif, dan kesesuaian total JSON/CSV. Hasil masuk ke `data-science/reports/runs/<run_id>/` bersama manifest berisi periode, zona waktu, jumlah baris, dan hash SHA-256 tiap artefak. Run tidak pernah ditimpa.
+
+Perintah CLI setara untuk analisis lokal dari root repositori:
 
 ```powershell
-# Jalankan dari root repositori dengan Python yang memiliki dependensi Data Science.
-python data-science/src/weekly_analytics_aggregator.py --start-date 2026-11-02 --end-date 2026-11-08
+python data-science/src/weekly_analytics_aggregator.py --start-date 2026-11-02 --end-date 2026-11-08 --run-id <uuid-baru>
 ```
 
-| Artefak | Isi dan pemakai |
-|---|---|
-| `reports/weekly_analytics_summary.json` | Lima kategori analisis, deret konsumsi harian, dan `risk_records` per mitra-produk. Dibaca job Naive Bayes dan sintesis fakta AI. |
-| `reports/cleaned_inventory_summary.csv` | Sampel stok dan konsumsi per mitra-produk. Dibaca job alokasi dan training `daisuki.pkl`. |
-| `reports/weekly_analytics_report.md` | Ringkasan manusia untuk ditinjau sebelum AI Engineer memproses laporan. |
+CLI tidak membuat baris status PostgreSQL; gunakan tombol aplikasi untuk alur persetujuan dan publikasi. Admin meninjau draft dan menyetujuinya. AI Engineer kemudian memproses `run_id` yang sama tanpa menjalankan ulang agregator. File JSON/CSV dan Markdown dapat memuat identitas cabang, tetap privat, dan tidak menjadi dokumen RAG mitra. Jadwal Senin 05.00 WIB membuat draft otomatis untuk tujuh hari sebelumnya; persetujuan tetap manual.
 
-Sebelum serah terima, periksa `metadata.start_date`, `metadata.end_date`, keempat nama produk resmi, dan kesesuaian total konsumsi JSON dengan CSV. Laporan dapat memuat identitas serta data cabang; ketiganya tetap lokal dan diabaikan Git. AI Engineer menjalankan job dari laporan yang sudah ditinjau sesuai [panduan AI](../ai/README.md#11-alur-mingguan-data-science-ke-ai-dan-chatbot).
-
-Saat ini **belum ada tombol atau role aplikasi khusus Data Science** dan belum ada penjadwalan mingguan otomatis. Tombol Admin menjalankan agregator ini sendiri dengan periode bawaan tujuh hari kalender terakhir, kemudian langsung menjalankan seluruh tahap AI. Jika tim membutuhkan rentang tanggal tertentu, gunakan CLI di atas sebelum menjalankan tahap AI secara manual.
+Ringkasan konsumsi berasal dari **penurunan laporan stok fisik**, bukan transaksi kasir. Stok pusat dan sisa stok cabang pada laporan adalah snapshot saat agregasi; rentang tanggal berlaku untuk konsumsi dan aktivitas log. Jika diperlukan rekonstruksi stok historis tepat pada akhir periode, tambahkan sumber event lengkap dan validasi terpisah sebelum mengklaim snapshot historis.

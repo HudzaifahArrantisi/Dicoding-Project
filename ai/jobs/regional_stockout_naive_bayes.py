@@ -10,13 +10,14 @@ import math
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from run_context import source_file, stage_dir, run_id
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_JSON = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings" / "regional_stockout_insights.json"
-ITEM_RISKS_JSON = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings" / "regional_item_risks.json"
-SOURCE_JSON = ROOT / "data-science" / "reports" / "weekly_analytics_summary.json"
-DATA_DIR = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings"
+OUTPUT_JSON = stage_dir() / "regional_stockout_insights.json"
+ITEM_RISKS_JSON = stage_dir() / "regional_item_risks.json"
+SOURCE_JSON = source_file("weekly_analytics_summary.json")
+DATA_DIR = OUTPUT_JSON.parent
 LEAD_TIME_DAYS = 7
 
 
@@ -355,8 +356,11 @@ def run_pipeline() -> dict:
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source_generated_at": source["metadata"]["generated_at"],
+        "source_run_id": run_id(),
         "algorithm": "MultiFactorGaussianAndCategoricalNaiveBayes",
         "model_version": "v2.0-deep-naive-bayes",
+        "probability_calibrated": False,
+        "probability_meaning": "Skor relatif dari label aturan, belum terkalibrasi pada kejadian stokout nyata",
         "features_evaluated": MultiFactorNaiveBayes.FEATURE_NAMES,
         "summary": summary,
         "regional_rankings": regional_rankings,
@@ -367,7 +371,7 @@ def run_pipeline() -> dict:
         json.dump(payload, f, indent=2, ensure_ascii=False)
     private_path = ITEM_RISKS_JSON.with_suffix(".json.tmp")
     try:
-        private_path.write_text(json.dumps({"source_generated_at": payload["source_generated_at"],
+        private_path.write_text(json.dumps({"source_generated_at": payload["source_generated_at"], "source_run_id": run_id(),
                                             "items": item_results}, ensure_ascii=False), encoding="utf-8")
         private_path.replace(ITEM_RISKS_JSON)
     finally:

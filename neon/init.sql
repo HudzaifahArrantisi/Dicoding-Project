@@ -11,7 +11,7 @@ create extension if not exists "pgcrypto";
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'user_role') then
-    create type user_role as enum ('admin', 'mitra');
+    create type user_role as enum ('admin', 'mitra', 'data_science', 'ai_engineer');
   end if;
 
   if not exists (select 1 from pg_type where typname = 'partner_type') then
@@ -35,6 +35,8 @@ begin
     create type stock_source as enum ('manual_update', 'order_received', 'adjustment');
   end if;
 end $$;
+alter type user_role add value if not exists 'data_science';
+alter type user_role add value if not exists 'ai_engineer';
 
 -- 3. STRUKTUR TABEL SISTEM
 
@@ -86,8 +88,34 @@ create table if not exists users (
   partner_id uuid references partners(id) on delete set null,
   full_name text not null,
   created_at timestamptz not null default now(),
-  constraint mitra_user_needs_partner check (role = 'admin' or partner_id is not null)
+  constraint mitra_user_needs_partner check (role <> 'mitra' or partner_id is not null),
+  constraint team_user_has_no_partner check (role = 'mitra' or partner_id is null)
 );
+alter table users drop constraint if exists mitra_user_needs_partner;
+alter table users add constraint mitra_user_needs_partner check (role <> 'mitra' or partner_id is not null);
+alter table users drop constraint if exists team_user_has_no_partner;
+alter table users add constraint team_user_has_no_partner check (role = 'mitra' or partner_id is null);
+
+create table if not exists analysis_runs (
+  id uuid primary key,
+  start_date date not null,
+  end_date date not null,
+  status text not null check (status in ('creating', 'draft', 'approved', 'rejected', 'processing', 'failed', 'published')),
+  manifest jsonb,
+  created_by uuid references users(id) on delete set null,
+  approved_by uuid references users(id) on delete set null,
+  processed_by uuid references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  approved_at timestamptz,
+  published_at timestamptz,
+  error text,
+  current_step text,
+  steps jsonb not null default '[]'::jsonb,
+  is_active boolean not null default false,
+  constraint analysis_run_dates check (start_date <= end_date)
+);
+create unique index if not exists analysis_runs_one_active_idx on analysis_runs (is_active) where is_active;
+create index if not exists analysis_runs_created_idx on analysis_runs (created_at desc);
 
 -- Kolom & index username jika tabel sudah ada sebelumnya
 alter table users add column if not exists username text;
