@@ -8,7 +8,7 @@ export const Route = createFileRoute('/login')({ component: LoginPage })
 
 const DEMO_ACCOUNTS = [
   { label: 'Admin Pusat', username: 'admin', password: 'password123' },
-  { label: 'Kafe Sejuk', username: 'mitra1', password: 'password123' },
+  { label: 'Kopken jeruk', username: 'mitra1', password: 'password123' },
   { label: 'Hotel Aruna', username: 'mitra2', password: 'password123' },
 ] as const
 
