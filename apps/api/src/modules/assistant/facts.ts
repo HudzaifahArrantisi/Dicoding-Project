@@ -1,12 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
-
-const root = resolve(import.meta.dir, "../../../../../");
-const factsPath = resolve(root, "ai/data/mainbrain/context_embeddings/weekly_operational_facts.json");
-const modelPath = process.env.DAISUKI_MODEL_PATH || resolve(root, "ai/data/mainbrain/models/daisuki.pkl");
+import { activeArtifact, activeRunId } from "../../lib/analysis-artifacts";
 
 export interface WeeklyFacts {
-  metadata: { generated_at: string; period_days: number; model_version: string; source_generated_at?: string; regional_generated_at?: string };
+  metadata: { generated_at: string; period_days: number; model_version: string; start_date?: string; end_date?: string; source_run_id?: string; source_generated_at?: string; regional_generated_at?: string };
   central_warehouse: { total_stock_units: number; products: Array<{ id: string; name: string; sku: string; central_stock: number; category: string }> };
   network_sales: {
     total_sold_7d: number; total_sold_prev_7d: number; sales_growth_percentage: number | null;
@@ -22,7 +18,7 @@ export interface WeeklyFacts {
 
 export async function loadWeeklyFacts(): Promise<WeeklyFacts | null> {
   try {
-    const value: unknown = JSON.parse(await readFile(factsPath, "utf8"));
+    const value: unknown = JSON.parse(await readFile(activeArtifact("facts"), "utf8"));
     if (!value || typeof value !== "object") throw new Error("Snapshot fakta bukan objek");
     const facts = value as WeeklyFacts;
     if (!facts.metadata?.generated_at || !Number.isFinite(Date.parse(facts.metadata.generated_at)) ||
@@ -39,7 +35,7 @@ export async function loadWeeklyFacts(): Promise<WeeklyFacts | null> {
 
 export async function getModelSyncStatus(facts: WeeklyFacts | null) {
   try {
-    const model = await stat(modelPath);
+    const model = await stat(activeRunId() ? activeArtifact("model") : process.env.DAISUKI_MODEL_PATH || activeArtifact("model"));
     return { trained_at: model.mtime.toISOString(), synchronized: Boolean(facts && model.mtimeMs >= Date.parse(facts.metadata.generated_at)) };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { trained_at: null, synchronized: false };

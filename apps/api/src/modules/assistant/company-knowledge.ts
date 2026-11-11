@@ -1,16 +1,20 @@
 import { readFile, readdir } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { getStopwords, matchSopSelection, matchesWordPack, matchesWordPattern } from "./word-loader";
 import { assistantCopy } from "./assistant-copy";
 
 const dataDir = resolve(import.meta.dir, "../../../../../ai/data/mainbrain");
 const mainbrainDir = resolve(dataDir, "context_embeddings");
 const companyFile = resolve(dataDir, "corporate_knowledge/company_knowledge.json");
-type RagPolicy = { approved_sources: string[]; max_documents: number; max_chars_per_document: number; max_excerpts: number; blocked_content_patterns: string[] };
+type RagPolicy = { version: string; approved_sources: string[]; max_documents: number; max_chars_per_document: number; max_excerpts: number; blocked_content_patterns: string[] };
 const ragPolicy = JSON.parse(readFileSync(resolve(dataDir, "corporate_knowledge/rag_policy.json"), "utf8")) as RagPolicy;
 const approvedSources = new Set(ragPolicy.approved_sources.filter((name) => name.endsWith(".public.md")));
 const blockedContent = ragPolicy.blocked_content_patterns.map((pattern) => new RegExp(pattern, "i"));
+const retrievalAliases = JSON.parse(readFileSync(resolve(dataDir, "../mega_data_word/dictionary/retrieval_aliases.json"), "utf8")) as {
+  version: string; aliases: Record<string, string[]>;
+};
 export function filterRagDocuments(files: Array<{ name: string; content: string }>): Array<{ name: string; content: string }> {
   return files.filter((file) => approvedSources.has(file.name) && !blockedContent.some((pattern) => pattern.test(file.content)));
 }
@@ -28,7 +32,8 @@ type Sop = { title: string; steps: SopStep[]; important_notes?: string[] };
 export type CompanyKnowledge = {
   company: Record<string, unknown> | null;
   sop: Sop | null;
-  documents: Array<{ source: string; excerpt: string }>;
+  documents: Array<{ source: string; version: string; excerpt: string }>;
+  policyVersion?: string;
 };
 
 export function knowledgeIntent(message: string, previousIntent: string | null): "company" | "sop" | null {
@@ -54,7 +59,7 @@ function selectSop(raw: unknown, message: string): Sop | null {
   return { title: source.title, steps: source.steps.filter((step) => Number.isInteger(step.step_number) && typeof step.action === "string").slice(0, 8), important_notes: source.important_notes?.filter((note) => !matchesWordPattern("intent/sop", "excluded_note_patterns", note)).slice(0, 3) };
 }
 
-type IndexedExcerpt = { source: string; excerpt: string };
+type IndexedExcerpt = { source: string; version: string; excerpt: string };
 type MainbrainIndex = { excerpts: IndexedExcerpt[]; terms: Map<string, Map<number, number>> };
 
 function words(text: string): string[] {
@@ -65,9 +70,10 @@ function indexMainbrain(files: Array<{ name: string; content: string }>): Mainbr
   const excerpts: IndexedExcerpt[] = [];
   const terms = new Map<string, Map<number, number>>();
   for (const file of files.filter((item) => item.name.endsWith(".public.md"))) {
+    const version = createHash("sha256").update(file.content).digest("hex").slice(0, 12);
     for (const part of file.content.split(/\n\s*\n/).filter((item) => item.length >= 40)) {
       const excerpt = part.slice(0, 1200);
-      const index = excerpts.push({ source: file.name, excerpt }) - 1;
+      const index = excerpts.push({ source: file.name, version, excerpt }) - 1;
       for (const word of new Set(words(excerpt))) {
         const postings = terms.get(word) ?? new Map<number, number>();
         postings.set(index, (postings.get(index) ?? 0) + 1);
@@ -80,7 +86,9 @@ function indexMainbrain(files: Array<{ name: string; content: string }>): Mainbr
 
 function searchMainbrain(query: string, index: MainbrainIndex): IndexedExcerpt[] {
   const scores = new Map<number, number>();
-  for (const word of new Set(words(query))) {
+  const terms = new Set(words(query));
+  for (const term of [...terms]) for (const alias of retrievalAliases.aliases[term] ?? []) terms.add(alias);
+  for (const word of terms) {
     for (const [id, weight] of index.terms.get(word) ?? []) scores.set(id, (scores.get(id) ?? 0) + weight);
   }
   return [...scores].sort((a, b) => b[1] - a[1]).slice(0, ragPolicy.max_excerpts).map(([id]) => index.excerpts[id]);
@@ -97,6 +105,7 @@ export async function loadCompanyKnowledge(message: string, intent: "company" | 
     company: intent === "company" ? cleanProfile(raw.company_profile) : null,
     sop: intent === "sop" ? selectSop(raw.sop_procedures, message) : null,
     documents,
+    policyVersion: ragPolicy.version,
   };
 }
 

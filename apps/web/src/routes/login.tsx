@@ -23,7 +23,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      void navigate({ to: user.role === 'admin' ? '/admin' : '/mitra' })
+      void navigate({ to: user.role === 'admin' ? '/admin' : user.role === 'mitra' ? '/mitra' : '/analysis' })
     }
   }, [isLoading, navigate, user])
 
@@ -38,7 +38,7 @@ function LoginPage() {
       return
     }
 
-    await navigate({ to: result.role === 'admin' ? '/admin' : '/mitra' })
+    await navigate({ to: result.role === 'admin' ? '/admin' : result.role === 'mitra' ? '/mitra' : '/analysis' })
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

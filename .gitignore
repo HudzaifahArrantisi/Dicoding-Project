@@ -26,6 +26,13 @@ data-science/.env
 ai/.env
 ai/data/mainbrain/context_embeddings/market_hotspot_digest.json
 ai/data/mainbrain/context_embeddings/regional_item_risks.json
+ai/data/mainbrain/context_embeddings/regional_stockout_insights.json
+ai/data/mainbrain/context_embeddings/weekly_operational_facts.json
+ai/data/mainbrain/context_embeddings/regional_stockout_insights.md
+ai/data/mainbrain/context_embeddings/weekly_operational_facts.md
+ai/data/mainbrain/context_embeddings/CV-Hudzaifah_Ar-Rantisi.md
+ai/data/private/
+data-science/reports/runs/
 
 # Uploads directory
 apps/api/uploads/*

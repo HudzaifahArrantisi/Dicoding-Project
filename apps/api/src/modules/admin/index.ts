@@ -1,8 +1,8 @@
-import { getWeeklyPipelineStatus, startWeeklyPipeline } from "../../lib/weekly-pipeline";
+import { getWeeklyPipelineStatus } from "../../lib/weekly-pipeline";
+import { activeArtifact } from "../../lib/analysis-artifacts";
 import { loadWeeklyAnalyticsReport } from "../../lib/weekly-analytics-report";
 import { getModelSyncStatus, loadWeeklyFacts } from "../assistant/facts";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { Elysia, t } from "elysia";
 import { desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, sql as postgres } from "../../db/client";
@@ -712,13 +712,13 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       return { error: "Forbidden: Admin only" };
     }
 
-    const [analytics, weeklyFacts, report, model] = await Promise.all([
-      computeCompanyAiAnalytics(), loadWeeklyFacts(), loadWeeklyAnalyticsReport(), loadRegionalModel(),
+    const [analytics, weeklyFacts, report, model, evaluation] = await Promise.all([
+      computeCompanyAiAnalytics(), loadWeeklyFacts(), loadWeeklyAnalyticsReport(), loadRegionalModel(), loadModelEvaluation(),
     ]);
     const modelSync = await getModelSyncStatus(weeklyFacts);
     if (!report || weeklyFacts?.metadata.source_generated_at !== report.metadata.generated_at ||
       model?.source_generated_at !== report.metadata.generated_at) {
-      return { data: { ...analytics, weekly_facts: weeklyFacts, model_sync: modelSync } };
+      return { data: { ...analytics, weekly_facts: weeklyFacts, model_sync: modelSync, model_evaluation: evaluation } };
     }
     const modelRegions = new Map(model?.regional_rankings.map((region) =>
       [`${region.province_name}\u0000${region.regency_name}`, region] as const) ?? []);
@@ -762,7 +762,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       reason: "Perhitungan Data Science dari laporan mingguan",
     })).sort((a, b) => b.weekly_consumption - a.weekly_consumption);
     return { data: { ...analytics, fast_moving_products: fastMoving,
-      regional_activity: regionalActivity, weekly_facts: weeklyFacts, model_sync: modelSync } };
+      regional_activity: regionalActivity, weekly_facts: weeklyFacts, model_sync: modelSync, model_evaluation: evaluation } };
   })
   .get("/ai-insights/run", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
@@ -787,8 +787,8 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       return { error: "Forbidden: Admin only" };
     }
 
-    set.status = 202;
-    return startWeeklyPipeline();
+    set.status = 409;
+    return { error: "Gunakan alur laporan Data Science di /analysis/runs" };
   });
 
 type RegionalModel = {
@@ -826,7 +826,7 @@ type RegionalModel = {
 };
 
 async function loadRegionalModel(): Promise<RegionalModel | null> {
-  const path = resolve(import.meta.dir, "../../../../../ai/data/mainbrain/context_embeddings/regional_stockout_insights.json");
+  const path = activeArtifact("regional");
   try {
     const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
     if (!parsed || typeof parsed !== "object" || !("regional_rankings" in parsed) ||
@@ -834,6 +834,15 @@ async function loadRegionalModel(): Promise<RegionalModel | null> {
       throw new Error("Format hasil model wilayah tidak valid");
     }
     return parsed as RegionalModel;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function loadModelEvaluation(): Promise<{ source_run_id: string; calibrated: boolean; decision: string; evaluation_samples: number; evaluation_events: number } | null> {
+  try {
+    return JSON.parse(await readFile(activeArtifact("evaluation"), "utf8"));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;

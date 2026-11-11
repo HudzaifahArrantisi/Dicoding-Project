@@ -1,4 +1,4 @@
-# AI Engineering — Daisuki Inventory
+﻿# AI Engineering â€” Daisuki Inventory
 
 ## 1. Tujuan
 Menjalankan hasil model Data Science secara otomatis dan menyediakan fitur berbasis AI:
@@ -37,8 +37,8 @@ Berikut adalah daftar pustaka (*libraries*) yang wajib diinstal beserta fungsi d
 | `matplotlib` | `>=3.7.0` | Membuat grafik dari snapshot analitik pada skrip `colab/`. |
 | `psycopg[binary]` | `>=3.1.0` | Driver PostgreSQL resmi (Neon DB) untuk menarik data riil (`stock_logs`, `partner_stocks`, `orders`) langsung dari server database. |
 | `python-dotenv` | `>=1.0.0` | Memuat variabel konfigurasi dan kredensial sensitif (`DATABASE_URL`, `LLM_API_KEY`) dari berkas `.env` lokal secara aman. |
-| `pypdf` | `>=3.17.0` | Universal Document Ingestion — mengekstrak teks dokumen PDF (seperti `CV-Hudzaifah_Ar-Rantisi.pdf`, laporan, dsb.) secara otomatis menjadi berkas Markdown di `ai/data/mainbrain/context_embeddings/`. |
-| `python-docx` | `>=1.0.0` | Universal Document Ingestion — membaca dan mengonversi berkas dokumen Microsoft Word (`.docx`) menjadi Markdown terstruktur untuk otak RAG. |
+| `pypdf` | `>=3.17.0` | Universal Document Ingestion â€” mengekstrak teks dokumen PDF (seperti `CV-Hudzaifah_Ar-Rantisi.pdf`, laporan, dsb.) secara otomatis menjadi berkas Markdown di `ai/data/mainbrain/context_embeddings/`. |
+| `python-docx` | `>=1.0.0` | Universal Document Ingestion â€” membaca dan mengonversi berkas dokumen Microsoft Word (`.docx`) menjadi Markdown terstruktur untuk otak RAG. |
 | `httpx` | `>=0.25.0` | Klien HTTP asinkron/sinkron berkecepatan tinggi untuk komunikasi dengan LLM lokal via 9Router (`localhost:20128`) dan webhook eksternal. |
 | `python-telegram-bot` | `>=20.0` | Integrasi bot percakapan Telegram sebagai saluran alternatif pelaporan sisa stok cabang secara mobile. |
 
@@ -137,60 +137,39 @@ Model `.pkl` menyimpan classifier intent dan risiko; dokumen RAG perusahaan teta
 - Modul pembuatan ringkasan performa dan kebutuhan inventaris mingguan.
 - Dokumentasi hasil pengujian dan akurasi di folder `evals/`.
 
-## 9. Pipeline Rekomendasi Stok
+## 9. Alur Mingguan Data Science → AI → Dashboard
 
-Setelah Data Science membuat laporan di `data-science/reports/`, jalankan dari root repo:
+1. Admin membuat akun `data_science` dan `ai_engineer` melalui halaman `/analysis`.
+2. Data Science masuk sebagai role tersebut, memilih tanggal, lalu menekan **Buat laporan**. Server menjalankan agregator secara baca-saja dan menyimpan JSON, CSV, Markdown, serta `manifest.json` dengan hash SHA-256 di `data-science/reports/runs/<run_id>/`. Run yang sudah ada tidak ditimpa.
+3. Admin meninjau periode, jumlah baris, dan produk di `/analysis`, lalu menyetujui atau menolak.
+4. AI Engineer menekan **Proses laporan** pada run yang disetujui. Job risiko, evaluasi historis, alokasi draft, fakta dashboard, training `daisuki.pkl`, grafik, dan validasi berjalan berurutan. Artefak tahap berada di `ai/data/private/runs/<run_id>/`.
+5. Setelah semua valid, API mengaktifkan run, menulis rekomendasi dengan stok pusat terkini, dan memuat ulang worker model chatbot. Dashboard dan chatbot membaca versi aktif yang sama. Admin dapat mengaktifkan kembali run terbit sebelumnya di `/analysis`.
+
+Status, langkah, kesalahan, waktu publikasi, dan pelaku disimpan di PostgreSQL `analysis_runs` serta `audit_logs`. Jadwal Senin 05.00 WIB hanya membuat draft mingguan; pengingat harian 09.00 WIB muncul jika draft atau run yang disetujui belum dilanjutkan. Proses yang terputus saat API dimulai ulang ditandai gagal agar tidak terlihat terus berjalan.
+
+**CLI manual untuk verifikasi run** (dari root repo, pakai Python pada `ai/.venv`):
 
 ```powershell
+$env:DAISUKI_ANALYSIS_RUN_ID='<run_id-yang-disetujui>'
 python ai/jobs/regional_stockout_naive_bayes.py
+python ai/jobs/evaluate_stockout.py
 python ai/jobs/smart_allocation.py
 python ai/jobs/weekly_facts_aggregator.py
 python ai/retraining/train.py
+python ai/retraining/chart_data.py
+python ai/jobs/validate_stage.py
 ```
 
-Job pertama menulis ringkasan zona wilayah ke `ai/data/mainbrain/context_embeddings/regional_stockout_insights.json` dan skor lengkap per mitra-produk ke `regional_item_risks.json` yang diabaikan Git. Job kedua menggunakan koneksi database hanya untuk mengecek stok pusat terkini dan menyimpan rekomendasi/alert. Fakta mingguan untuk dashboard dan RAG ditulis oleh job ketiga; API chatbot hanya menerima agregat katalog yang aman, bukan daftar mitra lain.
+CLI tersebut hanya menyiapkan draft privat. Publikasi rekomendasi dan pergantian run aktif dilakukan API melalui tombol **Proses laporan**, setelah validasi lengkap. Jangan menjalankan `smart_allocation.py --publish` secara manual karena melewati kontrol versi run.
 
-## 10. Aturan Kerja AI Workspace
-- Jangan pernah meng-commit file `.env`, API key, atau token ke repositori git.
-- Semua aset AI, termasuk model lokal, referensi mentah, dan snapshot analitik, berada di `ai/data/`. Model `.pkl` dan snapshot privat diabaikan oleh Git; jangan memuat model biner dari sumber yang tidak tepercaya.
+## 10. Kebenaran Model dan RAG
 
-## 11. Alur Mingguan Data Science ke AI dan Chatbot
+`daisuki.pkl` melatih classifier intent dari `ai/data/mega_data_word/intent/` dan classifier risiko dari CSV run yang dipilih. File itu **tidak menyimpan seluruh dokumen perusahaan** dan tidak melakukan fine tuning LLM 9Router. Dokumen profil/SOP yang ditinjau disimpan sebagai `*.public.md`, harus terdaftar di `rag_policy.json`, lalu diambil saat pertanyaan masuk. Alias pencarian berada di `ai/data/mega_data_word/dictionary/retrieval_aliases.json`; pola keamanan dan intent dibaca dari kamus versi yang sama saat API menyala. Restart API untuk memuat perubahan kamus atau dokumen publik.
 
-```mermaid
-flowchart LR
-  A[PostgreSQL: stok, log, pesanan] --> B[Data Science: agregator mingguan]
-  B --> C[data-science/reports: JSON, CSV, Markdown]
-  C --> D[AI: Naive Bayes risiko wilayah]
-  D --> E[AI: rekomendasi dan fakta mingguan]
-  C --> F[AI: training intent dan risiko daisuki.pkl]
-  C --> G[AI: deret grafik konsumsi]
-  E --> H[Dashboard Admin]
-  G --> H
-  E --> I[Chatbot: hanya agregat yang disaring]
-  F --> I
-  J[Dokumen publik + fakta cabang dari PostgreSQL] --> I
-  K[Kamus intent dan guardrail] --> I
-  I --> L[LLM 9Router, validasi jawaban, fallback lokal]
-```
+Fakta stok, PO, dan profil cabang diambil dari PostgreSQL sesuai JWT mitra yang login. Ringkasan wilayah hanya masuk prompt setelah disaring; dokumen privat dan daftar mitra lain tidak masuk RAG. Guardrail berjalan sebelum dan sesudah 9Router. Jika 9Router gagal, chatbot memakai balasan lokal.
 
-**Pembagian kerja tiap minggu:**
+`model_evaluation.json` memakai log historis dengan label stok mencapai nol dalam tujuh hari sebelum penerimaan. Data dipisah menurut waktu. Bila contoh atau kejadian nyata belum cukup, laporan menandai `insufficient_evidence` dan `calibrated: false`; prioritas pasokan tetap memakai aturan stok, bukan probabilitas model. Skor Naive Bayes tetap ditampilkan sebagai estimasi eksploratif. Rekomendasi tidak membuat PO otomatis.
 
-1. **Data Science** menjalankan [agregator mingguan](../data-science/README.md#10-serah-terima-mingguan-ke-ai-engineer), memeriksa periode serta empat produk resmi, lalu menyerahkan tiga artefak di `data-science/reports/`. Ketiganya berasal dari satu eksekusi; jangan mencampur JSON dan CSV dari minggu berbeda.
-2. **AI Engineer** menjalankan job berurutan dari root repositori:
+## 11. Penyimpanan dan Setup
 
-   ```powershell
-   python ai/jobs/regional_stockout_naive_bayes.py
-   python ai/jobs/smart_allocation.py
-   python ai/jobs/weekly_facts_aggregator.py
-   python ai/retraining/train.py
-   python ai/retraining/chart_data.py
-   ```
-
-   Job pertama membaca `risk_records` dari JSON dan menghitung probabilitas Gaussian/Categorical Naive Bayes serta zona `ZONA_HIJAU`, `ZONA_KUNING`, dan `ZONA_MERAH`. Job alokasi mengurutkan saran menurut skor itu, mengecek stok pusat terkini, lalu menulis `restock_recommendations`. Job fakta menggabungkan laporan dan skor ke `ai/data/mainbrain/context_embeddings/weekly_operational_facts.json`. Training membaca CSV yang berumur paling lama tujuh hari dan memperbarui `ai/data/mainbrain/models/daisuki.pkl`. Grafik mengambil deret konsumsi dari JSON laporan dan jumlah kelas risiko dari model.
-3. **Admin** membaca empat kartu AI Insights dan modal rincian dari fakta mingguan yang selaras dengan laporan. Grafik 14 hari tersedia pada status pipeline di tab Log & Data. Fakta operasional cabang untuk chatbot tetap diambil menurut mitra yang sedang login.
-
-**Pemakaian untuk chatbot:** `daisuki.pkl` berisi classifier intent dan risiko berbasis Multinomial Naive Bayes; model ini tidak menyimpan seluruh profil perusahaan sebagai pengetahuan percakapan. Profil dan SOP berasal dari `ai/data/mainbrain/corporate_knowledge/` serta cuplikan `*.public.md` yang terdaftar dalam `rag_policy.json`. Pengambilan cuplikan saat ini memakai indeks kata, belum embedding vektor. `ai/data/mega_data_word/` menyediakan frasa, alias, dan pola regex untuk normalisasi, intent, serta guardrail; memperbarui kamus bukan proses training risiko. Saat chat berlangsung, API menggabungkan sumber RAG yang disetujui dengan fakta PostgreSQL milik mitra yang login, lalu memeriksa permintaan dan jawaban LLM. Jika 9Router tidak tersedia, jawaban memakai fallback lokal.
-
-**Status tombol saat ini:** tombol **Perbarui saran** di AI Insights dan tombol analisis Python di Log & Data sama-sama memanggil `POST /admin/ai-insights/run`. Server menjalankan keenam langkah di atas mulai dari agregator Data Science dengan periode bawaan tujuh hari terakhir. Belum ada tombol tersendiri untuk role Data Science, persetujuan serah terima antar-role, atau jadwal otomatis setiap minggu. Untuk memproses periode khusus, jalankan CLI Data Science lalu lima job AI secara manual; menekan tombol Admin sesudahnya akan membuat ulang laporan untuk periode bawaan.
-
-File laporan per mitra dan `regional_item_risks.json` bersifat privat dan diabaikan Git. RAG mitra hanya memakai dokumen publik yang disetujui, agregat katalog yang telah disaring, dan fakta cabangnya sendiri; daftar serta angka cabang lain tidak masuk ke konteks chat.
+Jalankan `python -m venv .venv` lalu `pip install -r requirements.txt` dari folder `ai/`; untuk TS/JS gunakan Bun. Terapkan `neon/migrations/20261111_analysis_runs.sql` pada database yang sama dengan API sebelum membuka `/analysis`. Pada satu server, folder run privat harus berada di volume persisten. Deployment beberapa server memerlukan volume bersama atau object storage serta koordinasi worker; implementasi ini ditujukan untuk satu server API. Berkas `ai/data/private/` dan `data-science/reports/runs/` diabaikan Git dan wajib dicadangkan secara privat. Jangan memuat pickle dari sumber yang tidak tepercaya.

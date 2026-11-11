@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import os
+import shutil
+import uuid
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -269,6 +272,58 @@ def write_report(report: dict, cleaned: list[dict], destination: Path = REPORTS)
     os.replace(temp_csv, csv_path)
 
 
+def validate_handoff(report: dict, cleaned: list[dict]) -> None:
+    with CATALOG.open(encoding="utf-8") as source:
+        official = set(json.load(source)["official_products"])
+    metadata = report["metadata"]
+    start_day, end_day = date.fromisoformat(metadata["start_date"]), date.fromisoformat(metadata["end_date"])
+    if start_day > end_day or metadata["period_days"] != (end_day - start_day).days + 1:
+        raise ValueError("Tanggal atau jumlah hari laporan tidak konsisten")
+    names = {item["product_name"] for item in report["products"]}
+    if names != official or len(report["products"]) != 4:
+        raise ValueError("Laporan harus memuat tepat empat produk resmi")
+    pairs = {(item["partner_id"], item["product_id"]) for item in cleaned}
+    risk_pairs = {(item["partner_id"], item["product_id"]) for item in report["risk_records"]}
+    if len(pairs) != len(cleaned) or len(cleaned) != len(report["risk_records"]) or pairs != risk_pairs:
+        raise ValueError("Pasangan mitra-produk tidak unik atau jumlah baris tidak cocok")
+    total = sum(int(item["weekly_consumption"]) for item in cleaned)
+    if total != report["network_sales"]["total_sold_7d"] or total != sum(item["weekly_units"] for item in report["products"]):
+        raise ValueError("Total konsumsi JSON dan CSV tidak cocok")
+    for item in cleaned:
+        numeric = ("current_qty", "par_level", "weekly_consumption", "adu", "safety_stock", "rop",
+                   "days_of_cover", "prev_velocity", "critical_events", "zero_stock_events")
+        if item["product_name"] not in official or any(not math.isfinite(float(item[field])) or float(item[field]) < 0 for field in numeric):
+            raise ValueError("Produk atau angka CSV tidak valid")
+
+
+def write_immutable_run(report: dict, cleaned: list[dict], run_id: str, base: Path = REPORTS) -> Path:
+    canonical_id = str(uuid.UUID(run_id))
+    validate_handoff(report, cleaned)
+    runs = base / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    target = runs / canonical_id
+    if target.exists():
+        raise FileExistsError(f"Run {canonical_id} sudah ada")
+    temporary = runs / f".{canonical_id}.tmp"
+    if temporary.exists():
+        raise FileExistsError(f"Run {canonical_id} masih diproses")
+    try:
+        write_report(report, cleaned, temporary)
+        names = ("weekly_analytics_summary.json", "cleaned_inventory_summary.csv", "weekly_analytics_report.md")
+        hashes = {name: hashlib.sha256((temporary / name).read_bytes()).hexdigest() for name in names}
+        manifest = {"schema_version": 1, "run_id": canonical_id, "status": "draft",
+                    "start_date": report["metadata"]["start_date"], "end_date": report["metadata"]["end_date"],
+                    "timezone": "Asia/Jakarta", "generated_at": report["metadata"]["generated_at"],
+                    "partner_product_rows": len(cleaned), "product_count": len(report["products"]), "sha256": hashes}
+        (temporary / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(temporary, target)
+    except BaseException:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+        raise
+    return target
+
+
 def render_markdown(report: dict) -> str:
     meta = report["metadata"]
     lines = ["# Analisis mingguan Daisuki", "", f"Periode: {meta['start_date']} sampai {meta['end_date']}",
@@ -295,6 +350,7 @@ def run() -> dict:
     parser = argparse.ArgumentParser()
     parser.add_argument("--start-date", type=date.fromisoformat)
     parser.add_argument("--end-date", type=date.fromisoformat)
+    parser.add_argument("--run-id", type=str)
     args = parser.parse_args()
     today = datetime.now(JAKARTA).date()
     end_day = args.end_date or today
@@ -304,8 +360,14 @@ def run() -> dict:
     start = datetime.combine(start_day, time.min, JAKARTA)
     end = datetime.combine(end_day + timedelta(days=1), time.min, JAKARTA)
     report, cleaned = analyze(start, end, *fetch_rows(start, end))
-    write_report(report, cleaned)
-    print(f"Laporan Data Science: {len(cleaned)} pasangan mitra-produk; {REPORTS}")
+    if args.run_id:
+        report["metadata"]["source_run_id"] = str(uuid.UUID(args.run_id))
+        destination = write_immutable_run(report, cleaned, args.run_id)
+    else:
+        validate_handoff(report, cleaned)
+        write_report(report, cleaned)
+        destination = REPORTS
+    print(f"Laporan Data Science: {len(cleaned)} pasangan mitra-produk; {destination}")
     return report
 
 

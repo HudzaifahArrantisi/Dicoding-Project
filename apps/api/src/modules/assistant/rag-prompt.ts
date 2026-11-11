@@ -119,7 +119,7 @@ COMPANY_KNOWLEDGE:
 ${JSON.stringify({ profile: knowledge?.company ?? null, sop: knowledge?.sop ?? null })}
 
 MEMORI_MAINBRAIN_TEREKSTRAK:
-${JSON.stringify(knowledge?.documents ?? [])}`;
+${JSON.stringify({ policy_version: knowledge?.policyVersion ?? null, documents: knowledge?.documents ?? [] })}`;
 }
 
 function numericValues(value: unknown, result = new Set<string>()): Set<string> {

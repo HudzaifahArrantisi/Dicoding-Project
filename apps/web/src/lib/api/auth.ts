@@ -4,7 +4,7 @@ import type { RegionCodes } from '@/components/inventory/region-picker'
 export interface User {
   id: string
   email: string
-  role: 'admin' | 'mitra'
+  role: 'admin' | 'mitra' | 'data_science' | 'ai_engineer'
   partner_id: string | null
   partner_name?: string | null
   partner_pic_name?: string | null

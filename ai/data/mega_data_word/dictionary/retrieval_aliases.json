@@ -1,0 +1,17 @@
+{
+  "category": "dictionary",
+  "name": "retrieval_aliases",
+  "version": "1.0.0",
+  "aliases": {
+    "pindai": ["scan", "barcode"],
+    "memindai": ["scan", "barcode"],
+    "label": ["barcode", "resi"],
+    "penerimaan": ["kiriman", "resi"],
+    "pengisian": ["restock", "pasokan"],
+    "persediaan": ["stok", "buffer"],
+    "didirikan": ["berdiri", "pendiri"],
+    "perintis": ["pendiri"],
+    "pengembang": ["developer"],
+    "pencatatan": ["laporan", "stok"]
+  }
+}

@@ -10,9 +10,10 @@ import {
   numeric,
   bigserial,
   primaryKey,
+  date,
 } from "drizzle-orm/pg-core";
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "mitra"]);
+export const userRoleEnum = pgEnum("user_role", ["admin", "mitra", "data_science", "ai_engineer"]);
 export const partnerTypeEnum = pgEnum("partner_type", [
   "hotel",
   "restoran",
@@ -68,6 +69,24 @@ export const users = pgTable("users", {
   created_at: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+export const analysisRuns = pgTable("analysis_runs", {
+  id: uuid("id").primaryKey(),
+  start_date: date("start_date", { mode: "string" }).notNull(),
+  end_date: date("end_date", { mode: "string" }).notNull(),
+  status: text("status").notNull(),
+  manifest: jsonb("manifest"),
+  created_by: uuid("created_by").references(() => users.id),
+  approved_by: uuid("approved_by").references(() => users.id),
+  processed_by: uuid("processed_by").references(() => users.id),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  approved_at: timestamp("approved_at", { withTimezone: true }),
+  published_at: timestamp("published_at", { withTimezone: true }),
+  error: text("error"),
+  current_step: text("current_step"),
+  steps: jsonb("steps").notNull().default([]),
+  is_active: boolean("is_active").notNull().default(false),
 });
 
 export const authSessions = pgTable("auth_sessions", {

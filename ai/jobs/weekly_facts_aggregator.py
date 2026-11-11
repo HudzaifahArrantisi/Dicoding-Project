@@ -5,11 +5,12 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from run_context import source_file, stage_dir, run_id
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "data-science/reports/weekly_analytics_summary.json"
-REGIONAL = ROOT / "ai/data/mainbrain/context_embeddings/regional_stockout_insights.json"
-OUTPUT = ROOT / "ai/data/mainbrain/context_embeddings/weekly_operational_facts.json"
+SOURCE = source_file("weekly_analytics_summary.json")
+REGIONAL = stage_dir() / "regional_stockout_insights.json"
+OUTPUT = stage_dir() / "weekly_operational_facts.json"
 
 
 def percentage(numerator: int, denominator: int) -> float:
@@ -19,6 +20,8 @@ def percentage(numerator: int, denominator: int) -> float:
 def build_facts(source: dict, regional: dict) -> dict:
     if regional.get("source_generated_at") != source.get("metadata", {}).get("generated_at"):
         raise ValueError("Skor Naive Bayes tidak cocok dengan laporan Data Science terbaru")
+    if run_id() and regional.get("source_run_id") != run_id():
+        raise ValueError("Skor Naive Bayes berasal dari run lain")
     sales = source["network_sales"]
     sold, previous = sales["total_sold_7d"], sales["total_sold_prev_7d"]
     requested, approved = sales["requested_restock_units"], sales["approved_restock_units"]
@@ -43,6 +46,8 @@ def build_facts(source: dict, regional: dict) -> dict:
                          "recommended_action": item["recommended_action"]})
     return {
         "metadata": {"generated_at": datetime.now(timezone.utc).isoformat(), "period_days": days,
+                     "start_date": source["metadata"]["start_date"], "end_date": source["metadata"]["end_date"],
+                     "source_run_id": run_id(),
                      "model_version": regional["model_version"], "source_generated_at": source["metadata"]["generated_at"],
                      "regional_generated_at": regional["generated_at"]},
         "central_warehouse": {"total_stock_units": sum(p["central_stock"] for p in warehouse), "products": warehouse},

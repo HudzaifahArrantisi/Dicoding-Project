@@ -55,7 +55,7 @@ export function ProductSalesDetailModal({
               </span>
               <div className="min-w-0">
                 <Dialog.Title className="truncate font-display text-lg font-bold text-ink-900 sm:text-xl">
-                  Analisis 4 Produk Paling Laku
+                  Analisis Konsumsi 4 Produk
                 </Dialog.Title>
                 <Dialog.Description className="mt-0.5 text-xs text-muted">
                   Pangsa pasar dan perbandingan konsumsi 4 produk resmi Daisuki di seluruh mitra & wilayah.
@@ -79,8 +79,8 @@ export function ProductSalesDetailModal({
               <ThreeDPieChart
                 slices={pieSlices}
                 title="Pangsa Konsumsi 4 Produk Daisuki"
-                subtitle="Visualisasi proporsi penjualan per produk di seluruh jaringan cabang (7 hari terakhir)"
-                unitLabel="pcs terjual"
+                subtitle="Proporsi penurunan stok fisik yang dilaporkan cabang pada periode sumber"
+                unitLabel="pcs berkurang"
                 legendTitle="Daftar Produk"
                 donutOnly
               />

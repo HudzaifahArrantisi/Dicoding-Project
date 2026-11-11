@@ -18,7 +18,7 @@ function Home() {
     catch { setSeen(false) }
   }, [])
   if (isLoading || seen === null) return <main className="grid min-h-dvh place-items-center bg-paper text-muted" role="status">Memuat panduan...</main>
-  if (!tour && user) return <Navigate to={user.role === 'admin' ? '/admin' : '/mitra'} replace />
+  if (!tour && user) return <Navigate to={user.role === 'admin' ? '/admin' : user.role === 'mitra' ? '/mitra' : '/analysis'} replace />
   if (!tour && seen) return <Navigate to="/login" replace />
   return <OnboardingWalkthrough onFinish={() => {
     try { localStorage.setItem('daisuki_intro_seen', 'true') } catch { /* Penyimpanan dapat diblokir browser; navigasi tetap berjalan. */ }

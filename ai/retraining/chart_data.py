@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 from csv_handoff import INPUT, load_samples
 from filter import DaisukiFilter, MODEL_FILE
 
-REPORT = Path(__file__).resolve().parents[2] / "data-science/reports/weekly_analytics_summary.json"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jobs"))
+from run_context import run_id, source_file, stage_dir
+
+REPORT = source_file("weekly_analytics_summary.json")
 
 
 def load_daily_consumption() -> list[dict[str, int | str]]:
@@ -20,11 +24,11 @@ def load_daily_consumption() -> list[dict[str, int | str]]:
 
 
 def load_model_summary() -> dict[str, object]:
-    model_path = Path(os.environ.get("DAISUKI_MODEL_PATH") or MODEL_FILE)
+    model_path = stage_dir() / "daisuki.pkl" if run_id() else Path(os.environ.get("DAISUKI_MODEL_PATH") or MODEL_FILE)
     classifier = DaisukiFilter(model_path, model_key="risk")
     if not classifier.is_ready:
         return {"available": False, "sample_count": 0, "risk_counts": {}}
-    texts, _, _ = load_samples(INPUT)
+    texts, _, _ = load_samples(source_file("cleaned_inventory_summary.csv") if run_id() else INPUT)
     labels = classifier.predict(texts)
     counts = {"urgent_restock": 0, "regular_order": 0, "normal": 0}
     for label in labels:
@@ -34,4 +38,7 @@ def load_model_summary() -> dict[str, object]:
 
 
 if __name__ == "__main__":
-    print(json.dumps({"days": load_daily_consumption(), "model": load_model_summary()}, separators=(",", ":")))
+    result = {"days": load_daily_consumption(), "model": load_model_summary(), "source_run_id": run_id()}
+    if run_id():
+        (stage_dir() / "chart_data.json").write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    print(json.dumps(result, separators=(",", ":")))

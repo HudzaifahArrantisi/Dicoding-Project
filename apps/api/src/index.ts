@@ -15,11 +15,12 @@ import { ordersModule } from "./modules/orders";
 import { notificationsModule } from "./modules/notifications";
 import { adminNotificationModule } from "./modules/notifications/admin";
 import { adminModule } from "./modules/admin";
+import { analysisModule } from "./modules/analysis";
 import { regionModule } from "./modules/regions";
 import { assistantModule } from "./modules/assistant";
 import { warmMitraModelWorker } from "./modules/assistant/model";
 import { realtimeModule } from "./realtime";
-import { runWeeklyPipeline } from "./lib/weekly-pipeline";
+import { createScheduledAnalysisDraft, recoverInterruptedAnalysisRuns, remindPendingAnalysisRuns } from "./lib/analysis-runs";
 
 function serverErrorDetails(error: unknown): { name: string; code?: string; message: string } {
   let detail = error;
@@ -222,15 +223,26 @@ export const app = new Elysia()
   .use(notificationsModule)
   .use(adminNotificationModule)
   .use(adminModule)
+  .use(analysisModule)
   .use(regionModule)
   .use(assistantModule)
   .use(
     cron({
-      name: "weekly-demand-and-restock",
+      name: "weekly-analysis-draft",
       pattern: "0 5 * * 1",
       timezone: "Asia/Jakarta",
       run() {
-        return runWeeklyPipeline().catch((error) => console.error("[WEEKLY AI]", error));
+        return createScheduledAnalysisDraft().catch((error) => console.error("[WEEKLY DRAFT]", error));
+      },
+    }),
+  )
+  .use(
+    cron({
+      name: "analysis-pending-reminder",
+      pattern: "0 9 * * *",
+      timezone: "Asia/Jakarta",
+      run() {
+        return remindPendingAnalysisRuns().catch((error) => console.error("[ANALYSIS REMINDER]", error));
       },
     }),
   )
@@ -245,5 +257,6 @@ console.log(
 );
 
 warmMitraModelWorker();
+void recoverInterruptedAnalysisRuns().catch((error) => console.error("[ANALYSIS RECOVERY]", error));
 
 export type App = typeof app;

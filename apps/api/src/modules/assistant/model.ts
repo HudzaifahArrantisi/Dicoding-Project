@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ModelRecord } from "./context";
+import { activeArtifact, activeRunId } from "../../lib/analysis-artifacts";
 
 export interface ModelPrediction {
   product_id: string;
@@ -50,7 +51,7 @@ function createWorker() {
   const python = resolvePythonBinary();
   const processHandle = Bun.spawn([python, "-u", scriptPath], {
     cwd: retrainingDir,
-    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    env: { ...process.env, PYTHONUNBUFFERED: "1", DAISUKI_MODEL_PATH: activeRunId() ? activeArtifact("model") : process.env.DAISUKI_MODEL_PATH || activeArtifact("model") },
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
@@ -200,4 +201,10 @@ export function warmMitraModelWorker(): void {
 export function stopMitraModelWorker(): void {
   currentWorker?.stop();
   currentWorker = null;
+}
+
+export function reloadMitraModelWorker(): void {
+  stopMitraModelWorker();
+  lastWorkerFailureTime = 0;
+  warmMitraModelWorker();
 }
