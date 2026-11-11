@@ -162,6 +162,10 @@ daisuki-inventory/
 
 ## Catatan Perubahan Harian (Daily Changelog)
 
+### 2026-11-12
+- **Analisis seluruh mitra dan empat artefak kategori**: Data Science tidak lagi bergantung pada mitra yang memiliki log; query membentuk seluruh mitra aktif × produk resmi dan memberi nilai nol untuk periode tanpa laporan. Run menghasilkan empat JSON kategori untuk kartu produk, mitra, wilayah, dan disiplin pelaporan. Modal AI Insights menampilkan file kategori sebelum Admin melanjutkan analisis AI.
+- **Flow Admin akhir minggu untuk Data Science dan AI Insights**: Admin kini dapat membuat laporan Data Science langsung dari tab Log & Data, meninjau JSON/CSV/Markdown pada modal AI Insights, lalu melanjutkan pemrosesan AI dari file run yang sama. Progres job Naive Bayes, evaluasi, alokasi, training `daisuki.pkl`, grafik, dan validasi ditampilkan per langkah. API artifact preview dan otorisasi Admin untuk membuat/memproses run ditambahkan.
+
 ### 2026-11-11
 - **Implementasi Alur Run Data Science → AI → RAG**: Role tim dan halaman `/analysis` memisahkan pembuatan, persetujuan, pemrosesan, dan rollback laporan. Run privat berisi manifest SHA-256; job AI mengonsumsi run yang sama dan menerbitkan rekomendasi/model/fakta setelah validasi. Evaluasi historis menjaga skor Naive Bayes yang belum terkalibrasi tetap eksploratif. Snapshot per mitra dipindahkan ke direktori privat; retrieval RAG publik memakai alias parafrasa dan versi sumber. Jadwal mingguan membuat draft saja. Migrasi PostgreSQL berhasil dan run historis 424 baris lolos validasi tanpa publikasi.
 - **Rencana Penyempurnaan Pipeline Data Science, AI, dan RAG**: `docs/PLANNING_PENYEMPURNAAN_PIPELINE_DS_AI_RAG.md` mendefinisikan tahapan privasi, run Data Science yang disetujui, inferensi/training yang dapat diulang, evaluasi risiko, peningkatan RAG dan guardrail, serta jadwal dan rollback. README AI/Data Science ditautkan; implementasi ditunda.

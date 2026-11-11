@@ -1,9 +1,10 @@
 import { Elysia, t } from "elysia";
+import { readFile } from "node:fs/promises";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { analysisRuns, auditLogs, users } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
-import { activeRunId } from "../../lib/analysis-artifacts";
+import { activeRunId, dataScienceRunDir } from "../../lib/analysis-artifacts";
 import { approveAnalysisRun, createAnalysisDraft, listAnalysisRuns, processAnalysisRun, rollbackAnalysisRun } from "../../lib/analysis-runs";
 
 function validPeriod(start: string, end: string): boolean {
@@ -24,10 +25,38 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     if (user.role === "mitra") { set.status = 403; return { error: "Forbidden" }; }
     return { runs: await listAnalysisRuns(), active_run_id: activeRunId() };
   })
+  .get("/runs/:id/artifacts", async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role === "mitra") { set.status = 403; return { error: "Forbidden" }; }
+    const [run] = await db.select({ status: analysisRuns.status, manifest: analysisRuns.manifest })
+      .from(analysisRuns).where(eq(analysisRuns.id, params.id)).limit(1);
+    if (!run) { set.status = 404; return { error: "Run tidak ditemukan" }; }
+    const directory = dataScienceRunDir(params.id);
+    try {
+      const [json, csv, markdown, manifest, products, partners, regions, reporting] = await Promise.all([
+        readFile(`${directory}/weekly_analytics_summary.json`, "utf8"),
+        readFile(`${directory}/cleaned_inventory_summary.csv`, "utf8"),
+        readFile(`${directory}/weekly_analytics_report.md`, "utf8"),
+        readFile(`${directory}/manifest.json`, "utf8"),
+        readFile(`${directory}/category_products.json`, "utf8"),
+        readFile(`${directory}/category_partners.json`, "utf8"),
+        readFile(`${directory}/category_regions.json`, "utf8"),
+        readFile(`${directory}/category_reporting.json`, "utf8"),
+      ]);
+      return { status: run.status, manifest: JSON.parse(manifest), json: JSON.parse(json),
+        csv_preview: csv.split(/\r?\n/).slice(0, 16).join("\n"), markdown,
+        categories: { products: JSON.parse(products), partners: JSON.parse(partners),
+          regions: JSON.parse(regions), reporting: JSON.parse(reporting) } };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") { set.status = 404; return { error: "Artefak laporan belum tersedia" }; }
+      throw error;
+    }
+  }, { params: t.Object({ id: t.String({ format: "uuid" }) }) })
   .post("/runs", async ({ headers, body, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
-    if (user.role !== "data_science") { set.status = 403; return { error: "Hanya Data Science dapat membuat laporan" }; }
+    if (user.role !== "data_science" && user.role !== "admin") { set.status = 403; return { error: "Hanya Admin atau Data Science dapat membuat laporan" }; }
     if (!validPeriod(body.start_date, body.end_date)) {
       set.status = 422; return { error: "Periode harus tanggal valid, maksimal 31 hari, dan tidak boleh di masa depan" };
     }
@@ -57,9 +86,11 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
   .post("/runs/:id/process", async ({ headers, params, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
-    if (user.role !== "ai_engineer") { set.status = 403; return { error: "Hanya AI Engineer dapat memproses laporan" }; }
+    if (user.role !== "ai_engineer" && user.role !== "admin") { set.status = 403; return { error: "Hanya Admin atau AI Engineer dapat memproses laporan" }; }
     const [run] = await db.select({ status: analysisRuns.status }).from(analysisRuns).where(eq(analysisRuns.id, params.id)).limit(1);
-    if (run?.status !== "approved") { set.status = 409; return { error: "Run belum disetujui Admin" }; }
+    if (run?.status === "draft" && user.role === "admin") {
+      await approveAnalysisRun(params.id, user.userId);
+    } else if (run?.status !== "approved") { set.status = 409; return { error: "Run belum disetujui Admin" }; }
     processAnalysisRun(params.id, user.userId);
     set.status = 202;
     return { id: params.id, status: "processing" };

@@ -27,6 +27,12 @@ CSV_COLUMNS = ["partner_id", "partner_name", "partner_type", "province_name", "r
                "product_id", "product_name", "product_sku", "current_qty", "par_level",
                "weekly_consumption", "adu", "safety_stock", "rop", "days_of_cover",
                "is_critical", "prev_velocity", "critical_events", "zero_stock_events", "has_active_order"]
+CATEGORY_FILES = {
+    "products": "category_products.json",
+    "partners": "category_partners.json",
+    "regions": "category_regions.json",
+    "reporting": "category_reporting.json",
+}
 
 
 def database_url() -> str:
@@ -49,13 +55,14 @@ def fetch_rows(start: datetime, end: datetime) -> tuple[list[dict], list[dict], 
             cursor.execute("SET TRANSACTION READ ONLY")
             cursor.execute("SELECT id::text AS id, name, sku, central_stock FROM products WHERE is_active")
             products = cursor.fetchall()
-            cursor.execute("""SELECT ps.partner_id::text AS partner_id, p.name AS partner_name,
+            cursor.execute("""SELECT p.id::text AS partner_id, p.name AS partner_name,
                 p.type::text AS partner_type, coalesce(nullif(p.province_name, ''), 'Tidak diketahui') AS province_name,
                 coalesce(nullif(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
-                ps.product_id::text AS product_id, pr.name AS product_name, pr.sku AS product_sku,
-                ps.current_qty, ps.par_level, ps.updated_at
-                FROM partner_stocks ps JOIN partners p ON p.id=ps.partner_id AND p.is_active
-                JOIN products pr ON pr.id=ps.product_id AND pr.is_active""")
+                pr.id::text AS product_id, pr.name AS product_name, pr.sku AS product_sku,
+                coalesce(ps.current_qty, 0) AS current_qty, coalesce(ps.par_level, 0) AS par_level, ps.updated_at
+                FROM partners p CROSS JOIN products pr
+                LEFT JOIN partner_stocks ps ON ps.partner_id=p.id AND ps.product_id=pr.id
+                WHERE p.is_active AND pr.is_active""")
             stocks = cursor.fetchall()
             cursor.execute("""SELECT sl.partner_id::text AS partner_id, sl.product_id::text AS product_id,
                 sl.qty_before, sl.qty_after, sl.created_at
@@ -259,8 +266,17 @@ def write_report(report: dict, cleaned: list[dict], destination: Path = REPORTS)
     json_path = destination / "weekly_analytics_summary.json"
     csv_path = destination / "cleaned_inventory_summary.csv"
     md_path = destination / "weekly_analytics_report.md"
-    for path, content in ((json_path, json.dumps(report, ensure_ascii=False, indent=2)),
-                          (md_path, render_markdown(report))):
+    category_payloads = {
+        key: {"category": key, "generated_at": report["metadata"]["generated_at"],
+              "start_date": report["metadata"]["start_date"], "end_date": report["metadata"]["end_date"],
+              "items": report[key]}
+        for key in CATEGORY_FILES
+    }
+    files = [(json_path, json.dumps(report, ensure_ascii=False, indent=2)),
+             (md_path, render_markdown(report))]
+    files.extend((destination / filename, json.dumps(category_payloads[key], ensure_ascii=False, indent=2))
+                 for key, filename in CATEGORY_FILES.items())
+    for path, content in files:
         temp = path.with_suffix(path.suffix + ".tmp")
         temp.write_text(content + "\n", encoding="utf-8")
         os.replace(temp, path)
@@ -309,7 +325,7 @@ def write_immutable_run(report: dict, cleaned: list[dict], run_id: str, base: Pa
         raise FileExistsError(f"Run {canonical_id} masih diproses")
     try:
         write_report(report, cleaned, temporary)
-        names = ("weekly_analytics_summary.json", "cleaned_inventory_summary.csv", "weekly_analytics_report.md")
+        names = ("weekly_analytics_summary.json", "cleaned_inventory_summary.csv", "weekly_analytics_report.md", *CATEGORY_FILES.values())
         hashes = {name: hashlib.sha256((temporary / name).read_bytes()).hexdigest() for name in names}
         manifest = {"schema_version": 1, "run_id": canonical_id, "status": "draft",
                     "start_date": report["metadata"]["start_date"], "end_date": report["metadata"]["end_date"],

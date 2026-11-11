@@ -15,8 +15,21 @@ export interface AnalysisRun {
   steps: Array<{ label: string; status: 'running' | 'succeeded' | 'failed' }>
 }
 
+export interface AnalysisArtifacts {
+  status: AnalysisRun['status']
+  manifest: AnalysisRun['manifest'] & { run_id?: string; start_date?: string; end_date?: string; timezone?: string; generated_at?: string }
+  json: Record<string, unknown>
+  csv_preview: string
+  markdown: string
+  categories: Record<'products' | 'partners' | 'regions' | 'reporting', { category: string; items: unknown[] }>
+}
+
 export async function getAnalysisRuns() {
   return apiRequest<{ runs: AnalysisRun[]; active_run_id: string | null }>('/analysis/runs')
+}
+
+export async function getAnalysisArtifacts(id: string) {
+  return apiRequest<AnalysisArtifacts>(`/analysis/runs/${id}/artifacts`)
 }
 
 export async function createAnalysisRun(start_date: string, end_date: string) {

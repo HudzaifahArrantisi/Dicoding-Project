@@ -77,7 +77,7 @@ Output eksperimen ini tidak menjadi input tombol **Perbarui analisis**. Handoff 
 
 ## 10. Serah Terima Mingguan ke AI Engineer
 
-Masuk sebagai `data_science` lalu buka `/analysis`. Pilih rentang tanggal inklusif (maksimal 31 hari) dan tekan **Buat laporan**. API menjalankan `weekly_analytics_aggregator.py` dengan `--run-id`, memvalidasi empat produk resmi, pasangan mitra-produk unik, angka nonnegatif, dan kesesuaian total JSON/CSV. Hasil masuk ke `data-science/reports/runs/<run_id>/` bersama manifest berisi periode, zona waktu, jumlah baris, dan hash SHA-256 tiap artefak. Run tidak pernah ditimpa.
+Masuk sebagai `data_science` lalu buka `/analysis`, atau gunakan tombol **Perbarui analisis Data Science** di tab Log & Data Admin. Pilih rentang tanggal inklusif (maksimal 31 hari) dan buat laporan. API menjalankan `weekly_analytics_aggregator.py` dengan `--run-id`, memvalidasi empat produk resmi, seluruh mitra aktif (termasuk yang tidak memiliki log pada periode), pasangan mitra-produk unik, angka nonnegatif, dan kesesuaian total JSON/CSV. Hasil masuk ke `data-science/reports/runs/<run_id>/` bersama manifest berisi periode, zona waktu, jumlah baris, dan hash SHA-256 tiap artefak. Run tidak pernah ditimpa.
 
 Perintah CLI setara untuk analisis lokal dari root repositori:
 
@@ -85,6 +85,6 @@ Perintah CLI setara untuk analisis lokal dari root repositori:
 python data-science/src/weekly_analytics_aggregator.py --start-date 2026-11-02 --end-date 2026-11-08 --run-id <uuid-baru>
 ```
 
-CLI tidak membuat baris status PostgreSQL; gunakan tombol aplikasi untuk alur persetujuan dan publikasi. Admin meninjau draft dan menyetujuinya. AI Engineer kemudian memproses `run_id` yang sama tanpa menjalankan ulang agregator. File JSON/CSV dan Markdown dapat memuat identitas cabang, tetap privat, dan tidak menjadi dokumen RAG mitra. Jadwal Senin 05.00 WIB membuat draft otomatis untuk tujuh hari sebelumnya; persetujuan tetap manual.
+CLI tidak membuat baris status PostgreSQL; gunakan tombol aplikasi untuk alur persetujuan dan publikasi. Admin meninjau draft dan menyetujuinya. AI Engineer kemudian memproses `run_id` yang sama tanpa menjalankan ulang agregator. Selain laporan gabungan, run menghasilkan empat file kategori: `category_products.json`, `category_partners.json`, `category_regions.json`, dan `category_reporting.json`. Keempatnya menjadi sumber peringkat/grafik empat kartu AI Insights. File JSON/CSV dan Markdown dapat memuat identitas cabang, tetap privat, dan tidak menjadi dokumen RAG mitra. Jadwal Senin 05.00 WIB membuat draft otomatis untuk tujuh hari sebelumnya; persetujuan tetap manual.
 
 Ringkasan konsumsi berasal dari **penurunan laporan stok fisik**, bukan transaksi kasir. Stok pusat dan sisa stok cabang pada laporan adalah snapshot saat agregasi; rentang tanggal berlaku untuk konsumsi dan aktivitas log. Jika diperlukan rekonstruksi stok historis tepat pada akhir periode, tambahkan sumber event lengkap dan validasi terpisah sebelum mengklaim snapshot historis.
