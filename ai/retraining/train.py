@@ -16,7 +16,7 @@ import psycopg
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
-from source import build_intent_samples, build_training_samples, fetch_training_records
+from source import build_intent_samples
 from doc_loader import scan_and_generate_mainbrain
 from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, prepare_handoff
 
@@ -37,7 +37,7 @@ def train_pipeline(texts: list[str], labels: list[str], *, fit_prior: bool = Tru
         ("classifier", MultinomialNB(alpha=1.0, fit_prior=fit_prior)),
     ])
     model.fit(texts, labels)
-    LOGGER.info("Training selesai")
+    LOGGER.info("Training sudah selesesai ")
     return model
 
 
@@ -62,11 +62,10 @@ def run_retraining_loop() -> bool:
     try:
         csv_texts: list[str] = []
         csv_labels: list[str] = []
-        if is_fresh_handoff(CSV_HANDOFF):
-            csv_texts, csv_labels, product_count = prepare_handoff()
-            LOGGER.info("Data Science CSV: %d pasangan mitra-produk, %d produk; ringkasan privat disiapkan", len(csv_texts), product_count)
-        elif CSV_HANDOFF.is_file():
-            LOGGER.warning("CSV Data Science lebih dari 7 hari atau bertanggal masa depan; training risiko memakai PostgreSQL")
+        if not is_fresh_handoff(CSV_HANDOFF):
+            raise ValueError("CSV laporan Data Science belum ada atau sudah kedaluwarsa; jalankan agregator lebih dulu")
+        csv_texts, csv_labels, product_count = prepare_handoff()
+        LOGGER.info("Data Science CSV: %d pasangan mitra-produk, %d produk", len(csv_texts), product_count)
         LOGGER.info("Memulai pemindaian dokumen di ai/data/raw_references/...")
         mainbrain_stats = scan_and_generate_mainbrain()
         LOGGER.info(
@@ -77,13 +76,8 @@ def run_retraining_loop() -> bool:
         )
 
         # 2. Pipeline Klasifikasi Operasional Database & Intent
-        if csv_texts:
-            texts, labels = csv_texts, csv_labels
-            training_source = "data_science_csv"
-        else:
-            records = fetch_training_records()
-            texts, labels = build_training_samples(records)
-            training_source = "postgresql"
+        texts, labels = csv_texts, csv_labels
+        training_source = "data_science_csv"
         intent_texts, intent_labels = build_intent_samples()
         bundle: dict[str, Any] = {
             "intent": train_pipeline(intent_texts, intent_labels, fit_prior=False),

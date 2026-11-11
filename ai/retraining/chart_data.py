@@ -1,40 +1,22 @@
-"""Return dated stock consumption and current model risk counts for the admin chart."""
-
+"""Return the Data Science consumption series and current model classifications."""
 from __future__ import annotations
 
 import json
 import os
 from pathlib import Path
 
-import psycopg
-
+from csv_handoff import INPUT, load_samples
 from filter import DaisukiFilter, MODEL_FILE
-from source import build_training_samples, database_url, fetch_training_records
+
+REPORT = Path(__file__).resolve().parents[2] / "data-science/reports/weekly_analytics_summary.json"
 
 
 def load_daily_consumption() -> list[dict[str, int | str]]:
-    with psycopg.connect(database_url(), connect_timeout=10) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                WITH days AS (
-                  SELECT generate_series(
-                    (now() AT TIME ZONE 'Asia/Jakarta')::date - 13,
-                    (now() AT TIME ZONE 'Asia/Jakarta')::date,
-                    interval '1 day'
-                  )::date AS day
-                ), consumption AS (
-                  SELECT (created_at AT TIME ZONE 'Asia/Jakarta')::date AS day,
-                    SUM(qty_before - qty_after)::int AS units
-                  FROM stock_logs
-                  WHERE source = 'manual_update' AND qty_before > qty_after
-                    AND created_at >= now() - interval '15 days'
-                  GROUP BY 1
-                )
-                SELECT days.day::text, COALESCE(consumption.units, 0)::int
-                FROM days LEFT JOIN consumption ON consumption.day = days.day
-                ORDER BY days.day
-            """)
-            return [{"day": day, "units": units} for day, units in cursor.fetchall()]
+    report = json.loads(REPORT.read_text(encoding="utf-8"))
+    days = report.get("daily_consumption")
+    if not isinstance(days, list):
+        raise ValueError("Laporan Data Science belum memuat grafik konsumsi")
+    return days[-14:]
 
 
 def load_model_summary() -> dict[str, object]:
@@ -42,8 +24,7 @@ def load_model_summary() -> dict[str, object]:
     classifier = DaisukiFilter(model_path, model_key="risk")
     if not classifier.is_ready:
         return {"available": False, "sample_count": 0, "risk_counts": {}}
-    records = fetch_training_records()
-    texts, _ = build_training_samples(records)
+    texts, _, _ = load_samples(INPUT)
     labels = classifier.predict(texts)
     counts = {"urgent_restock": 0, "regular_order": 0, "normal": 0}
     for label in labels:

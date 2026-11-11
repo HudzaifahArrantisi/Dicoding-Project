@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { orderItems, orders, partners, products, stockLogs } from "../../db/schema";
-import { loadWeeklyFacts } from "./facts";
+import { loadWeeklyFacts, type WeeklyFacts } from "./facts";
 import { OFFICIAL_PRODUCTS, isOfficialProduct } from "./official-products";
 
 export interface ModelRecord {
@@ -114,7 +114,7 @@ export async function loadMitraContext(partnerId: string) {
     ...order,
     items: orderRows.filter((item) => item.order_id === order.id).map(({ product_name, qty_requested, qty_approved }) => ({ product_name, qty_requested, qty_approved })),
   }));
-  const filteredFacts = weeklyFacts ? {
+  const filteredFacts: WeeklyFacts | null = weeklyFacts ? {
     ...weeklyFacts,
     central_warehouse: {
       ...weeklyFacts.central_warehouse,
@@ -122,6 +122,9 @@ export async function loadMitraContext(partnerId: string) {
       total_stock_units: weeklyFacts.central_warehouse.products.filter((item) => isOfficialProduct(item.name)).reduce((total, item) => total + item.central_stock, 0),
     },
     top_selling_products: weeklyFacts.top_selling_products.filter((item) => isOfficialProduct(item.product_name)),
+    top_performers_partners: [],
+    top_log_partners: [],
+    regional_hotspots: [],
   } : null;
   return { stocks, partner, orders: ordersWithItems, logs: latestLogs, weeklyFacts: filteredFacts };
 }

@@ -43,7 +43,7 @@ def main() -> None:
         assert classifier.filter_by_label(texts, "urgent_restock") == [texts[0]]
         for result in results:
             print(f"{result['text'][:45]}... -> {result['predicted_label']} ({result['confidence']:.2%})")
-    print("Smoke test lulus. Training produksi memakai CSV handoff yang valid atau PostgreSQL.")
+    print("Smoke test lulus. Training produksi memakai CSV laporan Data Science yang valid.")
 
 
 if __name__ == "__main__":

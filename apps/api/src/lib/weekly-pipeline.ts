@@ -1,23 +1,16 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { publishInventoryChange } from "../realtime";
 
 const root = resolve(import.meta.dir, "../../../..");
-const handoffCsv = resolve(root, "ai/data/raw_references/csv/cleaned_inventory_summary.csv");
-function hasFreshHandoff(): boolean {
-  if (!existsSync(handoffCsv)) return false;
-  const age = Date.now() - statSync(handoffCsv).mtimeMs;
-  return age >= 0 && age <= 7 * 24 * 60 * 60 * 1000;
-}
 const python = process.env.DAISUKI_PYTHON_BIN || process.env.PYTHON_EXECUTABLE ||
   (existsSync(resolve(root, "ai/.venv/Scripts/python.exe")) ? resolve(root, "ai/.venv/Scripts/python.exe") :
   existsSync(resolve(root, "ai/.venv/bin/python")) ? resolve(root, "ai/.venv/bin/python") :
   process.platform === "win32" ? "python" : "python3");
 const jobs = [
-  { path: "data-science/src/weekly_demand.py", label: "Profil konsumsi mingguan" },
-  { path: "ai/jobs/weekly_restock_predictor.py", label: "Rekomendasi restock" },
-  { path: "ai/jobs/market_hotspot_analytics.py", label: "Analisis wilayah" },
+  { path: "data-science/src/weekly_analytics_aggregator.py", label: "Agregasi laporan Data Science" },
   { path: "ai/jobs/regional_stockout_naive_bayes.py", label: "Risiko wilayah" },
+  { path: "ai/jobs/smart_allocation.py", label: "Rekomendasi restock" },
   { path: "ai/jobs/weekly_facts_aggregator.py", label: "Ringkasan AI" },
   { path: "ai/retraining/train.py", label: "Pelatihan daisuki.pkl" },
   { path: "ai/retraining/chart_data.py", label: "Grafik konsumsi dan klasifikasi" },
@@ -62,7 +55,7 @@ export function runWeeklyPipeline(): Promise<void> {
   if (running) return running;
   pipelineStatus = {
     status: "running", started_at: new Date().toISOString(), finished_at: null,
-    training_source: hasFreshHandoff() ? "data_science_csv" : "postgresql",
+    training_source: "data_science_csv",
     current_step: null, steps: [], chart: null,
   };
   publishInventoryChange({ partnerId: null, topics: ["ai"] });

@@ -11,7 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-INPUT = DATA_DIR / "raw_references" / "csv" / "cleaned_inventory_summary.csv"
+INPUT = DATA_DIR.parents[1] / "data-science" / "reports" / "cleaned_inventory_summary.csv"
 OUTPUT = DATA_DIR / "raw_references" / "csv" / "ai_analysis_summary.csv"
 RULES = DATA_DIR / "mainbrain" / "corporate_knowledge" / "business_rules.json"
 REQUIRED = {"partner_id", "product_id", "product_name", "current_qty", "par_level", "weekly_consumption", "days_of_cover"}
