@@ -1,4 +1,5 @@
 import { getWeeklyPipelineStatus, startWeeklyPipeline } from "../../lib/weekly-pipeline";
+import { loadWeeklyAnalyticsReport } from "../../lib/weekly-analytics-report";
 import { getModelSyncStatus, loadWeeklyFacts } from "../assistant/facts";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -685,90 +686,20 @@ export const adminModule = new Elysia({ prefix: "/admin" })
   })
   .get("/weekly-summary", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
-    if (!user) {
-      set.status = 401;
-      return { error: "Unauthorized" };
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Forbidden: Admin only" }; }
+    const [report, facts] = await Promise.all([loadWeeklyAnalyticsReport(), loadWeeklyFacts()]);
+    if (!report || facts?.metadata.source_generated_at !== report.metadata.generated_at) {
+      set.status = 503;
+      return { error: "Laporan Data Science belum siap. Jalankan Perbarui Analisis." };
     }
-    if (user.role !== "admin") {
-      set.status = 403;
-      return { error: "Forbidden: Admin only" };
-    }
-
-    const [summaryRows, daily, partnerDaily] = await Promise.all([
-      db.execute<{
-        total_logs_this_week: number;
-        active_partners_count: number;
-        total_units_consumed: number;
-      }>(sql`
-        SELECT
-          COUNT(*)::int AS total_logs_this_week,
-          COUNT(DISTINCT partner_id)::int AS active_partners_count,
-          COALESCE(SUM(GREATEST(qty_before - qty_after, 0)), 0)::int AS total_units_consumed
-        FROM stock_logs
-        WHERE source = 'manual_update'
-          AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >=
-            (NOW() AT TIME ZONE 'Asia/Jakarta')::date - 6
-          AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <=
-            (NOW() AT TIME ZONE 'Asia/Jakarta')::date
-      `),
-      db.execute<{
-        day: string;
-        active_partners: number;
-        log_count: number;
-      }>(sql`
-        WITH days AS (
-          SELECT generate_series(
-            (NOW() AT TIME ZONE 'Asia/Jakarta')::date - 6,
-            (NOW() AT TIME ZONE 'Asia/Jakarta')::date,
-            INTERVAL '1 day'
-          )::date AS report_day
-        )
-        SELECT TO_CHAR(days.report_day, 'YYYY-MM-DD') AS day,
-          COUNT(DISTINCT logs.partner_id)::int AS active_partners,
-          COUNT(logs.id)::int AS log_count
-        FROM days
-        LEFT JOIN stock_logs logs
-          ON (logs.created_at AT TIME ZONE 'Asia/Jakarta')::date = days.report_day
-          AND logs.source = 'manual_update'
-        GROUP BY days.report_day ORDER BY days.report_day
-      `),
-      db.execute<{
-        day: string;
-        partner_id: string;
-        partner_name: string;
-        log_count: number;
-      }>(sql`
-        SELECT
-          TO_CHAR((sl.created_at AT TIME ZONE 'Asia/Jakarta')::date, 'YYYY-MM-DD') AS day,
-          p.id AS partner_id,
-          p.name AS partner_name,
-          COUNT(sl.id)::int AS log_count
-        FROM stock_logs sl
-        JOIN partners p ON p.id = sl.partner_id
-        WHERE p.is_active = true
-          AND sl.source = 'manual_update'
-          AND (sl.created_at AT TIME ZONE 'Asia/Jakarta')::date >=
-            (NOW() AT TIME ZONE 'Asia/Jakarta')::date - 6
-          AND (sl.created_at AT TIME ZONE 'Asia/Jakarta')::date <=
-            (NOW() AT TIME ZONE 'Asia/Jakarta')::date
-        GROUP BY (sl.created_at AT TIME ZONE 'Asia/Jakarta')::date, p.id, p.name
-        ORDER BY day, log_count DESC, p.name
-      `),
-    ]);
-    const [summary] = summaryRows;
-
-    return {
-      data: {
-        total_logs_this_week: Number(summary?.total_logs_this_week ?? 0),
-        active_partners_count: Number(summary?.active_partners_count ?? 0),
-        total_units_consumed: Number(summary?.total_units_consumed ?? 0),
-        daily_update_breakdown: daily,
-        partner_daily_log_breakdown: partnerDaily.map((row) => ({
-          ...row,
-          log_count: Number(row.log_count),
-        })),
-      },
-    };
+    return { data: {
+      total_logs_this_week: report.daily_reporting.reduce((total, day) => total + day.log_count, 0),
+      active_partners_count: report.partners.filter((partner) => partner.active_days > 0).length,
+      total_units_consumed: report.network_sales.total_sold_7d,
+      daily_update_breakdown: report.daily_reporting,
+      partner_daily_log_breakdown: report.partner_daily_log_breakdown,
+    } };
   })
   .get("/ai-insights", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
@@ -781,9 +712,57 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       return { error: "Forbidden: Admin only" };
     }
 
-    const [analytics, weeklyFacts] = await Promise.all([computeCompanyAiAnalytics(), loadWeeklyFacts()]);
+    const [analytics, weeklyFacts, report, model] = await Promise.all([
+      computeCompanyAiAnalytics(), loadWeeklyFacts(), loadWeeklyAnalyticsReport(), loadRegionalModel(),
+    ]);
     const modelSync = await getModelSyncStatus(weeklyFacts);
-    return { data: { ...analytics, weekly_facts: weeklyFacts, model_sync: modelSync } };
+    if (!report || weeklyFacts?.metadata.source_generated_at !== report.metadata.generated_at ||
+      model?.source_generated_at !== report.metadata.generated_at) {
+      return { data: { ...analytics, weekly_facts: weeklyFacts, model_sync: modelSync } };
+    }
+    const modelRegions = new Map(model?.regional_rankings.map((region) =>
+      [`${region.province_name}\u0000${region.regency_name}`, region] as const) ?? []);
+    const regionalActivity = {
+      period_days: report.metadata.period_days,
+      model_generated_at: model?.generated_at ?? null,
+      regions: report.regions.map((region) => {
+        const scored = modelRegions.get(`${region.province_name}\u0000${region.regency_name}`);
+        const partnersInRegion = report.partners.filter((partner) =>
+          partner.province_name === region.province_name && partner.regency_name === region.regency_name);
+        return {
+          province_name: region.province_name, regency_name: region.regency_name,
+          regional_zone: scored?.regional_zone ?? "BELUM_DIANALISIS",
+          recommended_action: scored?.recommended_action ?? null,
+          primary_risk_driver: scored?.primary_risk_driver ?? null,
+          peak_stockout_probability: scored?.peak_stockout_probability ?? 0,
+          average_stockout_probability: scored?.average_stockout_probability ?? 0,
+          critical_logs: partnersInRegion.reduce((total, p) => total + p.critical_frequency, 0),
+          stockout_logs: partnersInRegion.reduce((total, p) => total + p.stockout_events, 0),
+          restock_requests: region.restock_frequency,
+          partners: partnersInRegion.map((partner) => {
+            const risk = scored?.partners.find((item) => item.partner_id === partner.partner_id);
+            return { partner_id: partner.partner_id, partner_name: partner.partner_name,
+              critical_logs: partner.critical_frequency, stockout_logs: partner.stockout_events,
+              restock_requests: partner.restock_requests, weekly_units: partner.weekly_units,
+              zone: risk?.zone ?? "BELUM_DIANALISIS",
+              max_stockout_probability: risk?.max_stockout_probability ?? 0,
+              average_stockout_probability: risk?.average_stockout_probability ?? 0,
+              urgent_items: risk?.urgent_items ?? [], suggested_products: [] };
+          }),
+        };
+      }),
+    };
+    const fastMoving = report.risk_records.map((item) => ({
+      partner_id: item.partner_id, partner_name: item.partner_name, partner_type: item.partner_type,
+      product_id: item.product_id, product_name: item.product_name, product_sku: item.product_sku,
+      current_qty: item.current_qty, par_level: item.par_level,
+      weekly_consumption: item.units_7d, daily_velocity: item.daily_velocity,
+      critical_frequency: item.critical_events, turnover_rate: item.turnover_rate,
+      suggested_par_level: item.rop, par_delta: Math.max(0, item.rop - item.par_level),
+      reason: "Perhitungan Data Science dari laporan mingguan",
+    })).sort((a, b) => b.weekly_consumption - a.weekly_consumption);
+    return { data: { ...analytics, fast_moving_products: fastMoving,
+      regional_activity: regionalActivity, weekly_facts: weeklyFacts, model_sync: modelSync } };
   })
   .get("/ai-insights/run", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
@@ -814,6 +793,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
 
 type RegionalModel = {
   generated_at: string;
+  source_generated_at?: string;
   algorithm?: string;
   model_version?: string;
   regional_rankings: Array<{

@@ -2373,10 +2373,7 @@ function AIInsightsPanel({
           <p className="mt-2 text-xs text-muted">
             {lastAnalysis ? `Analisis ${formatDetailedDateTime(lastAnalysis)}` : 'Analisis belum tersedia'}
             <span className="mx-1.5" aria-hidden="true">·</span>
-            <span className={data?.model_sync?.synchronized ? 'text-ok-fg' : 'text-warn-fg'}>
-              daisuki.pkl {data?.model_sync?.synchronized ? 'sinkron' : 'belum sinkron'}
-            </span>
-          </p>
+         </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">

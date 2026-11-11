@@ -7,33 +7,19 @@ from __future__ import annotations
 
 import json
 import math
-import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-import psycopg
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_JSON = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings" / "regional_stockout_insights.json"
+ITEM_RISKS_JSON = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings" / "regional_item_risks.json"
+SOURCE_JSON = ROOT / "data-science" / "reports" / "weekly_analytics_summary.json"
 DATA_DIR = ROOT / "ai" / "data" / "mainbrain" / "context_embeddings"
-LEAD_TIME_DAYS = 6
+LEAD_TIME_DAYS = 7
 
 
-def get_database_url() -> str:
-    """Membaca DATABASE_URL dari file .env di ai/, root, atau apps/api/."""
-    candidates = [
-        ROOT / "ai" / ".env",
-        ROOT / ".env",
-        ROOT / "apps" / "api" / ".env",
-    ]
-    for env_path in candidates:
-        if env_path.exists():
-            for line in env_path.read_text(encoding="utf-8").splitlines():
-                key, sep, val = line.partition("=")
-                if sep and key.strip() == "DATABASE_URL":
-                    return val.strip().strip("'\"")
-    return os.getenv("DATABASE_URL", "")
 
 
 class MultiFactorNaiveBayes:
@@ -145,73 +131,14 @@ class MultiFactorNaiveBayes:
         return normalized, predicted_class, dominant_driver
 
 
-def fetch_comprehensive_records(database_url: str) -> list[dict]:
-    """Mengambil riwayat transaksi multi-dimensi per mitra dan produk."""
-    query = """
-    WITH recent_7d AS (
-        SELECT partner_id, product_id,
-            COALESCE(SUM(qty_before - qty_after), 0)::float / 7.0 AS adu_7d,
-            COALESCE(SUM(qty_before - qty_after), 0)::float AS units_7d
-        FROM stock_logs
-        WHERE source = 'manual_update'
-          AND qty_before > qty_after
-          AND created_at >= NOW() - INTERVAL '7 days'
-        GROUP BY partner_id, product_id
-    ),
-    historical_30d AS (
-        SELECT partner_id, product_id,
-            COALESCE(SUM(qty_before - qty_after), 0)::float / 23.0 AS adu_prev,
-            COUNT(CASE WHEN qty_after <= 10 THEN 1 END) AS crit_count,
-            COUNT(CASE WHEN qty_after = 0 THEN 1 END) AS zero_count
-        FROM stock_logs
-        WHERE source = 'manual_update'
-          AND qty_before > qty_after
-          AND created_at >= NOW() - INTERVAL '30 days'
-          AND created_at < NOW() - INTERVAL '7 days'
-        GROUP BY partner_id, product_id
-    ),
-    active_orders AS (
-        SELECT DISTINCT o.partner_id, oi.product_id
-        FROM orders o
-        JOIN order_items oi ON oi.order_id = o.id
-        WHERE o.status IN ('diproses', 'disetujui', 'dalam_pengiriman')
-    )
-    SELECT
-        p.id::text AS partner_id,
-        p.name AS partner_name,
-        p.type::text AS partner_type,
-        COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
-        COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
-        COALESCE(NULLIF(p.district_name, ''), 'Tidak diketahui') AS district_name,
-        pr.id::text AS product_id,
-        pr.name AS product_name,
-        pr.sku AS product_sku,
-        ps.current_qty,
-        COALESCE(r7.adu_7d, 0.0) AS daily_velocity,
-        COALESCE(r7.units_7d, 0.0) AS units_7d,
-        COALESCE(h30.adu_prev, 0.0) AS prev_velocity,
-        COALESCE(h30.crit_count, 0) AS critical_events,
-        COALESCE(h30.zero_count, 0) AS zero_stock_events,
-        CASE WHEN ao.product_id IS NOT NULL THEN 1 ELSE 0 END AS has_active_order
-    FROM partners p
-    JOIN partner_stocks ps ON ps.partner_id = p.id
-    JOIN products pr ON pr.id = ps.product_id
-    LEFT JOIN recent_7d r7 ON r7.partner_id = p.id AND r7.product_id = ps.product_id
-    LEFT JOIN historical_30d h30 ON h30.partner_id = p.id AND h30.product_id = ps.product_id
-    LEFT JOIN active_orders ao ON ao.partner_id = p.id AND ao.product_id = ps.product_id
-    WHERE p.is_active = TRUE;
-    """
-    with psycopg.connect(database_url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(query)
-            columns = [desc[0] for desc in cur.description]
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
 def train_deep_naive_bayes(records: list[dict]) -> tuple[list[dict], list[dict], dict]:
     """Mengekstraksi fitur multi-faktor, melatih model Naive Bayes, dan menyusun wawasan cerdas."""
     if not records:
-        return [], [], {}
+        return [], [], {"total_items_analyzed": 0, "high_risk_items_count": 0,
+                        "surge_detected_count": 0, "red_zone_regions_count": 0,
+                        "yellow_zone_regions_count": 0, "green_zone_regions_count": 0}
 
     prepared_items: list[dict] = []
     X: list[list[float]] = []
@@ -415,12 +342,10 @@ def run_pipeline() -> dict:
     print("DAISUKI AI: DEEP MULTI-FACTOR NAIVE BAYES STOCKOUT ANALYTICS")
     print("=================================================================")
 
-    db_url = get_database_url()
-    if not db_url:
-        raise RuntimeError("DATABASE_URL tidak ditemukan di .env")
-
-    print("Mengambil data histori transaksi multi-dimensi dari Neon DB...")
-    records = fetch_comprehensive_records(db_url)
+    source = json.loads(SOURCE_JSON.read_text(encoding="utf-8"))
+    records = source.get("risk_records")
+    if not isinstance(records, list) or not source.get("metadata", {}).get("generated_at"):
+        raise ValueError("Laporan Data Science tidak valid; jalankan agregator lebih dulu")
     print(f"Berhasil memuat {len(records)} baris data inventaris cabang.")
 
     print("Melatih model Multi-Factor Naive Bayes dan mengkalkulasi probabilitas...")
@@ -429,6 +354,7 @@ def run_pipeline() -> dict:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source_generated_at": source["metadata"]["generated_at"],
         "algorithm": "MultiFactorGaussianAndCategoricalNaiveBayes",
         "model_version": "v2.0-deep-naive-bayes",
         "features_evaluated": MultiFactorNaiveBayes.FEATURE_NAMES,
@@ -439,6 +365,13 @@ def run_pipeline() -> dict:
 
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
+    private_path = ITEM_RISKS_JSON.with_suffix(".json.tmp")
+    try:
+        private_path.write_text(json.dumps({"source_generated_at": payload["source_generated_at"],
+                                            "items": item_results}, ensure_ascii=False), encoding="utf-8")
+        private_path.replace(ITEM_RISKS_JSON)
+    finally:
+        private_path.unlink(missing_ok=True)
 
     print(f"\n[SUKSES] Analisis selesai. Hasil diekspor ke: {OUTPUT_JSON}")
     print(f"Total Item Dianalisis: {summary['total_items_analyzed']}")

@@ -17,12 +17,15 @@ data-science/data/*
 !data-science/data/.gitkeep
 data-science/models/*
 !data-science/models/.gitkeep
+data-science/reports/*
+!data-science/reports/.gitkeep
 .ipynb_checkpoints
 __pycache__/
 .venv/
 data-science/.env
 ai/.env
 ai/data/mainbrain/context_embeddings/market_hotspot_digest.json
+ai/data/mainbrain/context_embeddings/regional_item_risks.json
 
 # Uploads directory
 apps/api/uploads/*

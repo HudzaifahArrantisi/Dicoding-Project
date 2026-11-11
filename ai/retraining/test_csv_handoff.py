@@ -48,7 +48,7 @@ class CsvHandoffTests(unittest.TestCase):
             load_samples(self.source)
         self.assertFalse(self.output.exists())
 
-    def test_old_handoff_uses_database_fallback(self) -> None:
+    def test_old_handoff_is_rejected(self) -> None:
         self.write_rows([])
         old = self.source.stat().st_mtime - MAX_AGE_SECONDS - 60
         os.utime(self.source, (old, old))
@@ -64,8 +64,7 @@ class CsvHandoffTests(unittest.TestCase):
               patch.object(train, "prepare_handoff", side_effect=lambda: prepare_handoff(self.source, self.output)),
               patch.object(train, "scan_and_generate_mainbrain", return_value={"total": 2, "success": 2, "failed": 0}),
               patch.object(train, "MODEL_OUTPUT_FILE", model),
-              patch.object(train, "TEMP_MODEL_FILE", model.with_suffix(".pkl.tmp")),
-              patch.object(train, "fetch_training_records", side_effect=AssertionError("Database tidak boleh dibaca"))):
+              patch.object(train, "TEMP_MODEL_FILE", model.with_suffix(".pkl.tmp"))):
             self.assertTrue(train.run_retraining_loop())
         with model.open("rb") as source:
             bundle = pickle.load(source)

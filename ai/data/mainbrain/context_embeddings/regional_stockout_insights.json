@@ -1,5 +1,6 @@
 {
-  "generated_at": "2026-11-09T12:11:54.950615+00:00",
+  "generated_at": "2026-11-11T07:42:47.799911+00:00",
+  "source_generated_at": "2026-11-11T07:42:42.266647+00:00",
   "algorithm": "MultiFactorGaussianAndCategoricalNaiveBayes",
   "model_version": "v2.0-deep-naive-bayes",
   "features_evaluated": [
@@ -12,70 +13,64 @@
   ],
   "summary": {
     "total_items_analyzed": 424,
-    "high_risk_items_count": 2,
-    "surge_detected_count": 8,
-    "red_zone_regions_count": 2,
+    "high_risk_items_count": 6,
+    "surge_detected_count": 19,
+    "red_zone_regions_count": 3,
     "yellow_zone_regions_count": 0,
-    "green_zone_regions_count": 2
+    "green_zone_regions_count": 1
   },
   "regional_rankings": [
     {
-      "province_name": "Jawa Barat",
-      "regency_name": "Kota Depok",
-      "total_partners": 1,
-      "critical_partners_count": 1,
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "total_partners": 102,
+      "critical_partners_count": 2,
       "warning_partners_count": 0,
-      "average_stockout_probability": 38.4,
-      "peak_stockout_probability": 38.4,
+      "average_stockout_probability": 1.0,
+      "peak_stockout_probability": 75.0,
       "regional_zone": "ZONA_MERAH",
       "primary_risk_driver": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
       "recommended_action": "Prioritaskan suplai pengiriman darurat ke cabang berisiko tinggi dan amankan buffer stok.",
       "partners": [
         {
-          "partner_id": "ed67e209-504b-5874-832e-f5436a79a438",
-          "partner_name": "Restoran Purnama Cirebon",
+          "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
+          "partner_name": "Resto Bento Serpong",
           "max_stockout_probability": 100.0,
-          "average_stockout_probability": 38.4,
-          "zone": "ZONA_MERAH",
-          "urgent_items": [
-            {
-              "product_name": "Basreng Daun Jeruk",
-              "stockout_probability": 100.0
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "province_name": "Tidak diketahui",
-      "regency_name": "Tidak diketahui",
-      "total_partners": 102,
-      "critical_partners_count": 1,
-      "warning_partners_count": 0,
-      "average_stockout_probability": 0.4,
-      "peak_stockout_probability": 29.9,
-      "regional_zone": "ZONA_MERAH",
-      "primary_risk_driver": "Sisa stok menipis (hanya bertahan ~0.1 hari)",
-      "recommended_action": "Prioritaskan suplai pengiriman darurat ke cabang berisiko tinggi dan amankan buffer stok.",
-      "partners": [
-        {
-          "partner_id": "7f8112c6-b6b5-5b34-8770-f5dd5657d66d",
-          "partner_name": "Restoran Mentari Solo",
-          "max_stockout_probability": 100.0,
-          "average_stockout_probability": 29.9,
+          "average_stockout_probability": 75.0,
           "zone": "ZONA_MERAH",
           "urgent_items": [
             {
               "product_name": "Seblak Jadul Instan",
               "stockout_probability": 100.0
+            },
+            {
+              "product_name": "Makaroni Daun Jeruk",
+              "stockout_probability": 100.0
+            },
+            {
+              "product_name": "Keripik Pisang Rasa Coklat",
+              "stockout_probability": 100.0
             }
           ]
         },
         {
-          "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
-          "partner_name": "Resto Bento Serpong",
-          "max_stockout_probability": 14.7,
-          "average_stockout_probability": 11.0,
+          "partner_id": "7f8112c6-b6b5-5b34-8770-f5dd5657d66d",
+          "partner_name": "Restoran Mentari Solo",
+          "max_stockout_probability": 96.1,
+          "average_stockout_probability": 24.7,
+          "zone": "ZONA_MERAH",
+          "urgent_items": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "stockout_probability": 96.1
+            }
+          ]
+        },
+        {
+          "partner_id": "101b8697-9c73-49af-89f0-bdc770d4d74c",
+          "partner_name": "Hotel Aruna Jakarta",
+          "max_stockout_probability": 0.0,
+          "average_stockout_probability": 0.0,
           "zone": "ZONA_HIJAU",
           "urgent_items": []
         },
@@ -112,14 +107,6 @@
           "urgent_items": []
         },
         {
-          "partner_id": "1001becd-2e6f-538e-8518-923967dfc6d3",
-          "partner_name": "Hotel Nirwana Jakarta Utara",
-          "max_stockout_probability": 0.0,
-          "average_stockout_probability": 0.0,
-          "zone": "ZONA_HIJAU",
-          "urgent_items": []
-        },
-        {
           "partner_id": "2e3f698e-607a-5228-8d94-690c28324d78",
           "partner_name": "Hotel Sembada Tangerang Selatan",
           "max_stockout_probability": 0.0,
@@ -138,14 +125,6 @@
         {
           "partner_id": "9e577601-f63f-5cb6-8524-cd6f7be32a43",
           "partner_name": "Hotel Senja Serang",
-          "max_stockout_probability": 0.0,
-          "average_stockout_probability": 0.0,
-          "zone": "ZONA_HIJAU",
-          "urgent_items": []
-        },
-        {
-          "partner_id": "101b8697-9c73-49af-89f0-bdc770d4d74c",
-          "partner_name": "Hotel Aruna Jakarta",
           "max_stockout_probability": 0.0,
           "average_stockout_probability": 0.0,
           "zone": "ZONA_HIJAU",
@@ -266,6 +245,14 @@
         {
           "partner_id": "6d74da17-a39f-59c3-8a4a-4c7aa8cea6e6",
           "partner_name": "Hotel Bumi Raya Palembang",
+          "max_stockout_probability": 0.0,
+          "average_stockout_probability": 0.0,
+          "zone": "ZONA_HIJAU",
+          "urgent_items": []
+        },
+        {
+          "partner_id": "1001becd-2e6f-538e-8518-923967dfc6d3",
+          "partner_name": "Hotel Nirwana Jakarta Utara",
           "max_stockout_probability": 0.0,
           "average_stockout_probability": 0.0,
           "zone": "ZONA_HIJAU",
@@ -536,14 +523,6 @@
           "urgent_items": []
         },
         {
-          "partner_id": "3b1c0a4d-0362-5a3d-8890-c281a9f07ddc",
-          "partner_name": "Kafe Melati Bogor",
-          "max_stockout_probability": 0.0,
-          "average_stockout_probability": 0.0,
-          "zone": "ZONA_HIJAU",
-          "urgent_items": []
-        },
-        {
           "partner_id": "fead5a98-bccd-5a32-88c0-f0a68ba1f270",
           "partner_name": "Kafe Seruni Depok",
           "max_stockout_probability": 0.0,
@@ -666,6 +645,14 @@
         {
           "partner_id": "0650befe-00af-5a8a-87e6-339a2740e4f3",
           "partner_name": "Minimarket Arunika Jakarta Selatan",
+          "max_stockout_probability": 0.0,
+          "average_stockout_probability": 0.0,
+          "zone": "ZONA_HIJAU",
+          "urgent_items": []
+        },
+        {
+          "partner_id": "3b1c0a4d-0362-5a3d-8890-c281a9f07ddc",
+          "partner_name": "Kafe Melati Bogor",
           "max_stockout_probability": 0.0,
           "average_stockout_probability": 0.0,
           "zone": "ZONA_HIJAU",
@@ -885,21 +872,26 @@
       "province_name": "DKI Jakarta",
       "regency_name": "Kota Administrasi Jakarta Selatan",
       "total_partners": 2,
-      "critical_partners_count": 0,
+      "critical_partners_count": 1,
       "warning_partners_count": 0,
-      "average_stockout_probability": 0.0,
-      "peak_stockout_probability": 0.0,
-      "regional_zone": "ZONA_HIJAU",
-      "primary_risk_driver": "Pola konsumsi stabil",
-      "recommended_action": "Pasokan wilayah stabil, pertahankan alokasi restok reguler.",
+      "average_stockout_probability": 13.4,
+      "peak_stockout_probability": 26.9,
+      "regional_zone": "ZONA_MERAH",
+      "primary_risk_driver": "Risiko lead time pengiriman (7 hari) melebihi cakupan stok",
+      "recommended_action": "Prioritaskan suplai pengiriman darurat ke cabang berisiko tinggi dan amankan buffer stok.",
       "partners": [
         {
           "partner_id": "372ce392-cf3c-4119-8b47-ce94e47052d8",
           "partner_name": "kopken cijeruk",
-          "max_stockout_probability": 0.0,
-          "average_stockout_probability": 0.0,
-          "zone": "ZONA_HIJAU",
-          "urgent_items": []
+          "max_stockout_probability": 98.1,
+          "average_stockout_probability": 26.9,
+          "zone": "ZONA_MERAH",
+          "urgent_items": [
+            {
+              "product_name": "Seblak Jadul Instan",
+              "stockout_probability": 98.1
+            }
+          ]
         },
         {
           "partner_id": "86d0892a-6f7a-58f4-88c6-0b1830ca7d19",
@@ -908,6 +900,33 @@
           "average_stockout_probability": 0.0,
           "zone": "ZONA_HIJAU",
           "urgent_items": []
+        }
+      ]
+    },
+    {
+      "province_name": "Jawa Barat",
+      "regency_name": "Kota Depok",
+      "total_partners": 1,
+      "critical_partners_count": 1,
+      "warning_partners_count": 0,
+      "average_stockout_probability": 25.0,
+      "peak_stockout_probability": 25.0,
+      "regional_zone": "ZONA_MERAH",
+      "primary_risk_driver": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
+      "recommended_action": "Prioritaskan suplai pengiriman darurat ke cabang berisiko tinggi dan amankan buffer stok.",
+      "partners": [
+        {
+          "partner_id": "ed67e209-504b-5874-832e-f5436a79a438",
+          "partner_name": "Restoran Purnama Cirebon",
+          "max_stockout_probability": 100.0,
+          "average_stockout_probability": 25.0,
+          "zone": "ZONA_MERAH",
+          "urgent_items": [
+            {
+              "product_name": "Basreng Daun Jeruk",
+              "stockout_probability": 100.0
+            }
+          ]
         }
       ]
     },
@@ -936,22 +955,58 @@
   ],
   "high_risk_items": [
     {
-      "partner_id": "7f8112c6-b6b5-5b34-8770-f5dd5657d66d",
-      "partner_name": "Restoran Mentari Solo",
+      "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
+      "partner_name": "Resto Bento Serpong",
       "partner_type": "restoran",
       "province_name": "Tidak diketahui",
       "regency_name": "Tidak diketahui",
       "product_id": "51a46f8b-74d6-4a96-926f-0b63c453e9bc",
       "product_name": "Seblak Jadul Instan",
       "product_sku": "DSK-SB-001",
-      "current_qty": 1,
-      "daily_velocity": 7.1,
-      "days_of_cover": 0.1,
-      "sales_surge_ratio": 142.86,
+      "current_qty": 0,
+      "daily_velocity": 0.1,
+      "days_of_cover": 0.0,
+      "sales_surge_ratio": 1.0,
       "stockout_probability": 100.0,
       "risk_level": "TINGGI",
-      "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.1 hari)",
-      "suggested_restock_units": 64
+      "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
+      "suggested_restock_units": 1
+    },
+    {
+      "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
+      "partner_name": "Resto Bento Serpong",
+      "partner_type": "restoran",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "product_id": "929c3fde-b8c1-4102-bb56-5572279affee",
+      "product_name": "Makaroni Daun Jeruk",
+      "product_sku": "DSK-MK-003",
+      "current_qty": 0,
+      "daily_velocity": 0.1,
+      "days_of_cover": 0.0,
+      "sales_surge_ratio": 1.0,
+      "stockout_probability": 100.0,
+      "risk_level": "TINGGI",
+      "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
+      "suggested_restock_units": 1
+    },
+    {
+      "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
+      "partner_name": "Resto Bento Serpong",
+      "partner_type": "restoran",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "product_id": "d0a913d0-7fce-4606-8973-675b09e628ca",
+      "product_name": "Keripik Pisang Rasa Coklat",
+      "product_sku": "DSK-KP-004",
+      "current_qty": 0,
+      "daily_velocity": 0.1,
+      "days_of_cover": 0.0,
+      "sales_surge_ratio": 1.0,
+      "stockout_probability": 100.0,
+      "risk_level": "TINGGI",
+      "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
+      "suggested_restock_units": 1
     },
     {
       "partner_id": "ed67e209-504b-5874-832e-f5436a79a438",
@@ -965,47 +1020,65 @@
       "current_qty": 0,
       "daily_velocity": 0.1,
       "days_of_cover": 0.0,
-      "sales_surge_ratio": 0.01,
+      "sales_surge_ratio": 0.0,
       "stockout_probability": 100.0,
       "risk_level": "TINGGI",
       "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
       "suggested_restock_units": 1
     },
     {
-      "partner_id": "ed67e209-504b-5874-832e-f5436a79a438",
-      "partner_name": "Restoran Purnama Cirebon",
+      "partner_id": "372ce392-cf3c-4119-8b47-ce94e47052d8",
+      "partner_name": "kopken cijeruk",
+      "partner_type": "kafe",
+      "province_name": "DKI Jakarta",
+      "regency_name": "Kota Administrasi Jakarta Selatan",
+      "product_id": "51a46f8b-74d6-4a96-926f-0b63c453e9bc",
+      "product_name": "Seblak Jadul Instan",
+      "product_sku": "DSK-SB-001",
+      "current_qty": 115,
+      "daily_velocity": 22.9,
+      "days_of_cover": 5.0,
+      "sales_surge_ratio": 0.84,
+      "stockout_probability": 98.1,
+      "risk_level": "TINGGI",
+      "dominant_factor": "Risiko lead time pengiriman (7 hari) melebihi cakupan stok",
+      "suggested_restock_units": 114
+    },
+    {
+      "partner_id": "7f8112c6-b6b5-5b34-8770-f5dd5657d66d",
+      "partner_name": "Restoran Mentari Solo",
       "partner_type": "restoran",
-      "province_name": "Jawa Barat",
-      "regency_name": "Kota Depok",
-      "product_id": "d0a913d0-7fce-4606-8973-675b09e628ca",
-      "product_name": "Keripik Pisang Rasa Coklat",
-      "product_sku": "DSK-KP-004",
-      "current_qty": 110,
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "product_id": "51a46f8b-74d6-4a96-926f-0b63c453e9bc",
+      "product_name": "Seblak Jadul Instan",
+      "product_sku": "DSK-SB-001",
+      "current_qty": 1,
       "daily_velocity": 0.1,
-      "days_of_cover": 2200.0,
-      "sales_surge_ratio": 0.03,
-      "stockout_probability": 26.9,
-      "risk_level": "RENDAH",
+      "days_of_cover": 20.0,
+      "sales_surge_ratio": 0.01,
+      "stockout_probability": 96.1,
+      "risk_level": "TINGGI",
       "dominant_factor": "Keseimbangan stok dan pola konsumsi normal",
       "suggested_restock_units": 0
     },
     {
-      "partner_id": "ed67e209-504b-5874-832e-f5436a79a438",
-      "partner_name": "Restoran Purnama Cirebon",
-      "partner_type": "restoran",
-      "province_name": "Jawa Barat",
-      "regency_name": "Kota Depok",
-      "product_id": "51a46f8b-74d6-4a96-926f-0b63c453e9bc",
-      "product_name": "Seblak Jadul Instan",
-      "product_sku": "DSK-SB-001",
-      "current_qty": 110,
-      "daily_velocity": 0.1,
-      "days_of_cover": 2200.0,
-      "sales_surge_ratio": 0.1,
-      "stockout_probability": 26.8,
+      "partner_id": "372ce392-cf3c-4119-8b47-ce94e47052d8",
+      "partner_name": "kopken cijeruk",
+      "partner_type": "kafe",
+      "province_name": "DKI Jakarta",
+      "regency_name": "Kota Administrasi Jakarta Selatan",
+      "product_id": "d0a913d0-7fce-4606-8973-675b09e628ca",
+      "product_name": "Keripik Pisang Rasa Coklat",
+      "product_sku": "DSK-KP-004",
+      "current_qty": 10,
+      "daily_velocity": 42.1,
+      "days_of_cover": 0.2,
+      "sales_surge_ratio": 1.84,
+      "stockout_probability": 9.7,
       "risk_level": "RENDAH",
-      "dominant_factor": "Keseimbangan stok dan pola konsumsi normal",
-      "suggested_restock_units": 0
+      "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.2 hari)",
+      "suggested_restock_units": 412
     },
     {
       "partner_id": "7f8112c6-b6b5-5b34-8770-f5dd5657d66d",
@@ -1017,67 +1090,31 @@
       "product_name": "Keripik Pisang Rasa Coklat",
       "product_sku": "DSK-KP-004",
       "current_qty": 115,
-      "daily_velocity": 0.9,
-      "days_of_cover": 134.2,
-      "sales_surge_ratio": 17.14,
-      "stockout_probability": 15.3,
+      "daily_velocity": 0.1,
+      "days_of_cover": 2300.0,
+      "sales_surge_ratio": 0.06,
+      "stockout_probability": 1.5,
       "risk_level": "RENDAH",
-      "dominant_factor": "Lonjakan konsumsi tajam (+1614% dibanding tren biasa)",
+      "dominant_factor": "Keseimbangan stok dan pola konsumsi normal",
       "suggested_restock_units": 0
     },
     {
-      "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
-      "partner_name": "Resto Bento Serpong",
+      "partner_id": "7f8112c6-b6b5-5b34-8770-f5dd5657d66d",
+      "partner_name": "Restoran Mentari Solo",
       "partner_type": "restoran",
       "province_name": "Tidak diketahui",
       "regency_name": "Tidak diketahui",
-      "product_id": "51a46f8b-74d6-4a96-926f-0b63c453e9bc",
-      "product_name": "Seblak Jadul Instan",
-      "product_sku": "DSK-SB-001",
-      "current_qty": 0,
+      "product_id": "aed53bdf-07d0-4054-bf45-36be0a913a38",
+      "product_name": "Basreng Daun Jeruk",
+      "product_sku": "DSK-BR-002",
+      "current_qty": 103,
       "daily_velocity": 0.1,
-      "days_of_cover": 0.0,
-      "sales_surge_ratio": 1.0,
-      "stockout_probability": 14.7,
+      "days_of_cover": 2060.0,
+      "sales_surge_ratio": 0.12,
+      "stockout_probability": 0.6,
       "risk_level": "RENDAH",
-      "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
-      "suggested_restock_units": 1
-    },
-    {
-      "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
-      "partner_name": "Resto Bento Serpong",
-      "partner_type": "restoran",
-      "province_name": "Tidak diketahui",
-      "regency_name": "Tidak diketahui",
-      "product_id": "929c3fde-b8c1-4102-bb56-5572279affee",
-      "product_name": "Makaroni Daun Jeruk",
-      "product_sku": "DSK-MK-003",
-      "current_qty": 0,
-      "daily_velocity": 0.1,
-      "days_of_cover": 0.0,
-      "sales_surge_ratio": 1.0,
-      "stockout_probability": 14.7,
-      "risk_level": "RENDAH",
-      "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
-      "suggested_restock_units": 1
-    },
-    {
-      "partner_id": "bf582ad4-b195-4e58-9a20-f40f9890a854",
-      "partner_name": "Resto Bento Serpong",
-      "partner_type": "restoran",
-      "province_name": "Tidak diketahui",
-      "regency_name": "Tidak diketahui",
-      "product_id": "d0a913d0-7fce-4606-8973-675b09e628ca",
-      "product_name": "Keripik Pisang Rasa Coklat",
-      "product_sku": "DSK-KP-004",
-      "current_qty": 0,
-      "daily_velocity": 0.1,
-      "days_of_cover": 0.0,
-      "sales_surge_ratio": 1.0,
-      "stockout_probability": 14.7,
-      "risk_level": "RENDAH",
-      "dominant_factor": "Sisa stok menipis (hanya bertahan ~0.0 hari)",
-      "suggested_restock_units": 1
+      "dominant_factor": "Keseimbangan stok dan pola konsumsi normal",
+      "suggested_restock_units": 0
     },
     {
       "partner_id": "7f8112c6-b6b5-5b34-8770-f5dd5657d66d",
@@ -1089,12 +1126,12 @@
       "product_name": "Makaroni Daun Jeruk",
       "product_sku": "DSK-MK-003",
       "current_qty": 110,
-      "daily_velocity": 4.1,
-      "days_of_cover": 26.6,
-      "sales_surge_ratio": 82.86,
-      "stockout_probability": 4.5,
+      "daily_velocity": 0.1,
+      "days_of_cover": 2200.0,
+      "sales_surge_ratio": 0.01,
+      "stockout_probability": 0.5,
       "risk_level": "RENDAH",
-      "dominant_factor": "Lonjakan konsumsi tajam (+8186% dibanding tren biasa)",
+      "dominant_factor": "Keseimbangan stok dan pola konsumsi normal",
       "suggested_restock_units": 0
     },
     {
@@ -1109,11 +1146,29 @@
       "current_qty": 100,
       "daily_velocity": 36.4,
       "days_of_cover": 2.7,
-      "sales_surge_ratio": 2.1,
+      "sales_surge_ratio": 2.32,
       "stockout_probability": 0.0,
       "risk_level": "RENDAH",
-      "dominant_factor": "Lonjakan konsumsi tajam (+110% dibanding tren biasa)",
-      "suggested_restock_units": 228
+      "dominant_factor": "Lonjakan konsumsi tajam (+132% dibanding tren biasa)",
+      "suggested_restock_units": 265
+    },
+    {
+      "partner_id": "101b8697-9c73-49af-89f0-bdc770d4d74c",
+      "partner_name": "Hotel Aruna Jakarta",
+      "partner_type": "hotel",
+      "province_name": "Tidak diketahui",
+      "regency_name": "Tidak diketahui",
+      "product_id": "aed53bdf-07d0-4054-bf45-36be0a913a38",
+      "product_name": "Basreng Daun Jeruk",
+      "product_sku": "DSK-BR-002",
+      "current_qty": 20,
+      "daily_velocity": 5.4,
+      "days_of_cover": 3.7,
+      "sales_surge_ratio": 108.58,
+      "stockout_probability": 0.0,
+      "risk_level": "RENDAH",
+      "dominant_factor": "Lonjakan konsumsi tajam (+10758% dibanding tren biasa)",
+      "suggested_restock_units": 35
     },
     {
       "partner_id": "1140f98e-2218-54e2-8709-2245238baa90",
@@ -1127,7 +1182,7 @@
       "current_qty": 20,
       "daily_velocity": 0.1,
       "days_of_cover": 400.0,
-      "sales_surge_ratio": 0.02,
+      "sales_surge_ratio": 1.0,
       "stockout_probability": 0.0,
       "risk_level": "RENDAH",
       "dominant_factor": "Keseimbangan stok dan pola konsumsi normal",
@@ -1343,42 +1398,6 @@
       "current_qty": 52,
       "daily_velocity": 0.1,
       "days_of_cover": 1040.0,
-      "sales_surge_ratio": 1.0,
-      "stockout_probability": 0.0,
-      "risk_level": "RENDAH",
-      "dominant_factor": "Keseimbangan stok dan pola konsumsi normal",
-      "suggested_restock_units": 0
-    },
-    {
-      "partner_id": "1001becd-2e6f-538e-8518-923967dfc6d3",
-      "partner_name": "Hotel Nirwana Jakarta Utara",
-      "partner_type": "hotel",
-      "province_name": "Tidak diketahui",
-      "regency_name": "Tidak diketahui",
-      "product_id": "51a46f8b-74d6-4a96-926f-0b63c453e9bc",
-      "product_name": "Seblak Jadul Instan",
-      "product_sku": "DSK-SB-001",
-      "current_qty": 8,
-      "daily_velocity": 0.1,
-      "days_of_cover": 160.0,
-      "sales_surge_ratio": 1.0,
-      "stockout_probability": 0.0,
-      "risk_level": "RENDAH",
-      "dominant_factor": "Keseimbangan stok dan pola konsumsi normal",
-      "suggested_restock_units": 0
-    },
-    {
-      "partner_id": "1001becd-2e6f-538e-8518-923967dfc6d3",
-      "partner_name": "Hotel Nirwana Jakarta Utara",
-      "partner_type": "hotel",
-      "province_name": "Tidak diketahui",
-      "regency_name": "Tidak diketahui",
-      "product_id": "aed53bdf-07d0-4054-bf45-36be0a913a38",
-      "product_name": "Basreng Daun Jeruk",
-      "product_sku": "DSK-BR-002",
-      "current_qty": 28,
-      "daily_velocity": 0.1,
-      "days_of_cover": 560.0,
       "sales_surge_ratio": 1.0,
       "stockout_probability": 0.0,
       "risk_level": "RENDAH",
