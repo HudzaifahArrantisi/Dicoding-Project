@@ -71,6 +71,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const sessionId = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`)
 
   const hasMessages = messages.length > 1
 
@@ -99,7 +100,8 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
     setEnding(true)
     setError('')
     try {
-      await endMitraAssistantSession()
+      await endMitraAssistantSession(sessionId.current)
+      sessionId.current = crypto.randomUUID()
       nextId.current = 1
       setMessages([initialGreeting])
       setReplies(initialReplies)
@@ -114,7 +116,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
 
   useEffect(() => {
     let cancelled = false
-    void getMitraAssistantHistory().then((history) => {
+    void getMitraAssistantHistory(sessionId.current).then((history) => {
       if (cancelled) return
       const restored = history.flatMap((item) => [
         { id: nextId.current++, author: 'mitra' as const, text: item.message },
@@ -142,7 +144,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
     setMessages((current) => [...current, { id: nextId.current++, author: 'mitra', text }])
     setBusy(true)
     try {
-      const result: MitraAssistantReply = await askMitraAssistant(text)
+      const result: MitraAssistantReply = await askMitraAssistant(text, sessionId.current)
       setMessages((current) => [...current, {
         id: nextId.current++, author: 'assistant', text: result.reply, source: result.source,
         tour: result.suggestedTour, tourLabel: result.tourLabel,
@@ -161,7 +163,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
     const previous = message.feedback
     setMessages((current) => current.map((item) => item.id === message.id ? { ...item, feedback: rating } : item))
     try {
-      await rateMitraAssistantAnswer(message.interactionId, rating)
+      await rateMitraAssistantAnswer(message.interactionId, rating, sessionId.current)
     } catch {
       setMessages((current) => current.map((item) => item.id === message.id ? { ...item, feedback: previous } : item))
       setError('Penilaian belum tersimpan. Coba lagi.')

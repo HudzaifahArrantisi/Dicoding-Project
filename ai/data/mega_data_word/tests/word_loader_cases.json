@@ -1,0 +1,11 @@
+{
+  "category": "test_fixture",
+  "name": "word_loader_cases",
+  "version": "1.0.0",
+  "greeting": "halo",
+  "identity": "siapa kah anda",
+  "identity_help": "kamu membantu apa",
+  "product_alias": { "product": "Seblak Jadul Instan", "alias": "seblak" },
+  "stock_question": "stok seblak sisa berapa",
+  "out_of_scope": ["bagaimana cara membuat rendang", "siapa presiden"]
+}

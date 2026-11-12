@@ -1,60 +1,56 @@
 import { describe, expect, test } from 'bun:test'
 import { answerMitraQuestion } from './knowledge'
+import type { MitraTour } from './knowledge'
+import { loadAssistantFixture } from './test-data'
+
+type KnowledgeFixture = {
+  greetings: string[]
+  tours: Array<{ question: string; tour: MitraTour }>
+  refusal_cases: Array<{ question: string; required_fragment: string }>
+  mixed_cases: Array<{ question: string; tour: MitraTour }>
+  inventory_policy: { report_question: string; delivery_question: string; report_required_fragments: string[]; report_forbidden_fragments: string[]; delivery_required_fragments: string[] }
+  identity_cases: Array<{ question: string; required_fragment: string }>
+}
+
+const fixture = loadAssistantFixture<KnowledgeFixture>('knowledge_cases.json')
 
 describe('asisten mitra', () => {
-  test.each(['hi', 'Hai!', 'halo', 'Selamat pagi', 'permisi', 'gimana kabar anda', 'apa kabar', 'halo apa kabar'])('membalas sapaan %s', (question) => {
+  test.each(fixture.greetings)('membalas sapaan %s', (question) => {
     const answer = answerMitraQuestion(question)
     expect(answer.reply).toContain('Halo!')
     expect(answer.suggestedTour).toBeUndefined()
     expect(answer.quickReplies).toHaveLength(5)
   })
 
-  test.each([
-    ['pesan barang untuk toko', 'restock'],
-    ['lapor stok harian', 'stock_report'],
-    ['scan resi di dus', 'delivery'],
-    ['lihat log mutasi', 'logs'],
-    ['ubah profil toko', 'profile'],
-    ['totalkan haisl logs saya di minggukemaren', 'logs'],
-  ] as const)('mengenali %s', (question, tour) => {
+  test.each(fixture.tours.map(({ question, tour }) => [question, tour] as const))('mengenali %s', (question, tour) => {
     const answer = answerMitraQuestion(question)
     expect(answer.suggestedTour).toBe(tour)
     expect(answer.tourLabel).toBeTruthy()
     expect(answer.quickReplies).toHaveLength(5)
   })
 
-  test('menolak pertanyaan di luar inventaris meski mengandung kata restock', () => {
-    const answer = answerMitraQuestion('Buatkan resep masakan untuk restock toko')
+  test.each(fixture.refusal_cases)('menolak pertanyaan di luar inventaris: $question', ({ question, required_fragment }) => {
+    const answer = answerMitraQuestion(question)
     expect(answer.suggestedTour).toBeUndefined()
-    expect(answer.reply).toContain('asisten khusus inventaris Daisuki B2B')
+    expect(answer.reply).toContain(required_fragment)
   })
 
   test('sapaan bersama pertanyaan tetap mengikuti topiknya', () => {
-    expect(answerMitraQuestion('Halo, stok saya sekarang berapa?').suggestedTour).toBe('stock_report')
-    expect(answerMitraQuestion('Hi, buatkan resep masakan').reply).toContain('asisten khusus inventaris Daisuki B2B')
-  })
-
-  test('menolak pertanyaan umum yang tidak cocok dengan kata kunci', () => {
-    const answer = answerMitraQuestion('Siapa penemu listrik?')
-    expect(answer.suggestedTour).toBeUndefined()
-    expect(answer.reply).toContain('asisten khusus inventaris Daisuki B2B')
+    const [stock] = fixture.mixed_cases
+    expect(answerMitraQuestion(stock.question).suggestedTour).toBe(stock.tour)
+    const refusal = fixture.refusal_cases[1]
+    expect(answerMitraQuestion(refusal.question).reply).toContain(refusal.required_fragment)
   })
 
   test('menjelaskan stok tanpa kapasitas maksimum dan hanya bertambah setelah verifikasi', () => {
-    const report = answerMitraQuestion('lapor stok harian').reply
-    const delivery = answerMitraQuestion('scan resi').reply
-    expect(report).toContain('tidak punya batas maksimum')
-    expect(report).not.toContain('40 pcs')
-    expect(report).not.toContain('kapasitas rak')
-    expect(delivery).toContain('setelah verifikasi berhasil')
-    expect(delivery).toContain('jumlah yang disetujui')
+    const report = answerMitraQuestion(fixture.inventory_policy.report_question).reply
+    const delivery = answerMitraQuestion(fixture.inventory_policy.delivery_question).reply
+    for (const text of fixture.inventory_policy.report_required_fragments) expect(report).toContain(text)
+    for (const text of fixture.inventory_policy.report_forbidden_fragments) expect(report).not.toContain(text)
+    for (const text of fixture.inventory_policy.delivery_required_fragments) expect(delivery).toContain(text)
   })
 
   test('menjawab pertanyaan tentang identitas diri asisten dengan profil resmi daisuki.pkl', () => {
-    expect(answerMitraQuestion('kamu siapa').reply).toContain('Daisuki AI Assistant')
-    expect(answerMitraQuestion('siapa kamu').reply).toContain('daisuki.pkl')
-    expect(answerMitraQuestion('siapa kah anda').reply).toContain('Daisuki AI Assistant')
-    expect(answerMitraQuestion('siapakah anda').reply).toContain('Daisuki AI Assistant')
-    expect(answerMitraQuestion('apa itu daisuki pkl').reply).toContain('Multinomial Naive Bayes')
+    for (const item of fixture.identity_cases) expect(answerMitraQuestion(item.question).reply).toContain(item.required_fragment)
   })
 })

@@ -1,6 +1,6 @@
-import { isOperationalQuestion, isOutOfScopeQuestion } from "./knowledge";
+import { isOperationalQuestion } from "./knowledge";
 import { knowledgeIntent } from "./company-knowledge";
-import { isChitChat, isCrossTenant, isDeveloperQuery, isFollowUp, isGreeting, isInjection, isOutOfScope, isSystemProbe } from "./word-loader";
+import { isChitChat, isCrossTenant, isDeveloperQuery, isGreeting, isInjection, isSystemProbe } from "./word-loader";
 import { assistantCopy } from "./assistant-copy";
 
 export { OUT_OF_SCOPE_REPLY } from "./knowledge";
@@ -12,9 +12,9 @@ export function isCrossTenantQuestion(message: string): boolean {
 
 export function shouldRefuseMitraMessage(message: string, previousIntent: string | null): boolean {
   const normalized = message.trim();
-  if (isInjection(normalized) || isSystemProbe(normalized) || isOutOfScope(normalized) || isOutOfScopeQuestion(normalized) || isCrossTenantQuestion(normalized)) return true;
+  if (isInjection(normalized) || isSystemProbe(normalized) || isCrossTenantQuestion(normalized)) return true;
   if (isGreeting(normalized) || isChitChat(normalized) || isDeveloperQuery(normalized) || knowledgeIntent(normalized, previousIntent) || isOperationalQuestion(normalized)) return false;
-  return !(previousIntent && isFollowUp(normalized));
+  return false;
 }
 
 export function leaksAssistantInternals(reply: string): boolean {
