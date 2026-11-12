@@ -163,6 +163,7 @@ daisuki-inventory/
 ## Catatan Perubahan Harian (Daily Changelog)
 
 ### 2026-11-12
+- **Panduan folder data dan memori AI**: Menambahkan `ai/data/PANDUAN_DATA_DAN_MEMORI_DAISUKI.md` untuk menjelaskan struktur data, perintah ekstraksi dokumen, training intent/risiko, publikasi sumber RAG, dan penyimpanan memori percakapan. Tautan ditambahkan di README data.
 - **Memori database berpartisi UUID**: Menambahkan kolom dan primary key `session_id` pada `assistant_conversation_memory` melalui migrasi `20261112_assistant_memory_session_uuid.sql`; ringkasan sesi paralel kini tersimpan terpisah.
 - **Session UUID, typo tolerance, dan anti-looping chatbot**: Endpoint chat menerima `session_id` UUID dari body/header, event menyimpan identitas sesi, dan UI memakai UUID terpisah per percakapan. Filter awal hanya menahan prompt injection, system probe, dan pelanggaran cross-tenant; typo seperti sapaan gabung diteruskan. Grounding RAG menerima angka hasil penjumlahan yang bersumber dari konteks sesi, sementara klaim stok individual dan PO tetap diverifikasi.
 - **Sentralisasi fixture dan kosakata pengujian ke bank data**: Semua contoh pesan guardrail, identitas, sapaan, intent tur, penolakan, kebocoran internal, dan kebijakan stok pada test assistant dipindahkan ke `ai/data/mega_data_word/tests/*.json`. Test memakai loader fixture bersama, sedangkan penyaringan sapaan singkat pada memori sesi membaca `dictionary/courtesy_phrases.json` agar kosakata tidak di-hardcode di source.
