@@ -1,5 +1,7 @@
 # Data Daisuki
 
+Panduan fungsi setiap folder, alur training, dokumen RAG, dan memori percakapan: [PANDUAN_DATA_DAN_MEMORI_DAISUKI.md](PANDUAN_DATA_DAN_MEMORI_DAISUKI.md).
+
 - `raw_references/`: dokumen sumber untuk ekstraksi; tempatkan PDF, dokumen teks, dan CSV di subfolder yang sesuai.
 - `mainbrain/models/`: artefak `daisuki.pkl` hasil training lokal.
 - `mainbrain/context_embeddings/`: snapshot analitik dan dokumen Markdown hasil ekstraksi. Chatbot membangun indeks kata terbalik di RAM dari `*.public.md` saat API menyala; folder ini belum berisi vektor embedding.
