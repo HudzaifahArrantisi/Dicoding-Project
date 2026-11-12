@@ -11,6 +11,7 @@ export interface MitraAssistantReply {
   quickReplies: string[]
   interactionId: string
   modelAvailable: boolean
+  session_id?: string
 }
 
 export interface MitraChatHistoryItem {
@@ -23,11 +24,11 @@ export interface MitraChatHistoryItem {
   created_at: string
 }
 
-export async function askMitraAssistant(message: string): Promise<MitraAssistantReply> {
+export async function askMitraAssistant(message: string, sessionId?: string): Promise<MitraAssistantReply> {
   const response = await apiFetch('/assistant/mitra/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, session_id: sessionId }),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: string } | null
@@ -39,19 +40,19 @@ export async function askMitraAssistant(message: string): Promise<MitraAssistant
   return readAssistantSse<MitraAssistantReply>(response)
 }
 
-export async function getMitraAssistantHistory(): Promise<MitraChatHistoryItem[]> {
-  const response = await apiClient.get<{ data: MitraChatHistoryItem[] }>('/assistant/mitra/history')
+export async function getMitraAssistantHistory(sessionId?: string): Promise<MitraChatHistoryItem[]> {
+  const response = await apiClient.get<{ data: MitraChatHistoryItem[] }>('/assistant/mitra/history', sessionId ? { headers: { 'x-session-id': sessionId } } : undefined)
   return response.data
 }
 
-export function rateMitraAssistantAnswer(id: string, rating: -1 | 1): Promise<{ status: string }> {
-  return apiClient.patch<{ status: string }>(`/assistant/mitra/chat/${encodeURIComponent(id)}/feedback`, { rating })
+export function rateMitraAssistantAnswer(id: string, rating: -1 | 1, sessionId?: string): Promise<{ status: string }> {
+  return apiClient.patch<{ status: string }>(`/assistant/mitra/chat/${encodeURIComponent(id)}/feedback`, { rating }, sessionId ? { headers: { 'x-session-id': sessionId } } : undefined)
 }
 
 export function clearMitraAssistantHistory(): Promise<{ status: string }> {
   return apiClient.delete<{ status: string }>('/assistant/mitra/history')
 }
 
-export function endMitraAssistantSession(): Promise<{ status: string; remembered: boolean }> {
-  return apiClient.post<{ status: string; remembered: boolean }>('/assistant/mitra/end', {})
+export function endMitraAssistantSession(sessionId?: string): Promise<{ status: string; remembered: boolean }> {
+  return apiClient.post<{ status: string; remembered: boolean }>('/assistant/mitra/end', { session_id: sessionId })
 }

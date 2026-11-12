@@ -21,8 +21,10 @@ from source import build_intent_samples
 from doc_loader import scan_and_generate_mainbrain
 from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, prepare_handoff
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jobs"))
-from run_context import run_id, source_file, stage_dir, verify_manifest
+AI_ROOT = str(Path(__file__).resolve().parents[1])
+if AI_ROOT not in sys.path:
+    sys.path.insert(0, AI_ROOT)
+from jobs.run_context import run_id, source_file, stage_dir, verify_manifest
 
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent

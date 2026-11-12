@@ -1,0 +1,6 @@
+{
+  "category": "dictionary",
+  "name": "courtesy_phrases",
+  "version": "1.0.0",
+  "exact_phrases": ["halo", "hai", "hi", "tes", "test", "ok", "oke", "terima kasih"]
+}

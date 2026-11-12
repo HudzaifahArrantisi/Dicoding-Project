@@ -175,9 +175,10 @@ export const assistantChatEvents = pgTable("assistant_chat_events", {
 export const assistantConversationMemory = pgTable("assistant_conversation_memory", {
   partner_id: uuid("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
   user_id: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  session_id: uuid("session_id").notNull(),
   summary: text("summary").notNull(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.partner_id, table.user_id] })]);
+}, (table) => [primaryKey({ columns: [table.partner_id, table.user_id, table.session_id] })]);
 
 export const orders = pgTable("orders", {
   id: uuid("id").primaryKey().defaultRandom(),

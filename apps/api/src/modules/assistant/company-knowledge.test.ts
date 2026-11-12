@@ -2,6 +2,13 @@ import { expect, test } from "bun:test";
 import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts } from "./company-knowledge";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { loadAssistantFixture } from "./test-data";
+
+type KnowledgeFixture = {
+  company_intent_cases: Array<{ question: string; previous_intent: string | null; expected: "company" | "sop" | null }>;
+  retrieval_paraphrase_cases: Array<{ query: string; source: string }>;
+};
+const fixture = loadAssistantFixture<KnowledgeFixture>("knowledge_cases.json");
 
 test("profil dan SOP perusahaan dibaca dari sumber terstruktur", async () => {
   const company = await loadCompanyKnowledge("siapa pendiri Daisuki", "company");
@@ -32,25 +39,14 @@ test("kebijakan RAG hanya menerima sumber terdaftar tanpa data kontak", () => {
 });
 
 test("pertanyaan profil dan panduan dikenali tanpa mengubah pertanyaan stok", () => {
-  expect(knowledgeIntent("siapa pendiri Daisuki?", null)).toBe("company");
-  expect(knowledgeIntent("siapa developermu?", null)).toBe("company");
-  expect(knowledgeIntent("siapa Hudzaifah?", null)).toBe("company");
-  expect(knowledgeIntent("bagaimana cara scan resi?", null)).toBe("sop");
-  expect(knowledgeIntent("berapa stok saya?", null)).toBeNull();
-  expect(knowledgeIntent("siapa saja?", "company")).toBe("company");
+  for (const item of fixture.company_intent_cases) expect(knowledgeIntent(item.question, item.previous_intent)).toBe(item.expected);
 });
 
 test("retrieval dokumen publik mengenali pertanyaan parafrasa", () => {
   const directory = resolve(import.meta.dir, "../../../../../ai/data/mainbrain/context_embeddings");
   const names = ["company-profile.public.md", "inventory_rules.public.md", "partner_workflows.public.md", "assistant_identity.public.md"];
   const files = filterRagDocuments(names.map((name) => ({ name, content: readFileSync(resolve(directory, name), "utf8") })));
-  const cases = [
-    ["siapa perintis perusahaan ini", "company-profile.public.md"],
-    ["bagaimana memindai label penerimaan dus", "partner_workflows.public.md"],
-    ["bagaimana pengisian persediaan cabang", "partner_workflows.public.md"],
-    ["apakah ada batas persediaan toko", "inventory_rules.public.md"],
-  ];
-  for (const [query, expected] of cases) {
-    expect(selectMainbrainExcerpts(query, files).some((item) => item.source === expected)).toBe(true);
+  for (const item of fixture.retrieval_paraphrase_cases) {
+    expect(selectMainbrainExcerpts(item.query, files).some((entry) => entry.source === item.source)).toBe(true);
   }
 });

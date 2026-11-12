@@ -1,3 +1,5 @@
+import { isCourtesyPhrase } from "./word-loader";
+
 type SessionTurn = { id: string; message: string; reply: string; intent: string | null; source: "llm" | "fallback"; feedback: -1 | 1 | null; created_at: Date };
 type Session = { turns: SessionTurn[]; touchedAt: number };
 
@@ -51,7 +53,7 @@ export function buildConversationContext(turns: SessionTurn[]): string {
 export function extractUserGoals(turns: SessionTurn[]): string {
   return turns
     .map((turn) => turn.message.trim())
-    .filter((message) => message.length >= 12 && !/^(?:halo|hai|hi|tes|test|ok|oke|terima kasih)[.!?\s]*$/i.test(message))
+    .filter((message) => message.length >= 12 && !isCourtesyPhrase(message))
     .slice(-5)
     .map((message) => `- ${message.slice(0, 280)}`)
     .join("\n")

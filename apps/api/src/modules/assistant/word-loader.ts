@@ -89,6 +89,7 @@ export function matchSopSelection(text: string): string {
   return "restock_order_submission";
 }
 export function isGreeting(text: string): boolean { return matches("intent/greetings", normalize(text)) || matchTrainingPhrase(text) === "greeting"; }
+export function isCourtesyPhrase(text: string): boolean { return matches("dictionary/courtesy_phrases", text); }
 export function isChitChat(text: string): boolean {
   return extra("intent/greetings", "chit_chat_patterns")?.test(text) ?? false;
 }

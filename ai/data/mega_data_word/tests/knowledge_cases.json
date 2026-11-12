@@ -1,0 +1,58 @@
+{
+  "category": "test_fixture",
+  "name": "knowledge_cases",
+  "version": "1.0.0",
+  "greetings": ["hi", "Hai!", "halo", "Selamat pagi", "permisi", "gimana kabar anda", "apa kabar", "halo apa kabar"],
+  "tours": [
+    { "question": "pesan barang untuk toko", "tour": "restock" },
+    { "question": "lapor stok harian", "tour": "stock_report" },
+    { "question": "scan resi di dus", "tour": "delivery" },
+    { "question": "lihat log mutasi", "tour": "logs" },
+    { "question": "ubah profil toko", "tour": "profile" },
+    { "question": "totalkan haisl logs saya di minggukemaren", "tour": "logs" }
+  ],
+  "refusal_cases": [
+    { "question": "Buatkan resep masakan untuk restock toko", "required_fragment": "asisten khusus inventaris Daisuki B2B" },
+    { "question": "Hi, buatkan resep masakan", "required_fragment": "asisten khusus inventaris Daisuki B2B" },
+    { "question": "Siapa penemu listrik?", "required_fragment": "asisten khusus inventaris Daisuki B2B" }
+  ],
+  "mixed_cases": [
+    { "question": "Halo, stok saya sekarang berapa?", "tour": "stock_report" }
+  ],
+  "inventory_policy": {
+    "report_question": "lapor stok harian",
+    "delivery_question": "scan resi",
+    "report_required_fragments": ["tidak punya batas maksimum"],
+    "report_forbidden_fragments": ["40 pcs", "kapasitas rak"],
+    "delivery_required_fragments": ["setelah verifikasi berhasil", "jumlah yang disetujui"]
+  },
+  "identity_cases": [
+    { "question": "kamu siapa?", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "siapakah dia??", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "siapa kah dia", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "diri nya apa?", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "chatbot ini siapa?", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "apa identitasmu?", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "perkenalkan dirimu", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "kamu siapa", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "siapa kamu", "required_fragment": "daisuki.pkl" },
+    { "question": "siapa kah anda", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "siapakah anda", "required_fragment": "Daisuki AI Assistant" },
+    { "question": "apa itu daisuki pkl", "required_fragment": "Multinomial Naive Bayes" }
+  ],
+  "identity_negative_cases": ["siapa pendiri Daisuki?", "stok saya berapa?"]
+  ,"company_intent_cases": [
+    { "question": "siapa pendiri Daisuki?", "previous_intent": null, "expected": "company" },
+    { "question": "siapa developermu?", "previous_intent": null, "expected": "company" },
+    { "question": "siapa Hudzaifah?", "previous_intent": null, "expected": "company" },
+    { "question": "bagaimana cara scan resi?", "previous_intent": null, "expected": "sop" },
+    { "question": "berapa stok saya?", "previous_intent": null, "expected": null },
+    { "question": "siapa saja?", "previous_intent": "company", "expected": "company" }
+  ],
+  "retrieval_paraphrase_cases": [
+    { "query": "siapa perintis perusahaan ini", "source": "company-profile.public.md" },
+    { "query": "bagaimana memindai label penerimaan dus", "source": "partner_workflows.public.md" },
+    { "query": "bagaimana pengisian persediaan cabang", "source": "partner_workflows.public.md" },
+    { "query": "apakah ada batas persediaan toko", "source": "inventory_rules.public.md" }
+  ]
+}
