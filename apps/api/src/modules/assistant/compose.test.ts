@@ -23,6 +23,11 @@ describe('jawaban dengan data mitra', () => {
     const emptyModel = { available: false, predictions: [] }
     expect(composeMitraReply('hai', context, emptyModel, null).reply).toContain('Toko A')
     expect(composeMitraReply('stok pusat berapa', context, emptyModel, null).reply).toContain('90 pcs')
+    expect(composeMitraReply('berapa stok di gudang saya?', context, emptyModel, null).reply).toContain('8 pcs')
+    expect(composeMitraReply('berapa stok di gudang saya?', context, emptyModel, null).reply).not.toContain('90 pcs')
+    const corrected = composeMitraReply('salahh basreng saya sisa 8 bukan 90', context, emptyModel, null).reply
+    expect(corrected).toContain('Maaf')
+    expect(corrected).toContain('8 pcs')
     expect(composeMitraReply('produk apa yang paling laku', context, emptyModel, null).reply).toContain('35 pcs')
     expect(composeMitraReply('mitra paling laku', context, emptyModel, null).reply).toContain('hanya dapat menampilkan data inventaris cabang Anda sendiri')
     expect(composeMitraReply('siapa presiden', context, emptyModel, null).reply).toContain('asisten khusus inventaris Daisuki B2B')
@@ -33,6 +38,17 @@ describe('jawaban dengan data mitra', () => {
     expect(answer.reply).toContain('8 pcs')
     expect(answer.reply).toContain('Basreng Daun Jeruk')
     expect(answer.reply).toContain('bukan batas maksimum')
+  })
+
+  test('gudang saya memakai jumlah cabang untuk beberapa produk', () => {
+    const stocks = [
+      { ...stock, current_qty: 100, central_stock: 595 },
+      { ...stock, product_id: 'produk-b', product_name: 'Makaroni Daun Jeruk', current_qty: 115, central_stock: 480 },
+    ]
+    const answer = composeMitraReply('berapa stok di gudang saya?', { ...context, stocks }, { available: false, predictions: [] }, null).reply
+    expect(answer).toContain('Basreng Daun Jeruk: sisa stok 100 pcs')
+    expect(answer).toContain('Makaroni Daun Jeruk: sisa stok 115 pcs')
+    expect(answer).not.toContain('595 pcs')
   })
 
   test('prioritas restock memakai label model dan jumlah dibatasi stok pusat', () => {

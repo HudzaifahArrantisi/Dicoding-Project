@@ -43,3 +43,5 @@ ai/data/mainbrain/models/*.pkl.tmp
 ai/data/raw_references/csv/*.csv
 ai/data/mainbrain/context_embeddings/cleaned_inventory_summary.md
 ai/data/mainbrain/context_embeddings/ai_analysis_summary.md
+ai/data/mainbrain/context_embeddings/*.md
+!ai/data/mainbrain/context_embeddings/*.public.md

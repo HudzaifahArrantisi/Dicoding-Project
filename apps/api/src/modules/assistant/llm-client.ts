@@ -28,7 +28,7 @@ function configuredEndpoints(): string[] {
 
 export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest): Promise<string | null> {
   if (process.env.LLM_ENABLED !== "true" || !process.env.LLM_API_KEY) return null;
-  const timeout = Math.min(8_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 8_000));
+  const timeout = Math.min(120_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 25_000));
   const deadline = Date.now() + timeout;
   const endpoints = configuredEndpoints();
 
@@ -36,7 +36,7 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
     if ((failedUntil.get(endpoint) ?? 0) > Date.now()) continue;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
-    const attemptTimeout = index === 0 && endpoints.length > 1 ? Math.min(7_500, remaining) : remaining;
+    const attemptTimeout = index === 0 && endpoints.length > 1 ? Math.min(remaining - 1_000, Math.max(20_000, remaining * 0.8)) : remaining;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {

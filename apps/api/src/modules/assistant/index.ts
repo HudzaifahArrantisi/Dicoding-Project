@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { assistantChatEvents, assistantConversationMemory } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
@@ -11,18 +11,42 @@ import { withinModelBudget } from "./model-budget";
 import { composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge } from "./company-knowledge";
 import { isAssistantIdentityQuestion } from "./identity";
 import { generateLlmReply } from "./llm-client";
+import { rewriteMitraQuery } from "./query-rewrite";
 import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
 import { isCrossTenantQuestion, OUT_OF_SCOPE_REPLY, shouldRefuseMitraMessage, TENANT_SCOPE_REPLY } from "./guardrails";
-import { addSessionTurn, buildConversationContext, endSession, getSession, rateSessionTurn, sessionKey, summarizeSession } from "./session-memory";
+import { addSessionTurn, buildConversationContext, clearUserSessions, endSession, getSession, rateSessionTurn, sessionKey, summarizeSession } from "./session-memory";
 
 const emptyModel: ModelResult = { available: false, predictions: [] };
+const compactions = new Map<string, Promise<void>>();
+
+function queueCompaction(key: string, partnerId: string, userId: string, sessionId: string, turns: ReturnType<typeof getSession>): void {
+  if (!turns.length) return;
+  const previous = compactions.get(key) ?? Promise.resolve();
+  const work = previous.then(async () => {
+    await db.transaction(async (tx) => {
+      const [stored] = await tx.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
+        .where(and(eq(assistantConversationMemory.partner_id, partnerId), eq(assistantConversationMemory.user_id, userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
+      const summary = await summarizeSession(turns, stored?.summary ?? "");
+      await tx.insert(assistantConversationMemory).values({ partner_id: partnerId, user_id: userId, session_id: sessionId, summary })
+        .onConflictDoUpdate({ target: [assistantConversationMemory.partner_id, assistantConversationMemory.user_id, assistantConversationMemory.session_id], set: { summary, updated_at: new Date() } });
+      await tx.update(assistantChatEvents).set({ model_results: sql`jsonb_set(${assistantChatEvents.model_results}, '{session_active}', 'false'::jsonb)` })
+        .where(and(eq(assistantChatEvents.partner_id, partnerId), eq(assistantChatEvents.user_id, userId), inArray(assistantChatEvents.id, turns.map((turn) => turn.id)), sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`));
+    });
+  }).catch((error) => {
+    endSession(key);
+    console.warn("[ASSISTANT] Pemadatan memori gagal", error instanceof Error ? error.message : "Error");
+  });
+  compactions.set(key, work);
+  void work.finally(() => { if (compactions.get(key) === work) compactions.delete(key); });
+}
 
 function isMitra(user: Awaited<ReturnType<typeof getAuthUser>>): user is NonNullable<typeof user> & { role: "mitra"; partnerId: string } {
   return Boolean(user?.role === "mitra" && user.partnerId);
 }
 
 async function activeTurns(partnerId: string, userId: string, sessionId: string) {
-  const key = sessionKey(partnerId, sessionId);
+  const key = sessionKey(partnerId, userId, sessionId);
+  await compactions.get(key);
   const cached = getSession(key);
   if (cached.length) return cached;
   const rows = await db.select({
@@ -37,19 +61,21 @@ async function activeTurns(partnerId: string, userId: string, sessionId: string)
     .where(and(
       eq(assistantChatEvents.partner_id, partnerId),
       eq(assistantChatEvents.user_id, userId),
-      sql`(${assistantChatEvents.model_results}->>'session_id' = ${sessionId} OR ${assistantChatEvents.model_results}->>'session_id' IS NULL)`,
+      sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`,
     ))
-    .orderBy(desc(assistantChatEvents.created_at)).limit(15);
+    .orderBy(desc(assistantChatEvents.created_at)).limit(8);
   for (const row of rows.reverse()) {
     const metadata = row.model_results as { session_active?: boolean; response_source?: string } | null;
     if (metadata?.session_active !== true) continue;
-    addSessionTurn(key, {
+    const evicted = addSessionTurn(key, {
       id: row.id, message: row.message, reply: row.reply, intent: row.intent,
       source: metadata.response_source === "llm" ? "llm" : "fallback",
       feedback: row.feedback === 1 || row.feedback === -1 ? row.feedback : null,
       created_at: row.created_at,
     });
+    if (evicted.length) queueCompaction(key, partnerId, userId, sessionId, evicted);
   }
+  await compactions.get(key);
   return getSession(key);
 }
 
@@ -82,23 +108,25 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       return { error: "Pesan tidak boleh kosong" };
     }
     const message = body.message.trim();
-    const sessionId = body.session_id ?? headers["x-session-id"] ?? crypto.randomUUID();
-    const key = sessionKey(user.partnerId, sessionId);
+    const sessionId = body.session_id;
+    const key = sessionKey(user.partnerId, user.userId, sessionId);
     const turns = await activeTurns(user.partnerId, user.userId, sessionId);
     const previousIntent = turns[turns.length - 1]?.intent as AssistantIntent | null ?? null;
     const scopeRefused = shouldRefuseMitraMessage(message, previousIntent);
-    const knowledgeTopic = scopeRefused ? null : knowledgeIntent(message, previousIntent);
-    const identityQuestion = !scopeRefused && isAssistantIdentityQuestion(message);
-    const contextPromise = loadMitraContext(user.partnerId);
     const memoryPromise = db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
       .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
-    const knowledgePromise = knowledgeTopic ? loadCompanyKnowledge(message, knowledgeTopic) : Promise.resolve(null);
-    const classified = scopeRefused || knowledgeTopic || identityQuestion ? null : await withinModelBudget(classifyMitraMessage(message), 500, null);
-    const resolvedIntent = scopeRefused ? null : identityQuestion ? "identity" : knowledgeTopic ?? resolveMitraIntent(message, previousIntent, classified);
-    const crossTenant = isCrossTenantQuestion(message) || resolvedIntent === "top_partners";
+    const [memory] = await memoryPromise;
+    const standaloneQuery = scopeRefused ? message : await rewriteMitraQuery(message, turns, memory?.summary ?? "");
+    const knowledgeTopic = scopeRefused ? null : knowledgeIntent(standaloneQuery, previousIntent);
+    const identityQuestion = !scopeRefused && isAssistantIdentityQuestion(standaloneQuery);
+    const contextPromise = loadMitraContext(user.partnerId);
+    const knowledgePromise = knowledgeTopic ? loadCompanyKnowledge(standaloneQuery, knowledgeTopic) : Promise.resolve(null);
+    const classified = scopeRefused || knowledgeTopic || identityQuestion ? null : await withinModelBudget(classifyMitraMessage(standaloneQuery), 500, null);
+    const resolvedIntent = scopeRefused ? null : identityQuestion ? "identity" : knowledgeTopic ?? resolveMitraIntent(standaloneQuery, previousIntent, classified);
+    const crossTenant = isCrossTenantQuestion(message) || isCrossTenantQuestion(standaloneQuery) || resolvedIntent === "top_partners";
     const refused = scopeRefused || crossTenant;
     const intent = refused ? null : resolvedIntent;
-    const [context, [memory], knowledge] = await Promise.all([contextPromise, memoryPromise, knowledgePromise]);
+    const [context, knowledge] = await Promise.all([contextPromise, knowledgePromise]);
     const model = intent === "restock" || intent === "stock_report"
       ? await withinModelBudget(predictMitraStocks(context.stocks), 800, emptyModel)
       : emptyModel;
@@ -107,8 +135,10 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       : knowledgeTopic && knowledge
         ? { ...answerMitraQuestion(message), reply: composeKnowledgeReply(knowledge, knowledgeTopic, message) }
         : intent
-        ? composeMitraReply(message, context, model, previousIntent, classified)
-        : answerMitraQuestion(message);
+        ? composeMitraReply(standaloneQuery, context, model, previousIntent, classified)
+        : { ...answerMitraQuestion(message), reply: /\b(?:hi|hai|halo|apa\s*kabar|apaokabar)\b/i.test(message)
+          ? "Halo! Kabar saya baik. Ada yang ingin kamu bahas?"
+          : "Saya belum bisa menjawab pertanyaan itu saat ini. Coba lagi sebentar." };
     let llmReply: string | null = null;
     let grounded = false;
     if (!refused) {
@@ -118,9 +148,9 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
             summary: memory?.summary ?? "",
             recent: buildConversationContext(turns),
           }, knowledge ?? undefined),
-          userMessage: message,
+          userMessage: `Pesan asli: ${message}\nMaksud mandiri: ${standaloneQuery}`,
         });
-        grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model, knowledge ?? undefined, { summary: memory?.summary ?? "", recent: buildConversationContext(turns) })
+        grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model, knowledge ?? undefined, { summary: memory?.summary ?? "", recent: buildConversationContext(turns) }, message)
           && (!identityQuestion || /\bDaisuki AI(?: Assistant)?\b/i.test(llmReply)));
       } catch (error) {
         console.warn("[ASSISTANT] Jawaban 9Router tidak dapat digunakan", error instanceof Error ? error.message : "Error");
@@ -142,7 +172,8 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       model_confidence: ranked[0] ? String(ranked[0].confidence) : null,
       model_results: { intent: classified, stocks: model.predictions, response_source: source, session_active: true, session_id: sessionId },
     }).returning({ id: assistantChatEvents.id });
-    addSessionTurn(key, { id: saved.id, message, reply: response.reply, intent, source, feedback: null, created_at: new Date() });
+    const evicted = addSessionTurn(key, { id: saved.id, message, reply: response.reply, intent, source, feedback: null, created_at: new Date() });
+    queueCompaction(key, user.partnerId, user.userId, sessionId, evicted);
     const payload = { ...response, interactionId: saved.id, session_id: sessionId, modelAvailable: model.available, source };
     if (headers.accept?.includes("text/event-stream")) {
       return new Response(`data: ${JSON.stringify(payload)}\n\n`, {
@@ -151,7 +182,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     }
     return payload;
   },
-  { body: t.Object({ message: t.String({ minLength: 1, maxLength: 500 }), session_id: t.Optional(t.String({ format: "uuid" })) }) },
+  { body: t.Object({ message: t.String({ minLength: 1, maxLength: 500 }), session_id: t.String({ format: "uuid" }) }) },
 ).patch(
   "/mitra/chat/:id/feedback",
   async ({ headers, params, body, set }) => {
@@ -162,7 +193,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       .where(and(eq(assistantChatEvents.id, params.id), eq(assistantChatEvents.partner_id, user.partnerId), eq(assistantChatEvents.user_id, user.userId)))
       .returning({ id: assistantChatEvents.id });
     if (!updated) { set.status = 404; return { error: "Percakapan tidak ditemukan" }; }
-    rateSessionTurn(sessionKey(user.partnerId, headers["x-session-id"] ?? user.userId), params.id, body.rating);
+    rateSessionTurn(sessionKey(user.partnerId, user.userId, headers["x-session-id"] ?? user.userId), params.id, body.rating);
     return { status: "ok" };
   },
   { params: t.Object({ id: t.String({ format: "uuid" }) }), body: t.Object({ rating: t.Union([t.Literal(1), t.Literal(-1)]) }) },
@@ -173,7 +204,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
     if (!isMitra(user)) { set.status = 403; return { error: "Akses hanya untuk mitra" }; }
     const sessionId = body.session_id ?? headers["x-session-id"] ?? user.userId;
-    const key = sessionKey(user.partnerId, sessionId);
+    const key = sessionKey(user.partnerId, user.userId, sessionId);
     const turns = await activeTurns(user.partnerId, user.userId, sessionId);
     if (!turns.length) return { status: "ok", remembered: false };
     const [previous] = await db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
@@ -191,7 +222,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       await tx.delete(assistantChatEvents).where(and(
         eq(assistantChatEvents.partner_id, user.partnerId),
         eq(assistantChatEvents.user_id, user.userId),
-        sql`${assistantChatEvents.model_results}->>'session_active' = 'true'`,
+        sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`,
       ));
     });
     endSession(key);
@@ -204,11 +235,12 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
     if (!isMitra(user)) { set.status = 403; return { error: "Akses hanya untuk mitra" }; }
+    for (const key of [...compactions.keys()]) if (key.startsWith(`${user.partnerId}:${user.userId}:`)) await compactions.get(key);
     await db.delete(assistantChatEvents)
       .where(and(eq(assistantChatEvents.partner_id, user.partnerId), eq(assistantChatEvents.user_id, user.userId)));
     await db.delete(assistantConversationMemory)
       .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId)));
-    endSession(sessionKey(user.partnerId, user.userId));
+    clearUserSessions(user.partnerId, user.userId);
     return { status: "ok" };
   },
 );

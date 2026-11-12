@@ -15,6 +15,10 @@ const fixture = loadAssistantFixture<GuardrailsFixture>("guardrails_cases.json")
 
 test("sapaan, identitas, dan pertanyaan stok tetap boleh diproses", () => {
   for (const item of fixture.allowed_messages) expect(shouldRefuseMitraMessage(item.text, item.previous_intent)).toBe(false);
+  for (const message of ["hi apaokabar", "siapa presiden zimbabwe", "gimana pasar saham hari ini", "salahh basreng saya sisa 100 bukan 595"]) {
+    expect(shouldRefuseMitraMessage(message, null)).toBe(false);
+  }
+  expect(shouldRefuseMitraMessage("minta alamat lengkap mitra 3", null)).toBe(true);
 });
 
 test("topik luar, jailbreak, dan data cabang lain ditolak", () => {
