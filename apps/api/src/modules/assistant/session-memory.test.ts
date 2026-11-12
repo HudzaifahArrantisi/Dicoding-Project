@@ -39,3 +39,15 @@ test("ringkasan sesi disimpan tanpa menunggu 9Router", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("setelah lima pasangan, empat pesan tertua dipadatkan dan enam pesan tetap aktif", async () => {
+  const key = sessionKey("mitra-memory", "user-memory", "session-one");
+  let evicted = [] as ReturnType<typeof getSession>;
+  for (let index = 1; index <= 5; index++) evicted = addSessionTurn(key, turn(String(index), `Topik ${index}`, `Jawaban ${index}`));
+  expect(evicted.map((item) => item.id)).toEqual(["1", "2"]);
+  expect(getSession(key).map((item) => item.id)).toEqual(["3", "4", "5"]);
+  expect(await summarizeSession(evicted, "Ringkasan awal")).toContain("Topik 1");
+  expect(await summarizeSession(evicted, "Ringkasan awal")).toContain("Jawaban 2");
+  expect(getSession(sessionKey("mitra-memory", "user-memory", "session-two"))).toEqual([]);
+  endSession(key);
+});

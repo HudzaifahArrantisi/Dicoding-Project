@@ -114,7 +114,8 @@ export function matchTourIntent(text: string): "delivery" | "restock" | "stock_r
   }
   return null;
 }
-export function matchFactualIntent(text: string): "central_stock" | "top_products" | "top_partners" | "top_regions" | null {
+export function matchFactualIntent(text: string): "own_stock" | "central_stock" | "top_products" | "top_partners" | "top_regions" | null {
+  if (matchFactualPattern("own_stock_patterns", text) && !matchFactualPattern("central_stock_patterns", text)) return "own_stock";
   const trained = matchTrainingPhrase(text);
   if (trained === "central_stock" || trained === "top_products" || trained === "top_partners" || trained === "top_regions") return trained;
   const intents = pack("intent/factual").raw.intents as Record<string, string[]>;
@@ -125,7 +126,7 @@ export function matchFactualIntent(text: string): "central_stock" | "top_product
   }
   return null;
 }
-export function matchFactualPattern(name: "network_patterns" | "own_branch_patterns" | "central_stock_patterns" | "tutorial_patterns", text: string): boolean {
+export function matchFactualPattern(name: "network_patterns" | "own_branch_patterns" | "own_stock_patterns" | "central_stock_patterns" | "tutorial_patterns", text: string): boolean {
   return extra("intent/factual", name)?.test(text) ?? false;
 }
 export function getProductAliases(): Map<string, string[]> {

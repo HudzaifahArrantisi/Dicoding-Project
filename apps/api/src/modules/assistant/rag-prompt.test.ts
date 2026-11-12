@@ -36,7 +36,8 @@ test("jawaban LLM dengan angka atau PO di luar fakta ditolak", () => {
   expect(isGroundedLlmReply("Basreng Daun Jeruk tersisa 8 pcs. Pesanan PO-TEST-123 sedang dalam pengiriman.", context, model)).toBe(true);
   expect(isGroundedLlmReply("Basreng Daun Jeruk tersisa 99 pcs.", context, model)).toBe(false);
   expect(isGroundedLlmReply("Pesanan PO-KARANGAN-999 sedang dikirim.", context, model)).toBe(false);
-  expect(isGroundedLlmReply("Basreng baru tersisa 8 pcs.", context, model)).toBe(false);
+  expect(isGroundedLlmReply("Basreng baru tersisa 8 pcs.", context, model)).toBe(true);
+  expect(isGroundedLlmReply("Basreng tersisa 90 pcs di gudang saya.", context, model, undefined, undefined, "berapa stok gudang saya?")).toBe(false);
   expect(isGroundedLlmReply("Basreng Daun Jeruk: sisa stok 90 pcs di toko.", context, model)).toBe(false);
   expect(isGroundedLlmReply("PO-TEST-123 sudah selesai.", context, model)).toBe(false);
   expect(isGroundedLlmReply("Stok Basreng Daun Jeruk aman.", context, model)).toBe(false);
@@ -56,9 +57,11 @@ test("prompt memuat identitas resmi model daisuki.pkl", () => {
   expect(prompt).toContain("Daisuki AI Assistant");
 });
 
-test("prompt membatasi domain, kewenangan, dan akses mitra lain", () => {
+test("prompt menjaga kewenangan dan akses mitra lain sambil menerima pertanyaan umum", () => {
   const prompt = buildMitraRagPrompt(context, model);
-  expect(prompt).toContain("asisten khusus inventaris Daisuki B2B");
+  expect(prompt).toContain("percakapan umum yang aman");
+  expect(prompt).toContain("GUARDRAILS_POLICY");
+  expect(prompt).toContain("central_stock_available");
   expect(prompt).toContain("Anda baca-saja");
   expect(prompt).toContain("jangan mengungkap identitas atau data cabang lain");
   expect(isGroundedLlmReply("FAKTA_JSON berisi data internal", context, model)).toBe(false);

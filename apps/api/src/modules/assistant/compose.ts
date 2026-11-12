@@ -6,8 +6,8 @@ import { DAISUKI_AI_IDENTITY_REPLY, isAssistantIdentityQuestion } from "./identi
 import { getProductAliases, isGreeting, isFollowUp, matchFactualIntent, matchFactualPattern, matchTourIntent } from "./word-loader";
 
 const number = (value: number) => value.toLocaleString("id-ID");
-export type AssistantIntent = MitraTour | "greeting" | "central_stock" | "top_products" | "top_partners" | "top_regions" | "identity" | "out_of_scope" | "company" | "sop";
-const factualIntents = new Set<AssistantIntent>(["central_stock", "top_products", "top_partners", "top_regions"]);
+export type AssistantIntent = MitraTour | "greeting" | "own_stock" | "central_stock" | "top_products" | "top_partners" | "top_regions" | "identity" | "out_of_scope" | "company" | "sop";
+const factualIntents = new Set<AssistantIntent>(["own_stock", "central_stock", "top_products", "top_partners", "top_regions"]);
 const tours = new Set<AssistantIntent>(["restock", "stock_report", "delivery", "logs", "profile"]);
 
 function selectedStocks(message: string, stocks: ModelRecord[]): ModelRecord[] {
@@ -19,7 +19,7 @@ function selectedStocks(message: string, stocks: ModelRecord[]): ModelRecord[] {
 function stockReply(message: string, context: MitraContext): string {
   const stocks = selectedStocks(message, context.stocks);
   if (!stocks.length) return "Data stok toko belum tersedia. Coba buka tab Stok atau hubungi admin pusat.";
-  const central = matchFactualPattern("central_stock_patterns", message);
+  const central = !matchFactualPattern("own_stock_patterns", message) && matchFactualPattern("central_stock_patterns", message);
   const lines = stocks.map((stock) => central
     ? `${stock.product_name}: stok gudang pusat ${number(stock.central_stock)} pcs.`
     : `${stock.product_name}: sisa stok ${number(stock.current_qty)} pcs (${getStockStatus(stock.current_qty, stock.par_level)}${isStale(stock.updated_at) ? ", laporan lebih dari 24 jam" : ""}).`);
@@ -80,6 +80,7 @@ function profileReply(context: MitraContext): string {
 }
 
 function factReply(intent: AssistantIntent, context: MitraContext, message: string): string {
+  if (intent === "own_stock") return stockReply(message, context);
   if (intent === "central_stock") {
     if (!context.stocks.length) return "Data stok gudang pusat untuk produk cabang Anda belum tersedia di sistem kami saat ini. Buka tab Restock untuk mengecek kembali.";
     return `Stok gudang pusat untuk produk cabang Anda:\n${context.stocks.map((stock) => `${stock.product_name}: ${number(stock.central_stock)} pcs.`).join("\n")}`;
@@ -105,6 +106,9 @@ function factReply(intent: AssistantIntent, context: MitraContext, message: stri
 }
 
 export function resolveMitraIntent(message: string, previousIntent: AssistantIntent | null, classified?: { label: string; confidence: number } | null): AssistantIntent | null {
+  if (/\b(?:salah+|keliru|bukan)\b/i.test(message) && /\b(?:sisa|stok|gudang|toko|cabang)\b/i.test(message)) return "own_stock";
+  if (matchFactualPattern("own_stock_patterns", message) && !matchFactualPattern("central_stock_patterns", message)) return "own_stock";
+  if (matchFactualPattern("central_stock_patterns", message)) return "central_stock";
   if (isOutOfScopeQuestion(message) || !isOperationalQuestion(message) && !isFollowUp(message)) return null;
   const normalized = message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   if (isAssistantIdentityQuestion(message)) return "identity";
@@ -124,6 +128,9 @@ export function composeMitraReply(message: string, context: MitraContext, model:
   const base = answerMitraQuestion(message);
   const intent = resolveMitraIntent(message, previousIntent, classified);
   if (!intent) return base;
+  if (intent === "own_stock" && /\b(?:salah+|keliru|bukan)\b/i.test(message)) {
+    return { ...base, reply: `Maaf, saya keliru merujuk angka stok. ${stockReply(message, context)} Jika jumlah fisiknya berbeda dari laporan terakhir, perbarui melalui Laporan Harian.` };
+  }
   if (intent === "identity") {
     return {
       ...base,

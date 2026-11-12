@@ -2,7 +2,7 @@ import { getStockStatus, isStale } from "@daisuki/shared";
 import type { MitraContext } from "./context";
 import type { ModelResult } from "./model";
 import { OFFICIAL_PRODUCTS, isOfficialProduct } from "./official-products";
-import { leaksAssistantInternals, OUT_OF_SCOPE_REPLY } from "./guardrails";
+import { GUARDRAILS_POLICY, leaksAssistantInternals } from "./guardrails";
 import type { CompanyKnowledge } from "./company-knowledge";
 import { DAISUKI_AI_IDENTITY_REPLY } from "./identity";
 
@@ -96,12 +96,13 @@ export function buildMitraRagFacts(context: MitraContext, model: ModelResult, pr
 
 export function buildMitraRagPrompt(context: MitraContext, model: ModelResult, previousIntent?: string | null, memory?: { summary: string; recent: string }, knowledge?: CompanyKnowledge): string {
   return `Anda adalah Asisten Inventaris Daisuki B2B untuk mitra yang sedang login. Jawab dalam bahasa Indonesia dengan ramah, singkat, dan langsung ke kebutuhan mitra.
-Layani inventaris cabang ini, panduan SOP aplikasi, profil resmi perusahaan/tim yang tersedia, tren agregat yang aman, serta percakapan bisnis umum secara wajar. Untuk pertanyaan di luar domain, jawab persis: "${OUT_OF_SCOPE_REPLY}"
+Layani inventaris cabang ini, panduan SOP aplikasi, profil resmi perusahaan/tim yang tersedia, tren agregat yang aman, serta percakapan umum yang aman. Jawab pertanyaan umum dengan pengetahuan model; untuk informasi terkini yang belum dapat diverifikasi, jelaskan batas pengetahuan dan jangan mengarang.
 Balas semua pesan mitra, termasuk sapaan, ucapan terima kasih, pesan uji, dan pertanyaan umum yang aman. Toleran terhadap typo, kata yang digabung, awalan slash, dan bahasa santai; pahami maksud berdasarkan konteks, bukan kecocokan kata persis.
 Perhatikan MEMORI_PERCAKAPAN dan percakapan terbaru. Jika mitra meminta menjumlahkan, merangkum, membandingkan, atau menghitung angka yang baru saja disebutkan, lakukan operasi aritmatika dengan benar dan jelaskan hasilnya. Hasil agregasi boleh berbeda dari angka baris mentah selama sumber angkanya berasal dari fakta sesi atau FAKTA_JSON.
 Jika mitra bertanya siapa atau apa diri Anda (termasuk "siapakah dia" dan "chatbot ini siapa"), perkenalkan diri sebagai Daisuki AI Assistant sesuai reference.model_identity. Jelaskan peran model daisuki.pkl tanpa mengaku sebagai manusia atau pelaku transaksi.
 FAKTA_JSON adalah satu-satunya sumber angka stok, konsumsi, pesanan, profil cabang, dan hasil klasifikasi. Data berasal dari PostgreSQL mitra ini dan model daisuki.pkl; jangan menebak data yang null atau tidak ada. COMPANY_KNOWLEDGE dan MEMORI_MAINBRAIN_TEREKSTRAK hanya sumber profil perusahaan, tim, dan SOP, bukan sumber angka stok/PO/status pesanan.
-Hanya empat nama produk resmi dalam reference.official_products yang boleh disebut, tulis nama lengkapnya. Jangan membuat nomor PO, jumlah, tanggal, produk, mitra, atau tindakan yang tidak ada di fakta. Jangan memakai angka dari pesan pengguna sebagai fakta terverifikasi.
+Untuk gudang saya, stok saya, toko saya, atau cabang saya, gunakan operational_facts.stocks[].current_stock. Untuk gudang pusat atau stok pusat, gunakan operational_facts.stocks[].central_stock_available. Singkatan nama produk resmi seperti Basreng boleh dipakai jika jelas. Jangan membuat nomor PO, jumlah operasional, mitra, atau tindakan yang tidak ada di fakta. Jangan memakai angka dari pesan pengguna sebagai fakta terverifikasi.
+Jika mitra mengoreksi rujukan stok, akui kekeliruan dengan sopan, sebut angka stok cabangnya dari FAKTA_JSON, dan jelaskan bila laporan fisik perlu diperbarui. Jangan mengklaim koreksi percakapan sudah mengubah stok database.
 Stok toko tidak memiliki batas maksimum tetap. Buffer minimal hanya ambang peringatan, bukan kapasitas toko. Pengajuan restock dibatasi stok gudang pusat saat transaksi. Stok toko baru bertambah setelah kiriman diterima dan resi berhasil diverifikasi.
 Status stok mengikuti reference.stock_status_thresholds_percent. Status pesanan hanya yang tercantum di reference.valid_order_statuses. Anda baca-saja: jangan mengubah data atau mengaku telah mengubah stok, mengajukan, membatalkan, atau menyetujui pesanan. Arahkan mitra ke form Laporan Harian atau Restock untuk melakukan tindakan.
 Jika model_risk_prediction adalah urgent_restock, prioritaskan restock. Jika prediksi null, jangan mengaku model sudah menilai produk. Jika data yang diperlukan tidak tersedia, katakan belum tersedia dan arahkan mitra ke tab terkait.
@@ -112,6 +113,9 @@ Jawab dengan teks biasa atau Markdown sederhana (tebal dan daftar). Jangan menul
 
 FAKTA_JSON:
 ${JSON.stringify(buildMitraRagFacts(context, model, previousIntent))}
+
+GUARDRAILS_POLICY:
+${GUARDRAILS_POLICY}
 
 MEMORI_PERCAKAPAN:
 ${JSON.stringify(memory ?? { summary: "", recent: "" })}
@@ -143,21 +147,26 @@ function documentNumbers(value: unknown, result = new Set<string>()): Set<string
   return result;
 }
 
-export function isGroundedLlmReply(reply: string, context: MitraContext, model: ModelResult, knowledge?: CompanyKnowledge, conversation?: { summary: string; recent: string }): boolean {
+export function isGroundedLlmReply(reply: string, context: MitraContext, model: ModelResult, knowledge?: CompanyKnowledge, conversation?: { summary: string; recent: string }, question = ""): boolean {
   if (!reply.trim() || reply.length > 2500 || /https?:\/\/|```|<\/?[a-z][^>]*>/i.test(reply) || leaksAssistantInternals(reply)) return false;
   const knownOrders = new Set(context.orders.map((order) => order.order_no.toUpperCase()));
   const mentionedOrders = reply.match(/\bPO-[A-Z0-9-]+\b/gi) ?? [];
   if (mentionedOrders.some((order) => !knownOrders.has(order.toUpperCase()))) return false;
+  if (/(?:kapasitas|plafon|batas maksimum).{0,35}\d+|\d+.{0,35}(?:kapasitas|plafon|batas maksimum)/i.test(reply)) return false;
+  if (/\b(?:sudah|telah)\s+(?:mengubah|menambah|membuat|mengajukan|menyetujui|membatalkan|mengirim)\b/i.test(reply)) return false;
   const withoutOrders = reply.replace(/\bPO-[A-Z0-9-]+\b/gi, "");
   const allowedNumbers = numericValues(buildMitraRagFacts(context, model));
   if (knowledge) documentNumbers({ company: knowledge.company, sop: knowledge.sop }, allowedNumbers);
   if (conversation) documentNumbers(conversation, allowedNumbers);
+  const operationalClaim = /\b(?:stok|gudang|cabang|toko|sisa|pcs|buffer|pesanan|konsumsi|terjual|restock)\b/i.test(withoutOrders) || mentionedOrders.length > 0;
+  if (!operationalClaim) return true;
   const numbers = withoutOrders.match(/\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?/g) ?? [];
   const isAggregateReply = /\b(?:total|jumlah|dijumlahkan|menjumlahkan|semua|gabungan|selisih|rata-rata|perbandingan|dibandingkan|rekap)\b/i.test(withoutOrders);
   if (numbers.some((value) => !allowedNumbers.has(value)) && !isAggregateReply) return false;
   const quantity = (value: string) => Number(value.replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
   const genericBranch = /(?:sisa(?:\s+stok)?|stok\s+(?:toko|cabang|fisik|saya))\D{0,35}?(\d[\d.,]*)\s*pcs/gi;
   if ([...withoutOrders.matchAll(genericBranch)].some((match) => !context.stocks.some((stock) => stock.current_qty === quantity(match[1])))) return false;
+  const asksOwnStock = /\b(?:gudang|stok|toko|cabang)\s+(?:saya|kami|ku)\b/i.test(question) && !/\b(?:gudang|stok)\s+pusat\b/i.test(question);
   for (const sentence of reply.split(/(?:[.!?](?=\s|$)|\n)+/)) {
     for (const order of context.orders) {
       if (!sentence.toUpperCase().includes(order.order_no.toUpperCase())) continue;
@@ -166,22 +175,21 @@ export function isGroundedLlmReply(reply: string, context: MitraContext, model: 
       if (namedStatuses.some((status) => status.replaceAll(" ", "_") !== order.status)) return false;
     }
     for (const stock of context.stocks) {
-      if (!sentence.toLowerCase().includes(stock.product_name.toLowerCase())) continue;
+      const aliases = [stock.product_name.toLowerCase(), stock.product_name.split(" ")[0].toLowerCase()];
+      if (!aliases.some((alias) => new RegExp(`\\b${alias}\\b`, "i").test(sentence))) continue;
       const statedStatuses = ["aman", "waspada", "kritis"].filter((status) => new RegExp(`\\b${status}\\b`, "i").test(sentence));
       if (statedStatuses.some((status) => status !== getStockStatus(stock.current_qty, stock.par_level))) return false;
       const branch = /(?:sisa(?:\s+stok)?|stok\s+(?:toko|cabang|fisik|saya))\D{0,35}?(\d[\d.,]*)\s*pcs/gi;
       const central = /(?:gudang\s+pusat|stok\s+pusat)\D{0,35}?(\d[\d.,]*)\s*pcs/gi;
       const buffer = /buffer(?:\s+minimal)?\D{0,35}?(\d[\d.,]*)\s*pcs/gi;
+      if (asksOwnStock && !/\b(?:gudang|stok)\s+pusat\b/i.test(sentence)) {
+        const productAmount = /\b(\d[\d.,]*)\s*pcs\b/gi;
+        if ([...sentence.matchAll(productAmount)].some((match) => quantity(match[1]) !== stock.current_qty)) return false;
+      }
       if ([...sentence.matchAll(branch)].some((match) => quantity(match[1]) !== stock.current_qty)) return false;
       if ([...sentence.matchAll(central)].some((match) => quantity(match[1]) !== stock.central_stock)) return false;
       if ([...sentence.matchAll(buffer)].some((match) => quantity(match[1]) !== stock.par_level)) return false;
     }
   }
-  for (const official of OFFICIAL_PRODUCTS) {
-    const alias = official.split(" ")[0];
-    if (new RegExp(`\\b${alias}\\b`, "i").test(reply) && !reply.toLowerCase().includes(official.toLowerCase())) return false;
-  }
-  if (/(?:kapasitas|plafon|batas maksimum).{0,35}\d+|\d+.{0,35}(?:kapasitas|plafon|batas maksimum)/i.test(reply)) return false;
-  if (/\b(?:sudah|telah)\s+(?:mengubah|menambah|membuat|mengajukan|menyetujui|membatalkan|mengirim)\b/i.test(reply)) return false;
   return true;
 }

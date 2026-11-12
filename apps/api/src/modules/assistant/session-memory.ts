@@ -1,15 +1,15 @@
 import { isCourtesyPhrase } from "./word-loader";
 
-type SessionTurn = { id: string; message: string; reply: string; intent: string | null; source: "llm" | "fallback"; feedback: -1 | 1 | null; created_at: Date };
+export type SessionTurn = { id: string; message: string; reply: string; intent: string | null; source: "llm" | "fallback"; feedback: -1 | 1 | null; created_at: Date };
 type Session = { turns: SessionTurn[]; touchedAt: number };
 
 const sessions = new Map<string, Session>();
 const ttlMs = 24 * 60 * 60 * 1000;
-const maxTurns = 15;
+const maxTurns = 4;
 const maxSessions = 1_000;
 
-export function sessionKey(partnerId: string, userId: string): string {
-  return `${partnerId}:${userId}`;
+export function sessionKey(partnerId: string, userId: string, sessionId = userId): string {
+  return `${partnerId}:${userId}:${sessionId}`;
 }
 
 export function getSession(key: string): SessionTurn[] {
@@ -23,7 +23,7 @@ export function getSession(key: string): SessionTurn[] {
   return [...session.turns];
 }
 
-export function addSessionTurn(key: string, turn: SessionTurn): void {
+export function addSessionTurn(key: string, turn: SessionTurn): SessionTurn[] {
   const current = getSession(key);
   if (!sessions.has(key) && sessions.size >= maxSessions) {
     const now = Date.now();
@@ -32,7 +32,10 @@ export function addSessionTurn(key: string, turn: SessionTurn): void {
     }
     if (sessions.size >= maxSessions) sessions.delete(sessions.keys().next().value!);
   }
-  sessions.set(key, { turns: [...current, turn].slice(-maxTurns), touchedAt: Date.now() });
+  const next = [...current, turn];
+  const evicted = next.length > maxTurns ? next.splice(0, 2) : [];
+  sessions.set(key, { turns: next, touchedAt: Date.now() });
+  return evicted;
 }
 
 export function rateSessionTurn(key: string, id: string, feedback: -1 | 1): void {
@@ -46,8 +49,12 @@ export function endSession(key: string): SessionTurn[] {
   return turns;
 }
 
+export function clearUserSessions(partnerId: string, userId: string): void {
+  for (const key of sessions.keys()) if (key.startsWith(`${partnerId}:${userId}:`)) sessions.delete(key);
+}
+
 export function buildConversationContext(turns: SessionTurn[]): string {
-  return turns.slice(-5).map((turn) => `Mitra: ${turn.message}\nAsisten: ${turn.reply}`).join("\n").slice(-2200);
+  return turns.slice(-maxTurns).map((turn) => `Mitra: ${turn.message}\nAsisten: ${turn.reply}`).join("\n").slice(-3000);
 }
 
 export function extractUserGoals(turns: SessionTurn[]): string {
@@ -60,7 +67,9 @@ export function extractUserGoals(turns: SessionTurn[]): string {
     .slice(0, 1500);
 }
 export async function summarizeSession(turns: SessionTurn[], previousSummary: string): Promise<string> {
-  const goals = extractUserGoals(turns);
-  if (!goals) return previousSummary;
-  return [previousSummary, goals].filter(Boolean).join("\n").slice(-1800);
+  const condensed = turns.filter((turn) => !isCourtesyPhrase(turn.message)).map((turn) =>
+    `Mitra: ${turn.message.slice(0, 180)} | Asisten: ${turn.reply.slice(0, 220)}`).join("\n");
+  if (!condensed) return previousSummary;
+  const combined = [previousSummary, condensed].filter(Boolean).join("\n");
+  return combined.length <= 2400 ? combined : `${combined.slice(0, 400)}\n…\n${combined.slice(-1996)}`;
 }
