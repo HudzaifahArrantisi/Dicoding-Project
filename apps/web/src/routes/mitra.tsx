@@ -1060,7 +1060,6 @@ function OrderForm({
   stocksQuery,
   centralProducts,
   orderItems,
-  skippedProductIds,
   note,
   onNoteChange,
   onAdd,
@@ -1077,9 +1076,6 @@ function OrderForm({
         statusPriority[getStockStatus(b.current_qty, b.par_level)] ||
       a.current_qty - b.current_qty,
   )
-  const skippedCount = products.filter((stock) =>
-    skippedProductIds.has(stock.product_id),
-  ).length
 
   const hasAnyExceeded = orderItems.some((item) => {
     const centralItem = centralProducts.find((p) => p.id === item.product_id)
@@ -1100,386 +1096,457 @@ function OrderForm({
 
   return (
     <section aria-labelledby="order-heading" className="dashboard-panel-enter">
-      <div>
-        <p className="dashboard-eyebrow">Restock cabang</p>
-        <h1
-          id="order-heading"
-          className="mt-1 font-display text-2xl font-bold text-ink-900 sm:text-3xl"
-        >
-          Ajukan restock
-        </h1>
-      </div>
-      <hr></hr>
-
-      {stocksQuery.isLoading ? (
-        <LoadingState label="Memuat produk cabang..." />
-      ) : null}
-
-      {needsRestock.length > 0 ? (
-        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-          <div className="flex items-center gap-2 text-amber-900">
-            <AlertTriangle className="size-5" aria-hidden="true" />
-            <h2 className="font-display text-lg font-bold">
-              Saran pasokan untuk stok kritis
-            </h2>
-          </div>
-          <p className="mt-2 text-sm text-amber-900">
-            Perkiraan awal dihitung dari selisih buffer dan stok fisik saat ini.
-            Sesuaikan pesanan dengan kebutuhan cabang dan stok pusat.
-          </p>
-          <ul className="mt-3 divide-y divide-amber-200">
-            {needsRestock.map((stock) => (
-              <li
-                key={stock.product_id}
-                className="flex items-center justify-between gap-3 py-2 text-sm text-amber-950"
-              >
-                <span>{stock.product_name}</span>
-                <strong className="shrink-0 tabular-nums">
-                  Saran{' '}
-                  {Math.max(
-                    0,
-                    stock.par_level - stock.current_qty,
-                  ).toLocaleString('id-ID')}{' '}
-                  pcs
-                </strong>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {stocksQuery.isError ? (
-        <div className="mt-6">
-          <ErrorState
-            message={errorMessage(stocksQuery.error)}
-            onRetry={() => void stocksQuery.refetch()}
-          />
-        </div>
-      ) : null}
-      {stocksQuery.data?.length === 0 ? (
-        <div className="mt-6">
-          <EmptyState
-            title="Belum ada produk untuk dipesan"
-            description="Produk akan muncul setelah admin menambahkan stok untuk cabang Anda."
-          />
-        </div>
-      ) : null}
-
-      {products.length > 0 ? (
-        <div className="mt-6 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-lg font-semibold text-ink-900">Pilih barang</h2>
-        </div>
-      ) : null}
-      <div className="mt-3 space-y-3">
-        {products.map((stock) => {
-          const selected = orderItems.find(
-            (item) => item.product_id === stock.product_id,
-          )
-          const centralItem = centralProducts.find(
-            (p) => p.id === stock.product_id,
-          )
-          const centralQty = centralItem?.central_stock ?? stock.central_stock
-          const status = getStockStatus(stock.current_qty, stock.par_level)
-          const skipped = skippedProductIds.has(stock.product_id)
-          const isExceeded = Boolean(
-            selected &&
-            centralQty !== undefined &&
-            Number(selected.qty) > centralQty,
-          )
-
-          return (
-            <article
-              key={stock.product_id}
-              className={`rounded-md border p-4 sm:p-5 ${
-                isExceeded
-                  ? 'border-warn bg-warn-bg/30'
-                  : selected
-                    ? 'border-ink-700 bg-white'
-                    : skipped
-                      ? 'border-line bg-ink-50'
-                      : 'border-line bg-white'
-              }`}
+      <div className="dashboard-surface overflow-hidden border border-line shadow-xs">
+        {/* Header Ajukan Restock */}
+        <div className="flex flex-col gap-2 border-b border-line bg-paper/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex items-center gap-3">
+            <span
+              className="grid size-11 shrink-0 place-items-center rounded-lg border border-ink-200 bg-white text-ink-900 shadow-2xs"
+              aria-hidden="true"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-ink-900">
-                    {stock.product_name}
-                  </h3>
-                  <p className="mt-1 text-sm text-muted">
-                    Stok tersedia di toko saat ini:{' '}
-                    <strong className="tabular-nums text-ink-900">
-                      {stock.current_qty} {stock.product_unit}
-                    </strong>
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <StockStatusBadge status={status} />
-                  {selected ? (
-                    <button
-                      type="button"
-                      onClick={() => onRemove(stock.product_id)}
-                      className="min-h-11 rounded-md px-3 text-sm font-semibold text-crit-fg hover:bg-crit-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                      aria-label={`Hapus ${stock.product_name} dari pengajuan`}
-                    >
-                      Hapus
-                    </button>
-                  ) : null}
-                </div>
+              <PackagePlus className="size-5.5 text-ink-900" />
+            </span>
+            <div>
+              <p className="dashboard-eyebrow">Restock cabang</p>
+              <h1
+                id="order-heading"
+                className="font-display text-xl font-bold tracking-tight text-ink-900 sm:text-2xl"
+              >
+                Ajukan restock
+              </h1>
+              <p className="mt-0.5 text-xs text-muted sm:text-sm">
+                Pilih barang yang ingin dipesan dan sesuaikan jumlahnya dengan stok pusat.
+              </p>
+            </div>
+          </div>
+          {orderItems.length > 0 ? (
+            <div className="flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 sm:self-center">
+              <span className="size-2 rounded-full bg-emerald-600" aria-hidden="true" />
+              <span className="tabular-nums">
+                {orderItems.length} produk · {totalOrderQty.toLocaleString('id-ID')} pcs dipilih
+              </span>
+            </div>
+          ) : null}
+        </div>
+
+        {stocksQuery.isLoading ? (
+          <div className="p-6">
+            <LoadingState label="Memuat produk cabang..." />
+          </div>
+        ) : null}
+
+        {stocksQuery.isError ? (
+          <div className="p-6">
+            <ErrorState
+              message={errorMessage(stocksQuery.error)}
+              onRetry={() => void stocksQuery.refetch()}
+            />
+          </div>
+        ) : null}
+
+        {stocksQuery.data?.length === 0 ? (
+          <div className="p-6">
+            <EmptyState
+              title="Belum ada produk untuk dipesan"
+              description="Produk akan muncul setelah admin menambahkan stok untuk cabang Anda."
+            />
+          </div>
+        ) : null}
+
+        {/* Banner Ringkas Saran Stok Kritis (Bila Ada) */}
+        {needsRestock.length > 0 ? (
+          <div className="border-b border-amber-200/80 bg-amber-50/80 px-4 py-3 sm:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-950 sm:text-sm">
+              <div className="flex items-center gap-2 font-semibold text-amber-900">
+                <AlertTriangle className="size-4 shrink-0 text-amber-700" aria-hidden="true" />
+                <span>Prioritas stok kritis:</span>
               </div>
-              <div className="mt-3 border-t border-line pt-2">
-                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-ink-900">
-                  <input
-                    type="checkbox"
-                    checked={skipped}
-                    onChange={(event) =>
-                      onSkipChange(stock.product_id, event.target.checked)
-                    }
-                    className="size-5 shrink-0 accent-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                  />
-                  Tidak perlu restock barang ini
-                </label>
-                {skipped ? (
-                  <p className="pb-1 text-xs text-muted">
-                    Barang ini dilewati dan tidak masuk pengajuan.
-                  </p>
-                ) : (
-                  <div>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-xs text-muted">
-                        Stok pusat:{' '}
-                        {centralQty === undefined ? (
-                          'data belum tersedia'
-                        ) : (
-                          <span
-                            className={`tabular-nums ${
-                              isExceeded
-                                ? 'font-bold text-amber-700'
-                                : 'font-semibold text-ink-900'
-                            }`}
-                          >
-                            {centralQty.toLocaleString('id-ID')}{' '}
-                            {stock.product_unit}
-                          </span>
-                        )}
-                      </p>
-                      {selected ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label
-                            htmlFor={`order-${stock.product_id}`}
-                            className="text-sm font-medium text-ink-900"
-                          >
-                            Jumlah diajukan
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onQtyChange(
-                                stock.product_id,
-                                String(
-                                  Math.max(1, Number(selected.qty || 1) - 1),
-                                ),
-                              )
-                            }
-                            disabled={
-                              !selected.qty || Number(selected.qty) <= 1
-                            }
-                            className="grid size-11 place-items-center rounded-md border border-line bg-white text-ink-900 hover:bg-ink-100 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                            aria-label={`Kurangi jumlah ${stock.product_name}`}
-                          >
-                            <Minus className="size-4" aria-hidden="true" />
-                          </button>
-                          <input
-                            data-tour="restock-item-input"
-                            id={`order-${stock.product_id}`}
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            placeholder="Jumlah"
-                            value={selected.qty}
-                            onChange={(event) =>
-                              onQtyChange(stock.product_id, event.target.value)
-                            }
-                            className={`h-11 w-24 rounded-sm border text-center text-base font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                              isExceeded
-                                ? 'border-amber-400 bg-amber-50/70 text-amber-950 ring-1 ring-amber-300 focus-visible:outline-amber-600'
-                                : 'border-line bg-white text-ink-900 focus-visible:outline-ink-700'
-                            }`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onQtyChange(
-                                stock.product_id,
-                                String(Number(selected.qty || 0) + 1),
-                              )
-                            }
-                            className="grid size-11 place-items-center rounded-md border border-line bg-white text-ink-900 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                            aria-label={`Tambah jumlah ${stock.product_name}`}
-                          >
-                            <Plus className="size-4" aria-hidden="true" />
-                          </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {needsRestock.map((stock) => {
+                  const suggested = Math.max(1, stock.par_level - stock.current_qty)
+                  return (
+                    <button
+                      key={stock.product_id}
+                      type="button"
+                      onClick={() => {
+                        onSkipChange(stock.product_id, false)
+                        onAdd(stock)
+                        onQtyChange(stock.product_id, String(suggested))
+                      }}
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-950 shadow-2xs transition-colors hover:bg-amber-100/60 cursor-pointer"
+                    >
+                      <span>{stock.product_name}</span>
+                      <span className="tabular-nums text-amber-800">
+                        +{suggested.toLocaleString('id-ID')} pcs
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Grid 2 Kolom Daftar Produk */}
+        {products.length > 0 ? (
+          <div className="bg-paper/30 p-4 sm:p-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {products.map((stock) => {
+                const selected = orderItems.find(
+                  (item) => item.product_id === stock.product_id,
+                )
+                const centralItem = centralProducts.find(
+                  (p) => p.id === stock.product_id,
+                )
+                const centralQty = centralItem?.central_stock ?? stock.central_stock
+                const status = getStockStatus(stock.current_qty, stock.par_level)
+                const suggestedQty = Math.max(0, stock.par_level - stock.current_qty)
+                const isExceeded = Boolean(
+                  selected &&
+                    centralQty !== undefined &&
+                    Number(selected.qty) > centralQty,
+                )
+
+                return (
+                  <article
+                    key={stock.product_id}
+                    className={`flex flex-col justify-between rounded-xl border bg-white p-4 shadow-2xs transition-all sm:p-5 ${
+                      isExceeded
+                        ? 'border-amber-400 bg-amber-50/20 ring-1 ring-amber-300/70'
+                        : selected
+                          ? 'border-ink-900 bg-emerald-50/10 ring-1 ring-ink-900/10 shadow-xs'
+                          : 'border-line hover:border-ink-300'
+                    }`}
+                  >
+                    <div>
+                      {/* Baris Atas: Nama Produk & Badge Status */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h2
+                              className="truncate font-display text-base font-bold text-ink-900 sm:text-lg"
+                              title={stock.product_name}
+                            >
+                              {stock.product_name}
+                            </h2>
+                            {selected ? (
+                              <span
+                                className="size-2 shrink-0 rounded-full bg-emerald-600 ring-2 ring-emerald-200"
+                                aria-label="Masuk pengajuan"
+                                title="Masuk daftar pengajuan"
+                              />
+                            ) : null}
+                          </div>
                         </div>
-                      ) : (
-                        <button
-                          data-tour="restock-item-input"
-                          type="button"
-                          onClick={() => onAdd(stock)}
-                          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-ink-700 px-3 text-sm font-semibold text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-                        >
-                          <Plus className="size-4" aria-hidden="true" /> Tambah
-                          ke pengajuan
-                        </button>
-                      )}
+                        <StockStatusBadge status={status} />
+                      </div>
+
+                      {/* Baris Metrik Ringkas: Sisa Toko vs Stok Pusat */}
+                      <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-line/70 bg-paper/50 px-3 py-2 text-xs">
+                        <div>
+                          <span className="text-muted"> Sisa di toko Saya </span>
+                          <p className="mt-0.5 font-display text-base font-bold tabular-nums text-ink-900">
+                            {stock.current_qty.toLocaleString('id-ID')}{' '}
+                            <span className="font-sans text-xs font-normal text-muted">
+                              {stock.product_unit}
+                            </span>
+                          </p>
+                        </div>
+                        <div className="border-l border-line/70 pl-2.5">
+                          <span className="text-muted">Stok pusat</span>
+                          <p
+                            className={`mt-0.5 font-display text-base font-bold tabular-nums ${
+                              isExceeded ? 'text-amber-700' : 'text-ink-900'
+                            }`}
+                          >
+                            {centralQty === undefined ? (
+                              <span className="font-sans text-xs font-normal text-muted">
+                                Belum tersedia
+                              </span>
+                            ) : (
+                              <>
+                                {centralQty.toLocaleString('id-ID')}{' '}
+                                <span className="font-sans text-xs font-normal text-muted">
+                                  {stock.product_unit}
+                                </span>
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
-                    {selected && isExceeded && centralQty !== undefined ? (
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 animate-in fade-in duration-200">
-                        <div className="flex items-center gap-2 min-w-0">
+                    {/* Baris Kontrol Pengajuan */}
+                    <div className="mt-4 border-t border-line/80 pt-3">
+                      {selected ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <label
+                              htmlFor={`order-${stock.product_id}`}
+                              className="text-xs font-semibold text-ink-900"
+                            >
+                              Pesan:
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onRemove(stock.product_id)
+                              }
+                              className="rounded-md px-2 py-1 text-xs font-semibold text-crit-fg transition-colors hover:bg-crit-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
+                              aria-label={`Batal pesan ${stock.product_name}`}
+                            >
+                              Batal
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onQtyChange(
+                                  stock.product_id,
+                                  String(
+                                    Math.max(1, Number(selected.qty || 1) - 1),
+                                  ),
+                                )
+                              }
+                              disabled={
+                                !selected.qty || Number(selected.qty) <= 1
+                              }
+                              className="grid size-11 place-items-center rounded-lg border border-line bg-paper text-ink-900 transition-all hover:bg-ink-100 active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
+                              aria-label={`Kurangi jumlah ${stock.product_name}`}
+                            >
+                              <Minus className="size-4" aria-hidden="true" />
+                            </button>
+                            <input
+                              data-tour="restock-item-input"
+                              id={`order-${stock.product_id}`}
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              placeholder="0"
+                              value={selected.qty}
+                              onChange={(event) =>
+                                onQtyChange(
+                                  stock.product_id,
+                                  event.target.value.replace(/^0+(?=\d)/, ''),
+                                )
+                              }
+                              className={`h-11 w-20 sm:w-24 rounded-lg border text-center text-lg font-bold tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                                isExceeded
+                                  ? 'border-amber-400 bg-amber-50/70 text-amber-950 ring-1 ring-amber-300 focus-visible:outline-amber-600'
+                                  : 'border-line bg-white text-ink-900 focus-visible:outline-ink-700'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onQtyChange(
+                                  stock.product_id,
+                                  String(Number(selected.qty || 0) + 1),
+                                )
+                              }
+                              className="grid size-11 place-items-center rounded-lg border border-line bg-paper text-ink-900 transition-all hover:bg-ink-100 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
+                              aria-label={`Tambah jumlah ${stock.product_name}`}
+                            >
+                              <Plus className="size-4" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          {suggestedQty > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSkipChange(stock.product_id, false)
+                                onAdd(stock)
+                                onQtyChange(
+                                  stock.product_id,
+                                  String(
+                                    centralQty !== undefined
+                                      ? Math.min(suggestedQty, Math.max(1, centralQty))
+                                      : suggestedQty,
+                                  ),
+                                )
+                              }}
+                              className="inline-flex min-h-9 items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 cursor-pointer"
+                            >
+                              <span>Isi saran +{suggestedQty} pcs</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted">
+                              Belum diajukan
+                            </span>
+                          )}
+                          <button
+                            data-tour="restock-item-input"
+                            type="button"
+                            onClick={() => {
+                              onSkipChange(stock.product_id, false)
+                              onAdd(stock)
+                              if (suggestedQty > 0) {
+                                onQtyChange(
+                                  stock.product_id,
+                                  String(
+                                    centralQty !== undefined
+                                      ? Math.min(suggestedQty, Math.max(1, centralQty))
+                                      : suggestedQty,
+                                  ),
+                                )
+                              }
+                            }}
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-ink-800 bg-white px-3.5 text-sm font-semibold text-ink-900 shadow-2xs transition-colors hover:bg-ink-900 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
+                          >
+                            <Plus className="size-4" aria-hidden="true" />
+                            <span>Tambah ke pengajuan</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {selected && isExceeded && centralQty !== undefined ? (
+                        <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
                           <AlertTriangle
                             className="size-4 shrink-0 text-amber-600"
                             aria-hidden="true"
                           />
                           <span>
-                            <strong>Jumlah melebihi stok pusat</strong>{' '}
-                            (tersedia{' '}
-                            <strong>
-                              {centralQty} {stock.product_unit}
-                            </strong>
-                            , diminta{' '}
-                            <strong>
-                              {selected.qty} {stock.product_unit}
-                            </strong>
-                            ). Kurangi jumlah sebelum mengirim pengajuan.
+                            Melebihi stok pusat ({centralQty.toLocaleString('id-ID')}{' '}
+                            {stock.product_unit} tersedia).
                           </span>
                         </div>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            </article>
-          )
-        })}
-      </div>
-
-      <div className="dashboard-surface mt-6 p-4 sm:p-5">
-        <h2 className="text-lg font-semibold text-ink-900">
-          Periksa pengajuan
-        </h2>
-        {orderItems.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">
-            {skippedCount === products.length && products.length > 0
-              ? 'Semua barang dilewati. Tidak ada restock yang perlu diajukan.'
-              : 'Belum ada barang dipilih. Tambahkan barang dari daftar di atas untuk mulai mengajukan restock.'}
-          </p>
-        ) : (
-          <ul className="mt-4 divide-y divide-line border-y border-line">
-            {orderItems.map((item) => {
-              const stock = stocksQuery.data?.find(
-                (entry) => entry.product_id === item.product_id,
-              )
-              const centralItem = centralProducts.find(
-                (p) => p.id === item.product_id,
-              )
-              const centralQty =
-                centralItem?.central_stock ?? stock?.central_stock
-              const itemExceeded =
-                centralQty !== undefined && Number(item.qty) > centralQty
-
-              return (
-                <li
-                  key={item.product_id}
-                  className="flex items-center justify-between gap-4 py-3 text-sm"
-                >
-                  <div className="min-w-0">
-                    <span className="font-medium text-ink-900">
-                      {stock?.product_name ?? 'Produk'}
-                    </span>
-                    {itemExceeded ? (
-                      <p className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
-                        <AlertTriangle
-                          className="size-3 shrink-0"
-                          aria-hidden="true"
-                        />
-                        Melebihi stok pusat (sisa {centralQty}{' '}
-                        {stock?.product_unit})
-                      </p>
-                    ) : null}
-                  </div>
-                  <span
-                    className={`shrink-0 font-semibold tabular-nums ${
-                      itemExceeded ? 'text-amber-800 font-bold' : 'text-ink-900'
-                    }`}
-                  >
-                    {item.qty || 'Belum diisi'}{' '}
-                    {item.qty ? stock?.product_unit : ''}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        {hasAnyExceeded ? (
-          <div className="mt-4 flex items-start gap-2.5 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 animate-in fade-in duration-200">
-            <AlertTriangle
-              className="size-4 shrink-0 text-amber-600 mt-0.5"
-              aria-hidden="true"
-            />
-            <div>
-              <p className="font-bold text-amber-900">
-                Peringatan: Kuantitas melebihi stok gudang pusat
-              </p>
-              <p className="mt-0.5 text-amber-800 leading-relaxed">
-                Kurangi jumlah sesuai stok pusat yang tersedia sebelum mengirim
-                pengajuan. Stok diperiksa lagi saat pesanan disimpan.
-              </p>
+                      ) : null}
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           </div>
         ) : null}
-        {hasInvalidQty ? (
-          <p role="alert" className="mt-3 text-sm font-medium text-crit-fg">
-            Isi jumlah minimal 1 pcs untuk setiap barang yang dipilih.
-          </p>
-        ) : null}
-        {skippedCount > 0 ? (
-          <p className="mt-3 text-sm text-muted">
-            {skippedCount} barang dilewati dan tidak dikirim dalam pengajuan
-            ini.
-          </p>
-        ) : null}
 
-        <label
-          htmlFor="order-note"
-          className="mt-5 block text-sm font-semibold text-ink-900"
-        >
-          Catatan untuk admin{' '}
-          <span className="font-normal text-muted">(opsional)</span>
-        </label>
-        <textarea
-          data-tour="restock-note-input"
-          id="order-note"
-          value={note}
-          onChange={(event) => onNoteChange(event.target.value)}
-          placeholder="Contoh: barang dibutuhkan sebelum hari Jumat untuk event"
-          className="mt-1.5 min-h-24 w-full resize-y rounded-sm border border-line p-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
-          maxLength={500}
-        />
-        <button
-          data-tour="submit-order-button"
-          type="button"
-          onClick={onSubmit}
-          disabled={
-            orderItems.length === 0 ||
-            hasInvalidQty ||
-            hasAnyExceeded ||
-            isSubmitting
-          }
-          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-5 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto"
-        >
-          {isSubmitting ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        {/* Footer Ringkasan Pengajuan & Catatan */}
+        <div className="border-t border-line bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-bold text-ink-900">
+              Ringkasan pengajuan
+            </h2>
+            {orderItems.length > 0 ? (
+              <span className="text-xs font-semibold tabular-nums text-muted">
+                Total: {totalOrderQty.toLocaleString('id-ID')} pcs
+              </span>
+            ) : null}
+          </div>
+
+          {orderItems.length === 0 ? (
+            <p className="mt-1.5 text-sm text-muted">
+              Belum ada barang dipilih. Tekan <strong>Tambah ke pengajuan</strong> pada kartu produk di atas.
+            </p>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {orderItems.map((item) => {
+                const stock = stocksQuery.data?.find(
+                  (entry) => entry.product_id === item.product_id,
+                )
+                const centralItem = centralProducts.find(
+                  (p) => p.id === item.product_id,
+                )
+                const centralQty =
+                  centralItem?.central_stock ?? stock?.central_stock
+                const itemExceeded =
+                  centralQty !== undefined && Number(item.qty) > centralQty
+
+                return (
+                  <div
+                    key={item.product_id}
+                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                      itemExceeded
+                        ? 'border-amber-300 bg-amber-50 text-amber-950'
+                        : 'border-line bg-paper/60 text-ink-900'
+                    }`}
+                  >
+                    <span>{stock?.product_name ?? 'Produk'}</span>
+                    <strong className="tabular-nums font-bold">
+                      {item.qty || '0'} {stock?.product_unit ?? 'pcs'}
+                    </strong>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(item.product_id)}
+                      className="ml-0.5 text-muted hover:text-crit-fg cursor-pointer"
+                      aria-label={`Hapus ${stock?.product_name ?? 'produk'} dari ringkasan`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {hasAnyExceeded ? (
+            <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              <AlertTriangle
+                className="size-4 shrink-0 text-amber-600 mt-0.5"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="font-bold text-amber-900">
+                  Kuantitas melebihi stok gudang pusat
+                </p>
+                <p className="mt-0.5 text-amber-800">
+                  Sesuaikan jumlah agar tidak melebihi stok pusat yang tersedia sebelum mengirim.
+                </p>
+              </div>
+            </div>
           ) : null}
-          Kirim Pengajuan Restock ({totalOrderQty.toLocaleString('id-ID')} pcs)
-        </button>
+
+          {hasInvalidQty ? (
+            <p role="alert" className="mt-3 text-xs font-semibold text-crit-fg">
+              Isi jumlah minimal 1 pcs untuk setiap barang yang dipilih.
+            </p>
+          ) : null}
+
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div>
+              <label
+                htmlFor="order-note"
+                className="block text-xs font-semibold text-ink-900"
+              >
+                Catatan untuk admin{' '}
+                <span className="font-normal text-muted">(opsional)</span>
+              </label>
+              <textarea
+                data-tour="restock-note-input"
+                id="order-note"
+                rows={2}
+                value={note}
+                onChange={(event) => onNoteChange(event.target.value)}
+                placeholder="Contoh: dibutuhkan sebelum Jumat untuk akhir pekan"
+                className="mt-1.5 w-full resize-y rounded-lg border border-line bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                maxLength={500}
+              />
+            </div>
+
+            <button
+              data-tour="submit-order-button"
+              type="button"
+              onClick={onSubmit}
+              disabled={
+                orderItems.length === 0 ||
+                hasInvalidQty ||
+                hasAnyExceeded ||
+                isSubmitting
+              }
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto cursor-pointer"
+            >
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              <span className="tabular-nums">
+                Kirim Pengajuan ({totalOrderQty.toLocaleString('id-ID')} pcs)
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </section>
   )
