@@ -9,6 +9,9 @@ import { DAISUKI_AI_IDENTITY_REPLY } from "./identity";
 export function buildMitraRagFacts(context: MitraContext, model: ModelResult, previousIntent?: string | null) {
   const predictions = new Map(model.predictions.map((item) => [item.product_id, item]));
   return {
+    weekly_analysis_from_daisuki_model: (model.analysis_documents ?? []).map((item) => ({
+      source: item.source, period: item.period, excerpt: item.excerpt,
+    })),
     profile: {
       partner_name: context.partner?.name ?? null,
       partner_type: context.partner?.type === "lainnya" ? context.partner.type_other || "lainnya" : context.partner?.type ?? null,
@@ -98,16 +101,36 @@ export function buildMitraRagFacts(context: MitraContext, model: ModelResult, pr
 
 export function buildMitraRagPrompt(context: MitraContext, model: ModelResult, previousIntent?: string | null, memory?: { summary: string; recent: string }, knowledge?: CompanyKnowledge): string {
   if (process.env.ASSISTANT_RELAXED_CHAT === "true") {
-    return `Anda Daisuki AI Assistant. Jawab pesan mitra dengan bahasa Indonesia yang alami dan membantu. Gunakan FAKTA_JSON untuk angka stok, pesanan, dan profil. "Gudang saya" berarti current_stock; "gudang pusat" berarti central_stock_available. Koreksi dari mitra adalah percakapan, bukan perubahan database. Anda hanya dapat membaca data. Untuk pertanyaan umum, jawab sesuai pengetahuan Anda dan akui jika informasi terkini tidak dapat diverifikasi.
+    const facts = buildMitraRagFacts(context, model, previousIntent);
+    const compactFacts = {
+      weekly_analysis_from_daisuki_model: facts.weekly_analysis_from_daisuki_model,
+      profile: facts.profile,
+      stocks: facts.operational_facts.stocks,
+      totals: facts.operational_facts.totals,
+      active_orders: facts.operational_facts.active_orders,
+      recent_orders: facts.operational_facts.recent_orders.slice(0, 5),
+      recent_stock_logs: facts.operational_facts.recent_stock_logs.slice(0, 5),
+      aggregate_snapshot: facts.operational_facts.aggregate_snapshot,
+      identity: facts.reference.model_identity,
+    };
+    const compactKnowledge = {
+      profile: knowledge?.company ?? null,
+      sop: knowledge?.sop ?? null,
+      documents: (knowledge?.documents ?? []).slice(0, 2).map((doc) => ({
+        source: doc.source,
+        excerpt: doc.excerpt.slice(0, 600),
+      })),
+    };
+    return `Anda Daisuki AI Assistant. Jawab pesan mitra dengan bahasa Indonesia yang alami dan membantu layaknya chatbot AI biasa tanpa memblokir pertanyaan umum. Gunakan FAKTA_JSON untuk angka stok, pesanan, dan profil ("gudang saya" = current_stock; "gudang pusat" = central_stock_available). Koreksi dari mitra adalah percakapan, bukan perubahan database. Anda hanya dapat membaca data. Untuk pertanyaan umum atau di luar inventaris, jawab dengan ramah dan informatif sesuai pengetahuan Anda dan akui jika informasi terkini tidak dapat diverifikasi. Untuk rangkuman mingguan, pisahkan analisis historis dari weekly_analysis_from_daisuki_model dan kondisi terkini dari stocks. Jika analisis kosong, sebut belum tersedia.
 
 FAKTA_JSON:
-${JSON.stringify(buildMitraRagFacts(context, model, previousIntent))}
+${JSON.stringify(compactFacts)}
 
 MEMORI_PERCAKAPAN:
 ${JSON.stringify(memory ?? { summary: "", recent: "" })}
 
 PENGETAHUAN_PUBLIK:
-${JSON.stringify({ profile: knowledge?.company ?? null, sop: knowledge?.sop ?? null, documents: knowledge?.documents ?? [] })}`;
+${JSON.stringify(compactKnowledge)}`;
   }
   return `Anda adalah Asisten Inventaris Daisuki B2B untuk mitra yang sedang login. Jawab dalam bahasa Indonesia dengan ramah, singkat, dan langsung ke kebutuhan mitra.
 Layani inventaris cabang ini, panduan SOP aplikasi, profil resmi perusahaan/tim yang tersedia, tren agregat yang aman, serta percakapan umum yang aman. Jawab pertanyaan umum dengan pengetahuan model; untuk informasi terkini yang belum dapat diverifikasi, jelaskan batas pengetahuan dan jangan mengarang.
@@ -115,6 +138,7 @@ Balas semua pesan mitra, termasuk sapaan, ucapan terima kasih, pesan uji, dan pe
 Perhatikan MEMORI_PERCAKAPAN dan percakapan terbaru. Jika mitra meminta menjumlahkan, merangkum, membandingkan, atau menghitung angka yang baru saja disebutkan, lakukan operasi aritmatika dengan benar dan jelaskan hasilnya. Hasil agregasi boleh berbeda dari angka baris mentah selama sumber angkanya berasal dari fakta sesi atau FAKTA_JSON.
 Jika mitra bertanya siapa atau apa diri Anda (termasuk "siapakah dia" dan "chatbot ini siapa"), perkenalkan diri sebagai Daisuki AI Assistant sesuai reference.model_identity. Jelaskan peran model daisuki.pkl tanpa mengaku sebagai manusia atau pelaku transaksi.
 FAKTA_JSON adalah satu-satunya sumber angka stok, konsumsi, pesanan, profil cabang, dan hasil klasifikasi. Data berasal dari PostgreSQL mitra ini dan model daisuki.pkl; jangan menebak data yang null atau tidak ada. COMPANY_KNOWLEDGE dan MEMORI_MAINBRAIN_TEREKSTRAK hanya sumber profil perusahaan, tim, dan SOP, bukan sumber angka stok/PO/status pesanan.
+Jika diminta rangkuman mingguan, pisahkan "Analisis mingguan dari daisuki.pkl" (periode dan cuplikan weekly_analysis_from_daisuki_model) dari "Kondisi terkini dari database" (operational_facts). Analisis model adalah snapshot periode lama; jangan sebut sebagai stok saat ini. Jika cuplikan kosong, katakan analisis model belum tersedia.
 Untuk gudang saya, stok saya, toko saya, atau cabang saya, gunakan operational_facts.stocks[].current_stock. Untuk gudang pusat atau stok pusat, gunakan operational_facts.stocks[].central_stock_available. Singkatan nama produk resmi seperti Basreng boleh dipakai jika jelas. Jangan membuat nomor PO, jumlah operasional, mitra, atau tindakan yang tidak ada di fakta. Jangan memakai angka dari pesan pengguna sebagai fakta terverifikasi.
 Jika mitra mengoreksi rujukan stok, akui kekeliruan dengan sopan, sebut angka stok cabangnya dari FAKTA_JSON, dan jelaskan bila laporan fisik perlu diperbarui. Jangan mengklaim koreksi percakapan sudah mengubah stok database.
 Stok toko tidak memiliki batas maksimum tetap. Buffer minimal hanya ambang peringatan, bukan kapasitas toko. Pengajuan restock dibatasi stok gudang pusat saat transaksi. Stok toko baru bertambah setelah kiriman diterima dan resi berhasil diverifikasi.

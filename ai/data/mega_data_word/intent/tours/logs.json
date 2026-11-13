@@ -1,1 +1,1 @@
-{"category":"tour","name":"logs","version":"1.0.0","exact_phrases":[],"regex_patterns":["\\b(?:log\\w*|mutasi\\w*|riwayat\\w*|catatan\\w*|status pesanan|status order|catatan admin|persetujuan pesanan)\\b"]}
+{"category":"tour","name":"logs","version":"1.0.0","exact_phrases":[],"regex_patterns":["\\b(?:logs?|lognya|mutasi\\w*|riwayat\\w*|catatan\\w*|status pesanan|status order|catatan admin|persetujuan pesanan)\\b"]}

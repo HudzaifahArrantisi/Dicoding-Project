@@ -25,6 +25,7 @@ export interface ModelResult {
   intent?: { label: string; confidence: number } | null;
   identity?: ModelIdentity | null;
   documents?: Array<{ source: string; version: string; excerpt: string; score: number }>;
+  analysis_documents?: Array<{ partner_id: string; source: string; period: string; excerpt: string; score: number }>;
   retrieval_ready?: boolean;
   risk_available?: boolean;
 }
@@ -34,7 +35,7 @@ type Pending = { resolve: (result: ModelResult) => void; reject: (error: Error) 
 
 const retrainingDir = resolve(import.meta.dir, "../../../../../ai/retraining");
 const scriptPath = resolve(retrainingDir, "inference_worker.py");
-let currentWorker: { send: (records: ModelRecord[], message?: string) => Promise<ModelResult>; stop: () => void; isDead: boolean } | null = null;
+let currentWorker: { send: (records: ModelRecord[], message?: string, partnerId?: string) => Promise<ModelResult>; stop: () => void; isDead: boolean } | null = null;
 let lastWorkerFailureTime = 0;
 const FAILURE_COOLDOWN_MS = 30_000;
 const COLD_WORKER_TIMEOUT_MS = 30_000;
@@ -77,7 +78,7 @@ function createWorker() {
       if (currentWorker === client) currentWorker = null;
       try { processHandle.kill(); } catch {}
     },
-    send(records: ModelRecord[], message?: string): Promise<ModelResult> {
+    send(records: ModelRecord[], message?: string, partnerId?: string): Promise<ModelResult> {
       if (client.isDead || processHandle.exitCode !== null) {
         if (currentWorker === client) currentWorker = null;
         return Promise.reject(new Error("Worker model tidak aktif"));
@@ -93,7 +94,7 @@ function createWorker() {
         }, workerReady ? READY_WORKER_TIMEOUT_MS : COLD_WORKER_TIMEOUT_MS);
         pending.set(id, { resolve: resolveResult, reject, timer });
         try {
-          processHandle.stdin.write(JSON.stringify({ id, records, message }) + "\n");
+          processHandle.stdin.write(JSON.stringify({ id, records, message, partner_id: partnerId }) + "\n");
           processHandle.stdin.flush();
         } catch (error) {
           clearTimeout(timer);
@@ -120,7 +121,7 @@ function createWorker() {
               clearTimeout(request.timer);
               workerReady = true;
               if (result.error) request.reject(new Error(result.error));
-              else request.resolve({ available: result.available, predictions: result.predictions, intent: result.intent, identity: result.identity, documents: result.documents, retrieval_ready: result.retrieval_ready, risk_available: result.risk_available });
+              else request.resolve({ available: result.available, predictions: result.predictions, intent: result.intent, identity: result.identity, documents: result.documents, analysis_documents: result.analysis_documents, retrieval_ready: result.retrieval_ready, risk_available: result.risk_available });
             }
           } catch (error) {
             console.error("[ASSISTANT] Respons worker model tidak valid", error);
@@ -186,11 +187,11 @@ export async function classifyMitraMessage(message: string): Promise<ModelResult
   return (await understandMitraMessage(message)).intent ?? null;
 }
 
-export async function understandMitraMessage(message: string): Promise<ModelResult> {
+export async function understandMitraMessage(message: string, partnerId?: string): Promise<ModelResult> {
   try {
     const worker = getOrStartWorker();
     if (!worker) return { available: false, predictions: [] };
-    return await worker.send([], message);
+    return await worker.send([], message, partnerId);
   } catch (error) {
     console.warn("[ASSISTANT] Klasifikasi pesan belum tersedia:", error instanceof Error ? error.message : "Error");
     return { available: false, predictions: [] };
