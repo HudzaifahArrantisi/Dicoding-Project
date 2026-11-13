@@ -17,6 +17,7 @@ import {
   users,
 } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
+import { retryTransientRead } from "../../lib/db-retry";
 import { resolveRegion, RegionError } from "../regions";
 import { publishInventoryChange } from "../../realtime";
 import {
@@ -852,51 +853,53 @@ async function loadModelEvaluation(): Promise<{ source_run_id: string; calibrate
 async function getRegionalActivity(naiveBayesResult?: NaiveBayesAnalysisResult) {
   const [model, rows] = await Promise.all([
     loadRegionalModel(),
-    db.execute(sql<{
-      partner_id: string;
-      partner_name: string;
-      province_name: string;
-      regency_name: string;
-      critical_logs: number;
-      stockout_logs: number;
-      restock_requests: number;
-      weekly_units: number;
-    }>`
-      WITH stockout AS (
-        SELECT sl.partner_id,
-          COUNT(*) FILTER (WHERE sl.qty_after <= GREATEST(10, ps.par_level * 0.2))::int AS critical_logs,
-          COUNT(*) FILTER (WHERE sl.qty_after = 0)::int AS stockout_logs
-        FROM stock_logs sl
-        JOIN partner_stocks ps ON ps.partner_id = sl.partner_id AND ps.product_id = sl.product_id
-        WHERE sl.created_at >= NOW() - INTERVAL '60 days'
-        GROUP BY sl.partner_id
-      ), restock AS (
-        SELECT partner_id, COUNT(*)::int AS restock_requests
-        FROM orders
-        WHERE status <> 'dibatalkan' AND created_at >= NOW() - INTERVAL '60 days'
-        GROUP BY partner_id
-      ), sales AS (
-        SELECT partner_id,
-          SUM(qty_before - qty_after)::int AS weekly_units
-        FROM stock_logs
-        WHERE source = 'manual_update'
-          AND qty_before > qty_after
-          AND created_at >= NOW() - INTERVAL '7 days'
-        GROUP BY partner_id
-      )
-      SELECT p.id::text AS partner_id, p.name AS partner_name,
-        COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
-        COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
-        COALESCE(s.critical_logs, 0)::int AS critical_logs,
-        COALESCE(s.stockout_logs, 0)::int AS stockout_logs,
-        COALESCE(r.restock_requests, 0)::int AS restock_requests,
-        COALESCE(sa.weekly_units, 0)::int AS weekly_units
-      FROM partners p
-      LEFT JOIN stockout s ON s.partner_id = p.id
-      LEFT JOIN restock r ON r.partner_id = p.id
-      LEFT JOIN sales sa ON sa.partner_id = p.id
-      WHERE p.is_active = true
-    `),
+    retryTransientRead(() =>
+      db.execute(sql<{
+        partner_id: string;
+        partner_name: string;
+        province_name: string;
+        regency_name: string;
+        critical_logs: number;
+        stockout_logs: number;
+        restock_requests: number;
+        weekly_units: number;
+      }>`
+        WITH stockout AS (
+          SELECT sl.partner_id,
+            COUNT(*) FILTER (WHERE sl.qty_after <= GREATEST(10, ps.par_level * 0.2))::int AS critical_logs,
+            COUNT(*) FILTER (WHERE sl.qty_after = 0)::int AS stockout_logs
+          FROM stock_logs sl
+          JOIN partner_stocks ps ON ps.partner_id = sl.partner_id AND ps.product_id = sl.product_id
+          WHERE sl.created_at >= NOW() - INTERVAL '60 days'
+          GROUP BY sl.partner_id
+        ), restock AS (
+          SELECT partner_id, COUNT(*)::int AS restock_requests
+          FROM orders
+          WHERE status <> 'dibatalkan' AND created_at >= NOW() - INTERVAL '60 days'
+          GROUP BY partner_id
+        ), sales AS (
+          SELECT partner_id,
+            SUM(qty_before - qty_after)::int AS weekly_units
+          FROM stock_logs
+          WHERE source = 'manual_update'
+            AND qty_before > qty_after
+            AND created_at >= NOW() - INTERVAL '7 days'
+          GROUP BY partner_id
+        )
+        SELECT p.id::text AS partner_id, p.name AS partner_name,
+          COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
+          COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
+          COALESCE(s.critical_logs, 0)::int AS critical_logs,
+          COALESCE(s.stockout_logs, 0)::int AS stockout_logs,
+          COALESCE(r.restock_requests, 0)::int AS restock_requests,
+          COALESCE(sa.weekly_units, 0)::int AS weekly_units
+        FROM partners p
+        LEFT JOIN stockout s ON s.partner_id = p.id
+        LEFT JOIN restock r ON r.partner_id = p.id
+        LEFT JOIN sales sa ON sa.partner_id = p.id
+        WHERE p.is_active = true
+      `),
+    ),
   ]);
 
   const modelRegions = new Map<string, RegionalModel["regional_rankings"][number]>(
@@ -1020,75 +1023,164 @@ async function getRegionalActivity(naiveBayesResult?: NaiveBayesAnalysisResult) 
   };
 }
 
+let cachedCompanyAnalytics: { expiresAt: number; value: Awaited<ReturnType<typeof computeCompanyAiAnalyticsUncached>> } | null = null;
+let inflightCompanyAnalytics: Promise<Awaited<ReturnType<typeof computeCompanyAiAnalyticsUncached>>> | null = null;
+
 async function computeCompanyAiAnalytics() {
-  // 1. Existing frequentStockouts for backwards-compatibility
-  const frequentStockouts = await db.execute(sql`
-    SELECT ps.partner_id, pa.name AS partner_name, ps.product_id,
-      pr.name AS product_name, ps.current_qty, ps.par_level,
-      COUNT(*) FILTER (WHERE sl.qty_after <= GREATEST(10, ps.par_level * 0.2))::int AS critical_log_count
-    FROM partner_stocks ps
-    JOIN partners pa ON pa.id = ps.partner_id AND pa.is_active = true
-    JOIN products pr ON pr.id = ps.product_id AND pr.is_active = true
-    LEFT JOIN stock_logs sl ON sl.partner_id = ps.partner_id
-      AND sl.product_id = ps.product_id
-      AND sl.created_at >= NOW() - INTERVAL '30 days'
-    GROUP BY ps.partner_id, pa.name, ps.product_id, pr.name, ps.current_qty, ps.par_level
-    HAVING ps.current_qty < ps.par_level * 0.2
-      OR (COUNT(*) FILTER (WHERE sl.qty_after <= GREATEST(10, ps.par_level * 0.2))) > 0
-    ORDER BY critical_log_count DESC, ps.current_qty ASC
-    LIMIT 100
-  `);
-
-  // 2. Existing recommendations
-  const recommendations = await db
-    .select({
-      partner_id: restockRecommendations.partner_id,
-      partner_name: partners.name,
-      product_id: restockRecommendations.product_id,
-      product_name: products.name,
-      forecast_qty: restockRecommendations.forecast_qty,
-      suggested_qty: restockRecommendations.suggested_qty,
-      days_of_cover: restockRecommendations.days_of_cover,
-      model_version: restockRecommendations.model_version,
-      metadata: restockRecommendations.metadata,
-      generated_at: restockRecommendations.generated_at,
+  if (cachedCompanyAnalytics && cachedCompanyAnalytics.expiresAt > Date.now()) {
+    return cachedCompanyAnalytics.value;
+  }
+  if (inflightCompanyAnalytics) {
+    return inflightCompanyAnalytics;
+  }
+  inflightCompanyAnalytics = computeCompanyAiAnalyticsUncached()
+    .then((result) => {
+      cachedCompanyAnalytics = { expiresAt: Date.now() + 15_000, value: result };
+      return result;
     })
-    .from(restockRecommendations)
-    .innerJoin(partners, eq(restockRecommendations.partner_id, partners.id))
-    .innerJoin(products, eq(restockRecommendations.product_id, products.id))
-    .orderBy(desc(restockRecommendations.generated_at))
-    .limit(200);
+    .catch((error) => {
+      if (cachedCompanyAnalytics) {
+        return cachedCompanyAnalytics.value;
+      }
+      throw error;
+    })
+    .finally(() => {
+      inflightCompanyAnalytics = null;
+    });
+  return inflightCompanyAnalytics;
+}
 
-  // 3. Overall 3-Pillar Aggregates (Sales & Restock Fulfillment)
-  const [salesSummary] = await db.execute(sql<{
-    total_7d: number;
-    total_prev_7d: number;
-    fulfillment_rate: number;
-  }>`
-    SELECT
-      COALESCE((
-        SELECT SUM(qty_before - qty_after)
-        FROM stock_logs
-        WHERE source = 'manual_update'
-          AND created_at >= NOW() - INTERVAL '7 days'
-          AND qty_before > qty_after
-      ), 0)::int as total_7d,
-      COALESCE((
-        SELECT SUM(qty_before - qty_after)
-        FROM stock_logs
-        WHERE source = 'manual_update'
-          AND created_at >= NOW() - INTERVAL '14 days'
-          AND created_at < NOW() - INTERVAL '7 days'
-          AND qty_before > qty_after
-      ), 0)::int as total_prev_7d,
-      COALESCE((
-        SELECT (SUM(oi.qty_approved)::float / NULLIF(SUM(oi.qty_requested), 0)::float) * 100
-        FROM order_items oi
-        JOIN orders o ON o.id = oi.order_id
-        WHERE o.created_at >= NOW() - INTERVAL '30 days'
-          AND o.status IN ('disetujui', 'dalam_pengiriman', 'selesai')
-      ), 100.0)::float as fulfillment_rate
-  `);
+async function computeCompanyAiAnalyticsUncached() {
+  const [frequentStockouts, recommendations, [salesSummary], branchStockDetails] = await Promise.all([
+    // 1. Existing frequentStockouts for backwards-compatibility
+    retryTransientRead(() =>
+      db.execute(sql`
+        SELECT ps.partner_id, pa.name AS partner_name, ps.product_id,
+          pr.name AS product_name, ps.current_qty, ps.par_level,
+          COUNT(*) FILTER (WHERE sl.qty_after <= GREATEST(10, ps.par_level * 0.2))::int AS critical_log_count
+        FROM partner_stocks ps
+        JOIN partners pa ON pa.id = ps.partner_id AND pa.is_active = true
+        JOIN products pr ON pr.id = ps.product_id AND pr.is_active = true
+        LEFT JOIN stock_logs sl ON sl.partner_id = ps.partner_id
+          AND sl.product_id = ps.product_id
+          AND sl.created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY ps.partner_id, pa.name, ps.product_id, pr.name, ps.current_qty, ps.par_level
+        HAVING ps.current_qty < ps.par_level * 0.2
+          OR (COUNT(*) FILTER (WHERE sl.qty_after <= GREATEST(10, ps.par_level * 0.2))) > 0
+        ORDER BY critical_log_count DESC, ps.current_qty ASC
+        LIMIT 100
+      `),
+    ),
+
+    // 2. Existing recommendations
+    retryTransientRead(() =>
+      db
+        .select({
+          partner_id: restockRecommendations.partner_id,
+          partner_name: partners.name,
+          product_id: restockRecommendations.product_id,
+          product_name: products.name,
+          forecast_qty: restockRecommendations.forecast_qty,
+          suggested_qty: restockRecommendations.suggested_qty,
+          days_of_cover: restockRecommendations.days_of_cover,
+          model_version: restockRecommendations.model_version,
+          metadata: restockRecommendations.metadata,
+          generated_at: restockRecommendations.generated_at,
+        })
+        .from(restockRecommendations)
+        .innerJoin(partners, eq(restockRecommendations.partner_id, partners.id))
+        .innerJoin(products, eq(restockRecommendations.product_id, products.id))
+        .orderBy(desc(restockRecommendations.generated_at))
+        .limit(200),
+    ),
+
+    // 3. Overall 3-Pillar Aggregates (Sales & Restock Fulfillment)
+    retryTransientRead(() =>
+      db.execute(sql<{
+        total_7d: number;
+        total_prev_7d: number;
+        fulfillment_rate: number;
+      }>`
+        SELECT
+          COALESCE((
+            SELECT SUM(qty_before - qty_after)
+            FROM stock_logs
+            WHERE source = 'manual_update'
+              AND created_at >= NOW() - INTERVAL '7 days'
+              AND qty_before > qty_after
+          ), 0)::int as total_7d,
+          COALESCE((
+            SELECT SUM(qty_before - qty_after)
+            FROM stock_logs
+            WHERE source = 'manual_update'
+              AND created_at >= NOW() - INTERVAL '14 days'
+              AND created_at < NOW() - INTERVAL '7 days'
+              AND qty_before > qty_after
+          ), 0)::int as total_prev_7d,
+          COALESCE((
+            SELECT (SUM(oi.qty_approved)::float / NULLIF(SUM(oi.qty_requested), 0)::float) * 100
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE o.created_at >= NOW() - INTERVAL '30 days'
+              AND o.status IN ('disetujui', 'dalam_pengiriman', 'selesai')
+          ), 100.0)::float as fulfillment_rate
+      `),
+    ),
+
+    // 4. Detailed Branch Stocks & Consumption Velocity
+    retryTransientRead(() =>
+      db.execute<{
+        partner_id: string;
+        partner_name: string;
+        partner_type: string;
+        product_id: string;
+        product_name: string;
+        product_sku: string;
+        current_qty: number;
+        par_level: number;
+        weekly_consumption: number;
+        critical_frequency: number;
+        has_active_order: boolean;
+      }>(sql`
+        WITH sales_7d AS (
+          SELECT partner_id, product_id,
+            COALESCE(SUM(qty_before - qty_after), 0)::int as sold_7d
+          FROM stock_logs
+          WHERE source = 'manual_update'
+            AND created_at >= NOW() - INTERVAL '7 days'
+            AND qty_before > qty_after
+          GROUP BY partner_id, product_id
+        ),
+        crit_logs AS (
+          SELECT ps.partner_id, ps.product_id,
+            COUNT(sl.id)::int as critical_count
+          FROM partner_stocks ps
+          LEFT JOIN stock_logs sl ON sl.partner_id = ps.partner_id
+            AND sl.product_id = ps.product_id
+            AND sl.created_at >= NOW() - INTERVAL '30 days'
+            AND sl.qty_after <= GREATEST(10, ps.par_level * 0.2)
+          GROUP BY ps.partner_id, ps.product_id
+        ),
+        active_orders AS (
+          SELECT DISTINCT partner_id
+          FROM orders
+          WHERE status IN ('diproses', 'disetujui', 'dalam_pengiriman')
+        )
+        SELECT ps.partner_id, pa.name as partner_name, pa.type as partner_type,
+          ps.product_id, pr.name as product_name, pr.sku as product_sku,
+          ps.current_qty, ps.par_level,
+          COALESCE(s7.sold_7d, 0)::int as weekly_consumption,
+          COALESCE(cl.critical_count, 0)::int as critical_frequency,
+          (ao.partner_id IS NOT NULL) as has_active_order
+        FROM partner_stocks ps
+        JOIN partners pa ON pa.id = ps.partner_id AND pa.is_active = true
+        JOIN products pr ON pr.id = ps.product_id AND pr.is_active = true
+        LEFT JOIN sales_7d s7 ON s7.partner_id = ps.partner_id AND s7.product_id = ps.product_id
+        LEFT JOIN crit_logs cl ON cl.partner_id = ps.partner_id AND cl.product_id = ps.product_id
+        LEFT JOIN active_orders ao ON ao.partner_id = ps.partner_id
+      `),
+    ),
+  ]);
 
   const totalSales7d = Number(salesSummary?.total_7d ?? 0);
   const totalSalesPrev7d = Number(salesSummary?.total_prev_7d ?? 0);
@@ -1096,58 +1188,6 @@ async function computeCompanyAiAnalytics() {
   const salesGrowthPct = totalSalesPrev7d > 0
     ? Number((((totalSales7d - totalSalesPrev7d) / totalSalesPrev7d) * 100).toFixed(1))
     : 0;
-
-  // 4. Detailed Branch Stocks & Consumption Velocity
-  const branchStockDetails = await db.execute<{
-    partner_id: string;
-    partner_name: string;
-    partner_type: string;
-    product_id: string;
-    product_name: string;
-    product_sku: string;
-    current_qty: number;
-    par_level: number;
-    weekly_consumption: number;
-    critical_frequency: number;
-    has_active_order: boolean;
-  }>(sql`
-    WITH sales_7d AS (
-      SELECT partner_id, product_id,
-        COALESCE(SUM(qty_before - qty_after), 0)::int as sold_7d
-      FROM stock_logs
-      WHERE source = 'manual_update'
-        AND created_at >= NOW() - INTERVAL '7 days'
-        AND qty_before > qty_after
-      GROUP BY partner_id, product_id
-    ),
-    crit_logs AS (
-      SELECT ps.partner_id, ps.product_id,
-        COUNT(sl.id)::int as critical_count
-      FROM partner_stocks ps
-      LEFT JOIN stock_logs sl ON sl.partner_id = ps.partner_id
-        AND sl.product_id = ps.product_id
-        AND sl.created_at >= NOW() - INTERVAL '30 days'
-        AND sl.qty_after <= GREATEST(10, ps.par_level * 0.2)
-      GROUP BY ps.partner_id, ps.product_id
-    ),
-    active_orders AS (
-      SELECT DISTINCT partner_id
-      FROM orders
-      WHERE status IN ('diproses', 'disetujui', 'dalam_pengiriman')
-    )
-    SELECT ps.partner_id, pa.name as partner_name, pa.type as partner_type,
-      ps.product_id, pr.name as product_name, pr.sku as product_sku,
-      ps.current_qty, ps.par_level,
-      COALESCE(s7.sold_7d, 0)::int as weekly_consumption,
-      COALESCE(cl.critical_count, 0)::int as critical_frequency,
-      (ao.partner_id IS NOT NULL) as has_active_order
-    FROM partner_stocks ps
-    JOIN partners pa ON pa.id = ps.partner_id AND pa.is_active = true
-    JOIN products pr ON pr.id = ps.product_id AND pr.is_active = true
-    LEFT JOIN sales_7d s7 ON s7.partner_id = ps.partner_id AND s7.product_id = ps.product_id
-    LEFT JOIN crit_logs cl ON cl.partner_id = ps.partner_id AND cl.product_id = ps.product_id
-    LEFT JOIN active_orders ao ON ao.partner_id = ps.partner_id
-  `);
 
   const fastMovingProducts: Array<{
     partner_id: string;
@@ -1259,26 +1299,102 @@ async function computeCompanyAiAnalytics() {
   fastMovingProducts.sort((a, b) => b.par_delta - a.par_delta || b.critical_frequency - a.critical_frequency || b.weekly_consumption - a.weekly_consumption);
   stockoutDeficitAnalysis.sort((a, b) => (a.risk_level === 'DARURAT' ? -1 : 1) - (b.risk_level === 'DARURAT' ? -1 : 1) || a.days_of_cover - b.days_of_cover);
 
-  // 5. Factory Procurement Forecast
-  const factoryRows = await db.execute(sql<{
-    product_id: string;
-    product_name: string;
-    product_sku: string;
-    central_stock: number;
-    weekly_demand: number;
-  }>`
-    SELECT pr.id as product_id, pr.name as product_name, pr.sku as product_sku,
-      pr.central_stock,
-      COALESCE(SUM(sl.qty_before - sl.qty_after), 0)::int as weekly_demand
-    FROM products pr
-    LEFT JOIN stock_logs sl ON sl.product_id = pr.id
-      AND sl.source = 'manual_update'
-      AND sl.created_at >= NOW() - INTERVAL '7 days'
-      AND sl.qty_before > sl.qty_after
-    WHERE pr.is_active = true
-    GROUP BY pr.id, pr.name, pr.sku, pr.central_stock
-    ORDER BY pr.name ASC
-  `);
+  const [factoryRows, topPerformers, hotspotRegions, rawStockRows] = await Promise.all([
+    // 5. Factory Procurement Forecast
+    retryTransientRead(() =>
+      db.execute(sql<{
+        product_id: string;
+        product_name: string;
+        product_sku: string;
+        central_stock: number;
+        weekly_demand: number;
+      }>`
+        SELECT pr.id as product_id, pr.name as product_name, pr.sku as product_sku,
+          pr.central_stock,
+          COALESCE(SUM(sl.qty_before - sl.qty_after), 0)::int as weekly_demand
+        FROM products pr
+        LEFT JOIN stock_logs sl ON sl.product_id = pr.id
+          AND sl.source = 'manual_update'
+          AND sl.created_at >= NOW() - INTERVAL '7 days'
+          AND sl.qty_before > sl.qty_after
+        WHERE pr.is_active = true
+        GROUP BY pr.id, pr.name, pr.sku, pr.central_stock
+        ORDER BY pr.name ASC
+      `),
+    ),
+    retryTransientRead(() =>
+      db.execute(sql<{ partner_name: string; region: string; weekly_units: number }>`
+        SELECT p.name AS partner_name, COALESCE(p.regency_name, 'Tidak diketahui') AS region,
+               SUM(GREATEST(0, sl.qty_before-sl.qty_after))::int AS weekly_units
+        FROM stock_logs sl JOIN partners p ON p.id=sl.partner_id
+        WHERE sl.source='manual_update' AND sl.created_at >= now()-interval '7 days'
+        GROUP BY p.id ORDER BY weekly_units DESC LIMIT 5
+      `),
+    ),
+    retryTransientRead(() =>
+      db.execute(sql<{ region: string; deficit_units: number; partner_count: number }>`
+        SELECT COALESCE(p.regency_name, 'Tidak diketahui') AS region,
+               SUM(GREATEST(0, r.suggested_qty))::int AS deficit_units,
+               COUNT(DISTINCT p.id)::int AS partner_count
+        FROM restock_recommendations r JOIN partners p ON p.id=r.partner_id
+        GROUP BY region ORDER BY deficit_units DESC LIMIT 3
+      `),
+    ),
+    // 7. Real-Time Deep Multi-Factor Naive Bayes Stockout Analytics
+    retryTransientRead(() =>
+      db.execute(sql<RawStockAnalysisRow>`
+        WITH recent_7d AS (
+          SELECT partner_id, product_id,
+            COALESCE(SUM(qty_before - qty_after), 0)::float / 7.0 AS adu_7d
+          FROM stock_logs
+          WHERE source = 'manual_update'
+            AND qty_before > qty_after
+            AND created_at >= NOW() - INTERVAL '7 days'
+          GROUP BY partner_id, product_id
+        ),
+        historical_30d AS (
+          SELECT partner_id, product_id,
+            COALESCE(SUM(qty_before - qty_after), 0)::float / 23.0 AS adu_prev,
+            COUNT(CASE WHEN qty_after <= 10 THEN 1 END)::int AS crit_count,
+            COUNT(CASE WHEN qty_after = 0 THEN 1 END)::int AS zero_count
+          FROM stock_logs
+          WHERE source = 'manual_update'
+            AND qty_before > qty_after
+            AND created_at >= NOW() - INTERVAL '30 days'
+            AND created_at < NOW() - INTERVAL '7 days'
+          GROUP BY partner_id, product_id
+        ),
+        active_orders AS (
+          SELECT DISTINCT o.partner_id, oi.product_id
+          FROM orders o
+          JOIN order_items oi ON oi.order_id = o.id
+          WHERE o.status IN ('diproses', 'disetujui', 'dalam_pengiriman')
+        )
+        SELECT
+          p.id::text AS partner_id,
+          p.name AS partner_name,
+          p.type::text AS partner_type,
+          COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
+          COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
+          pr.id::text AS product_id,
+          pr.name AS product_name,
+          pr.sku AS product_sku,
+          ps.current_qty::int AS current_qty,
+          COALESCE(r7.adu_7d, 0.0)::float AS daily_velocity,
+          COALESCE(h30.adu_prev, 0.0)::float AS prev_velocity,
+          COALESCE(h30.crit_count, 0)::int AS critical_events,
+          COALESCE(h30.zero_count, 0)::int AS zero_stock_events,
+          CASE WHEN ao.product_id IS NOT NULL THEN 1 ELSE 0 END AS has_active_order
+        FROM partners p
+        JOIN partner_stocks ps ON ps.partner_id = p.id
+        JOIN products pr ON pr.id = ps.product_id AND pr.is_active = true
+        LEFT JOIN recent_7d r7 ON r7.partner_id = p.id AND r7.product_id = ps.product_id
+        LEFT JOIN historical_30d h30 ON h30.partner_id = p.id AND h30.product_id = ps.product_id
+        LEFT JOIN active_orders ao ON ao.partner_id = p.id AND ao.product_id = ps.product_id
+        WHERE p.is_active = true
+      `),
+    ),
+  ]);
 
   let totalCentralStock = 0;
   let totalWeeklyDemandAll = 0;
@@ -1340,74 +1456,6 @@ async function computeCompanyAiAnalytics() {
     procurement_insight: procurementText,
     generated_at: new Date().toISOString(),
   };
-
-  const topPerformers = await db.execute(sql<{ partner_name: string; region: string; weekly_units: number }>`
-    SELECT p.name AS partner_name, COALESCE(p.regency_name, 'Tidak diketahui') AS region,
-           SUM(GREATEST(0, sl.qty_before-sl.qty_after))::int AS weekly_units
-    FROM stock_logs sl JOIN partners p ON p.id=sl.partner_id
-    WHERE sl.source='manual_update' AND sl.created_at >= now()-interval '7 days'
-    GROUP BY p.id ORDER BY weekly_units DESC LIMIT 5
-  `);
-  const hotspotRegions = await db.execute(sql<{ region: string; deficit_units: number; partner_count: number }>`
-    SELECT COALESCE(p.regency_name, 'Tidak diketahui') AS region,
-           SUM(GREATEST(0, r.suggested_qty))::int AS deficit_units,
-           COUNT(DISTINCT p.id)::int AS partner_count
-    FROM restock_recommendations r JOIN partners p ON p.id=r.partner_id
-    GROUP BY region ORDER BY deficit_units DESC LIMIT 3
-  `);
-
-  // 7. Real-Time Deep Multi-Factor Naive Bayes Stockout Analytics
-  const rawStockRows = await db.execute(sql<RawStockAnalysisRow>`
-    WITH recent_7d AS (
-      SELECT partner_id, product_id,
-        COALESCE(SUM(qty_before - qty_after), 0)::float / 7.0 AS adu_7d
-      FROM stock_logs
-      WHERE source = 'manual_update'
-        AND qty_before > qty_after
-        AND created_at >= NOW() - INTERVAL '7 days'
-      GROUP BY partner_id, product_id
-    ),
-    historical_30d AS (
-      SELECT partner_id, product_id,
-        COALESCE(SUM(qty_before - qty_after), 0)::float / 23.0 AS adu_prev,
-        COUNT(CASE WHEN qty_after <= 10 THEN 1 END)::int AS crit_count,
-        COUNT(CASE WHEN qty_after = 0 THEN 1 END)::int AS zero_count
-      FROM stock_logs
-      WHERE source = 'manual_update'
-        AND qty_before > qty_after
-        AND created_at >= NOW() - INTERVAL '30 days'
-        AND created_at < NOW() - INTERVAL '7 days'
-      GROUP BY partner_id, product_id
-    ),
-    active_orders AS (
-      SELECT DISTINCT o.partner_id, oi.product_id
-      FROM orders o
-      JOIN order_items oi ON oi.order_id = o.id
-      WHERE o.status IN ('diproses', 'disetujui', 'dalam_pengiriman')
-    )
-    SELECT
-      p.id::text AS partner_id,
-      p.name AS partner_name,
-      p.type::text AS partner_type,
-      COALESCE(NULLIF(p.province_name, ''), 'Tidak diketahui') AS province_name,
-      COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
-      pr.id::text AS product_id,
-      pr.name AS product_name,
-      pr.sku AS product_sku,
-      ps.current_qty::int AS current_qty,
-      COALESCE(r7.adu_7d, 0.0)::float AS daily_velocity,
-      COALESCE(h30.adu_prev, 0.0)::float AS prev_velocity,
-      COALESCE(h30.crit_count, 0)::int AS critical_events,
-      COALESCE(h30.zero_count, 0)::int AS zero_stock_events,
-      CASE WHEN ao.product_id IS NOT NULL THEN 1 ELSE 0 END AS has_active_order
-    FROM partners p
-    JOIN partner_stocks ps ON ps.partner_id = p.id
-    JOIN products pr ON pr.id = ps.product_id AND pr.is_active = true
-    LEFT JOIN recent_7d r7 ON r7.partner_id = p.id AND r7.product_id = ps.product_id
-    LEFT JOIN historical_30d h30 ON h30.partner_id = p.id AND h30.product_id = ps.product_id
-    LEFT JOIN active_orders ao ON ao.partner_id = p.id AND ao.product_id = ps.product_id
-    WHERE p.is_active = true
-  `);
 
   const naiveBayesResult = computeDeepNaiveBayes(rawStockRows as unknown as RawStockAnalysisRow[]);
   const regionalActivity = await getRegionalActivity(naiveBayesResult);

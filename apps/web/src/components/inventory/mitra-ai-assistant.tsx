@@ -404,7 +404,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
           <div className="border-t border-line/70 bg-white p-3 sm:p-3.5">
             {/* Quick Reply Pills */}
             <div
-              className="mb-2.5 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none"
+              className="mb-2.5 flex flex-wrap gap-1.5"
               aria-label="Pertanyaan cepat"
             >
               {replies.map((reply) => (
@@ -413,7 +413,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                   type="button"
                   onClick={() => void send(reply)}
                   disabled={busy}
-                  className="shrink-0 rounded-full border border-line bg-slate-50/80 px-3 py-1.5 text-xs font-medium text-ink-800 shadow-2xs hover:border-ink-400 hover:bg-white disabled:opacity-50 transition-all cursor-pointer"
+                  className="rounded-full border border-line bg-slate-50/80 px-2.5 py-1 text-left text-xs font-medium text-ink-800 shadow-2xs transition-all hover:border-ink-400 hover:bg-white disabled:opacity-50 cursor-pointer"
                 >
                   {reply}
                 </button>
