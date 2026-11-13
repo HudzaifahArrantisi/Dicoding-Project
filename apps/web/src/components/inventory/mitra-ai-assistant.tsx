@@ -330,7 +330,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                     {message.source === 'llm' ? (
                       <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-indigo-600">
                         <Sparkles className="size-3" />
-                        <span>AI · 9Router</span>
+                        <span>Daisuki Asisten</span>
                       </div>
                     ) : null}
 

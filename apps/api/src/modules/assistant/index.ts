@@ -10,7 +10,7 @@ import { understandMitraMessage, predictMitraStocks, type ModelResult } from "./
 import { withinModelBudget } from "./model-budget";
 import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge } from "./company-knowledge";
 import { isAssistantIdentityQuestion } from "./identity";
-import { generateLlmReply } from "./llm-client";
+import { generateLlmReply, getLastLlmStatus } from "./llm-client";
 import { rewriteMitraQuery } from "./query-rewrite";
 import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
 import { isCrossTenantQuestion, OUT_OF_SCOPE_REPLY, shouldRefuseMitraMessage, TENANT_SCOPE_REPLY } from "./guardrails";
@@ -18,6 +18,21 @@ import { addSessionTurn, buildConversationContext, clearUserSessions, endSession
 
 const emptyModel: ModelResult = { available: false, predictions: [] };
 const compactions = new Map<string, Promise<void>>();
+
+function weeklyAnalysisReply(model: ModelResult, context: Awaited<ReturnType<typeof loadMitraContext>>): string {
+  const documents = model.analysis_documents ?? [];
+  const overview = documents.find((item) => item.source === "category_partners.json");
+  const period = overview?.period ?? documents[0]?.period;
+  const raw = overview?.excerpt.match(/\{.*\}$/)?.[0];
+  let facts: Record<string, unknown> = {};
+  try { facts = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch {}
+  const historical = period
+    ? `**Analisis mingguan dari daisuki.pkl (${period})**\n- Konsumsi: ${facts.weekly_units ?? "belum tersedia"} pcs\n- Laporan stok: ${facts.log_count ?? "belum tersedia"} kali\n- Pengajuan restock: ${facts.restock_requests ?? "belum tersedia"} kali\n- Kejadian stok habis: ${facts.stockout_events ?? "belum tersedia"} kali`
+    : "**Analisis mingguan dari daisuki.pkl**\nBelum tersedia untuk cabang Anda. Jalankan training dari run analisis yang valid.";
+  const currentStock = context.stocks.reduce((sum, item) => sum + item.current_qty, 0);
+  const currentConsumption = context.stocks.reduce((sum, item) => sum + item.sold_7d, 0);
+  return `${historical}\n\n**Kondisi terkini dari database**\n- Sisa stok cabang: ${currentStock} pcs\n- Konsumsi 7 hari terakhir: ${currentConsumption} pcs\n\nAngka model adalah snapshot periode analisis; angka database diperbarui dari catatan operasional.`;
+}
 
 function queueCompaction(key: string, partnerId: string, userId: string, sessionId: string, turns: ReturnType<typeof getSession>): void {
   if (!turns.length) return;
@@ -122,7 +137,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const identityQuestion = !scopeRefused && isAssistantIdentityQuestion(standaloneQuery);
     const contextPromise = loadMitraContext(user.partnerId);
     const knowledgePromise = scopeRefused ? Promise.resolve(null) : loadCompanyKnowledge(standaloneQuery, knowledgeTopic);
-    const understanding = scopeRefused ? emptyModel : await understandMitraMessage(standaloneQuery);
+    const understanding = scopeRefused ? emptyModel : await understandMitraMessage(standaloneQuery, user.partnerId);
     const classified = understanding.intent ?? null;
     const resolvedIntent = scopeRefused ? null : identityQuestion ? "identity" : knowledgeTopic ?? resolveMitraIntent(standaloneQuery, previousIntent, classified);
     const crossTenant = isCrossTenantQuestion(message) || isCrossTenantQuestion(standaloneQuery) || resolvedIntent === "top_partners";
@@ -138,33 +153,66 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       ? await withinModelBudget(predictMitraStocks(context.stocks), 800, emptyModel)
       : emptyModel;
     const model = { ...understanding, predictions: risk.predictions };
+    const wantsWeeklySummary = /\b(?:merangkum|rangkuman|rangkum|ringkasan|ringkas|rekap|analisis)\b/i.test(standaloneQuery) && /\b(?:seminggu|sepekan|mingguan|minggu|7\s*hari)\b/i.test(standaloneQuery);
+    const hasLocalTopic = Boolean(wantsWeeklySummary || (knowledgeTopic && knowledge) || intent);
+    const ruleRefusalReply = crossTenant
+      ? TENANT_SCOPE_REPLY
+      : "Maaf, permintaan tersebut tidak dapat diproses karena melanggar aturan keamanan sistem Daisuki AI (akses instruksi internal atau konfigurasi sistem tidak diizinkan).";
     const fallback = refused
-      ? { ...answerMitraQuestion(message), reply: crossTenant ? TENANT_SCOPE_REPLY : OUT_OF_SCOPE_REPLY }
+      ? { ...answerMitraQuestion(message), reply: ruleRefusalReply }
+      : wantsWeeklySummary
+        ? { ...answerMitraQuestion(message), reply: weeklyAnalysisReply(understanding, context) }
       : knowledgeTopic && knowledge
         ? { ...answerMitraQuestion(message), reply: composeKnowledgeReply(knowledge, knowledgeTopic, message) }
         : intent
         ? composeMitraReply(standaloneQuery, context, model, previousIntent, classified)
-        : { ...answerMitraQuestion(message), reply: /\b(?:hi|hai|halo|apa\s*kabar|apaokabar)\b/i.test(message)
-          ? "Halo! Kabar saya baik. Ada yang ingin kamu bahas?"
-          : "Saya belum bisa menjawab pertanyaan itu saat ini. Coba lagi sebentar." };
+        : { ...answerMitraQuestion(message), reply: /\b(?:hi|hai|halo|selamat\s+(?:pagi|siang|sore|malam)|apa\s*kabar|apaokabar|tes|test|ping)\b/i.test(message)
+          ? `Halo${context.partner?.name ? `, ${context.partner.name}` : ""}! Kabar saya baik dan siap membantu. Ada yang ingin kamu tanyakan atau bahas hari ini?`
+          : "Maaf, server sedang gangguan. Silakan coba lagi beberapa saat." };
     let llmReply: string | null = null;
     let grounded = false;
     if (!refused) {
-      try {
-        llmReply = await generateLlmReply({
-          systemPrompt: buildMitraRagPrompt(context, model, previousIntent, {
+      const needsOperationalFacts = Boolean(
+        hasLocalTopic ||
+        identityQuestion ||
+        turns.length > 0 ||
+        /\b(?:stok|stock|restock|restok|barang|produk|pesan|order|po-|gudang|cabang|toko|basreng|seblak|makaroni|keripik|resi|kirim|daisuki|laporan|buffer|konsumsi|laku|terjual|mitra|profil|alamat|pic)\b/i.test(standaloneQuery),
+      );
+      const systemPrompt = needsOperationalFacts
+        ? buildMitraRagPrompt(context, model, previousIntent, {
             summary: memory?.summary ?? "",
             recent: buildConversationContext(turns),
-          }, knowledge ?? undefined),
-          userMessage: `Pesan asli: ${message}\nMaksud mandiri: ${standaloneQuery}`,
+          }, knowledge ?? undefined)
+        : `Anda adalah Daisuki AI Assistant, asisten AI cerdas untuk mitra Daisuki (${context.partner?.name ?? "Mitra"}). Jawab pertanyaan pengguna dengan bahasa Indonesia yang alami, ramah, dan informatif layaknya chatbot AI biasa tanpa memblokir topik umum.${
+            knowledge?.documents?.length
+              ? `\n\nREFERENSI_DOKUMEN:\n${JSON.stringify(knowledge.documents.slice(0, 2).map((d) => ({ source: d.source, excerpt: d.excerpt.slice(0, 700) })))}`
+              : ""
+          }`;
+      try {
+        llmReply = await generateLlmReply({
+          systemPrompt,
+          userMessage: needsOperationalFacts ? `Pesan asli: ${message}\nMaksud mandiri: ${standaloneQuery}` : message,
         });
-        grounded = Boolean(llmReply && isGroundedLlmReply(llmReply, context, model, knowledge ?? undefined, { summary: memory?.summary ?? "", recent: buildConversationContext(turns) }, message)
-          && (!identityQuestion || /\bDaisuki AI(?: Assistant)?\b/i.test(llmReply)));
+        grounded = Boolean(
+          llmReply &&
+          isGroundedLlmReply(llmReply, context, model, knowledge ?? undefined, { summary: memory?.summary ?? "", recent: buildConversationContext(turns) }, message) &&
+          (!identityQuestion || relaxedChat || /\bDaisuki\b/i.test(llmReply)),
+        );
       } catch (error) {
         console.warn("[ASSISTANT] Jawaban 9Router tidak dapat digunakan", error instanceof Error ? error.message : "Error");
       }
     }
-    const response = grounded && llmReply ? { ...fallback, reply: llmReply } : fallback;
+    const llmStatus = getLastLlmStatus();
+    const timeoutReply = hasLocalTopic
+      ? `Maaf, server sedang gangguan (koneksi AI lokal sedang timeout). Berikut data langsung dari sistem cabang Anda:\n\n${fallback.reply}`
+      : "Maaf, server sedang gangguan (koneksi ke server AI sedang timeout). Silakan coba lagi beberapa saat.";
+    const response = refused
+      ? fallback
+      : grounded && llmReply
+        ? { ...fallback, reply: llmReply }
+        : llmStatus === "timeout" || llmStatus === "error"
+          ? { ...fallback, reply: timeoutReply }
+          : fallback;
     const source = grounded ? "llm" : "fallback";
     const ranked = [...model.predictions].sort((a, b) => {
       const weight = { urgent_restock: 0, regular_order: 1, normal: 2 };

@@ -30,6 +30,7 @@ class DaisukiFilter:
         self._model: Pipeline | None = None
         self._metadata: dict[str, Any] = {}
         self.retrieval: dict[str, Any] = {}
+        self.analysis_retrieval: dict[str, Any] = {}
         self._last_loaded_mtime: int | None = None
         self.load_model()
 
@@ -41,6 +42,7 @@ class DaisukiFilter:
             self._model = None
             self._metadata = {}
             self.retrieval = {}
+            self.analysis_retrieval = {}
             self._last_loaded_mtime = None
             LOGGER.warning("Model belum tersedia: %s", self.model_path)
             return
@@ -50,8 +52,10 @@ class DaisukiFilter:
             with self.model_path.open("rb") as source:
                 raw_payload = pickle.load(source)
             self.retrieval = {}
+            self.analysis_retrieval = {}
             if isinstance(raw_payload, dict):
                 self.retrieval = raw_payload.get("retrieval") or {}
+                self.analysis_retrieval = raw_payload.get("analysis_retrieval") or {}
                 meta = raw_payload.get("metadata")
                 self._metadata = dict(meta) if isinstance(meta, dict) else {}
                 model = raw_payload.get(self.model_key)
@@ -69,6 +73,7 @@ class DaisukiFilter:
             self._metadata = {}
             self._last_loaded_mtime = None
             self.retrieval = {}
+            self.analysis_retrieval = {}
             return
         self._model = model
         self._last_loaded_mtime = mtime

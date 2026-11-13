@@ -1,23 +1,40 @@
 type LlmRequest = { systemPrompt: string; userMessage: string };
+export type LlmCallStatus = "ok" | "timeout" | "error" | "disabled";
+
+let lastLlmStatus: LlmCallStatus = "disabled";
+
+export function getLastLlmStatus(): LlmCallStatus {
+  return lastLlmStatus;
+}
 
 function readReply(raw: string): string | null {
   if (raw.trimStart().startsWith("{")) {
-    const payload = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown } }> };
-    const content = payload.choices?.[0]?.message?.content;
-    return typeof content === "string" ? content.trim() || null : null;
+    const payload = JSON.parse(raw) as {
+      choices?: Array<{ message?: { content?: unknown; reasoning_content?: unknown } }>;
+    };
+    const msg = payload.choices?.[0]?.message;
+    const content = typeof msg?.content === "string" && msg.content.trim()
+      ? msg.content.trim()
+      : typeof msg?.reasoning_content === "string"
+        ? msg.reasoning_content.trim()
+        : "";
+    return content || null;
   }
   let content = "";
   for (const line of raw.split(/\r?\n/)) {
     if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
-    const chunk = JSON.parse(line.slice(6)) as { choices?: Array<{ delta?: { content?: unknown } }> };
-    const part = chunk.choices?.[0]?.delta?.content;
-    if (typeof part === "string") content += part;
+    try {
+      const chunk = JSON.parse(line.slice(6)) as {
+        choices?: Array<{ delta?: { content?: unknown }; message?: { content?: unknown } }>;
+      };
+      const part = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content;
+      if (typeof part === "string") content += part;
+    } catch {
+      // Abaikan baris komentar SSE atau chunk parsial non-JSON
+    }
   }
   return content.trim() || null;
 }
-
-const failedUntil = new Map<string, number>();
-const cooldownMs = 30_000;
 
 function configuredEndpoints(): string[] {
   return [process.env.LLM_BASE_URL, process.env.LLM_TUNNEL_URL]
@@ -27,18 +44,24 @@ function configuredEndpoints(): string[] {
 }
 
 export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest): Promise<string | null> {
-  if (process.env.LLM_ENABLED !== "true" || !process.env.LLM_API_KEY) return null;
-  const timeout = Math.min(120_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 25_000));
+  if (process.env.LLM_ENABLED !== "true" || !process.env.LLM_API_KEY) {
+    lastLlmStatus = "disabled";
+    return null;
+  }
+  const timeout = Math.min(120_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 35_000));
   const deadline = Date.now() + timeout;
   const endpoints = configuredEndpoints();
+  if (!endpoints.length) {
+    lastLlmStatus = "disabled";
+    return null;
+  }
 
   for (const [index, endpoint] of endpoints.entries()) {
-    if ((failedUntil.get(endpoint) ?? 0) > Date.now()) continue;
     const remaining = deadline - Date.now();
-    if (remaining <= 0) break;
-    const attemptTimeout = index === 0 && endpoints.length > 1
-      ? Math.max(1, Math.min(remaining - 1_000, Math.max(20_000, remaining * 0.8)))
-      : remaining;
+    if (remaining <= 0) {
+      lastLlmStatus = "timeout";
+      break;
+    }
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -54,7 +77,7 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
             model: process.env.LLM_MODEL || "opn",
             messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }],
             temperature: 0.2,
-            max_tokens: 600,
+            max_tokens: 2048,
             stream: true,
           }),
           signal: controller.signal,
@@ -65,18 +88,18 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
         return content;
       })();
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => { controller.abort(); reject(new Error("LLM timeout")); }, attemptTimeout);
+        timer = setTimeout(() => { controller.abort(); reject(new Error("LLM timeout")); }, remaining);
       });
       const content = await Promise.race([request, timeoutPromise]);
-      failedUntil.delete(endpoint);
+      lastLlmStatus = "ok";
       return content;
     } catch (error) {
-      failedUntil.set(endpoint, Date.now() + cooldownMs);
       console.warn(`[ASSISTANT] 9Router ${index === 0 ? "lokal" : "tunnel"} gagal:`, error instanceof Error ? error.message : "Error");
       if (error instanceof Error && error.message === "LLM timeout") {
-        for (const candidate of endpoints) failedUntil.set(candidate, Date.now() + cooldownMs);
+        lastLlmStatus = "timeout";
         return null;
       }
+      lastLlmStatus = "error";
     } finally {
       if (timer) clearTimeout(timer);
     }

@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from sklearn.feature_extraction.text import TfidfVectorizer
+from doc_loader import RAW_DIR, extract_text_from_pdf
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
@@ -46,3 +47,23 @@ def search_knowledge(index: dict, query: str) -> list[dict]:
     ranked = sorted(range(len(scores)), key=lambda i: float(scores[i]), reverse=True)
     return [dict(index["documents"][i], score=round(float(scores[i]), 4))
             for i in ranked[:index.get("max_excerpts", 3)] if scores[i] >= 0.08]
+
+
+def build_raw_pdf_index() -> dict:
+    """Store all readable PDFs as private vectors; public access uses the approved index."""
+    documents = []
+    paths = sorted((RAW_DIR / "pdf").glob("*.pdf"))
+    for path in paths:
+        content = extract_text_from_pdf(path)
+        for paragraph in re.split(r"\n\s*\n", content):
+            for offset in range(0, len(paragraph), 1000):
+                excerpt = paragraph[offset:offset + 1200].strip()
+                if len(excerpt) >= 40:
+                    documents.append({"source": path.name, "excerpt": excerpt, "visibility": "private"})
+    if paths and not documents:
+        raise ValueError("Tidak ada teks PDF yang berhasil diekstrak; pasang pypdf atau lakukan OCR sebelum training")
+    if not documents:
+        return {"documents": []}
+    vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), max_features=30000)
+    vectors = vectorizer.fit_transform([item["excerpt"] for item in documents])
+    return {"documents": documents, "vectorizer": vectorizer, "vectors": vectors}

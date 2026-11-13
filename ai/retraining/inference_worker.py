@@ -9,6 +9,7 @@ import sys
 from filter import DaisukiFilter, MODEL_FILE
 from source import build_training_samples
 from knowledge_index import search_knowledge
+from analysis_index import search_partner_analysis
 
 
 def main() -> None:
@@ -51,6 +52,9 @@ def main() -> None:
                     prediction = intent_classifier.predict_with_confidence(message)[0]
                     result["intent"] = {"label": prediction["predicted_label"], "confidence": prediction["confidence"]}
                 result["documents"] = search_knowledge(intent_classifier.retrieval, message)
+                partner_id = request.get("partner_id")
+                result["analysis_documents"] = search_partner_analysis(
+                    intent_classifier.analysis_retrieval, partner_id, message) if isinstance(partner_id, str) else []
             identity_meta = intent_classifier.metadata or risk_classifier.metadata
             if identity_meta:
                 result["identity"] = identity_meta
