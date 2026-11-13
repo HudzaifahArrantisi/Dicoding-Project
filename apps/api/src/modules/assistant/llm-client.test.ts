@@ -56,3 +56,20 @@ test("9Router yang menggantung dibatalkan pada batas waktu", async () => {
   })) as unknown as typeof fetch;
   expect(await generateLlmReply({ systemPrompt: "fakta", userMessage: "pesan" })).toBeNull();
 });
+
+test("timeout model tidak mengulang permintaan pada tunnel yang sama", async () => {
+  process.env.LLM_ENABLED = "true";
+  process.env.LLM_API_KEY = "test-key";
+  process.env.LLM_BASE_URL = "http://local-model-timeout/v1";
+  process.env.LLM_TUNNEL_URL = "https://same-model-tunnel/v1";
+  process.env.LLM_TIMEOUT_MS = "20";
+  const urls: string[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    urls.push(String(input));
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    });
+  }) as typeof fetch;
+  expect(await generateLlmReply({ systemPrompt: "fakta", userMessage: "pesan" })).toBeNull();
+  expect(urls).toEqual(["http://local-model-timeout/v1/chat/completions"]);
+});

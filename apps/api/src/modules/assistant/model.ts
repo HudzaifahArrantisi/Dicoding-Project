@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ModelRecord } from "./context";
-import { activeArtifact, activeRunId } from "../../lib/analysis-artifacts";
+import { activeArtifact, workspaceRoot } from "../../lib/analysis-artifacts";
 
 export interface ModelPrediction {
   product_id: string;
@@ -24,6 +24,9 @@ export interface ModelResult {
   predictions: ModelPrediction[];
   intent?: { label: string; confidence: number } | null;
   identity?: ModelIdentity | null;
+  documents?: Array<{ source: string; version: string; excerpt: string; score: number }>;
+  retrieval_ready?: boolean;
+  risk_available?: boolean;
 }
 
 type WorkerReply = ModelResult & { id: string; error?: string };
@@ -49,9 +52,13 @@ function resolvePythonBinary(): string {
 
 function createWorker() {
   const python = resolvePythonBinary();
+  const modelPath = process.env.DAISUKI_MODEL_PATH?.trim()
+    ? resolve(workspaceRoot, process.env.DAISUKI_MODEL_PATH.trim())
+    : activeArtifact("model");
+  console.log(`[ASSISTANT MODEL] Artefak: ${modelPath}`);
   const processHandle = Bun.spawn([python, "-u", scriptPath], {
     cwd: retrainingDir,
-    env: { ...process.env, PYTHONUNBUFFERED: "1", DAISUKI_MODEL_PATH: activeRunId() ? activeArtifact("model") : process.env.DAISUKI_MODEL_PATH || activeArtifact("model") },
+    env: { ...process.env, PYTHONUNBUFFERED: "1", DAISUKI_MODEL_PATH: modelPath },
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
@@ -113,7 +120,7 @@ function createWorker() {
               clearTimeout(request.timer);
               workerReady = true;
               if (result.error) request.reject(new Error(result.error));
-              else request.resolve({ available: result.available, predictions: result.predictions, intent: result.intent, identity: result.identity });
+              else request.resolve({ available: result.available, predictions: result.predictions, intent: result.intent, identity: result.identity, documents: result.documents, retrieval_ready: result.retrieval_ready, risk_available: result.risk_available });
             }
           } catch (error) {
             console.error("[ASSISTANT] Respons worker model tidak valid", error);
@@ -176,13 +183,17 @@ export async function predictMitraStocks(records: ModelRecord[]): Promise<ModelR
 }
 
 export async function classifyMitraMessage(message: string): Promise<ModelResult["intent"]> {
+  return (await understandMitraMessage(message)).intent ?? null;
+}
+
+export async function understandMitraMessage(message: string): Promise<ModelResult> {
   try {
     const worker = getOrStartWorker();
-    if (!worker) return null;
-    return (await worker.send([], message)).intent ?? null;
+    if (!worker) return { available: false, predictions: [] };
+    return await worker.send([], message);
   } catch (error) {
     console.warn("[ASSISTANT] Klasifikasi pesan belum tersedia:", error instanceof Error ? error.message : "Error");
-    return null;
+    return { available: false, predictions: [] };
   }
 }
 
@@ -190,7 +201,10 @@ export function warmMitraModelWorker(): void {
   try {
     const worker = getOrStartWorker();
     if (!worker) return;
-    void worker.send([], "halo").catch((error) => {
+    console.log("[ASSISTANT MODEL] Memuat daisuki.pkl ke worker Python...");
+    void worker.send([], "halo").then((result) => {
+      console.log(`[ASSISTANT MODEL] ${result.available ? "Siap" : "Tidak siap"}: intent ${result.intent ? "aktif" : "tidak tersedia"}, retrieval biner ${result.retrieval_ready ? "aktif" : "belum dilatih"}`);
+    }).catch((error) => {
       console.warn("[ASSISTANT] Pemanasan model belum berhasil:", error instanceof Error ? error.message : "Error");
     });
   } catch (error) {

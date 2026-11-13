@@ -90,3 +90,17 @@ test("snapshot wilayah hanya menyertakan kelompok agregat yang cukup besar", () 
   expect(prompt).toContain('"weekly_units":70');
 });
 
+test("mode percobaan memakai prompt ringkas dan tidak menolak angka obrolan umum", () => {
+  const previous = process.env.ASSISTANT_RELAXED_CHAT;
+  process.env.ASSISTANT_RELAXED_CHAT = "true";
+  try {
+    const prompt = buildMitraRagPrompt(context, model);
+    expect(prompt).toContain('"current_stock":8');
+    expect(prompt).not.toContain("GUARDRAILS_POLICY:");
+    expect(isGroundedLlmReply("Halo! Ada 3 hal yang bisa kita bahas.", context, model)).toBe(true);
+  } finally {
+    if (previous === undefined) delete process.env.ASSISTANT_RELAXED_CHAT;
+    else process.env.ASSISTANT_RELAXED_CHAT = previous;
+  }
+});
+

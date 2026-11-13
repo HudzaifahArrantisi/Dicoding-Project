@@ -6,9 +6,9 @@ import { getAuthUser } from "../../plugins/auth";
 import { answerMitraQuestion, type MitraTour } from "./knowledge";
 import { composeMitraReply, resolveMitraIntent, type AssistantIntent } from "./compose";
 import { loadMitraContext } from "./context";
-import { classifyMitraMessage, predictMitraStocks, type ModelResult } from "./model";
+import { understandMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
-import { composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge } from "./company-knowledge";
+import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge } from "./company-knowledge";
 import { isAssistantIdentityQuestion } from "./identity";
 import { generateLlmReply } from "./llm-client";
 import { rewriteMitraQuery } from "./query-rewrite";
@@ -44,9 +44,9 @@ function isMitra(user: Awaited<ReturnType<typeof getAuthUser>>): user is NonNull
   return Boolean(user?.role === "mitra" && user.partnerId);
 }
 
-async function activeTurns(partnerId: string, userId: string, sessionId: string) {
+async function activeTurns(partnerId: string, userId: string, sessionId: string, waitForCompaction = true) {
   const key = sessionKey(partnerId, userId, sessionId);
-  await compactions.get(key);
+  if (waitForCompaction) await compactions.get(key);
   const cached = getSession(key);
   if (cached.length) return cached;
   const rows = await db.select({
@@ -75,7 +75,7 @@ async function activeTurns(partnerId: string, userId: string, sessionId: string)
     });
     if (evicted.length) queueCompaction(key, partnerId, userId, sessionId, evicted);
   }
-  await compactions.get(key);
+  if (waitForCompaction) await compactions.get(key);
   return getSession(key);
 }
 
@@ -85,7 +85,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
     if (!isMitra(user)) { set.status = 403; return { error: "Akses hanya untuk mitra" }; }
-    const rows = await activeTurns(user.partnerId, user.userId, headers["x-session-id"] ?? user.userId);
+    const rows = await activeTurns(user.partnerId, user.userId, headers["x-session-id"] ?? user.userId, false);
     const tours = new Set<MitraTour>(["restock", "stock_report", "delivery", "logs", "profile"]);
     return { data: rows.reverse().map((row) => ({
       id: row.id,
@@ -113,23 +113,31 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const turns = await activeTurns(user.partnerId, user.userId, sessionId);
     const previousIntent = turns[turns.length - 1]?.intent as AssistantIntent | null ?? null;
     const scopeRefused = shouldRefuseMitraMessage(message, previousIntent);
+    const relaxedChat = process.env.ASSISTANT_RELAXED_CHAT === "true";
     const memoryPromise = db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
       .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
     const [memory] = await memoryPromise;
-    const standaloneQuery = scopeRefused ? message : await rewriteMitraQuery(message, turns, memory?.summary ?? "");
+    const standaloneQuery = scopeRefused || relaxedChat ? message : await rewriteMitraQuery(message, turns, memory?.summary ?? "");
     const knowledgeTopic = scopeRefused ? null : knowledgeIntent(standaloneQuery, previousIntent);
     const identityQuestion = !scopeRefused && isAssistantIdentityQuestion(standaloneQuery);
     const contextPromise = loadMitraContext(user.partnerId);
-    const knowledgePromise = knowledgeTopic ? loadCompanyKnowledge(standaloneQuery, knowledgeTopic) : Promise.resolve(null);
-    const classified = scopeRefused || knowledgeTopic || identityQuestion ? null : await withinModelBudget(classifyMitraMessage(standaloneQuery), 500, null);
+    const knowledgePromise = scopeRefused ? Promise.resolve(null) : loadCompanyKnowledge(standaloneQuery, knowledgeTopic);
+    const understanding = scopeRefused ? emptyModel : await understandMitraMessage(standaloneQuery);
+    const classified = understanding.intent ?? null;
     const resolvedIntent = scopeRefused ? null : identityQuestion ? "identity" : knowledgeTopic ?? resolveMitraIntent(standaloneQuery, previousIntent, classified);
     const crossTenant = isCrossTenantQuestion(message) || isCrossTenantQuestion(standaloneQuery) || resolvedIntent === "top_partners";
     const refused = scopeRefused || crossTenant;
     const intent = refused ? null : resolvedIntent;
     const [context, knowledge] = await Promise.all([contextPromise, knowledgePromise]);
-    const model = intent === "restock" || intent === "stock_report"
+    if (knowledge && understanding.documents?.length) {
+      const binaryDocuments = understanding.documents.filter((doc) => filterRagDocuments([{ name: doc.source, content: doc.excerpt }]).length > 0);
+      knowledge.documents = [...binaryDocuments, ...knowledge.documents]
+        .filter((doc, index, all) => all.findIndex((other) => other.source === doc.source && other.excerpt === doc.excerpt) === index).slice(0, 3);
+    }
+    const risk = intent === "restock" || intent === "stock_report"
       ? await withinModelBudget(predictMitraStocks(context.stocks), 800, emptyModel)
       : emptyModel;
+    const model = { ...understanding, predictions: risk.predictions };
     const fallback = refused
       ? { ...answerMitraQuestion(message), reply: crossTenant ? TENANT_SCOPE_REPLY : OUT_OF_SCOPE_REPLY }
       : knowledgeTopic && knowledge
@@ -170,7 +178,9 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       intent,
       model_label: ranked[0]?.label ?? null,
       model_confidence: ranked[0] ? String(ranked[0].confidence) : null,
-      model_results: { intent: classified, stocks: model.predictions, response_source: source, session_active: true, session_id: sessionId },
+      model_results: { intent: classified, stocks: model.predictions, response_source: source, session_active: true, session_id: sessionId,
+        model_available: understanding.available, binary_retrieval: understanding.retrieval_ready ?? false,
+        knowledge_sources: knowledge?.documents.map((doc) => ({ source: doc.source, version: doc.version })) ?? [] },
     }).returning({ id: assistantChatEvents.id });
     const evicted = addSessionTurn(key, { id: saved.id, message, reply: response.reply, intent, source, feedback: null, created_at: new Date() });
     queueCompaction(key, user.partnerId, user.userId, sessionId, evicted);

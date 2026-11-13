@@ -41,7 +41,7 @@ function restockReply(message: string, context: MitraContext, model: ModelResult
     const advice = suggested === null ? "belum cukup laporan konsumsi untuk menghitung saran jumlah" : `saran pengajuan sekitar ${number(suggested)} pcs berdasarkan konsumsi 7 hari dan persediaan 10 hari`;
     return `${stock.product_name}: sisa ${number(stock.current_qty)} pcs, gudang pusat ${number(stock.central_stock)} pcs; ${label}; ${advice}.`;
   });
-  const modelNote = model.available ? "Penilaian prioritas berasal dari model daisuki.pkl." : "Model daisuki.pkl sedang tidak tersedia; angka stok dan konsumsi tetap berasal dari data toko.";
+  const modelNote = (model.risk_available ?? model.available) ? "Penilaian prioritas berasal dari model daisuki.pkl." : "Model daisuki.pkl sedang tidak tersedia; angka stok dan konsumsi tetap berasal dari data toko.";
   return `${modelNote}\n${lines.join("\n")}\nJumlah akhir boleh disesuaikan dengan kebutuhan toko dan hanya dibatasi stok gudang pusat saat pengajuan.`;
 }
 
@@ -109,6 +109,8 @@ export function resolveMitraIntent(message: string, previousIntent: AssistantInt
   if (/\b(?:salah+|keliru|bukan)\b/i.test(message) && /\b(?:sisa|stok|gudang|toko|cabang)\b/i.test(message)) return "own_stock";
   if (matchFactualPattern("own_stock_patterns", message) && !matchFactualPattern("central_stock_patterns", message)) return "own_stock";
   if (matchFactualPattern("central_stock_patterns", message)) return "central_stock";
+  if (classified && classified.confidence >= 0.35 &&
+    (factualIntents.has(classified.label as AssistantIntent) || tours.has(classified.label as AssistantIntent))) return classified.label as AssistantIntent;
   if (isOutOfScopeQuestion(message) || !isOperationalQuestion(message) && !isFollowUp(message)) return null;
   const normalized = message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   if (isAssistantIdentityQuestion(message)) return "identity";

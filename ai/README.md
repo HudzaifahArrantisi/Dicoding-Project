@@ -1,6 +1,8 @@
 ﻿# AI Engineering â€” Daisuki Inventory
 
 ## 1. Tujuan
+
+Alur server dan model biner terbaru: [Runtime model Daisuki dan RAG](../docs/RUNTIME_RAG_DAISUKI.md).
 Menjalankan hasil model Data Science secara otomatis dan menyediakan fitur berbasis AI:
 - Job harian rekomendasi restock otomatis.
 - Asisten admin berbasis LLM (*tool calling*).
@@ -166,7 +168,7 @@ CLI tersebut hanya menyiapkan draft privat. Publikasi rekomendasi dan pergantian
 
 ## 10. Kebenaran Model dan RAG
 
-`daisuki.pkl` melatih classifier intent dari `ai/data/mega_data_word/intent/` dan classifier risiko dari CSV run yang dipilih. File itu **tidak menyimpan seluruh dokumen perusahaan** dan tidak melakukan fine tuning LLM 9Router. Dokumen profil/SOP yang ditinjau disimpan sebagai `*.public.md`, harus terdaftar di `rag_policy.json`, lalu diambil saat pertanyaan masuk. Alias pencarian berada di `ai/data/mega_data_word/dictionary/retrieval_aliases.json`; pola keamanan dan intent dibaca dari kamus versi yang sama saat API menyala. Restart API untuk memuat perubahan kamus atau dokumen publik.
+`daisuki.pkl` menyimpan classifier intent, classifier risiko, serta indeks TF-IDF dan cuplikan dokumen publik yang disetujui saat training. Worker Python persisten dimulai bersama API pada `bun run dev`; setiap pesan mengambil intent dan cuplikan dari biner sebelum penyusunan jawaban. Ini tidak melakukan fine tuning LLM 9Router. Dokumen profil/SOP harus bertanda `*.public.md` dan terdaftar di `rag_policy.json`. Pencarian berkas publik tetap tersedia sebagai cadangan; aliasnya berada di `ai/data/mega_data_word/dictionary/retrieval_aliases.json`. Latih ulang indeks untuk perubahan sumber biner dan restart API untuk perubahan kamus atau konfigurasi.
 
 Fakta stok, PO, dan profil cabang diambil dari PostgreSQL sesuai JWT mitra yang login. Ringkasan wilayah hanya masuk prompt setelah disaring; dokumen privat dan daftar mitra lain tidak masuk RAG. Guardrail berjalan sebelum dan sesudah 9Router. Jika 9Router gagal, chatbot memakai balasan lokal.
 

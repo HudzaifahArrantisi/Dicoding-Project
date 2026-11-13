@@ -80,6 +80,8 @@ export function buildMitraRagFacts(context: MitraContext, model: ModelResult, pr
       valid_order_statuses: ["diproses", "disetujui", "dalam_pengiriman", "selesai", "ditolak", "dibatalkan"],
       assistant_read_only: true,
       model_available: model.available,
+      trained_intent: model.intent ?? null,
+      binary_retrieval_available: model.retrieval_ready ?? false,
       previous_intent: previousIntent ?? null,
       model_identity: model.identity ?? {
         name: "Daisuki AI Assistant",
@@ -95,6 +97,18 @@ export function buildMitraRagFacts(context: MitraContext, model: ModelResult, pr
 }
 
 export function buildMitraRagPrompt(context: MitraContext, model: ModelResult, previousIntent?: string | null, memory?: { summary: string; recent: string }, knowledge?: CompanyKnowledge): string {
+  if (process.env.ASSISTANT_RELAXED_CHAT === "true") {
+    return `Anda Daisuki AI Assistant. Jawab pesan mitra dengan bahasa Indonesia yang alami dan membantu. Gunakan FAKTA_JSON untuk angka stok, pesanan, dan profil. "Gudang saya" berarti current_stock; "gudang pusat" berarti central_stock_available. Koreksi dari mitra adalah percakapan, bukan perubahan database. Anda hanya dapat membaca data. Untuk pertanyaan umum, jawab sesuai pengetahuan Anda dan akui jika informasi terkini tidak dapat diverifikasi.
+
+FAKTA_JSON:
+${JSON.stringify(buildMitraRagFacts(context, model, previousIntent))}
+
+MEMORI_PERCAKAPAN:
+${JSON.stringify(memory ?? { summary: "", recent: "" })}
+
+PENGETAHUAN_PUBLIK:
+${JSON.stringify({ profile: knowledge?.company ?? null, sop: knowledge?.sop ?? null, documents: knowledge?.documents ?? [] })}`;
+  }
   return `Anda adalah Asisten Inventaris Daisuki B2B untuk mitra yang sedang login. Jawab dalam bahasa Indonesia dengan ramah, singkat, dan langsung ke kebutuhan mitra.
 Layani inventaris cabang ini, panduan SOP aplikasi, profil resmi perusahaan/tim yang tersedia, tren agregat yang aman, serta percakapan umum yang aman. Jawab pertanyaan umum dengan pengetahuan model; untuk informasi terkini yang belum dapat diverifikasi, jelaskan batas pengetahuan dan jangan mengarang.
 Balas semua pesan mitra, termasuk sapaan, ucapan terima kasih, pesan uji, dan pertanyaan umum yang aman. Toleran terhadap typo, kata yang digabung, awalan slash, dan bahasa santai; pahami maksud berdasarkan konteks, bukan kecocokan kata persis.
@@ -148,6 +162,7 @@ function documentNumbers(value: unknown, result = new Set<string>()): Set<string
 }
 
 export function isGroundedLlmReply(reply: string, context: MitraContext, model: ModelResult, knowledge?: CompanyKnowledge, conversation?: { summary: string; recent: string }, question = ""): boolean {
+  if (process.env.ASSISTANT_RELAXED_CHAT === "true") return Boolean(reply.trim() && reply.length <= 2500 && !leaksAssistantInternals(reply));
   if (!reply.trim() || reply.length > 2500 || /https?:\/\/|```|<\/?[a-z][^>]*>/i.test(reply) || leaksAssistantInternals(reply)) return false;
   const knownOrders = new Set(context.orders.map((order) => order.order_no.toUpperCase()));
   const mentionedOrders = reply.match(/\bPO-[A-Z0-9-]+\b/gi) ?? [];

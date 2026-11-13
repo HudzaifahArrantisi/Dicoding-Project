@@ -5,6 +5,7 @@ from __future__ import annotations
 import pickle
 
 from source import build_intent_samples
+from knowledge_index import build_knowledge_index
 from train import IDENTITY_BIO, MODEL_OUTPUT_FILE, TEMP_MODEL_FILE, save_model_safely, train_pipeline
 
 
@@ -18,11 +19,12 @@ def main() -> None:
 
     texts, labels = build_intent_samples()
     bundle["intent"] = train_pipeline(texts, labels, fit_prior=False)
+    bundle["retrieval"] = build_knowledge_index()
     metadata = dict(bundle.get("metadata") or {})
     metadata.update(name="Daisuki AI Assistant", identity_bio=IDENTITY_BIO)
     bundle["metadata"] = metadata
     save_model_safely(bundle, MODEL_OUTPUT_FILE, TEMP_MODEL_FILE)
-    print(f"Identitas Daisuki AI dan {len(texts)} contoh intent diperbarui; model risiko dipertahankan.")
+    print(f"Daisuki AI: {len(texts)} contoh intent dan {len(bundle['retrieval']['documents'])} cuplikan retrieval diperbarui; model risiko dipertahankan.")
 
 
 if __name__ == "__main__":
