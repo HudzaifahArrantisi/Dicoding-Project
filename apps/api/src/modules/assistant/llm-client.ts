@@ -17,7 +17,7 @@ function readReply(raw: string): string | null {
 }
 
 const failedUntil = new Map<string, number>();
-const cooldownMs = 5_000;
+const cooldownMs = 30_000;
 
 function configuredEndpoints(): string[] {
   return [process.env.LLM_BASE_URL, process.env.LLM_TUNNEL_URL]
@@ -36,7 +36,9 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
     if ((failedUntil.get(endpoint) ?? 0) > Date.now()) continue;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
-    const attemptTimeout = index === 0 && endpoints.length > 1 ? Math.min(remaining - 1_000, Math.max(20_000, remaining * 0.8)) : remaining;
+    const attemptTimeout = index === 0 && endpoints.length > 1
+      ? Math.max(1, Math.min(remaining - 1_000, Math.max(20_000, remaining * 0.8)))
+      : remaining;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -71,6 +73,10 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
     } catch (error) {
       failedUntil.set(endpoint, Date.now() + cooldownMs);
       console.warn(`[ASSISTANT] 9Router ${index === 0 ? "lokal" : "tunnel"} gagal:`, error instanceof Error ? error.message : "Error");
+      if (error instanceof Error && error.message === "LLM timeout") {
+        for (const candidate of endpoints) failedUntil.set(candidate, Date.now() + cooldownMs);
+        return null;
+      }
     } finally {
       if (timer) clearTimeout(timer);
     }

@@ -98,7 +98,7 @@ export function selectMainbrainExcerpts(query: string, files: Array<{ name: stri
   return searchMainbrain(query, indexMainbrain(files));
 }
 
-export async function loadCompanyKnowledge(message: string, intent: "company" | "sop"): Promise<CompanyKnowledge> {
+export async function loadCompanyKnowledge(message: string, intent: "company" | "sop" | null): Promise<CompanyKnowledge> {
   const [raw, index] = await Promise.all([companyData, publicIndex]);
   const documents = searchMainbrain(message, index);
   return {

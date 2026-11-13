@@ -8,6 +8,7 @@ import sys
 
 from filter import DaisukiFilter, MODEL_FILE
 from source import build_training_samples
+from knowledge_index import search_knowledge
 
 
 def main() -> None:
@@ -27,7 +28,9 @@ def main() -> None:
             records = request.get("records", [])
             if not isinstance(records, list) or len(records) > 20:
                 raise ValueError("Jumlah produk tidak valid")
-            result = {"id": request["id"], "available": risk_classifier.is_ready, "predictions": []}
+            result = {"id": request["id"], "available": intent_classifier.is_ready, "predictions": [],
+                      "risk_available": risk_classifier.is_ready,
+                      "retrieval_ready": bool(intent_classifier.retrieval.get("documents"))}
             if records and risk_classifier.is_ready:
                 texts, _ = build_training_samples(records)
                 predictions = risk_classifier.predict_with_confidence(texts)
@@ -47,6 +50,7 @@ def main() -> None:
                 if intent_classifier.is_ready:
                     prediction = intent_classifier.predict_with_confidence(message)[0]
                     result["intent"] = {"label": prediction["predicted_label"], "confidence": prediction["confidence"]}
+                result["documents"] = search_knowledge(intent_classifier.retrieval, message)
             identity_meta = intent_classifier.metadata or risk_classifier.metadata
             if identity_meta:
                 result["identity"] = identity_meta

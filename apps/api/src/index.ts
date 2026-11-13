@@ -18,7 +18,7 @@ import { adminModule } from "./modules/admin";
 import { analysisModule } from "./modules/analysis";
 import { regionModule } from "./modules/regions";
 import { assistantModule } from "./modules/assistant";
-import { warmMitraModelWorker } from "./modules/assistant/model";
+import { warmMitraModelWorker, stopMitraModelWorker } from "./modules/assistant/model";
 import { realtimeModule } from "./realtime";
 import { createScheduledAnalysisDraft, recoverInterruptedAnalysisRuns, remindPendingAnalysisRuns } from "./lib/analysis-runs";
 
@@ -246,6 +246,7 @@ export const app = new Elysia()
       },
     }),
   )
+  .onStop(stopMitraModelWorker)
   .listen({
     port: env.PORT,
     hostname: "0.0.0.0",
@@ -257,6 +258,7 @@ console.log(
 );
 
 warmMitraModelWorker();
+process.once("exit", stopMitraModelWorker);
 void recoverInterruptedAnalysisRuns().catch((error) => console.error("[ANALYSIS RECOVERY]", error));
 
 export type App = typeof app;

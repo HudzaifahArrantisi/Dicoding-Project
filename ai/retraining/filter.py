@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import pickle
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from sklearn.pipeline import Pipeline
 
@@ -29,6 +29,7 @@ class DaisukiFilter:
         self.model_key = model_key
         self._model: Pipeline | None = None
         self._metadata: dict[str, Any] = {}
+        self.retrieval: dict[str, Any] = {}
         self._last_loaded_mtime: int | None = None
         self.load_model()
 
@@ -39,6 +40,7 @@ class DaisukiFilter:
         except FileNotFoundError:
             self._model = None
             self._metadata = {}
+            self.retrieval = {}
             self._last_loaded_mtime = None
             LOGGER.warning("Model belum tersedia: %s", self.model_path)
             return
@@ -47,7 +49,9 @@ class DaisukiFilter:
         try:
             with self.model_path.open("rb") as source:
                 raw_payload = pickle.load(source)
+            self.retrieval = {}
             if isinstance(raw_payload, dict):
+                self.retrieval = raw_payload.get("retrieval") or {}
                 meta = raw_payload.get("metadata")
                 self._metadata = dict(meta) if isinstance(meta, dict) else {}
                 model = raw_payload.get(self.model_key)
@@ -64,6 +68,7 @@ class DaisukiFilter:
             self._model = None
             self._metadata = {}
             self._last_loaded_mtime = None
+            self.retrieval = {}
             return
         self._model = model
         self._last_loaded_mtime = mtime

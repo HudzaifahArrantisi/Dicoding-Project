@@ -19,6 +19,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from source import build_intent_samples
 from doc_loader import collect_mainbrain_knowledge_snippets, scan_and_generate_mainbrain
+from knowledge_index import build_knowledge_index
 from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, prepare_handoff
 
 AI_ROOT = str(Path(__file__).resolve().parents[1])
@@ -91,6 +92,7 @@ def run_retraining_loop() -> bool:
         bundle: dict[str, Any] = {
             "intent": train_pipeline(intent_texts, intent_labels, fit_prior=False),
             "public_knowledge": collect_mainbrain_knowledge_snippets(),
+            "retrieval": build_knowledge_index(),
             "mainbrain_meta": {
                 "total_documents": mainbrain_stats["total"],
                 "converted_markdowns": mainbrain_stats["success"],

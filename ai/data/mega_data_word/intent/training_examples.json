@@ -3,6 +3,21 @@
   "name": "training_examples",
   "version": "1.0.0",
   "intents": {
+    "own_stock": [
+      "berapa stok di gudang saya",
+      "berapa sisa stok toko saya",
+      "gudang cabang saya ada berapa barang",
+      "cek persediaan cabang kami",
+      "sisa basreng saya berapa",
+      "stok fisik makaroni di toko saya",
+      "berapa jumlah barang sisa di dalam gudang saya",
+      "barang punya saya tinggal berapa",
+      "stok saya sekarang berapa",
+      "tolong cek stok cabang saya",
+      "salahh basreng saya sisa seratus bukan stok pusat",
+      "stok gudng saya brapa",
+      "cek sisa barang di cabang ku"
+    ],
     "greeting": [
       "hai",
       "halo",
@@ -17,11 +32,10 @@
       "berapa total stok gudang pusat daisuki",
       "stok pusat berapa",
       "cek ketersediaan barang di pusat",
-      "berapa persediaan gudang",
       "jumlah barang di gudang pusat",
       "stok basreng di pusat berapa",
-      "apa stok seblak di gudang",
-      "gudang punya berapa produk"
+      "apa stok seblak di gudang pusat",
+      "gudang pusat punya berapa produk"
     ],
     "top_products": [
       "produk apa yang paling laku",

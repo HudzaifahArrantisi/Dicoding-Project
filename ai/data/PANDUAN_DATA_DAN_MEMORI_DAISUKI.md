@@ -1,6 +1,6 @@
 # Panduan data dan memori Daisuki AI
 
-Dokumen ini menjelaskan apa yang disimpan di `ai/data/`, kapan datanya dipakai, dan perintah yang perlu dijalankan saat menambah pengetahuan. Istilah *training* di proyek ini merujuk pada pelatihan classifier lokal `daisuki.pkl`. Dokumen artikel untuk chatbot masuk melalui proses ekstraksi dan pencarian RAG; artikel tidak disimpan sebagai isi model `.pkl`.
+Dokumen ini menjelaskan apa yang disimpan di `ai/data/`, kapan datanya dipakai, dan perintah pembaruannya. Training `daisuki.pkl` melatih classifier intent/risiko dan membentuk indeks TF-IDF beserta cuplikan dokumen publik yang disetujui. Worker memuat biner bersama server untuk pencarian RAG, sementara angka operasional tetap dari PostgreSQL. Lihat [alur runtime terbaru](../../docs/RUNTIME_RAG_DAISUKI.md).
 
 ## Peta folder
 
