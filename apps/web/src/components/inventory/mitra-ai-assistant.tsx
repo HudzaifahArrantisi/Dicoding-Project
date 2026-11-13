@@ -13,19 +13,46 @@ import {
 type ChatMessage = { id: number; author: 'mitra' | 'assistant'; text: string; source?: 'llm' | 'fallback'; tour?: MitraTour; tourLabel?: string; interactionId?: string; feedback?: -1 | 1 | null }
 
 function inlineText(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) =>
     part.startsWith('**') && part.endsWith('**')
-      ? <strong key={index} className="font-semibold">{part.slice(2, -2)}</strong>
-      : part,
+      ? <strong key={index} className="font-semibold text-ink-950">{part.slice(2, -2)}</strong>
+      : part.startsWith('`') && part.endsWith('`')
+        ? <code key={index} className="rounded bg-ink-900/8 px-1 py-0.5 font-mono text-xs">{part.slice(1, -1)}</code>
+        : part,
   )
 }
 
-function AssistantMessageText({ text }: { text: string }) {
-  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered'; lines: string[] }> = []
+function parseTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = parseTableRow(line)
+  return cells.length > 0 && cells.every((cell) => /^:?-{2,}:?$/.test(cell))
+}
+
+export function AssistantMessageText({ text }: { text: string }) {
+  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered' | 'heading' | 'table'; lines: string[] }> = []
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim()
-    if (!line) continue
-    const bullet = /^[-*]\s+(.+)$/.exec(line)
+    if (!line || /^-{3,}$/.test(line)) continue
+    if (line.startsWith('|') && line.endsWith('|') && line.includes('|', 1)) {
+      const previous = blocks.at(-1)
+      if (previous?.kind === 'table') previous.lines.push(line)
+      else blocks.push({ kind: 'table', lines: [line] })
+      continue
+    }
+    const heading = /^#{1,4}\s+(.+)$/.exec(line)
+    if (heading) {
+      blocks.push({ kind: 'heading', lines: [heading[1]] })
+      continue
+    }
+    const bullet = /^[-*•]\s+(.+)$/.exec(line)
     const numbered = /^\d+[.)]\s+(.+)$/.exec(line)
     const kind = bullet ? 'bullets' : numbered ? 'numbered' : 'paragraph'
     const content = bullet?.[1] ?? numbered?.[1] ?? line
@@ -33,13 +60,46 @@ function AssistantMessageText({ text }: { text: string }) {
     if (previous?.kind === kind) previous.lines.push(content)
     else blocks.push({ kind, lines: [content] })
   }
-  return <div className="space-y-2 break-words">
-    {blocks.map((block, index) => block.kind === 'paragraph'
-      ? <p key={index}>{block.lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex ? <br /> : null}{inlineText(line)}</span>)}</p>
-      : block.kind === 'bullets'
-        ? <ul key={index} className="list-disc space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ul>
-        : <ol key={index} className="list-decimal space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ol>,
-    )}
+  return <div className="space-y-2.5 break-words">
+    {blocks.map((block, index) => {
+      if (block.kind === 'heading') {
+        return <h3 key={index} className="font-display text-sm font-bold text-ink-950 pt-1">{inlineText(block.lines[0])}</h3>
+      }
+      if (block.kind === 'table') {
+        const rows = block.lines.filter((line) => !isTableSeparator(line)).map(parseTableRow)
+        if (rows.length === 0) return null
+        const [header, ...body] = rows
+        return (
+          <div key={index} className="my-2 overflow-x-auto rounded-lg border border-line bg-white">
+            <table className="w-full border-collapse text-left text-xs tabular-nums">
+              <thead>
+                <tr className="border-b border-line bg-ink-900/5 text-ink-900">
+                  {header.map((cell, cellIdx) => (
+                    <th key={cellIdx} className="px-3 py-2 font-semibold">{inlineText(cell)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {body.map((row, rowIdx) => (
+                  <tr key={rowIdx} className="hover:bg-paper/60">
+                    {row.map((cell, cellIdx) => (
+                      <td key={cellIdx} className="px-3 py-2 align-top text-ink-800">{inlineText(cell)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+      if (block.kind === 'paragraph') {
+        return <p key={index}>{block.lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex ? <br /> : null}{inlineText(line)}</span>)}</p>
+      }
+      if (block.kind === 'bullets') {
+        return <ul key={index} className="list-disc space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ul>
+      }
+      return <ol key={index} className="list-decimal space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ol>
+    })}
   </div>
 }
 

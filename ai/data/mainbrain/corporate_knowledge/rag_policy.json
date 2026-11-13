@@ -9,11 +9,17 @@
     "inventory_rules.public.md",
     "partner_workflows.public.md",
     "assistant_identity.public.md",
-    "128330084_file5.public.md"
+    "128330084_file5.public.md",
+    "Karya_ilmiah__HudzaifahArrantisi_final.public.md",
+    "refrensi_1.public.md",
+    "refrensi_2.public.md",
+    "refrensi_3.public.md",
+    "refrensi_4.public.md",
+    "refrensi__5.public.md"
   ],
-  "max_documents": 20,
-  "max_chars_per_document": 20000,
-  "max_excerpts": 3,
+  "max_documents": 25,
+  "max_chars_per_document": 25000,
+  "max_excerpts": 4,
   "blocked_content_patterns": [
     "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}",
     "\\b(?:08\\d{8,12}|\\+62\\d{8,13})\\b",

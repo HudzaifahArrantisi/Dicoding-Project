@@ -26,9 +26,11 @@ def build_knowledge_index(data_dir: Path = DATA_DIR) -> dict:
             continue
         version = hashlib.sha256(content.encode()).hexdigest()[:12]
         content = content[:policy["max_chars_per_document"]]
-        for paragraph in re.split(r"\n\s*\n", content):
-            for offset in range(0, len(paragraph), 1000):
-                excerpt = paragraph[offset:offset + 1200].strip()
+        sections = [s.strip() for s in re.split(r"\n---\n|\n(?=#{1,3}\s)", content) if len(s.strip()) >= 40]
+        chunks = sections if len(sections) > 1 else re.split(r"\n\s*\n", content)
+        for paragraph in chunks:
+            for offset in range(0, len(paragraph), 1300):
+                excerpt = paragraph[offset:offset + 1500].strip()
                 if len(excerpt) >= 40:
                     documents.append({"source": name, "version": version, "excerpt": excerpt})
     if not documents:

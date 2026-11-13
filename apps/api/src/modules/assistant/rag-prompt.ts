@@ -116,12 +116,12 @@ export function buildMitraRagPrompt(context: MitraContext, model: ModelResult, p
     const compactKnowledge = {
       profile: knowledge?.company ?? null,
       sop: knowledge?.sop ?? null,
-      documents: (knowledge?.documents ?? []).slice(0, 2).map((doc) => ({
+      documents: (knowledge?.documents ?? []).slice(0, 4).map((doc) => ({
         source: doc.source,
-        excerpt: doc.excerpt.slice(0, 600),
+        excerpt: doc.excerpt.slice(0, 1500),
       })),
     };
-    return `Anda Daisuki AI Assistant. Jawab pesan mitra dengan bahasa Indonesia yang alami dan membantu layaknya chatbot AI biasa tanpa memblokir pertanyaan umum. Gunakan FAKTA_JSON untuk angka stok, pesanan, dan profil ("gudang saya" = current_stock; "gudang pusat" = central_stock_available). Koreksi dari mitra adalah percakapan, bukan perubahan database. Anda hanya dapat membaca data. Untuk pertanyaan umum atau di luar inventaris, jawab dengan ramah dan informatif sesuai pengetahuan Anda dan akui jika informasi terkini tidak dapat diverifikasi. Untuk rangkuman mingguan, pisahkan analisis historis dari weekly_analysis_from_daisuki_model dan kondisi terkini dari stocks. Jika analisis kosong, sebut belum tersedia.
+    return `Anda Daisuki AI Assistant. Jawab pesan mitra dengan bahasa Indonesia yang alami dan membantu layaknya chatbot AI biasa tanpa memblokir pertanyaan umum. Gunakan FAKTA_JSON untuk angka stok, pesanan, dan profil ("gudang saya" = current_stock; "gudang pusat" = central_stock_available). Koreksi dari mitra adalah percakapan, bukan perubahan database. Anda hanya dapat membaca data. Jika pertanyaan membahas dokumen, karya ilmiah, atau referensi di PENGETAHUAN_PUBLIK.documents, sajikan penjelasan dan tabel Markdown sesuai angka di dalam cuplikan dokumen tersebut. Untuk pertanyaan umum di luar inventaris, jawab dengan ramah dan informatif sesuai pengetahuan Anda. Untuk rangkuman mingguan, pisahkan analisis historis dari weekly_analysis_from_daisuki_model dan kondisi terkini dari stocks. Jika analisis kosong, sebut belum tersedia.
 
 FAKTA_JSON:
 ${JSON.stringify(compactFacts)}
@@ -186,8 +186,8 @@ function documentNumbers(value: unknown, result = new Set<string>()): Set<string
 }
 
 export function isGroundedLlmReply(reply: string, context: MitraContext, model: ModelResult, knowledge?: CompanyKnowledge, conversation?: { summary: string; recent: string }, question = ""): boolean {
-  if (process.env.ASSISTANT_RELAXED_CHAT === "true") return Boolean(reply.trim() && reply.length <= 2500 && !leaksAssistantInternals(reply));
-  if (!reply.trim() || reply.length > 2500 || /https?:\/\/|```|<\/?[a-z][^>]*>/i.test(reply) || leaksAssistantInternals(reply)) return false;
+  if (process.env.ASSISTANT_RELAXED_CHAT === "true") return Boolean(reply.trim() && reply.length <= 6000 && !leaksAssistantInternals(reply));
+  if (!reply.trim() || reply.length > 6000 || /https?:\/\/|```|<\/?[a-z][^>]*>/i.test(reply) || leaksAssistantInternals(reply)) return false;
   const knownOrders = new Set(context.orders.map((order) => order.order_no.toUpperCase()));
   const mentionedOrders = reply.match(/\bPO-[A-Z0-9-]+\b/gi) ?? [];
   if (mentionedOrders.some((order) => !knownOrders.has(order.toUpperCase()))) return false;
@@ -195,7 +195,7 @@ export function isGroundedLlmReply(reply: string, context: MitraContext, model: 
   if (/\b(?:sudah|telah)\s+(?:mengubah|menambah|membuat|mengajukan|menyetujui|membatalkan|mengirim)\b/i.test(reply)) return false;
   const withoutOrders = reply.replace(/\bPO-[A-Z0-9-]+\b/gi, "");
   const allowedNumbers = numericValues(buildMitraRagFacts(context, model));
-  if (knowledge) documentNumbers({ company: knowledge.company, sop: knowledge.sop }, allowedNumbers);
+  if (knowledge) documentNumbers({ company: knowledge.company, sop: knowledge.sop, documents: knowledge.documents }, allowedNumbers);
   if (conversation) documentNumbers(conversation, allowedNumbers);
   const operationalClaim = /\b(?:stok|gudang|cabang|toko|sisa|pcs|buffer|pesanan|konsumsi|terjual|restock)\b/i.test(withoutOrders) || mentionedOrders.length > 0;
   if (!operationalClaim) return true;

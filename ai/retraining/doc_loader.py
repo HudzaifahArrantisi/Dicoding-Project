@@ -34,6 +34,15 @@ def sanitize_filename(name: str) -> str:
     return clean.strip("._")
 
 
+def normalize_pdf_text(text: str) -> str:
+    """Merapikan teks ekstraksi PDF yang terpecah satu kata per baris (\n \n) dan menyamarkan email/telepon korespondensi."""
+    text = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "[email-redacted]", text)
+    text = re.sub(r"\b(?:08\d{8,12}|\+62\d{8,13})\b", "[phone-redacted]", text)
+    text = re.sub(r"(?<=\S)\n[ \t]+\n(?=\S)", " ", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return text.strip()
+
+
 def extract_text_from_pdf(file_path: Path) -> str:
     """Ekstraksi teks PDF hanya bila parser tersedia."""
     try:
@@ -41,7 +50,7 @@ def extract_text_from_pdf(file_path: Path) -> str:
         reader = PdfReader(str(file_path))
         pages_text: List[str] = []
         for i, page in enumerate(reader.pages):
-            page_text = page.extract_text() or ""
+            page_text = normalize_pdf_text(page.extract_text() or "")
             if page_text.strip():
                 pages_text.append(f"### Bagian Halaman {i + 1}\n{page_text.strip()}")
         return "\n\n".join(pages_text)
