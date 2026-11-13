@@ -24,6 +24,32 @@ export interface MitraChatHistoryItem {
   created_at: string
 }
 
+export interface MitraChatSession {
+  session_id: string
+  title: string | null
+  last_at: string
+  message_count: number
+  summary: string | null
+  is_closed: boolean
+}
+
+export async function getMitraChatSessions(): Promise<MitraChatSession[]> {
+  const response = await apiClient.get<{ data: MitraChatSession[] }>('/assistant/mitra/sessions')
+  return response.data
+}
+
+export async function getMitraChatSession(sessionId: string): Promise<{ data: MitraChatHistoryItem[]; summary: string | null }> {
+  return apiClient.get<{ data: MitraChatHistoryItem[]; summary: string | null }>('/assistant/mitra/history', { headers: { 'x-session-id': sessionId } })
+}
+
+export function deleteMitraChatSession(sessionId: string): Promise<{ status: string }> {
+  return apiClient.delete<{ status: string }>(`/assistant/mitra/sessions/${encodeURIComponent(sessionId)}`)
+}
+
+export function reopenMitraChatSession(sessionId: string): Promise<{ status: string; session_id: string }> {
+  return apiClient.post<{ status: string; session_id: string }>(`/assistant/mitra/sessions/${encodeURIComponent(sessionId)}/reopen`, {})
+}
+
 export async function askMitraAssistant(message: string, sessionId?: string): Promise<MitraAssistantReply> {
   const response = await apiFetch('/assistant/mitra/chat', {
     method: 'POST',

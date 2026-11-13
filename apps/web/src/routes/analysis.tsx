@@ -24,7 +24,7 @@ function AnalysisPage() {
 
   if (isLoading) return <main className="grid min-h-dvh place-items-center" role="status">Memeriksa sesi...</main>
   if (!user) return <Navigate to="/login" replace />
-  if (user.role === 'mitra') return <Navigate to="/mitra" replace />
+  if (user.role === 'mitra') return <Navigate to="/mitra" search={{ chat: undefined }} replace />
 
   const perform = async (key: string, task: () => Promise<unknown>, success: string) => {
     setBusy(key)

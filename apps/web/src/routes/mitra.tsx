@@ -32,7 +32,7 @@ import {
 } from '@/components/inventory/query-state'
 import { RegionPicker, emptyRegion } from '@/components/inventory/region-picker'
 import { DeliveryScannerModal } from '@/components/inventory/delivery-scanner-modal'
-import { MitraAiAssistant } from '@/components/inventory/mitra-ai-assistant'
+import { MitraChatRoom } from '@/components/inventory/mitra-chat-room'
 import {
   MitraProductTour,
   type MitraTab,
@@ -65,7 +65,12 @@ import { useAuth, type User } from '@/lib/auth'
 import type { MitraTour } from '@/lib/api/assistant'
 import type { Order, Product, StockItem, StockLog } from '@/lib/inventory-types'
 
-export const Route = createFileRoute('/mitra')({ component: MitraPortal })
+export const Route = createFileRoute('/mitra')({
+  validateSearch: (search: Record<string, unknown>) => ({ chat: typeof search.chat === 'string' && /^[0-9a-f-]{36}$/i.test(search.chat) ? search.chat : undefined }),
+  component: MitraPortal,
+})
+
+type PortalTab = MitraTab | 'chat'
 
 type DraftOrderItem = { product_id: string; qty: string }
 
@@ -80,7 +85,7 @@ function validOrderQuantity(qty: string): boolean {
 }
 
 const tabItems: Array<{
-  id: MitraTab
+  id: PortalTab
   label: string
   Icon: typeof Store
 }> = [
@@ -89,6 +94,7 @@ const tabItems: Array<{
   { id: 'history', label: 'Lacak', Icon: Truck },
   { id: 'logs', label: 'Log Stok', Icon: History },
   { id: 'profile', label: 'Profil', Icon: UserRound },
+  { id: 'chat', label: 'Chat AI', Icon: MessageSquare },
 ]
 
 function errorMessage(error: unknown) {
@@ -139,9 +145,12 @@ function MitraPortal() {
   const refreshUserRef = useRef(refreshUser)
   refreshUserRef.current = refreshUser
   const navigate = useNavigate()
+  const { chat } = Route.useSearch()
   const queryClient = useQueryClient()
   useInventoryEvents(user?.role === 'mitra', 'mitra')
-  const [activeTab, setActiveTab] = useState<MitraTab>('stocks')
+  const [activeTab, setActiveTab] = useState<PortalTab>(chat ? 'chat' : 'stocks')
+  const [lastChatId, setLastChatId] = useState<string | null>(chat ?? null)
+  useEffect(() => { if (chat) { setActiveTab('chat'); setLastChatId(chat) } }, [chat])
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const activeIndex = Math.max(
     0,
@@ -156,15 +165,20 @@ function MitraPortal() {
   )
   const [orderNote, setOrderNote] = useState('')
 
-  const openTab = useCallback((nextTab: MitraTab) => {
+  const openTab = useCallback((nextTab: PortalTab) => {
     setActiveTab(nextTab)
     setHoveredIndex(null)
+    if (nextTab === 'chat') {
+      void navigate({ to: '/mitra', search: { chat: chat ?? lastChatId ?? crypto.randomUUID() } })
+    } else if (chat) {
+      void navigate({ to: '/mitra', search: { chat: undefined } })
+    }
     if (nextTab === 'profile') {
       void refreshUserRef
         .current()
         .catch(() => toast.error('Profil terbaru belum dapat dimuat'))
     }
-  }, [])
+  }, [chat, lastChatId, navigate])
 
   const closeTour = useCallback(() => {
     setActiveTour(null)
@@ -557,15 +571,21 @@ function MitraPortal() {
             onLogout={handleLogout}
           />
         ) : null}
+        {activeTab === 'chat' && chat ? (
+          <MitraChatRoom
+            sessionId={chat}
+            onSelectSession={(id) => void navigate({ to: '/mitra', search: { chat: id } })}
+            onNewSession={() => void navigate({ to: '/mitra', search: { chat: crypto.randomUUID() } })}
+          />
+        ) : null}
       </main>
 
-      <MitraAiAssistant onStartTour={setActiveTour} />
       {activeTour ? (
         <MitraProductTour
           key={activeTour}
           tour={activeTour}
           onClose={closeTour}
-          onTabChange={openTab}
+          onTabChange={(tab) => openTab(tab)}
           onDeliveryStepChange={setDeliveryTourStep}
         />
       ) : null}
@@ -580,14 +600,14 @@ function MitraPortal() {
                 '--hover-index': hoveredIndex ?? activeIndex,
               } as React.CSSProperties
             }
-            className="pointer-events-auto relative mx-auto grid w-full max-w-[390px] grid-cols-5 items-center overflow-hidden rounded-full border border-ink-700/30 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-ink-700/10 backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[430px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
+            className="pointer-events-auto relative mx-auto grid w-full max-w-[450px] grid-cols-6 items-center overflow-hidden rounded-full border border-ink-700/30 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-ink-700/10 backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[490px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
             aria-label="Menu mitra"
           >
             {/* Liquid Glass Gliding Hover Pill */}
             <div
               aria-hidden="true"
               className={`liquid-pill-hover-mitra pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md
-                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/5)]
+                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/6)]
                 lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]
                 ${
                   hoveredIndex !== null && hoveredIndex !== activeIndex
@@ -600,7 +620,7 @@ function MitraPortal() {
             <div
               aria-hidden="true"
               className="liquid-pill-active-mitra pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)]
-                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/5)]
+                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/6)]
                 lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]"
             >
               {/* Glossy Liquid Specular Sheen */}

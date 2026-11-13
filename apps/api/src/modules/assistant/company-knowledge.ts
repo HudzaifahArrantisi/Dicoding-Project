@@ -63,7 +63,7 @@ type IndexedExcerpt = { source: string; version: string; excerpt: string };
 type MainbrainIndex = { excerpts: IndexedExcerpt[]; terms: Map<string, Map<number, number>> };
 
 function words(text: string): string[] {
-  return (text.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).filter((word) => !getStopwords().has(word));
+  return (text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((word) => !getStopwords().has(word));
 }
 
 function indexMainbrain(files: Array<{ name: string; content: string }>): MainbrainIndex {
@@ -71,10 +71,21 @@ function indexMainbrain(files: Array<{ name: string; content: string }>): Mainbr
   const terms = new Map<string, Map<number, number>>();
   for (const file of files.filter((item) => item.name.endsWith(".public.md"))) {
     const version = createHash("sha256").update(file.content).digest("hex").slice(0, 12);
-    for (const part of file.content.split(/\n\s*\n/).filter((item) => item.length >= 40)) {
-      const excerpt = part.slice(0, 1200);
+    const headerLine = file.content.split(/\r?\n/, 6).join(" ");
+    const headerWords = new Set(words(`${file.name.replace(/\.public\.md$/i, "").replace(/[_-]+/g, " ")} ${headerLine}`));
+    const rawSections = file.content.split(/\n---\n|\n(?=#{1,3}\s)/).map((s) => s.trim()).filter((item) => item.length >= 40);
+    const chunks = rawSections.length > 1 ? rawSections : file.content.split(/\n\s*\n/).map((s) => s.trim()).filter((item) => item.length >= 40);
+    for (const part of chunks) {
+      const excerpt = part.slice(0, 1500);
       const index = excerpts.push({ source: file.name, version, excerpt }) - 1;
-      for (const word of new Set(words(excerpt))) {
+      const excerptWords = new Set(words(excerpt));
+      for (const word of excerptWords) {
+        const postings = terms.get(word) ?? new Map<number, number>();
+        postings.set(index, (postings.get(index) ?? 0) + 2);
+        terms.set(word, postings);
+      }
+      for (const word of headerWords) {
+        if (excerptWords.has(word)) continue;
         const postings = terms.get(word) ?? new Map<number, number>();
         postings.set(index, (postings.get(index) ?? 0) + 1);
         terms.set(word, postings);
