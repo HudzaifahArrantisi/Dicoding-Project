@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Loader2, MessageCircle, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { ChatToolChart, ChatToolPdfExport } from '@/components/inventory/chat-tools'
 import {
   askMitraAssistant,
   clearMitraAssistantHistory,
@@ -11,6 +12,35 @@ import {
 } from '@/lib/api/assistant'
 
 type ChatMessage = { id: number; author: 'mitra' | 'assistant'; text: string; source?: 'llm' | 'fallback'; tour?: MitraTour; tourLabel?: string; interactionId?: string; feedback?: -1 | 1 | null }
+
+function cleanLatexFormula(formula: string): string {
+  let res = formula
+  for (let i = 0; i < 5; i++) {
+    const next = res.replace(/\\(?:text|mathbf|mathrm|mathit|textbf|bm)\{([^{}]+)\}/g, '$1')
+    if (next === res) break
+    res = next
+  }
+  return res
+    .replace(/\\times/g, '×')
+    .replace(/\\div/g, '÷')
+    .replace(/\\pm/g, '±')
+    .replace(/\\approx/g, '≈')
+    .replace(/\\leq/g, '≤')
+    .replace(/\\geq/g, '≥')
+    .replace(/\\neq/g, '≠')
+    .replace(/\\cdot/g, '•')
+    .replace(/\\[a-zA-Z]+/g, ' ')
+    .replace(/[{}]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function cleanLatexMath(text: string): string {
+  if (!text.includes('$')) return text
+  return text
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, f: string) => `**${cleanLatexFormula(f)}**`)
+    .replace(/(^|[^\\])\$([^\$\n]+?)\$/g, (_, prefix: string, f: string) => `${prefix}**${cleanLatexFormula(f)}**`)
+}
 
 function inlineText(text: string): ReactNode[] {
   return text.split(/(`[^`\n]+`|\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).map((part, index) => {
@@ -45,13 +75,22 @@ function isTableSeparator(line: string): boolean {
 }
 
 export function AssistantMessageText({ text }: { text: string }) {
-  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered' | 'heading' | 'table' | 'code'; lines: string[] }> = []
+  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered' | 'heading' | 'table' | 'code' | 'tool_chart' | 'tool_pdf'; lines: string[] }> = []
   let inCodeBlock = false
   let startNewBlock = false
-  for (const rawLine of text.split('\n')) {
+  for (const rawLine of cleanLatexMath(text).split('\n')) {
     const line = rawLine.trim()
     if (line.startsWith('```')) {
-      if (!inCodeBlock) blocks.push({ kind: 'code', lines: [] })
+      if (!inCodeBlock) {
+        const tag = line.slice(3).trim().toLowerCase()
+        if (tag.startsWith('tool:chart') || tag.startsWith('chart:')) {
+          blocks.push({ kind: 'tool_chart', lines: [] })
+        } else if (tag.startsWith('tool:pdf_export') || tag === 'pdf_export' || tag === 'pdf') {
+          blocks.push({ kind: 'tool_pdf', lines: [] })
+        } else {
+          blocks.push({ kind: 'code', lines: [] })
+        }
+      }
       inCodeBlock = !inCodeBlock
       startNewBlock = true
       continue
@@ -93,6 +132,22 @@ export function AssistantMessageText({ text }: { text: string }) {
       }
       if (block.kind === 'code') {
         return <pre key={index} className="overflow-x-auto rounded-lg bg-ink-900 p-3 text-xs leading-relaxed text-white"><code>{block.lines.join('\n')}</code></pre>
+      }
+      if (block.kind === 'tool_chart') {
+        try {
+          const json = JSON.parse(block.lines.join('\n'))
+          return <ChatToolChart key={index} data={json} />
+        } catch {
+          return <pre key={index} className="overflow-x-auto rounded-lg bg-ink-900 p-3 text-xs leading-relaxed text-white"><code>{block.lines.join('\n')}</code></pre>
+        }
+      }
+      if (block.kind === 'tool_pdf') {
+        try {
+          const json = JSON.parse(block.lines.join('\n'))
+          return <ChatToolPdfExport key={index} data={json} />
+        } catch {
+          return <pre key={index} className="overflow-x-auto rounded-lg bg-ink-900 p-3 text-xs leading-relaxed text-white"><code>{block.lines.join('\n')}</code></pre>
+        }
       }
       if (block.kind === 'table') {
         const rows = block.lines.filter((line) => !isTableSeparator(line)).map(parseTableRow)
