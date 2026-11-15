@@ -72,6 +72,7 @@ export function RegionPicker({
           <label htmlFor={`${idPrefix}-${field.key}`} className="mb-1.5 block text-sm font-semibold text-ink-900">{field.label}</label>
           <select
             id={`${idPrefix}-${field.key}`}
+            data-tour={idPrefix === 'profile-region' && field.key === 'province_code' ? 'profile-region' : undefined}
             value={value[field.key]}
             required={required || Object.values(value).some(Boolean)}
             disabled={!field.enabled || field.query.isPending || field.query.isError}

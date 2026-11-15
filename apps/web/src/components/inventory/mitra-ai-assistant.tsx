@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Loader2, MessageCircle, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
-import { ChatToolChart, ChatToolPdfExport } from '@/components/inventory/chat-tools'
+import { ArrowUp, Loader2, MessageCircle, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { ChatToolChart, ChatToolFlowDiagram, ChatToolPdfExport, type ChartToolData, type FlowDiagramData } from '@/components/inventory/chat-tools'
 import {
   askMitraAssistant,
   clearMitraAssistantHistory,
@@ -74,6 +74,59 @@ function isTableSeparator(line: string): boolean {
   return cells.length > 0 && cells.every((cell) => /^:?-{2,}:?$/.test(cell))
 }
 
+function parseMermaidDiagram(source: string):
+  | { kind: 'chart'; data: ChartToolData }
+  | { kind: 'flow'; data: FlowDiagramData }
+  | null {
+  const lines = source.split('\n').map((line) => line.trim()).filter(Boolean)
+  const first = lines[0] ?? ''
+
+  if (/^pie\b/i.test(first)) {
+    const title = first.replace(/^pie\s+(?:showData\s+)?title\s*/i, '').trim() || 'Diagram Pie'
+    const data = lines.slice(1).flatMap((line) => {
+      const item = /^\s*(?:"([^"]+)"|'([^']+)'|([^:]+))\s*:\s*(-?\d+(?:\.\d+)?)\s*$/.exec(line)
+      const value = item ? Number(item[4]) : NaN
+      const label = item?.[1] ?? item?.[2] ?? item?.[3]?.trim()
+      return item && label && Number.isFinite(value) && value >= 0 ? [{ label, value }] : []
+    })
+    return data.length ? { kind: 'chart', data: { type: 'pie', title, data } } : null
+  }
+
+  if (/^sequenceDiagram\b/i.test(first)) {
+    const participants = new Map<string, string>()
+    for (const line of lines.slice(1)) {
+      const actor = /^(?:participant|actor)\s+([A-Za-z0-9_]+)(?:\s+as\s+(.+))?$/i.exec(line)
+      if (actor) participants.set(actor[1], actor[2]?.trim() ?? actor[1])
+    }
+    const edges = lines.slice(1).flatMap((line) => {
+      const message = /^([A-Za-z0-9_]+)\s*(?:-->>|->>|-->|->|--x|-x|--\)|-\))\s*([A-Za-z0-9_]+)\s*(?::\s*(.*))?$/.exec(line)
+      if (!message) return []
+      return [{
+        from: participants.get(message[1]) ?? message[1],
+        to: participants.get(message[2]) ?? message[2],
+        ...(message[3] ? { label: message[3].trim() } : {}),
+      }]
+    })
+    return edges.length ? { kind: 'flow', data: { title: 'Diagram Urutan Interaksi', direction: 'LR', edges } } : null
+  }
+
+  const flowHeader = /^(?:flowchart|graph)\s+(LR|RL|TB|TD|BT)\b/i.exec(first)
+  if (!flowHeader) return null
+  const direction = flowHeader[1].toUpperCase() as FlowDiagramData['direction']
+  const readNode = (sourceNode: string): string | null => {
+    const node = /^\s*[A-Za-z0-9_]+\s*(?:\(\(([^)]+)\)\)|\[([^\]]+)\]|\(([^)]+)\)|\{([^}]+)\})?\s*$/.exec(sourceNode)
+    return node ? (node[1] ?? node[2] ?? node[3] ?? node[4] ?? sourceNode).trim() : null
+  }
+  const edges = lines.slice(1).flatMap((line) => {
+    const edge = /^\s*(.+?)\s*(-->|---|==>|-\.->)(?:\|([^|]+)\|)?\s*(.+?)\s*$/.exec(line)
+    if (!edge) return []
+    const from = readNode(edge[1])
+    const to = readNode(edge[4])
+    return from && to ? [{ from, to, ...(edge[3] ? { label: edge[3].trim() } : {}) }] : []
+  })
+  return edges.length ? { kind: 'flow', data: { title: 'Diagram Alur', direction, edges } } : null
+}
+
 export function AssistantMessageText({ text }: { text: string }) {
   const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered' | 'heading' | 'table' | 'code' | 'tool_chart' | 'tool_pdf'; lines: string[] }> = []
   let inCodeBlock = false
@@ -131,6 +184,9 @@ export function AssistantMessageText({ text }: { text: string }) {
         return <h3 key={index} className="font-display text-sm font-bold text-ink-950 pt-1">{inlineText(block.lines[0])}</h3>
       }
       if (block.kind === 'code') {
+        const diagram = parseMermaidDiagram(block.lines.join('\n'))
+        if (diagram?.kind === 'chart') return <ChatToolChart key={index} data={diagram.data} />
+        if (diagram?.kind === 'flow') return <ChatToolFlowDiagram key={index} data={diagram.data} />
         return <pre key={index} className="overflow-x-auto rounded-lg bg-ink-900 p-3 text-xs leading-relaxed text-white"><code>{block.lines.join('\n')}</code></pre>
       }
       if (block.kind === 'tool_chart') {
@@ -356,7 +412,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
           <header className="flex items-center justify-between border-b border-line/70 bg-white/95 px-4 py-3 backdrop-blur-md">
             <div className="flex items-center gap-3 min-w-0">
               <div className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-white shadow-2xs">
-                <Sparkles className="size-5 text-amber-300" aria-hidden="true" />
+                <img src="/icons/logo.jpg" alt="Logo" className="size-full rounded-xl object-cover" />
                 <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-500" />
               </div>
               <div className="min-w-0 flex-1">
@@ -453,7 +509,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                 >
                   {!isMitra ? (
                     <div className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-900 text-amber-300 shadow-2xs mt-0.5">
-                      <Sparkles className="size-3.5" aria-hidden="true" />
+                      <img src="/icons/logo.jpg" alt="" className="size-full rounded-full object-cover" />
                     </div>
                   ) : null}
 
@@ -473,7 +529,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                     {/* Badge Sumber AI */}
                     {message.source === 'llm' ? (
                       <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-indigo-600">
-                        <Sparkles className="size-3" />
+
                         <span>Daisuki Asisten</span>
                       </div>
                     ) : null}

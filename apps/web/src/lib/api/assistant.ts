@@ -12,12 +12,21 @@ export interface MitraAssistantReply {
   interactionId: string
   modelAvailable: boolean
   session_id?: string
+  visualization?: MitraStockVisualization | null
+}
+
+export interface MitraStockVisualization {
+  type: 'bar'
+  title: string
+  unit: string
+  items: Array<{ label: string; value: number }>
 }
 
 export interface MitraChatHistoryItem {
   id: string
   message: string
   reply: string
+  visualization?: MitraStockVisualization | null
   source: 'llm' | 'fallback'
   intent: MitraTour | null
   feedback: -1 | 1 | null
