@@ -94,7 +94,7 @@ Jalankan perintah berikut dari folder `ai/` setelah dependensi terpasang. Perint
 
 1. **Menjalankan Training Model & Ingestion Dokumen Mainbrain:**
    ```bash
-   python retraining/train.py
+   python retraining/train.py --weekly
    ```
    *Fungsi*: Memindai dokumen di `ai/data/raw_references/`, membaca `data-science/reports/cleaned_inventory_summary.csv`, dan menghasilkan `ai/data/mainbrain/models/daisuki.pkl`.
 
@@ -112,14 +112,14 @@ Jalankan perintah berikut dari folder `ai/` setelah dependensi terpasang. Perint
 
 4. **Memperbarui classifier intent tanpa koneksi database:**
    ```bash
-   python retraining/refresh_identity.py
+   python retraining/train.py --intent-only
    ```
    Tambahkan frasa di `data/mega_data_word/intent/training/` sebelum menjalankan perintah ini. Model risiko stok lama tetap dipertahankan. Restart API agar kamus JSON dan dokumen publik yang dicache dimuat ulang.
 
 ### Handoff laporan Data Science
 
 1. Data Science menjalankan `python data-science/src/weekly_analytics_aggregator.py` dari root, menghasilkan JSON, CSV, dan Markdown di `data-science/reports/`.
-2. AI menjalankan `python ai/jobs/regional_stockout_naive_bayes.py`, `python ai/jobs/smart_allocation.py`, `python ai/jobs/weekly_facts_aggregator.py`, lalu `python ai/retraining/train.py` dari root. Tombol **Perbarui analisis & model** menjalankan urutan ini otomatis dan menyiapkan grafik setelah training.
+2. AI menjalankan `python ai/jobs/regional_stockout_naive_bayes.py`, `python ai/jobs/smart_allocation.py`, `python ai/jobs/weekly_facts_aggregator.py`, lalu `python ai/retraining/train.py --weekly` dari root. Tombol **Perbarui analisis & model** menjalankan urutan ini otomatis dan menyiapkan grafik setelah training.
 3. Model risiko memakai CSV laporan yang berumur paling lama tujuh hari. Jika CSV tidak ada, lama, atau tidak valid, training gagal dan model lama dipertahankan. Ringkasan agregat privat tetap disimpan di `ai/data/raw_references/csv/ai_analysis_summary.csv`.
 
 Model `.pkl` menyimpan classifier intent dan risiko; dokumen RAG perusahaan tetap dibaca terpisah. Dokumen privat hasil CSV tidak otomatis tersedia untuk chatbot mitra. Jika ada pengetahuan agregat yang layak dibagikan, buat versi `*.public.md` yang sudah diperiksa dan daftarkan di `data/mainbrain/corporate_knowledge/rag_policy.json`, lalu restart API.

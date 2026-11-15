@@ -13,13 +13,13 @@ Untuk menerbitkan referensi tertentu kepada **semua mitra**, pilih nama file den
 Memperbarui indeks PDF privat dan dokumen publik yang sudah disetujui:
 
 ```powershell
-ai/.venv/Scripts/python.exe ai/retraining/train_daisuki.py --mode 2
+ai/.venv/Scripts/python.exe ai/retraining/train.py --mode 2
 ```
 
 Menyetujui satu artikel PDF agar dapat dipakai chatbot mitra:
 
 ```powershell
-ai/.venv/Scripts/python.exe ai/retraining/train_daisuki.py --mode 2 --public-source "nama-artikel.pdf"
+ai/.venv/Scripts/python.exe ai/retraining/train.py --mode 2 --public-source "nama-artikel.pdf"
 ```
 
 Tambahkan `--public-source "file-lain.pdf"` lagi untuk beberapa dokumen. Keluaran `Cuplikan PDF privat dalam biner: <jumlah>` harus lebih dari nol bila folder PDF berisi dokumen berbasis teks. Jika semua PDF tidak dapat diekstrak, training gagal. Pasang `pypdf` dari `ai/requirements.txt`; PDF hasil scan memerlukan OCR sebelum diproses. Format Word lama `.doc` perlu dikonversi menjadi `.docx`.

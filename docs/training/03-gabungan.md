@@ -9,13 +9,13 @@ Pastikan satu run Data Science memiliki `manifest.json`, empat JSON kategori, da
 ## Jalankan
 
 ```powershell
-ai/.venv/Scripts/python.exe ai/retraining/train_daisuki.py --mode 3
+ai/.venv/Scripts/python.exe ai/retraining/train.py --mode 3
 ```
 
 Untuk memilih run dan menyetujui artikel tertentu sebagai sumber chatbot:
 
 ```powershell
-ai/.venv/Scripts/python.exe ai/retraining/train_daisuki.py --mode 3 --run-id "30b2d67b-7dc6-4cb9-b63e-d49e04005921" --public-source "nama-artikel.pdf"
+ai/.venv/Scripts/python.exe ai/retraining/train.py --mode 3 --run-id "30b2d67b-7dc6-4cb9-b63e-d49e04005921" --public-source "nama-artikel.pdf"
 ```
 
 Ganti UUID dan nama artikel contoh sesuai berkas yang tersedia.

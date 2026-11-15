@@ -1,6 +1,6 @@
 # Training manual Daisuki AI
 
-Jalankan perintah dari root proyek. Ketiga pilihan di bawah memakai skrip yang sama, `ai/retraining/train_daisuki.py`, tetapi membaca sumber dan memperbarui bagian model yang berbeda.
+Jalankan perintah dari root proyek. Ketiga pilihan di bawah memakai satu skrip, `ai/retraining/train.py`, tetapi membaca sumber dan memperbarui bagian model yang berbeda. Pipeline mingguan API memakai skrip yang sama dengan `DAISUKI_ANALYSIS_RUN_ID`; jalankan `--weekly` untuk laporan CSV lokal di luar pipeline API.
 
 | Pilihan | Panduan | Sumber utama | Bagian `daisuki.pkl` yang diperbarui |
 | --- | --- | --- | --- |

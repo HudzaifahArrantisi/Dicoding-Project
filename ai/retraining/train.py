@@ -1,27 +1,27 @@
-"""Retrain the Daisuki text classifier from live AI Insights source tables,
-and process ai/data/raw_references/ into ai/data/mainbrain/context_embeddings/.
-"""
+"""Train Daisuki from analysis runs, raw references, or the weekly API pipeline."""
 
 from __future__ import annotations
 
+import argparse
 import logging
 import json
 import os
 import pickle
+import re
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 import hashlib
 
-import psycopg
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from source import build_intent_samples
-from doc_loader import collect_mainbrain_knowledge_snippets, scan_and_generate_mainbrain
+from doc_loader import RAW_DIR, MAINBRAIN_DIR, collect_mainbrain_knowledge_snippets, process_single_file, sanitize_filename, scan_and_generate_mainbrain
 from knowledge_index import build_knowledge_index, build_raw_pdf_index
 from analysis_index import build_analysis_index
-from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, prepare_handoff
+from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, load_samples, prepare_handoff
 
 AI_ROOT = str(Path(__file__).resolve().parents[1])
 if AI_ROOT not in sys.path:
@@ -32,7 +32,13 @@ LOGGER = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_OUTPUT_FILE = (stage_dir() / "daisuki.pkl") if run_id() else BASE_DIR.parent / "data" / "mainbrain" / "models" / "daisuki.pkl"
 TEMP_MODEL_FILE = MODEL_OUTPUT_FILE.with_name("daisuki.pkl.tmp")
+MANUAL_MODEL_FILE = BASE_DIR.parent / "data" / "private" / "manual" / "daisuki.pkl"
+LEGACY_MODEL_FILE = BASE_DIR.parent / "data" / "mainbrain" / "models" / "daisuki.pkl"
+RUNS = BASE_DIR.parents[1] / "data-science" / "reports" / "runs"
 CORPORATE_DIR = BASE_DIR.parent / "data" / "mainbrain" / "corporate_knowledge"
+POLICY = CORPORATE_DIR / "rag_policy.json"
+CATEGORIES = ("category_products.json", "category_partners.json", "category_regions.json", "category_reporting.json")
+ARTIFACTS = (*CATEGORIES, "cleaned_inventory_summary.csv", "weekly_analytics_summary.json", "weekly_analytics_report.md")
 with (CORPORATE_DIR / "assistant_copy.json").open(encoding="utf-8") as source:
     IDENTITY_BIO = json.load(source)["identity_reply"]
 with (CORPORATE_DIR / "business_rules.json").open(encoding="utf-8") as source:
@@ -64,6 +70,125 @@ def save_model_safely(model: Pipeline | dict[str, Any], dest_path: Path, temp_pa
                 os.remove(temp_path)
             except OSError as error:
                 LOGGER.warning("Gagal membersihkan file sementara %s: %s", temp_path, error)
+
+
+def analysis_source(selected_run_id: str | None) -> Path:
+    if selected_run_id:
+        selected_run_id = str(uuid.UUID(selected_run_id))
+    candidates = [RUNS / selected_run_id] if selected_run_id else sorted(
+        (path for path in RUNS.iterdir() if path.is_dir()),
+        key=lambda path: path.stat().st_mtime, reverse=True,
+    ) if RUNS.is_dir() else []
+    for folder in candidates:
+        try:
+            manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+            if manifest.get("run_id") != folder.name or manifest.get("schema_version") != 1:
+                continue
+            for name in ARTIFACTS:
+                data = (folder / name).read_bytes()
+                if manifest.get("sha256", {}).get(name) != hashlib.sha256(data).hexdigest():
+                    raise ValueError(f"Checksum tidak cocok: {name}")
+            for name in CATEGORIES:
+                category = json.loads((folder / name).read_text(encoding="utf-8"))
+                if not isinstance(category, (dict, list)):
+                    raise ValueError(f"Kategori kosong atau salah format: {name}")
+            return folder
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            if selected_run_id:
+                raise ValueError(f"Run analisis {selected_run_id} tidak valid: {error}") from error
+    raise ValueError("Tidak ada run Data Science valid dengan empat kategori JSON. Jalankan analisis terlebih dahulu.")
+
+
+def publish_references(names: list[str]) -> list[str]:
+    policy = json.loads(POLICY.read_text(encoding="utf-8"))
+    blocked = [re.compile(pattern, re.I) for pattern in policy["blocked_content_patterns"]]
+    selected = []
+    for name in names:
+        if Path(name).name != name or not name.lower().endswith((".pdf", ".docx", ".md", ".txt")):
+            raise ValueError(f"Nama atau format referensi tidak diizinkan: {name}")
+        matches = [folder / name for folder in (RAW_DIR / "pdf", RAW_DIR / "docs") if (folder / name).is_file()]
+        if len(matches) != 1:
+            raise ValueError(f"Referensi harus ada tepat di satu folder pdf/docs: {name}")
+        ok, extracted, reason = process_single_file(matches[0])
+        if not ok or extracted is None:
+            raise ValueError(f"Ekstraksi {name} gagal: {reason}")
+        content = extracted.read_text(encoding="utf-8")
+        if any(pattern.search(content) for pattern in blocked):
+            raise ValueError(f"Referensi {name} mengandung pola privat; tinjau dan sunting dokumen publik secara manual")
+        public_name = f"{sanitize_filename(matches[0].stem)}.public.md"
+        public_path = MAINBRAIN_DIR / public_name
+        if public_path.exists() and f"`{name}`" not in public_path.read_text(encoding="utf-8"):
+            raise ValueError(f"Nama keluaran {public_name} sudah dipakai dokumen lain")
+        selected.append((public_name, content))
+    approved = list(policy["approved_sources"])
+    if len({name for name, _ in selected}) != len(selected):
+        raise ValueError("Referensi berbeda menghasilkan nama dokumen publik yang sama")
+    if len(set(approved) | {name for name, _ in selected}) > policy["max_documents"]:
+        raise ValueError("Jumlah sumber publik melebihi max_documents dalam rag_policy.json")
+    for name, content in selected:
+        (MAINBRAIN_DIR / name).write_text(content, encoding="utf-8")
+        if name not in approved:
+            approved.append(name)
+    if selected:
+        policy["approved_sources"] = approved
+        POLICY.write_text(json.dumps(policy, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return [name for name, _ in selected]
+
+
+def train_manual(mode: int, selected_run_id: str | None, public_sources: list[str]) -> None:
+    if mode == 1 and public_sources:
+        raise ValueError("--public-source hanya berlaku untuk opsi 2 atau 3")
+    previous_model = MANUAL_MODEL_FILE if MANUAL_MODEL_FILE.is_file() else LEGACY_MODEL_FILE
+    bundle: dict[str, Any] = {}
+    if previous_model.is_file():
+        with previous_model.open("rb") as source:
+            loaded = pickle.load(source)
+        if not isinstance(loaded, dict):
+            raise ValueError("Format daisuki.pkl lama tidak didukung")
+        bundle = dict(loaded)
+    texts, labels = build_intent_samples()
+    bundle["intent"] = train_pipeline(texts, labels, fit_prior=False)
+    metadata = dict(bundle.get("metadata") or {})
+    metadata.update(name="Daisuki AI Assistant", identity_bio=IDENTITY_BIO)
+    bundle["metadata"] = metadata
+    if mode in (1, 3):
+        folder = analysis_source(selected_run_id)
+        samples, risks, _ = load_samples(folder / "cleaned_inventory_summary.csv")
+        if len(set(risks)) >= 2:
+            bundle["risk"] = train_pipeline(samples, risks)
+        elif "risk" not in bundle:
+            raise ValueError("Laporan hanya memiliki satu kelas risiko dan belum ada model risiko lama")
+        bundle["mainbrain_meta"] = {**dict(bundle.get("mainbrain_meta") or {}),
+                                    "source_run_id": folder.name, "training_input_source": "data_science_run"}
+        bundle["analysis_retrieval"] = build_analysis_index(folder)
+        print(f"Analisis privat: {folder.name}; empat kategori tervalidasi; {len(samples)} pasangan mitra-produk")
+    if mode in (2, 3):
+        published = publish_references(public_sources)
+        bundle["retrieval"] = build_knowledge_index()
+        bundle["raw_pdf_retrieval"] = build_raw_pdf_index()
+        print(f"Referensi publik baru: {', '.join(published) if published else 'tidak ada'}")
+        print(f"Cuplikan retrieval: {len(bundle['retrieval']['documents'])}")
+        print(f"Cuplikan PDF privat dalam biner: {len(bundle['raw_pdf_retrieval']['documents'])}")
+    MANUAL_MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    save_model_safely(bundle, MANUAL_MODEL_FILE, MANUAL_MODEL_FILE.with_name("daisuki.pkl.tmp"))
+    print(f"Model tersimpan: {MANUAL_MODEL_FILE}")
+
+
+def refresh_intent() -> None:
+    if not MODEL_OUTPUT_FILE.is_file():
+        raise ValueError("daisuki.pkl belum tersedia; jalankan training terlebih dahulu")
+    with MODEL_OUTPUT_FILE.open("rb") as source:
+        bundle = pickle.load(source)
+    if not isinstance(bundle, dict) or "intent" not in bundle:
+        raise ValueError("Format daisuki.pkl tidak mendukung pembaruan intent")
+    texts, labels = build_intent_samples()
+    bundle["intent"] = train_pipeline(texts, labels, fit_prior=False)
+    bundle["retrieval"] = build_knowledge_index()
+    metadata = dict(bundle.get("metadata") or {})
+    metadata.update(name="Daisuki AI Assistant", identity_bio=IDENTITY_BIO)
+    bundle["metadata"] = metadata
+    save_model_safely(bundle, MODEL_OUTPUT_FILE, TEMP_MODEL_FILE)
+    print(f"Daisuki AI: {len(texts)} contoh intent dan {len(bundle['retrieval']['documents'])} cuplikan retrieval diperbarui; model risiko dipertahankan.")
 
 
 def run_retraining_loop() -> bool:
@@ -129,11 +254,44 @@ def run_retraining_loop() -> bool:
         LOGGER.info("Training intent dari %d frasa dan risiko dari %d pasangan mitra-produk", len(intent_texts), len(texts))
         save_model_safely(bundle, MODEL_OUTPUT_FILE, TEMP_MODEL_FILE)
         return True
-    except (OSError, ValueError, RuntimeError, psycopg.Error) as error:
+    except (OSError, ValueError, RuntimeError) as error:
         LOGGER.exception("Retraining gagal; model lama dipertahankan: %s", error)
         return False
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--mode", type=int, choices=(1, 2, 3), help="1=analisis, 2=referensi, 3=keduanya")
+    action.add_argument("--weekly", action="store_true", help="Training pipeline mingguan dari CSV Data Science")
+    action.add_argument("--intent-only", action="store_true", help="Perbarui classifier intent tanpa melatih ulang risiko")
+    parser.add_argument("--run-id", help="ID run Data Science untuk mode 1/3; default run valid terbaru")
+    parser.add_argument("--public-source", action="append", default=[], metavar="FILE",
+                        help="Nama PDF/DOCX/MD/TXT di raw_references/pdf atau docs yang disetujui untuk chatbot mitra")
+    args = parser.parse_args()
+    if run_id() or args.weekly:
+        if args.run_id or args.public_source or args.intent_only or args.mode:
+            parser.error("Pipeline mingguan tidak menerima opsi training manual")
+        raise SystemExit(0 if run_retraining_loop() else 1)
+    if args.intent_only:
+        if args.run_id or args.public_source:
+            parser.error("--intent-only tidak menerima --run-id atau --public-source")
+        try:
+            refresh_intent()
+        except (OSError, ValueError) as error:
+            parser.exit(1, f"Training gagal: {error}\n")
+        return
+    try:
+        mode = args.mode or int(input("Pilih training (1=analisis, 2=referensi, 3=keduanya): ").strip())
+        if mode not in (1, 2, 3):
+            parser.error("Pilihan harus 1, 2, atau 3")
+        if args.run_id and mode == 2:
+            parser.error("--run-id hanya berlaku untuk mode 1 atau 3")
+        train_manual(mode, args.run_id, args.public_source)
+    except (OSError, ValueError) as error:
+        parser.exit(1, f"Training gagal: {error}\n")
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", stream=sys.stdout)
-    raise SystemExit(0 if run_retraining_loop() else 1)
+    main()

@@ -163,6 +163,8 @@ daisuki-inventory/
 ## Catatan Perubahan Harian (Daily Changelog)
 
 ### 2026-11-15
+- **Perbaikan interpreter untuk training manual**: `train.py` tidak lagi mengimpor `psycopg` tanpa kebutuhan. README menjelaskan penggunaan `ai/.venv` dari folder `ai/retraining/`; virtual environment lokal `ai/retraining/.venv` belum memiliki `scikit-learn`.
+- **Satu skrip training Daisuki**: `ai/retraining/train.py` kini melayani tiga mode manual, pipeline mingguan (`--weekly` atau konteks run API), dan pembaruan intent (`--intent-only`). Skrip `train_daisuki.py`, `refresh_identity.py`, dan `a.out` kosong dihapus; dokumentasi serta tes mengikuti satu entrypoint. Sembilan tes retraining dan kompilasi Python lulus; model dan PDF lokal pengguna dipertahankan.
 - **Penutupan Chat AI tidak lagi menunggu timeout 9Router penuh**: Ringkasan LLM saat menutup sesi Mitra dan Admin diberi batas tiga detik; saat timeout sistem memakai ringkasan lokal dan tetap menyimpan status sesi. Batas ini tidak mengubah timeout jawaban chat. Tes batas waktu dan typecheck lulus.
 - **Label teks menggantikan ikon gembok pada riwayat Chat AI**: Aksi status sesi di sidebar Mitra dan Admin sekarang menampilkan `Tutup` atau `Buka` tanpa ikon gembok, dengan target sentuh dan label aksesibilitas tetap tersedia.
 - **Tombol sembunyikan dan tampilkan sidebar Chat AI Mitra**: Menambahkan kontrol lipat sidebar riwayat pada desktop serta tombol pembuka kembali di header chat, dengan label aksesibilitas dan target sentuh 44px. Panel mobile tetap memakai tombol buka/tutup sendiri.

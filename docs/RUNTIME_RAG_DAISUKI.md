@@ -31,13 +31,13 @@ Override ini juga memilih classifier risiko dari berkas lokal. Kosongkan variabe
 Untuk memperbarui intent dan indeks dokumen publik tanpa mengubah classifier risiko, jalankan dari root:
 
 ```powershell
-python ai/retraining/refresh_identity.py
+python ai/retraining/train.py --intent-only
 ```
 
 Untuk melatih intent, risiko, dan indeks dokumen sekaligus setelah laporan Data Science tersedia:
 
 ```powershell
-python ai/retraining/train.py
+python ai/retraining/train.py --weekly
 ```
 
 Hanya dokumen `*.public.md` yang terdaftar di `ai/data/mainbrain/corporate_knowledge/rag_policy.json` dan lolos penyaringan konten yang masuk indeks biner. PDF mentah tidak otomatis dipublikasikan. Worker memeriksa perubahan waktu berkas saat inferensi; restart API diperlukan jika lokasi model atau konfigurasi `.env` diubah. Alur publikasi analisis memuat ulang worker ketika run baru diaktifkan.

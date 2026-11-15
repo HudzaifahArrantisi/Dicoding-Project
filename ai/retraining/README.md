@@ -7,15 +7,17 @@ Panduan per pilihan: [analisis internal](../../docs/training/01-analisis-interna
 Jalankan dari root proyek dengan Python virtual environment AI:
 
 ```powershell
-ai/.venv/Scripts/python.exe ai/retraining/train_daisuki.py
+ai/.venv/Scripts/python.exe ai/retraining/train.py
 ```
+
+Jika terminal berada di `ai/retraining/`, panggil interpreter AI yang berisi dependensi dengan `..\.venv\Scripts\python.exe train.py --mode 2`. Virtual environment terpisah di `ai/retraining/.venv` tidak otomatis memiliki paket dari `ai/requirements.txt`; prompt `(.venv)` saja tidak menunjukkan lokasi interpreter yang aktif.
 
 Menu menawarkan **1** analisis perusahaan, **2** referensi mentah, atau **3** keduanya. Untuk otomasi, pakai `--mode 1`, `--mode 2`, atau `--mode 3`. Opsi 1 dan 3 memakai run Data Science valid terbaru yang memiliki empat kategori JSON (`products`, `partners`, `regions`, `reporting`) beserta CSV pasangan mitra-produk. Gunakan `--run-id UUID` untuk memilih run tertentu. Empat JSON divalidasi; classifier risiko dilatih dari CSV run yang sama. Data per mitra tetap privat dan tidak masuk indeks dokumen mitra.
 
 Opsi 2 dan 3 memasukkan teks seluruh PDF yang berhasil diekstrak ke indeks vektor **privat** dalam `daisuki.pkl`, serta memperbarui indeks TF-IDF dokumen publik. Pilih PDF, DOCX, MD, atau TXT yang boleh dibaca **semua mitra** secara eksplisit, misalnya:
 
 ```powershell
-ai/.venv/Scripts/python.exe ai/retraining/train_daisuki.py --mode 2 --public-source "artikel-ai.pdf"
+ai/.venv/Scripts/python.exe ai/retraining/train.py --mode 2 --public-source "artikel-ai.pdf"
 ```
 
 File harus ada di `ai/data/raw_references/pdf/` atau `ai/data/raw_references/docs/`. Skrip mengekstrak teks ke Markdown privat, memeriksa pola sensitif, lalu membuat `.public.md` dan menambahkannya ke `rag_policy.json`. Periksa isi PDF terlebih dahulu: persetujuan file adalah persetujuan publikasi isinya ke chatbot mitra. PDF hasil scan memerlukan OCR; DOC lama perlu dikonversi ke DOCX. Tanpa `--public-source`, opsi 2 hanya membangun ulang indeks dari sumber publik yang sudah disetujui. Maksimum sumber dan panjang per dokumen mengikuti `rag_policy.json`.
@@ -26,22 +28,22 @@ Training manual menulis model ke `ai/data/private/manual/daisuki.pkl` (diabaikan
 
 `daisuki.pkl` menyimpan indeks pencarian TF-IDF berupa vektor angka dari n-gram karakter, bukan embedding neural atau model bahasa yang memahami semua artikel. PDF privat tidak menjadi konteks chatbot mitra sampai disetujui lewat `--public-source`. Jawaban tetap dibuat oleh LLM 9Router atau fallback lokal; angka stok/PO terkini selalu berasal dari PostgreSQL sesuai JWT. Worker API memuat ulang model setelah berkas berubah, tetapi daftar sumber publik yang dimuat API saat startup memerlukan restart API.
 
-Skrip ini ditujukan untuk training manual lokal. Alur analisis run yang diterbitkan melalui Admin tetap memakai `train.py` dan proses persetujuan run yang ada.
+Skrip yang sama melayani training manual dan alur analisis run melalui Admin. Pipeline API memilih jalur mingguan melalui `DAISUKI_ANALYSIS_RUN_ID` dan tetap memakai proses persetujuan run yang ada.
 
 `train.py` memakai `data-science/reports/cleaned_inventory_summary.csv` untuk training risiko. Jalankan `python data-science/src/weekly_analytics_aggregator.py` dari root terlebih dahulu. Jika CSV tidak ada, kedaluwarsa, atau tidak valid, training berhenti dan model lama dipertahankan. Data Science menghitung konsumsi dari penurunan stok `manual_update`; penerimaan barang tidak dihitung sebagai konsumsi.
 
 Setiap pasangan mitra-produk menjadi satu sampel teks berisi stok saat ini, buffer minimal, konsumsi, dan cakupan stok. Label `urgent_restock`, `regular_order`, dan `normal` diturunkan dari aturan risiko stok. Label ini adalah *pseudo-label* dari data operasional, bukan keputusan manusia yang sudah diverifikasi.
 
-`ai/data/mainbrain/models/daisuki.pkl` berisi dua pipeline Scikit-Learn: `intent` untuk maksud pertanyaan Daisuki, dan `risk` untuk prioritas restock. Contoh intent berasal dari `ai/data/mega_data_word/intent/training_examples.json` dan berkas per label di `ai/data/mega_data_word/intent/training/`; keduanya adalah korpus frasa berlabel, bukan fakta angka. Jalankan `python retraining/refresh_identity.py` dari folder `ai/` untuk memperbarui classifier intent tanpa melatih ulang model risiko. Bila data stok hanya menghasilkan satu kelas, pipeline intent tetap dilatih dan pipeline risiko lama dipertahankan bila tersedia. Model ini pengklasifikasi, bukan LLM pembuat teks.
+`ai/data/mainbrain/models/daisuki.pkl` berisi dua pipeline Scikit-Learn: `intent` untuk maksud pertanyaan Daisuki, dan `risk` untuk prioritas restock. Contoh intent berasal dari `ai/data/mega_data_word/intent/training_examples.json` dan berkas per label di `ai/data/mega_data_word/intent/training/`; keduanya adalah korpus frasa berlabel, bukan fakta angka. Jalankan `python retraining/train.py --intent-only` dari folder `ai/` untuk memperbarui classifier intent tanpa melatih ulang model risiko. Bila data stok hanya menghasilkan satu kelas, pipeline intent tetap dilatih dan pipeline risiko lama dipertahankan bila tersedia. Model ini pengklasifikasi, bukan LLM pembuat teks.
 
 ```powershell
 cd ai
 python -m pip install -r requirements.txt
 python retraining/test_pipeline.py
-python retraining/train.py
+python retraining/train.py --weekly
 ```
 
-`test_pipeline.py` memakai fixture lokal tanpa menyentuh database atau model produksi. `test_csv_handoff.py` menguji pemakaian CSV dengan model sementara. `python retraining/train.py` mengganti model secara atomik; tidak mengubah database.
+`test_pipeline.py` memakai fixture lokal tanpa menyentuh database atau model produksi. `test_csv_handoff.py` menguji pemakaian CSV dengan model sementara. `python retraining/train.py --weekly` mengganti model secara atomik; tidak mengubah database.
 
 Pipeline mingguan API menjalankan agregator Data Science, Naive Bayes wilayah, alokasi, sintesis fakta, lalu `train.py`. `weekly_facts_aggregator.py` menghasilkan `ai/data/mainbrain/context_embeddings/weekly_operational_facts.json` dari laporan Data Science dan skor wilayah; job ini tidak mengagregasi SQL sendiri. Snapshot menjadi sumber empat kartu AI Insights admin dan konteks agregat yang sudah disaring untuk chatbot mitra.
 
