@@ -76,7 +76,7 @@ function AnalysisPage() {
           </div>
           <p className="mt-3 text-sm text-muted">{run.manifest ? `${run.manifest.partner_product_rows ?? 0} baris mitra-produk · ${run.manifest.product_count ?? 0} produk` : 'Laporan belum selesai dibuat'}{run.published_at ? ` · Terbit ${new Date(run.published_at).toLocaleString('id-ID')}` : ''}</p>
           {run.current_step && <p role="status" className="mt-2 text-sm">Langkah aktif: {run.current_step}</p>}
-          {run.steps?.length > 0 && <ol className="mt-3 grid gap-1 text-xs sm:grid-cols-2">{run.steps.map((step, index) => <li key={step.label}>{index + 1}. {step.label}: {step.status === 'succeeded' ? 'selesai' : step.status === 'failed' ? 'gagal' : 'berjalan'}</li>)}</ol>}
+          {run.steps.length > 0 && <ol className="mt-3 grid gap-1 text-xs sm:grid-cols-2">{run.steps.map((step, index) => <li key={step.label}>{index + 1}. {step.label}: {step.status === 'succeeded' ? 'selesai' : step.status === 'failed' ? 'gagal' : 'berjalan'}</li>)}</ol>}
           {run.error && <p role="alert" className="mt-3 text-sm text-crit-fg">{run.error}</p>}
           <div className="mt-4 flex flex-wrap gap-2">
             {user.role === 'admin' && run.status === 'draft' && <button type="button" disabled={busy !== null} onClick={() => void perform(run.id, () => actionAnalysisRun(run.id, 'approve'), 'Laporan disetujui.')} className="min-h-11 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-white disabled:opacity-50">Setujui laporan</button>}
