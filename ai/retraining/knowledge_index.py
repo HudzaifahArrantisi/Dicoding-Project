@@ -12,7 +12,7 @@ from doc_loader import (RAW_DIR, extract_text_from_docx,
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
-def build_knowledge_index(data_dir: Path = DATA_DIR) -> dict:
+def build_knowledge_index(data_dir: Path = DATA_DIR, shared_summaries: list[dict] | None = None) -> dict:
     policy = json.loads((data_dir / "mainbrain/corporate_knowledge/rag_policy.json").read_text(encoding="utf-8"))
     blocked = [re.compile(pattern, re.I) for pattern in policy["blocked_content_patterns"]]
     documents = []
@@ -34,6 +34,21 @@ def build_knowledge_index(data_dir: Path = DATA_DIR) -> dict:
                 excerpt = paragraph[offset:offset + 1500].strip()
                 if len(excerpt) >= 40:
                     documents.append({"source": name, "version": version, "excerpt": excerpt})
+    for approved in shared_summaries or []:
+        raw_source = approved.get("raw_source", "")
+        excerpt = approved.get("excerpt", "").strip()
+        source_sha256 = approved.get("source_sha256", "")
+        raw_path = (data_dir / "raw_references" / raw_source).resolve()
+        raw_root = (data_dir / "raw_references").resolve()
+        if (not raw_source or not raw_path.is_relative_to(raw_root)
+                or not raw_path.is_file() or len(excerpt) < 40
+                or source_sha256 != hashlib.sha256(raw_path.read_bytes()).hexdigest()
+                or any(pattern.search(excerpt) for pattern in blocked)):
+            continue
+        version = hashlib.sha256(excerpt.encode()).hexdigest()[:12]
+        documents.append({"source": raw_source, "version": version, "excerpt": excerpt,
+                          "visibility": "mitra", "kind": "approved_summary",
+                          "aliases": approved.get("aliases", [])})
     if not documents:
         return {"documents": [], "policy_version": policy["version"]}
     vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), max_features=30000)
@@ -45,7 +60,10 @@ def build_knowledge_index(data_dir: Path = DATA_DIR) -> dict:
 def search_knowledge(index: dict, query: str) -> list[dict]:
     if not index.get("documents") or "vectorizer" not in index:
         return []
-    query_vector = index["vectorizer"].transform([query])
+    normalized_query = re.sub(r"[^\w\s]+", " ", query).strip()
+    if not normalized_query:
+        return []
+    query_vector = index["vectorizer"].transform([normalized_query])
     scores = (index["vectors"] @ query_vector.T).toarray().ravel()
     ranked = sorted(range(len(scores)), key=lambda i: float(scores[i]), reverse=True)
     return [dict(index["documents"][i], score=round(float(scores[i]), 4))

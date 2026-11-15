@@ -12,7 +12,7 @@ import { buildAdminRagPrompt } from "./admin-prompt";
 import { composeAdminFallbackReply } from "./admin-compose";
 import { understandAdminMessage, understandMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
-import { composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge, selectPublicRagMemory } from "./company-knowledge";
+import { approvedModelContextReply, composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge, selectPublicRagMemory } from "./company-knowledge";
 import { isAssistantIdentityQuestion } from "./identity";
 import { generateLlmReply, getLastLlmStatus } from "./llm-client";
 import { rewriteMitraQuery } from "./query-rewrite";
@@ -261,7 +261,8 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       : emptyModel;
     const model = { ...understanding, predictions: risk.predictions };
     const wantsWeeklySummary = /\b(?:merangkum|rangkuman|rangkum|ringkasan|ringkas|rekap|analisis)\b/i.test(standaloneQuery) && /\b(?:seminggu|sepekan|mingguan|minggu|7\s*hari)\b/i.test(standaloneQuery);
-    const hasDocumentMatch = Boolean(!intent && !knowledgeTopic && knowledge?.documents?.length && /\b(?:jurnal|artikel|karya\s*ilmiah|penelitian|sentimen|sgd|logistic|regression|nlp|natural\s*language|prabowo|mbg|makan\s*bergizi|danantara|omnibus|efisiensi\s*anggaran|indobert|referensi|refrensi|hudzaifah|jatisi|complementnb|cross-validation|dataset)\b/i.test(standaloneQuery));
+    const approvedContextReply = approvedModelContextReply(standaloneQuery, knowledge?.documents ?? []);
+    const hasDocumentMatch = Boolean(approvedContextReply || (!intent && !knowledgeTopic && knowledge?.documents?.length));
     const hasLocalTopic = Boolean(wantsWeeklySummary || (knowledgeTopic && knowledge) || intent || hasDocumentMatch);
     const ruleRefusalReply = crossTenant
       ? TENANT_SCOPE_REPLY
@@ -270,6 +271,8 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       ? { ...answerMitraQuestion(message), reply: ruleRefusalReply }
       : wantsWeeklySummary
         ? { ...answerMitraQuestion(message), reply: weeklyAnalysisReply(understanding, context) }
+      : approvedContextReply
+        ? { ...answerMitraQuestion(message), reply: approvedContextReply }
       : knowledgeTopic && knowledge
         ? { ...answerMitraQuestion(message), reply: composeKnowledgeReply(knowledge, knowledgeTopic, message) }
         : intent
@@ -281,7 +284,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
           : "Maaf, server sedang gangguan. Silakan coba lagi beberapa saat." };
     let llmReply: string | null = null;
     let grounded = false;
-    if (!refused) {
+    if (!refused && !approvedContextReply) {
       const needsOperationalFacts = Boolean(
         !hasDocumentMatch && (
           wantsWeeklySummary ||
@@ -611,11 +614,16 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       version: doc.version,
       title: doc.source,
       excerpt: doc.excerpt.slice(0, 1800),
+      visibility: doc.visibility,
+      kind: doc.kind,
+      aliases: doc.aliases,
     }));
     const knowledgeExcerpts = binaryReady ? [...rawExcerpts, ...publicExcerpts].slice(0, 5) : markdownExcerpts;
 
     // 4. Fallback cerdas lokal
-    const fallback = composeAdminFallbackReply(message, context, model, knowledgeExcerpts);
+    const baseFallback = composeAdminFallbackReply(message, context, model, knowledgeExcerpts);
+    const approvedAdminContextReply = approvedModelContextReply(message, knowledgeExcerpts);
+    const fallback = approvedAdminContextReply ? { ...baseFallback, reply: approvedAdminContextReply } : baseFallback;
 
     // 5. LLM Prompt
     let llmReply: string | null = null;
@@ -632,14 +640,16 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       },
     });
 
-    try {
-      llmReply = await generateLlmReply({
-        systemPrompt,
-        userMessage: message,
-      });
-      grounded = Boolean(llmReply && llmReply.trim().length > 0);
-    } catch (error) {
-      console.warn("[ADMIN ASSISTANT] 9Router gagal:", error instanceof Error ? error.message : "Error");
+    if (!approvedAdminContextReply) {
+      try {
+        llmReply = await generateLlmReply({
+          systemPrompt,
+          userMessage: message,
+        });
+        grounded = Boolean(llmReply && llmReply.trim().length > 0);
+      } catch (error) {
+        console.warn("[ADMIN ASSISTANT] 9Router gagal:", error instanceof Error ? error.message : "Error");
+      }
     }
 
     const response = grounded && llmReply ? { ...fallback, reply: llmReply } : fallback;

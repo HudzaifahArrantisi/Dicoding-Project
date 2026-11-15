@@ -24,7 +24,7 @@ export interface ModelResult {
   predictions: ModelPrediction[];
   intent?: { label: string; confidence: number } | null;
   identity?: ModelIdentity | null;
-  documents?: Array<{ source: string; version: string; excerpt: string; score: number }>;
+  documents?: Array<{ source: string; version: string; excerpt: string; score: number; visibility?: string; kind?: string; aliases?: string[] }>;
   raw_documents?: Array<{ source: string; excerpt: string; score: number }>;
   analysis_documents?: Array<{ partner_id: string; source: string; period: string; excerpt: string; score: number }>;
   retrieval_ready?: boolean;

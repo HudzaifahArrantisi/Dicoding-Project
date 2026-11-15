@@ -144,9 +144,42 @@ def select_raw_reference(name: str, paths: list[Path]) -> Path:
     return matches[0]
 
 
-def train_manual(mode: int, selected_run_id: str | None, public_sources: list[str], source_file_name: str | None = None) -> None:
-    if mode == 1 and public_sources:
-        raise ValueError("--public-source hanya berlaku untuk opsi 2 atau 3")
+def select_shared_summaries(previous: list[dict], specifications: list[str], paths: list[Path], revoked_names: list[str] | None = None) -> list[dict]:
+    by_name: dict[str, list[Path]] = {}
+    for path in paths:
+        by_name.setdefault(path.name.casefold(), []).append(path)
+    selected_sources = {path.relative_to(RAW_DIR).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    summaries = {item["raw_source"]: item for item in previous
+                 if isinstance(item, dict) and item.get("source_sha256") == selected_sources.get(item.get("raw_source"))}
+    for name in revoked_names or []:
+        matches = by_name.get(name.strip().casefold(), [])
+        if len(matches) != 1:
+            raise ValueError(f"File untuk mencabut akses Mitra tidak ditemukan atau ambigu: {name}")
+        summaries.pop(matches[0].relative_to(RAW_DIR).as_posix(), None)
+    policy = json.loads(POLICY.read_text(encoding="utf-8"))
+    blocked = [re.compile(pattern, re.I) for pattern in policy["blocked_content_patterns"]]
+    for specification in specifications:
+        name, separator, excerpt = specification.partition("=")
+        matches = by_name.get(name.strip().casefold(), [])
+        excerpt = excerpt.strip()
+        if not separator or len(matches) != 1 or len(excerpt) < 40:
+            raise ValueError("--mitra-summary harus berbentuk 'nama-file.pdf=ringkasan minimal 40 karakter' untuk file yang dilatih")
+        path = matches[0]
+        if any(pattern.search(excerpt) for pattern in blocked):
+            raise ValueError(f"Ringkasan {path.name} mengandung pola data privat; sunting sebelum dibagikan ke Mitra")
+        terms = [term.casefold() for term in re.findall(r"[\w]+", path.stem)
+                 if len(term) >= 3 and term.casefold() not in {"artikel", "dokumen", "file", "pdf", "resume", "referensi", "refrensi"}]
+        aliases = list(dict.fromkeys([" ".join(terms), *terms])) if terms else []
+        raw_source = path.relative_to(RAW_DIR).as_posix()
+        summaries[raw_source] = {"raw_source": raw_source, "source_sha256": selected_sources[raw_source],
+                                 "excerpt": excerpt, "aliases": aliases}
+    return list(summaries.values())
+
+
+def train_manual(mode: int, selected_run_id: str | None, public_sources: list[str], source_file_name: str | None = None,
+                 mitra_summaries: list[str] | None = None, revoked_mitra_sources: list[str] | None = None) -> None:
+    if mode == 1 and (public_sources or mitra_summaries or revoked_mitra_sources):
+        raise ValueError("Pengaturan sumber Mitra hanya berlaku untuk opsi 2 atau 3")
     previous_model = MANUAL_MODEL_FILE if MANUAL_MODEL_FILE.is_file() else LEGACY_MODEL_FILE
     bundle: dict[str, Any] = {}
     if previous_model.is_file():
@@ -180,11 +213,13 @@ def train_manual(mode: int, selected_run_id: str | None, public_sources: list[st
             raise ValueError("Mode 3 hanya boleh menerbitkan file yang sedang dilatih")
         reference_index = build_raw_reference_index(paths)
         published = publish_references(public_sources)
-        bundle["retrieval"] = build_knowledge_index()
+        bundle["shared_summaries"] = select_shared_summaries(bundle.get("shared_summaries", []), mitra_summaries or [], paths, revoked_mitra_sources)
+        bundle["retrieval"] = build_knowledge_index(shared_summaries=bundle["shared_summaries"])
         bundle["raw_pdf_retrieval"] = reference_index
         print(f"Referensi publik baru: {', '.join(published) if published else 'tidak ada'}")
         print(f"Cuplikan retrieval: {len(bundle['retrieval']['documents'])}")
         print(f"Berkas mentah terindeks: {len(paths)}; cuplikan privat dalam biner: {len(reference_index['documents'])}")
+        print(f"Ringkasan yang dapat dibaca Mitra dalam biner: {len(bundle['shared_summaries'])}")
     MANUAL_MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
     save_model_safely(bundle, MANUAL_MODEL_FILE, MANUAL_MODEL_FILE.with_name("daisuki.pkl.tmp"))
     print(f"Model tersimpan: {MANUAL_MODEL_FILE}")
@@ -199,7 +234,7 @@ def refresh_intent() -> None:
         raise ValueError("Format daisuki.pkl tidak mendukung pembaruan intent")
     texts, labels = build_intent_samples()
     bundle["intent"] = train_pipeline(texts, labels, fit_prior=False)
-    bundle["retrieval"] = build_knowledge_index()
+    bundle["retrieval"] = build_knowledge_index(shared_summaries=bundle.get("shared_summaries", []))
     metadata = dict(bundle.get("metadata") or {})
     metadata.update(name="Daisuki AI Assistant", identity_bio=IDENTITY_BIO)
     bundle["metadata"] = metadata
@@ -285,14 +320,18 @@ def main() -> None:
     parser.add_argument("--file", dest="source_file_name", help="Nama satu file dalam raw_references untuk mode 3")
     parser.add_argument("--public-source", action="append", default=[], metavar="FILE",
                         help="Nama PDF/DOCX/MD/TXT di raw_references/pdf atau docs yang disetujui untuk chatbot mitra")
+    parser.add_argument("--mitra-summary", action="append", default=[], metavar="FILE=TEXT",
+                        help="Ringkasan aman satu file mentah untuk Mitra; izin dan teks tersimpan dalam daisuki.pkl")
+    parser.add_argument("--revoke-mitra-source", action="append", default=[], metavar="FILE",
+                        help="Cabut akses ringkasan file dari Chat AI Mitra pada model berikutnya")
     args = parser.parse_args()
     if run_id() or args.weekly:
-        if args.run_id or args.source_file_name or args.public_source or args.intent_only or args.mode:
+        if args.run_id or args.source_file_name or args.public_source or args.mitra_summary or args.revoke_mitra_source or args.intent_only or args.mode:
             parser.error("Pipeline mingguan tidak menerima opsi training manual")
         raise SystemExit(0 if run_retraining_loop() else 1)
     if args.intent_only:
-        if args.run_id or args.source_file_name or args.public_source:
-            parser.error("--intent-only tidak menerima --run-id, --file, atau --public-source")
+        if args.run_id or args.source_file_name or args.public_source or args.mitra_summary or args.revoke_mitra_source:
+            parser.error("--intent-only tidak menerima --run-id, --file, --public-source, atau --mitra-summary")
         try:
             refresh_intent()
         except (OSError, ValueError) as error:
@@ -311,7 +350,20 @@ def main() -> None:
         if args.source_file_name and mode != 3:
             parser.error("--file hanya berlaku untuk mode 3")
         source_file_name = args.source_file_name or (input("Nama file (contoh: nama-file.pdf): ").strip() if mode == 3 else None)
-        train_manual(mode, args.run_id, args.public_source, source_file_name)
+        if args.mode is None and mode in (2, 3):
+            while True:
+                action = input("Akses ringkasan Mitra: tambah (t), cabut (c), atau Enter untuk lanjut: ").strip().casefold()
+                if not action:
+                    break
+                if action not in ("t", "c"):
+                    raise ValueError("Pilih t, c, atau Enter")
+                name = source_file_name if mode == 3 else input("Nama file referensi: ").strip()
+                if action == "t":
+                    summary = input("Ringkasan aman untuk semua Mitra (minimal 40 karakter): ").strip()
+                    args.mitra_summary.append(f"{name}={summary}")
+                else:
+                    args.revoke_mitra_source.append(name)
+        train_manual(mode, args.run_id, args.public_source, source_file_name, args.mitra_summary, args.revoke_mitra_source)
     except (OSError, ValueError) as error:
         parser.exit(1, f"Training gagal: {error}\n")
 

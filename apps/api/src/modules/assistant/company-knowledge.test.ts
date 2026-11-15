@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts, selectPublicRagMemory } from "./company-knowledge";
+import { approvedModelContextReply, composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts, selectPublicRagMemory } from "./company-knowledge";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadAssistantFixture } from "./test-data";
@@ -42,6 +42,16 @@ test("kebijakan RAG hanya menerima sumber terdaftar tanpa data kontak", () => {
     { name: "dokumen-baru.public.md", content: "Dokumen ini belum disetujui." },
   ]);
   expect(files.map((file) => file.name)).toEqual(["inventory_rules.public.md"]);
+});
+
+test("ringkasan CV yang disetujui berasal dari indeks biner dan tidak membuka CV mentah", () => {
+  const document = { source: "pdf/CV Contoh.pdf", version: "pkl", excerpt: "Contoh adalah mahasiswi aktif yang menyukai teknologi dan kegiatan organisasi.", kind: "approved_summary", visibility: "mitra", aliases: ["contoh"] };
+  expect(filterRagDocuments([{ name: document.source, content: document.excerpt }])).toHaveLength(0);
+  const selected = selectPublicRagMemory([{ ...document, score: 0.1238 }], []);
+  expect(selected.memory).toBe("daisuki.pkl");
+  expect(approvedModelContextReply("siapa itu contoh??", selected.documents)).toContain("Contoh adalah mahasiswi");
+  expect(approvedModelContextReply("siapa itu contoh??", [])).toBeNull();
+  expect(selectPublicRagMemory([{ ...document, visibility: "private", score: 0.4 }], []).documents).toEqual([]);
 });
 
 test("RAG memilih vektor publik yang relevan lalu fallback ke Markdown saat tidak ada", () => {

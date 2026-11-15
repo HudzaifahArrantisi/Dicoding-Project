@@ -16,4 +16,6 @@ Pilihan ini mengganti indeks referensi mentah privat dalam model manual dengan *
 
 Jika isi dokumen aman untuk **semua mitra**, tinjau isinya lalu tambahkan `--public-source "nama-file.pdf"`. Tanpa flag tersebut, teks hanya masuk indeks privat dan tidak diberikan kepada chatbot mitra.
 
+Jika cukup ringkasan singkat yang boleh dibaca Mitra, gunakan `--mitra-summary "nama-file.pdf=Ringkasan aman minimal empat puluh karakter tentang isi dokumen ini."`. Training menyimpan izin dan ringkasannya di `daisuki.pkl`; tidak perlu mengubah kode atau membuat `.public.md`. Gunakan `--revoke-mitra-source "nama-file.pdf"` untuk mencabut akses.
+
 Hasil model berada di `ai/data/private/manual/daisuki.pkl`. Agar API memakai hasil manual, arahkan `DAISUKI_MODEL_PATH` ke berkas tersebut dan mulai ulang API.
