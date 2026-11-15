@@ -20,6 +20,12 @@ test("profil dan SOP perusahaan dibaca dari sumber terstruktur", async () => {
   expect(JSON.stringify(sop)).not.toContain("DLV-XXXXXXXX");
 });
 
+test("saat indeks biner siap, profil tersedia tanpa membaca dokumen Markdown", async () => {
+  const result = await loadCompanyKnowledge("siapa pendiri Daisuki", "company", false);
+  expect(result.company?.legal_entity).toBe("PT Daisuki Pangan Indonesia");
+  expect(result.documents).toEqual([]);
+});
+
 test("retrieval mainbrain hanya membaca dokumen yang ditandai untuk mitra", () => {
   const results = selectMainbrainExcerpts("pendiri Daisuki", [
     { name: "cv-pribadi.md", content: "Pendiri Daisuki dan data pribadi seseorang yang tidak boleh dibagikan." },
@@ -45,6 +51,7 @@ test("RAG memilih vektor publik yang relevan lalu fallback ke Markdown saat tida
   expect(selectPublicRagMemory([{ ...binary[0], score: 0.01 }], markdown)).toEqual({ documents: markdown, memory: ".public.md" });
   expect(selectPublicRagMemory([{ ...binary[0], source: "private.pdf" }], markdown).memory).toBe(".public.md");
   expect(selectPublicRagMemory(undefined, []).memory).toBe("none");
+  expect(selectPublicRagMemory([], []).memory).toBe("none");
 });
 
 test("pertanyaan profil dan panduan dikenali tanpa mengubah pertanyaan stok", () => {

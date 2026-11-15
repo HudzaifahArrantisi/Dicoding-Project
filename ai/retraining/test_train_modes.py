@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import train
-from knowledge_index import build_raw_reference_index, list_raw_references
+from knowledge_index import build_raw_reference_index, list_raw_references, search_raw_reference
 
 
 class AnalysisSourceTests(unittest.TestCase):
@@ -74,6 +74,20 @@ class TrainingCommandTests(unittest.TestCase):
             self.assertEqual({item["source"] for item in build_raw_reference_index([selected], raw)["documents"]}, {"docs/artikel.txt"})
             with self.assertRaises(ValueError):
                 train.select_raw_reference("../artikel.txt", paths)
+
+    def test_private_reference_can_be_found_by_person_name_in_filename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = Path(directory)
+            (raw / "pdf").mkdir()
+            (raw / "docs").mkdir()
+            cv = raw / "pdf" / "CV DEA.txt"
+            cv.write_text("Mahasiswi aktif di bidang teknologi, organisasi, dan kerja tim.", encoding="utf-8")
+            other = raw / "docs" / "artikel.txt"
+            other.write_text("Artikel umum tentang persediaan dan analisis penjualan toko.", encoding="utf-8")
+            index = build_raw_reference_index([cv, other], raw)
+            matches = search_raw_reference(index, "siapa itu dea")
+            self.assertTrue(matches)
+            self.assertEqual(matches[0]["source"], "pdf/CV DEA.txt")
 
 
 if __name__ == "__main__":

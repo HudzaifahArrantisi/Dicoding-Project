@@ -8,7 +8,7 @@ import sys
 
 from filter import DaisukiFilter, MODEL_FILE
 from source import build_training_samples
-from knowledge_index import search_knowledge
+from knowledge_index import search_knowledge, search_raw_reference
 from analysis_index import search_partner_analysis
 
 
@@ -32,6 +32,8 @@ def main() -> None:
             result = {"id": request["id"], "available": intent_classifier.is_ready, "predictions": [],
                       "risk_available": risk_classifier.is_ready,
                       "retrieval_ready": bool(intent_classifier.retrieval.get("documents"))}
+            if request.get("admin_access") is True:
+                result["raw_retrieval_ready"] = bool(intent_classifier.raw_retrieval.get("documents"))
             if records and risk_classifier.is_ready:
                 texts, _ = build_training_samples(records)
                 predictions = risk_classifier.predict_with_confidence(texts)
@@ -52,6 +54,8 @@ def main() -> None:
                     prediction = intent_classifier.predict_with_confidence(message)[0]
                     result["intent"] = {"label": prediction["predicted_label"], "confidence": prediction["confidence"]}
                 result["documents"] = search_knowledge(intent_classifier.retrieval, message)
+                if request.get("admin_access") is True:
+                    result["raw_documents"] = search_raw_reference(intent_classifier.raw_retrieval, message)
                 partner_id = request.get("partner_id")
                 result["analysis_documents"] = search_partner_analysis(
                     intent_classifier.analysis_retrieval, partner_id, message) if isinstance(partner_id, str) else []

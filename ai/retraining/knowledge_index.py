@@ -52,6 +52,23 @@ def search_knowledge(index: dict, query: str) -> list[dict]:
             for i in ranked[:index.get("max_excerpts", 3)] if scores[i] >= 0.08]
 
 
+def search_raw_reference(index: dict, query: str, max_excerpts: int = 4) -> list[dict]:
+    """Search private reference vectors for the authenticated admin route only."""
+    if not index.get("documents") or "vectorizer" not in index:
+        return []
+    query_terms = set(re.findall(r"[\w]{3,}", query.casefold())) - {"siapa", "itu", "tentang", "dokumen", "file", "pdf", "dari"}
+    scores = (index["vectors"] @ index["vectorizer"].transform([query]).T).toarray().ravel()
+    ranked = []
+    for i, item in enumerate(index["documents"]):
+        source_terms = set(re.findall(r"[\w]{3,}", Path(item["source"]).stem.casefold())) - {"pdf", "doc", "docs", "cv"}
+        title_match = bool(query_terms & source_terms)
+        score = float(scores[i]) + (0.5 if title_match else 0)
+        if score >= (0.08 if title_match else 0.15):
+            ranked.append((score, i))
+    ranked.sort(reverse=True)
+    return [dict(index["documents"][i], score=round(score, 4)) for score, i in ranked[:max_excerpts]]
+
+
 RAW_FORMATS = {".pdf", ".docx", ".md", ".markdown", ".txt", ".json", ".csv"}
 
 
