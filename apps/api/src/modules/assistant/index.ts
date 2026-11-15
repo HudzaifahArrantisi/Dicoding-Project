@@ -47,7 +47,7 @@ function queueCompaction(key: string, partnerId: string, userId: string, session
         .where(and(eq(assistantConversationMemory.partner_id, partnerId), eq(assistantConversationMemory.user_id, userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
       const summary = await summarizeSession(turns, stored?.summary ?? "");
       await tx.insert(assistantConversationMemory).values({ partner_id: partnerId, user_id: userId, session_id: sessionId, summary })
-        .onConflictDoUpdate({ target: [assistantConversationMemory.partner_id, assistantConversationMemory.user_id, assistantConversationMemory.session_id], set: { summary, updated_at: new Date() } });
+        .onConflictDoUpdate({ target: [assistantConversationMemory.user_id, assistantConversationMemory.session_id], set: { summary, updated_at: new Date() } });
       await tx.update(assistantChatEvents).set({ model_results: sql`jsonb_set(${assistantChatEvents.model_results}, '{session_active}', 'false'::jsonb)` })
         .where(and(eq(assistantChatEvents.partner_id, partnerId), eq(assistantChatEvents.user_id, userId), inArray(assistantChatEvents.id, turns.map((turn) => turn.id)), sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`));
     });
@@ -414,7 +414,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
         await tx.insert(assistantConversationMemory).values({
           partner_id: user.partnerId, user_id: user.userId, session_id: sessionId, summary,
         }).onConflictDoUpdate({
-          target: [assistantConversationMemory.partner_id, assistantConversationMemory.user_id, assistantConversationMemory.session_id],
+          target: [assistantConversationMemory.user_id, assistantConversationMemory.session_id],
           set: { summary, updated_at: new Date() },
         });
       }

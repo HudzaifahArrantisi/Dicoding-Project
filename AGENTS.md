@@ -168,6 +168,8 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-15
+- **Perbaikan penutupan sesi Chat AI Mitra**: Menyamakan target `ON CONFLICT` pada penyimpanan ringkasan saat pemadatan memori dan penutupan sesi dengan primary key terbaru `(user_id, session_id)`, sehingga endpoint `/assistant/mitra/end` tidak lagi gagal dengan PostgreSQL `42P10`.
+- **Format jawaban Chat AI lebih rapi**: Penampil bersama Chat AI Admin dan Mitra kini merender `**tebal**`, `***tebal miring***`, `*miring*`, blok kode, serta jeda antarparagraf tanpa memperlihatkan penanda Markdown pada teks terformat. Dua tipe formulir stok mitra disesuaikan agar typecheck kembali lulus.
 - **Chatbot AI Admin Daisuki Pusat (Database Realtime + daisuki.pkl + Output Training MD & Karya Ilmiah)**: Mengimplementasikan asisten AI cerdas untuk Admin Daisuki Pusat di portal `/admin` dengan tab baru **Chat AI**:
   1. **Akses Data Database Real-time Tanpa Sekat Tenant**: Admin AI dapat mengakses ready stock gudang pusat untuk 4 produk resmi, status kesehatan stok seluruh cabang mitra (aman, waspada, kritis, stale >24 jam), daftar pesanan restock yang menunggu persetujuan (dengan kuantitas requested & stok gudang saat ini), status pengiriman aktif ekspedisi, serta audit log mutasi stok terakhir.
   2. **Integrasi Model Machine Learning (`daisuki.pkl`)**: Memanfaatkan inferensi model Multinomial Naive Bayes dan prediksi risiko stok serta intent dari artefak model `daisuki.pkl`.

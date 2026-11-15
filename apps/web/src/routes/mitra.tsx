@@ -301,7 +301,7 @@ function MitraPortal() {
       return reportDailyStock({
         items: changedStocks.map((stock) => ({
           product_id: stock.product_id,
-          current_qty: editedStocks[stock.product_id],
+          current_qty: editedStocks[stock.product_id] ?? stock.current_qty,
         })),
       })
     },
@@ -763,7 +763,7 @@ function NumericStockInput({
 interface StocksPanelProps {
   query: ReturnType<typeof useQuery<StockItem[]>>
   centralProductsQuery: ReturnType<typeof useQuery<Product[]>>
-  editedStocks: Record<string, number>
+  editedStocks: Partial<Record<string, number>>
   changedIds: Set<string>
   onQtyChange: (stock: StockItem, qty: number) => void
   onSave: () => void
