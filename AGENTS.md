@@ -168,6 +168,9 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-15
+- **Penutupan Chat AI tidak lagi menunggu timeout 9Router penuh**: Panggilan LLM untuk ringkasan saat menutup sesi Mitra dan Admin dibatasi tiga detik, terpisah dari timeout jawaban chat. Ringkasan lokal tetap disimpan bila model lambat atau gagal; transkrip dan status sesi tetap diproses. Menambahkan tes batas waktu khusus; 9 tes terkait dan typecheck lulus.
+- **Label teks menggantikan ikon gembok pada riwayat Chat AI**: Tombol status sesi di sidebar Chat AI Mitra dan Admin kini memakai teks `Tutup` atau `Buka`; fungsi penutupan dan pembukaan kembali sesi tetap tersedia. Target sentuh 44px serta label aksesibilitas dipertahankan.
+- **Tombol sembunyikan dan tampilkan sidebar Chat AI Mitra**: Sidebar riwayat chat kini dapat disembunyikan di desktop melalui tombol pada kepala sidebar dan ditampilkan kembali melalui tombol pada kepala ruang chat. Kontrol panel geser mobile tetap tersedia; tombol memiliki label aksesibilitas dan target sentuh 44px.
 - **Perbaikan penutupan sesi Chat AI Mitra**: Menyamakan target `ON CONFLICT` pada penyimpanan ringkasan saat pemadatan memori dan penutupan sesi dengan primary key terbaru `(user_id, session_id)`, sehingga endpoint `/assistant/mitra/end` tidak lagi gagal dengan PostgreSQL `42P10`.
 - **Format jawaban Chat AI lebih rapi**: Penampil bersama Chat AI Admin dan Mitra kini merender `**tebal**`, `***tebal miring***`, `*miring*`, blok kode, serta jeda antarparagraf tanpa memperlihatkan penanda Markdown pada teks terformat. Dua tipe formulir stok mitra disesuaikan agar typecheck kembali lulus.
 - **Chatbot AI Admin Daisuki Pusat (Database Realtime + daisuki.pkl + Output Training MD & Karya Ilmiah)**: Mengimplementasikan asisten AI cerdas untuk Admin Daisuki Pusat di portal `/admin` dengan tab baru **Chat AI**:

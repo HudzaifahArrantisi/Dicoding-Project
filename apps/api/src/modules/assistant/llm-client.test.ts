@@ -73,3 +73,19 @@ test("timeout model tidak mengulang permintaan pada tunnel yang sama", async () 
   expect(await generateLlmReply({ systemPrompt: "fakta", userMessage: "pesan" })).toBeNull();
   expect(urls).toEqual(["http://local-model-timeout/v1/chat/completions"]);
 });
+
+test("batas waktu ringkasan dapat lebih pendek dari batas chat biasa", async () => {
+  process.env.LLM_ENABLED = "true";
+  process.env.LLM_API_KEY = "test-key";
+  process.env.LLM_BASE_URL = "http://local-summary-timeout/v1";
+  process.env.LLM_TUNNEL_URL = "";
+  process.env.LLM_TIMEOUT_MS = "45000";
+  let aborted = false;
+  globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => { aborted = true; reject(new Error("aborted")); }, { once: true });
+  })) as typeof fetch;
+  const startedAt = Date.now();
+  expect(await generateLlmReply({ systemPrompt: "ringkas", userMessage: "pesan", timeoutMs: 20 })).toBeNull();
+  expect(aborted).toBe(true);
+  expect(Date.now() - startedAt).toBeLessThan(1_000);
+});
