@@ -13,13 +13,21 @@ import {
 type ChatMessage = { id: number; author: 'mitra' | 'assistant'; text: string; source?: 'llm' | 'fallback'; tour?: MitraTour; tourLabel?: string; interactionId?: string; feedback?: -1 | 1 | null }
 
 function inlineText(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) =>
-    part.startsWith('**') && part.endsWith('**')
-      ? <strong key={index} className="font-semibold text-ink-950">{part.slice(2, -2)}</strong>
-      : part.startsWith('`') && part.endsWith('`')
-        ? <code key={index} className="rounded bg-ink-900/8 px-1 py-0.5 font-mono text-xs">{part.slice(1, -1)}</code>
-        : part,
-  )
+  return text.split(/(`[^`\n]+`|\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).map((part, index) => {
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={index} className="rounded bg-ink-900/8 px-1 py-0.5 font-mono text-xs">{part.slice(1, -1)}</code>
+    }
+    if (part.startsWith('***') && part.endsWith('***')) {
+      return <strong key={index} className="font-semibold text-ink-950"><em>{part.slice(3, -3)}</em></strong>
+    }
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={index} className="font-semibold text-ink-950">{part.slice(2, -2)}</strong>
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={index}>{part.slice(1, -1)}</em>
+    }
+    return part
+  })
 }
 
 function parseTableRow(line: string): string[] {
@@ -37,19 +45,36 @@ function isTableSeparator(line: string): boolean {
 }
 
 export function AssistantMessageText({ text }: { text: string }) {
-  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered' | 'heading' | 'table'; lines: string[] }> = []
+  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered' | 'heading' | 'table' | 'code'; lines: string[] }> = []
+  let inCodeBlock = false
+  let startNewBlock = false
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim()
-    if (!line || /^-{3,}$/.test(line)) continue
+    if (line.startsWith('```')) {
+      if (!inCodeBlock) blocks.push({ kind: 'code', lines: [] })
+      inCodeBlock = !inCodeBlock
+      startNewBlock = true
+      continue
+    }
+    if (inCodeBlock) {
+      blocks.at(-1)?.lines.push(rawLine)
+      continue
+    }
+    if (!line || /^-{3,}$/.test(line)) {
+      startNewBlock = true
+      continue
+    }
     if (line.startsWith('|') && line.endsWith('|') && line.includes('|', 1)) {
       const previous = blocks.at(-1)
-      if (previous?.kind === 'table') previous.lines.push(line)
+      if (previous?.kind === 'table' && !startNewBlock) previous.lines.push(line)
       else blocks.push({ kind: 'table', lines: [line] })
+      startNewBlock = false
       continue
     }
     const heading = /^#{1,4}\s+(.+)$/.exec(line)
     if (heading) {
       blocks.push({ kind: 'heading', lines: [heading[1]] })
+      startNewBlock = false
       continue
     }
     const bullet = /^[-*•]\s+(.+)$/.exec(line)
@@ -57,13 +82,17 @@ export function AssistantMessageText({ text }: { text: string }) {
     const kind = bullet ? 'bullets' : numbered ? 'numbered' : 'paragraph'
     const content = bullet?.[1] ?? numbered?.[1] ?? line
     const previous = blocks.at(-1)
-    if (previous?.kind === kind) previous.lines.push(content)
+    if (previous?.kind === kind && !startNewBlock) previous.lines.push(content)
     else blocks.push({ kind, lines: [content] })
+    startNewBlock = false
   }
   return <div className="space-y-2.5 break-words">
     {blocks.map((block, index) => {
       if (block.kind === 'heading') {
         return <h3 key={index} className="font-display text-sm font-bold text-ink-950 pt-1">{inlineText(block.lines[0])}</h3>
+      }
+      if (block.kind === 'code') {
+        return <pre key={index} className="overflow-x-auto rounded-lg bg-ink-900 p-3 text-xs leading-relaxed text-white"><code>{block.lines.join('\n')}</code></pre>
       }
       if (block.kind === 'table') {
         const rows = block.lines.filter((line) => !isTableSeparator(line)).map(parseTableRow)
