@@ -1,4 +1,4 @@
-﻿import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Dialog } from 'radix-ui'
@@ -158,7 +158,8 @@ function MitraPortal() {
   )
   const [activeTour, setActiveTour] = useState<MitraTour | null>(null)
   const [deliveryTourStep, setDeliveryTourStep] = useState(-1)
-  const [editedStocks, setEditedStocks] = useState<Record<string, number>>({})
+  const [editedStocks, setEditedStocks] = useState<Partial<Record<string, number>>>({})
+  const previousStockQtyRef = useRef<Partial<Record<string, number>>>({})
   const [orderItems, setOrderItems] = useState<DraftOrderItem[]>([])
   const [skippedProductIds, setSkippedProductIds] = useState<Set<string>>(
     () => new Set(),
@@ -263,17 +264,34 @@ function MitraPortal() {
 
   useEffect(() => {
     if (!stocksQuery.data) return
-    setEditedStocks(
+    const previousStockQty = previousStockQtyRef.current
+    setEditedStocks((current) =>
       Object.fromEntries(
-        stocksQuery.data.map((stock) => [stock.product_id, stock.current_qty]),
+        stocksQuery.data.map((stock) => {
+          const editedQty = current[stock.product_id]
+          const previousQty = previousStockQty[stock.product_id]
+          return [
+            stock.product_id,
+            previousQty !== undefined &&
+            editedQty !== undefined &&
+            editedQty !== previousQty
+              ? editedQty
+              : stock.current_qty,
+          ]
+        }),
       ),
+    )
+    previousStockQtyRef.current = Object.fromEntries(
+      stocksQuery.data.map((stock) => [stock.product_id, stock.current_qty]),
     )
   }, [stocksQuery.data])
 
   const changedStocks = useMemo(
     () =>
       (stocksQuery.data ?? []).filter(
-        (stock) => editedStocks[stock.product_id] !== stock.current_qty,
+        (stock) =>
+          editedStocks[stock.product_id] !== undefined &&
+          editedStocks[stock.product_id] !== stock.current_qty,
       ),
     [editedStocks, stocksQuery.data],
   )
@@ -931,7 +949,7 @@ function StocksPanel({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {query.data.map((stock) => {
                 const qty = editedStocks[stock.product_id] ?? stock.current_qty
-                const status = getStockStatus(qty, stock.par_level)
+                const status = getStockStatus(stock.current_qty, stock.par_level)
                 const changed = changedIds.has(stock.product_id)
                 return (
                   <article
@@ -977,7 +995,7 @@ function StocksPanel({
                         aria-live="polite"
                       >
                         <span className="font-display text-3xl font-extrabold tabular-nums text-ink-900">
-                          {qty.toLocaleString('id-ID')}
+                          {stock.current_qty.toLocaleString('id-ID')}
                         </span>
                         <span className="text-xs font-medium text-muted">
                           /pcs sekarang

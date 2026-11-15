@@ -6,6 +6,10 @@ import { getAuthUser } from "../../plugins/auth";
 import { answerMitraQuestion, type MitraTour } from "./knowledge";
 import { composeMitraReply, resolveMitraIntent, type AssistantIntent } from "./compose";
 import { loadMitraContext } from "./context";
+import { loadAdminContext } from "./admin-context";
+import { searchAdminKnowledge, loadCompanyProfileAndSop } from "./admin-knowledge";
+import { buildAdminRagPrompt } from "./admin-prompt";
+import { composeAdminFallbackReply } from "./admin-compose";
 import { understandMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
 import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge } from "./company-knowledge";
@@ -57,6 +61,65 @@ function queueCompaction(key: string, partnerId: string, userId: string, session
 
 function isMitra(user: Awaited<ReturnType<typeof getAuthUser>>): user is NonNullable<typeof user> & { role: "mitra"; partnerId: string } {
   return Boolean(user?.role === "mitra" && user.partnerId);
+}
+
+function isAdmin(user: Awaited<ReturnType<typeof getAuthUser>>): user is NonNullable<typeof user> & { role: "admin" } {
+  return Boolean(user?.role === "admin");
+}
+
+function queueAdminCompaction(key: string, userId: string, sessionId: string, turns: ReturnType<typeof getSession>): void {
+  if (!turns.length) return;
+  const previous = compactions.get(key) ?? Promise.resolve();
+  const work = previous.then(async () => {
+    await db.transaction(async (tx) => {
+      const [stored] = await tx.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
+        .where(and(eq(assistantConversationMemory.user_id, userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
+      const summary = await summarizeSession(turns, stored?.summary ?? "");
+      await tx.insert(assistantConversationMemory).values({ user_id: userId, session_id: sessionId, summary, partner_id: null })
+        .onConflictDoUpdate({ target: [assistantConversationMemory.user_id, assistantConversationMemory.session_id], set: { summary, updated_at: new Date() } });
+      await tx.update(assistantChatEvents).set({ model_results: sql`jsonb_set(${assistantChatEvents.model_results}, '{session_active}', 'false'::jsonb)` })
+        .where(and(eq(assistantChatEvents.user_id, userId), inArray(assistantChatEvents.id, turns.map((turn) => turn.id)), sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`));
+    });
+  }).catch((error) => {
+    endSession(key);
+    console.warn("[ADMIN ASSISTANT] Pemadatan memori gagal", error instanceof Error ? error.message : "Error");
+  });
+  compactions.set(key, work);
+  void work.finally(() => { if (compactions.get(key) === work) compactions.delete(key); });
+}
+
+async function activeAdminTurns(userId: string, sessionId: string, waitForCompaction = true) {
+  const key = sessionKey("admin", userId, sessionId);
+  if (waitForCompaction) await compactions.get(key);
+  const cached = getSession(key);
+  if (cached.length) return cached;
+  const rows = await db.select({
+    id: assistantChatEvents.id,
+    message: assistantChatEvents.message,
+    reply: assistantChatEvents.reply,
+    intent: assistantChatEvents.intent,
+    model_results: assistantChatEvents.model_results,
+    feedback: assistantChatEvents.feedback,
+    created_at: assistantChatEvents.created_at,
+  }).from(assistantChatEvents)
+    .where(and(
+      eq(assistantChatEvents.user_id, userId),
+      sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`,
+    ))
+    .orderBy(desc(assistantChatEvents.created_at)).limit(8);
+  for (const row of rows.reverse()) {
+    const metadata = row.model_results as { session_active?: boolean; response_source?: string } | null;
+    if (metadata?.session_active !== true) continue;
+    const evicted = addSessionTurn(key, {
+      id: row.id, message: row.message, reply: row.reply, intent: row.intent,
+      source: metadata.response_source === "llm" ? "llm" : "fallback",
+      feedback: row.feedback === 1 || row.feedback === -1 ? row.feedback : null,
+      created_at: row.created_at,
+    });
+    if (evicted.length) queueAdminCompaction(key, userId, sessionId, evicted);
+  }
+  if (waitForCompaction) await compactions.get(key);
+  return getSession(key);
 }
 
 async function activeTurns(partnerId: string, userId: string, sessionId: string, waitForCompaction = true) {
@@ -428,6 +491,312 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     await db.delete(assistantConversationMemory)
       .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId)));
     clearUserSessions(user.partnerId, user.userId);
+    return { status: "ok" };
+  },
+).get(
+  "/admin/sessions",
+  async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    const rows = await db.execute(sql<{ session_id: string; title: string | null; last_at: Date; message_count: number; summary: string | null; is_closed: boolean }>`
+      WITH grouped AS (
+        SELECT model_results->>'session_id' AS session_id,
+          (array_agg(message ORDER BY created_at ASC))[1] AS title,
+          MAX(created_at) AS last_at, COUNT(*)::int AS message_count,
+          BOOL_OR(COALESCE((model_results->>'session_closed')::boolean, false)) AS is_closed
+        FROM assistant_chat_events
+        WHERE user_id = ${user.userId}::uuid
+          AND model_results->>'session_id' IS NOT NULL
+        GROUP BY model_results->>'session_id'
+      )
+      SELECT COALESCE(g.session_id, m.session_id::text) AS session_id,
+        g.title, COALESCE(g.last_at, m.updated_at) AS last_at,
+        COALESCE(g.message_count, 0)::int AS message_count,
+        m.summary, COALESCE(g.is_closed, true) AS is_closed
+      FROM grouped g FULL OUTER JOIN assistant_conversation_memory m
+        ON m.session_id::text = g.session_id AND m.user_id = ${user.userId}::uuid
+      WHERE (g.session_id IS NOT NULL OR m.user_id = ${user.userId}::uuid)
+      ORDER BY last_at DESC
+    `);
+    return { data: Array.from(rows) };
+  },
+).get(
+  "/admin/history",
+  async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    const sessionId = headers["x-session-id"];
+    if (!sessionId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+      set.status = 422; return { error: "UUID sesi tidak valid" };
+    }
+    const rows = await db.select({
+      id: assistantChatEvents.id,
+      message: assistantChatEvents.message,
+      reply: assistantChatEvents.reply,
+      intent: assistantChatEvents.intent,
+      model_results: assistantChatEvents.model_results,
+      feedback: assistantChatEvents.feedback,
+      created_at: assistantChatEvents.created_at,
+    }).from(assistantChatEvents)
+      .where(and(
+        eq(assistantChatEvents.user_id, user.userId),
+        sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`,
+      ))
+      .orderBy(assistantChatEvents.created_at);
+    const [memory] = await db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
+      .where(and(eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
+    return {
+      data: rows.map((row) => ({
+        id: row.id,
+        message: row.message,
+        reply: row.reply,
+        intent: row.intent,
+        source: (row.model_results as { response_source?: string } | null)?.response_source === "llm" ? "llm" : "fallback",
+        feedback: row.feedback,
+        created_at: row.created_at,
+      })),
+      summary: memory?.summary ?? null,
+    };
+  },
+).post(
+  "/admin/chat",
+  async ({ body, headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    if (!body.message.trim()) {
+      set.status = 422;
+      return { error: "Pesan tidak boleh kosong" };
+    }
+    const message = body.message.trim();
+    const sessionId = body.session_id;
+
+    const [closedSession] = await db.select({ id: assistantChatEvents.id }).from(assistantChatEvents)
+      .where(and(
+        eq(assistantChatEvents.user_id, user.userId),
+        sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`,
+        sql`${assistantChatEvents.model_results}->>'session_closed' = 'true'`,
+      )).limit(1);
+    if (closedSession) { set.status = 409; return { error: "Sesi ini sudah ditutup. Mulai chat baru." }; }
+
+    const key = sessionKey("admin", user.userId, sessionId);
+    const turns = await activeAdminTurns(user.userId, sessionId);
+
+    const [memory] = await db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
+      .where(and(eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
+
+    // 1. Data Realtime Database
+    const context = await loadAdminContext();
+
+    // 2. Mainbrain Knowledge (.md files & corporate knowledge)
+    const [knowledgeExcerpts, companyData] = await Promise.all([
+      searchAdminKnowledge(message, 5),
+      loadCompanyProfileAndSop(),
+    ]);
+
+    // 3. Machine Learning model daisuki.pkl
+    const model = await withinModelBudget(understandMitraMessage(message, undefined), 500, emptyModel);
+
+    // 4. Fallback cerdas lokal
+    const fallback = composeAdminFallbackReply(message, context, model, knowledgeExcerpts);
+
+    // 5. LLM Prompt
+    let llmReply: string | null = null;
+    let grounded = false;
+
+    const systemPrompt = buildAdminRagPrompt({
+      context,
+      model,
+      knowledgeExcerpts,
+      companyData,
+      memory: {
+        summary: memory?.summary ?? "",
+        recent: buildConversationContext(turns),
+      },
+    });
+
+    try {
+      llmReply = await generateLlmReply({
+        systemPrompt,
+        userMessage: message,
+      });
+      grounded = Boolean(llmReply && llmReply.trim().length > 0);
+    } catch (error) {
+      console.warn("[ADMIN ASSISTANT] 9Router gagal:", error instanceof Error ? error.message : "Error");
+    }
+
+    const response = grounded && llmReply ? { ...fallback, reply: llmReply } : fallback;
+    const source = grounded ? "llm" : "fallback";
+
+    // Simpan interaksi ke database (partner_id = null untuk admin)
+    const [saved] = await db.insert(assistantChatEvents).values({
+      partner_id: null,
+      user_id: user.userId,
+      message,
+      reply: response.reply,
+      intent: model.intent?.label ?? null,
+      model_label: model.intent?.label ?? null,
+      model_confidence: model.intent ? String(model.intent.confidence) : null,
+      model_results: {
+        intent: model.intent,
+        response_source: source,
+        session_active: true,
+        session_id: sessionId,
+        model_available: model.available,
+        knowledge_sources: knowledgeExcerpts.map((d) => ({ source: d.source, version: d.version, title: d.title })),
+      },
+    }).returning({ id: assistantChatEvents.id });
+
+    const evicted = addSessionTurn(key, { id: saved.id, message, reply: response.reply, intent: model.intent?.label ?? null, source, feedback: null, created_at: new Date() });
+    queueAdminCompaction(key, user.userId, sessionId, evicted);
+
+    const payload = { ...response, interactionId: saved.id, session_id: sessionId, modelAvailable: model.available, source };
+    if (headers.accept?.includes("text/event-stream")) {
+      return new Response(`data: ${JSON.stringify(payload)}\n\n`, {
+        headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+      });
+    }
+    return payload;
+  },
+  { body: t.Object({ message: t.String({ minLength: 1, maxLength: 500 }), session_id: t.String({ format: "uuid" }) }) },
+).patch(
+  "/admin/chat/:id/feedback",
+  async ({ headers, params, body, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    const [updated] = await db.update(assistantChatEvents).set({ feedback: body.rating })
+      .where(and(eq(assistantChatEvents.id, params.id), eq(assistantChatEvents.user_id, user.userId)))
+      .returning({ id: assistantChatEvents.id });
+    if (!updated) { set.status = 404; return { error: "Percakapan tidak ditemukan" }; }
+    rateSessionTurn(sessionKey("admin", user.userId, headers["x-session-id"] ?? user.userId), params.id, body.rating);
+    return { status: "ok" };
+  },
+  { params: t.Object({ id: t.String({ format: "uuid" }) }), body: t.Object({ rating: t.Union([t.Literal(1), t.Literal(-1)]) }) },
+).post(
+  "/admin/end",
+  async ({ headers, body, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    const sessionId = body.session_id ?? headers["x-session-id"] ?? user.userId;
+    const key = sessionKey("admin", user.userId, sessionId);
+    await activeAdminTurns(user.userId, sessionId);
+    const turns = await db.select({
+      id: assistantChatEvents.id,
+      message: assistantChatEvents.message,
+      reply: assistantChatEvents.reply,
+      intent: assistantChatEvents.intent,
+      model_results: assistantChatEvents.model_results,
+      feedback: assistantChatEvents.feedback,
+      created_at: assistantChatEvents.created_at,
+    }).from(assistantChatEvents)
+      .where(and(eq(assistantChatEvents.user_id, user.userId),
+        sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`))
+      .orderBy(assistantChatEvents.created_at);
+    if (!turns.length) return { status: "ok", remembered: false, session_id: sessionId };
+    if (turns.some((turn) => (turn.model_results as { session_closed?: boolean } | null)?.session_closed)) {
+      return { status: "ok", remembered: true, session_id: sessionId };
+    }
+    const [previous] = await db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
+      .where(and(eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
+    const transcript = turns.map((turn) => `Admin: ${turn.message}\nAsisten: ${turn.reply}`).join("\n\n");
+    let llmSummary: string | null = null;
+    try {
+      llmSummary = await generateLlmReply({
+        systemPrompt: "Ringkas diskusi analitik dan keputusan operasional admin pusat dalam bahasa Indonesia singkat dan padat.",
+        userMessage: `Ringkasan sebelumnya:\n${previous?.summary ?? "Belum ada"}\n\nTranskrip:\n${transcript.slice(0, 8000)}`,
+      });
+    } catch {}
+    const summary = llmSummary?.trim().slice(0, 3000) || await summarizeSession(turns.map((turn) => ({
+      id: turn.id, message: turn.message, reply: turn.reply, intent: turn.intent,
+      source: (turn.model_results as { response_source?: string } | null)?.response_source === "llm" ? "llm" as const : "fallback" as const,
+      feedback: turn.feedback === 1 || turn.feedback === -1 ? turn.feedback : null, created_at: turn.created_at,
+    })), previous?.summary ?? "");
+
+    await db.transaction(async (tx) => {
+      if (summary) {
+        await tx.insert(assistantConversationMemory).values({
+          partner_id: null, user_id: user.userId, session_id: sessionId, summary,
+        }).onConflictDoUpdate({
+          target: [assistantConversationMemory.user_id, assistantConversationMemory.session_id],
+          set: { summary, updated_at: new Date() },
+        });
+      }
+      await tx.update(assistantChatEvents).set({
+        model_results: sql`jsonb_set(jsonb_set(${assistantChatEvents.model_results}, '{session_active}', 'false'::jsonb), '{session_closed}', 'true'::jsonb)`,
+      }).where(and(eq(assistantChatEvents.user_id, user.userId),
+        sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`));
+    });
+    endSession(key);
+    return { status: "ok", remembered: Boolean(summary), session_id: sessionId };
+  },
+  { body: t.Object({ session_id: t.Optional(t.String({ format: "uuid" })) }) },
+).post(
+  "/admin/sessions/:sessionId/reopen",
+  async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    const key = sessionKey("admin", user.userId, params.sessionId);
+    await compactions.get(key);
+    const reopened = await db.transaction(async (tx) => {
+      const recent = await tx.select({ id: assistantChatEvents.id }).from(assistantChatEvents)
+        .where(and(eq(assistantChatEvents.user_id, user.userId),
+          sql`${assistantChatEvents.model_results}->>'session_id' = ${params.sessionId}`))
+        .orderBy(desc(assistantChatEvents.created_at)).limit(4);
+      if (!recent.length) return false;
+      await tx.update(assistantChatEvents)
+        .set({ model_results: sql`jsonb_set(jsonb_set(${assistantChatEvents.model_results}, '{session_closed}', 'false'::jsonb), '{session_active}', 'false'::jsonb)` })
+        .where(and(eq(assistantChatEvents.user_id, user.userId),
+          sql`${assistantChatEvents.model_results}->>'session_id' = ${params.sessionId}`));
+      await tx.update(assistantChatEvents)
+        .set({ model_results: sql`jsonb_set(${assistantChatEvents.model_results}, '{session_active}', 'true'::jsonb)` })
+        .where(and(eq(assistantChatEvents.user_id, user.userId),
+          inArray(assistantChatEvents.id, recent.map((item) => item.id))));
+      return true;
+    });
+    if (!reopened) { set.status = 404; return { error: "Transkrip sesi tidak ditemukan" }; }
+    endSession(key);
+    return { status: "ok", session_id: params.sessionId };
+  },
+  { params: t.Object({ sessionId: t.String({ format: "uuid" }) }) },
+).delete(
+  "/admin/sessions/:sessionId",
+  async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    const key = sessionKey("admin", user.userId, params.sessionId);
+    await compactions.get(key);
+    const removed = await db.transaction(async (tx) => {
+      const events = await tx.delete(assistantChatEvents)
+        .where(and(eq(assistantChatEvents.user_id, user.userId),
+          sql`${assistantChatEvents.model_results}->>'session_id' = ${params.sessionId}`))
+        .returning({ id: assistantChatEvents.id });
+      const memory = await tx.delete(assistantConversationMemory)
+        .where(and(eq(assistantConversationMemory.user_id, user.userId),
+          eq(assistantConversationMemory.session_id, params.sessionId)))
+        .returning({ session_id: assistantConversationMemory.session_id });
+      return events.length > 0 || memory.length > 0;
+    });
+    if (!removed) { set.status = 404; return { error: "Sesi chat tidak ditemukan" }; }
+    endSession(key);
+    return { status: "ok" };
+  },
+  { params: t.Object({ sessionId: t.String({ format: "uuid" }) }) },
+).delete(
+  "/admin/history",
+  async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    for (const key of [...compactions.keys()]) if (key.startsWith(`admin:${user.userId}:`)) await compactions.get(key);
+    await db.delete(assistantChatEvents).where(eq(assistantChatEvents.user_id, user.userId));
+    await db.delete(assistantConversationMemory).where(eq(assistantConversationMemory.user_id, user.userId));
+    clearUserSessions("admin", user.userId);
     return { status: "ok" };
   },
 );

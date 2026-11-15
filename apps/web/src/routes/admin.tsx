@@ -1,5 +1,13 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   keepPreviousData,
   useMutation,
@@ -82,6 +90,7 @@ import {
   type RegionRestockItem,
   type PartnerActivityItem,
 } from '@/components/inventory/ai-insights-modals'
+import { AdminChatRoom } from '@/components/inventory/admin-chat-room'
 import {
   OrderStatusBadge,
   StaleBadge,
@@ -144,7 +153,15 @@ import type {
   StockLog,
 } from '@/lib/inventory-types'
 
-export const Route = createFileRoute('/admin')({ component: AdminDashboard })
+export const Route = createFileRoute('/admin')({
+  validateSearch: (search: Record<string, unknown>): { chat?: string } => ({
+    chat:
+      typeof search.chat === 'string' && /^[0-9a-f-]{36}$/i.test(search.chat)
+        ? search.chat
+        : undefined,
+  }),
+  component: AdminDashboard,
+})
 
 interface Metrics {
   totalBranches: number
@@ -153,7 +170,15 @@ interface Metrics {
   criticalItemsCount: number
 }
 
-type AdminTab = 'stocks' | 'orders' | 'shipments' | 'alerts' | 'partners' | 'data-science' | 'ai-insights'
+type AdminTab =
+  | 'stocks'
+  | 'orders'
+  | 'shipments'
+  | 'alerts'
+  | 'partners'
+  | 'data-science'
+  | 'ai-insights'
+  | 'chat'
 type OrderCategoryTab = 'menunggu' | 'dalam_pengiriman' | 'selesai' | 'ditolak'
 
 const adminTabLabels: Record<AdminTab, string> = {
@@ -164,6 +189,7 @@ const adminTabLabels: Record<AdminTab, string> = {
   partners: 'Manajemen mitra',
   'data-science': 'Log & Data',
   'ai-insights': 'AI Insights',
+  chat: 'Chat AI',
 }
 
 const adminNavTabs: Array<{
@@ -176,9 +202,10 @@ const adminNavTabs: Array<{
   { id: 'orders', label: 'Persetujuan pesanan', shortLabel: 'Pesanan', Icon: ClipboardCheck },
   { id: 'shipments', label: 'Log pengiriman', shortLabel: 'Kirim', Icon: Truck },
   { id: 'partners', label: 'Manajemen mitra', shortLabel: 'Mitra', Icon: Building2 },
-  { id: 'data-science', label: 'Log & Data', shortLabel: 'Log & Data', Icon: Database },
+  { id: 'data-science', label: 'Log & Data', shortLabel: 'Log', Icon: Database },
   { id: 'alerts', label: 'Notifikasi', shortLabel: 'Notif', Icon: Bell },
   { id: 'ai-insights', label: 'AI Insights', shortLabel: 'AI', Icon: BrainCircuit },
+  { id: 'chat', label: 'Chat AI', shortLabel: 'Chat', Icon: MessageSquare },
 ]
 
 
@@ -2537,8 +2564,32 @@ function AIInsightsPanel({
 function AdminDashboard() {
   const { user, logout, clearSession, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const { chat } = Route.useSearch()
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<AdminTab>('stocks')
+  const [tab, setTabState] = useState<AdminTab>(chat ? 'chat' : 'stocks')
+  const [lastChatId, setLastChatId] = useState<string | null>(chat ?? null)
+
+  useEffect(() => {
+    if (chat) {
+      setTabState('chat')
+      setLastChatId(chat)
+    }
+  }, [chat])
+
+  const setTab = useCallback(
+    (nextTab: AdminTab) => {
+      setTabState(nextTab)
+      if (nextTab === 'chat') {
+        void navigate({
+          to: '/admin',
+          search: { chat: chat ?? lastChatId ?? crypto.randomUUID() },
+        })
+      } else if (chat) {
+        void navigate({ to: '/admin', search: { chat: undefined } })
+      }
+    },
+    [chat, lastChatId, navigate],
+  )
   useInventoryEvents(user?.role === 'admin', 'admin')
   const [shipmentPage, setShipmentPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -3014,6 +3065,20 @@ function AdminDashboard() {
               onReviewOrders={() => setTab('orders')}
             />
           ) : null}
+          {tab === 'chat' ? (
+            <AdminChatRoom
+              sessionId={chat ?? lastChatId ?? crypto.randomUUID()}
+              onSelectSession={(id) => {
+                setLastChatId(id)
+                void navigate({ to: '/admin', search: { chat: id } })
+              }}
+              onNewSession={() => {
+                const newId = crypto.randomUUID()
+                setLastChatId(newId)
+                void navigate({ to: '/admin', search: { chat: newId } })
+              }}
+            />
+          ) : null}
         </main>
       </div>
 
@@ -3054,13 +3119,13 @@ function AdminFloatingNavbar({
             '--hover-index': hoveredNavIndex ?? activeNavIndex,
           } as React.CSSProperties
         }
-        className="pointer-events-auto relative mx-auto grid w-full max-w-[460px] grid-cols-7 items-center overflow-hidden rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
+        className="pointer-events-auto relative mx-auto grid w-full max-w-[520px] grid-cols-8 items-center overflow-hidden rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
         aria-label="Menu navigasi admin"
       >
         {/* Liquid Glass Gliding Hover Pill */}
         <div
           aria-hidden="true"
-          className={`liquid-pill-hover-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/7)] rounded-full border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+          className={`liquid-pill-hover-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/8)] rounded-full border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
             hoveredNavIndex !== null && hoveredNavIndex !== activeNavIndex
               ? 'opacity-100 scale-100'
               : 'pointer-events-none opacity-0 scale-95'
@@ -3070,7 +3135,7 @@ function AdminFloatingNavbar({
         {/* Liquid Glass Sliding Active Capsule */}
         <div
           aria-hidden="true"
-          className="liquid-pill-active-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/7)] rounded-full bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)]"
+          className="liquid-pill-active-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/8)] rounded-full bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)]"
         >
           {/* Glossy Liquid Specular Sheen */}
           <div className="pointer-events-none absolute inset-x-1.5 top-0.5 h-2 rounded-t-full bg-gradient-to-b from-white/25 to-transparent" />
@@ -3163,6 +3228,7 @@ function AdminSidebar({
   const analysisNavItems = [
     { id: 'data-science' as const, label: 'Log & Data', Icon: Database },
     { id: 'ai-insights' as const, label: 'AI Insights', Icon: BrainCircuit },
+    { id: 'chat' as const, label: 'Chat AI', Icon: MessageSquare },
   ]
 
   const activeOpIndex = operationalNavItems.findIndex((item) => item.id === tab)
