@@ -32,11 +32,15 @@ export function DeliveryScannerModal({
   onOpenChange,
   onVerify,
   pending,
+  preview = false,
+  tourActive = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onVerify: (code: string) => Promise<unknown>
   pending: boolean
+  preview?: boolean
+  tourActive?: boolean
 }) {
   const id = useId().replace(/:/g, '')
   const containerId = `scanner-${id}`
@@ -59,7 +63,7 @@ export function DeliveryScannerModal({
   closeRef.current = onOpenChange
 
   useEffect(() => {
-    if (!open) return
+    if (!open || preview) return
 
     scanLock.current = false
     nextScanAt.current = 0
@@ -161,10 +165,11 @@ export function DeliveryScannerModal({
         scannerInstance.stop().catch(() => undefined)
       }
     }
-  }, [open, containerId, restartCount])
+  }, [open, preview, containerId, restartCount])
 
   // Fitur Unggah Foto / Jepret Langsung sebagai Fallback
   const handleFileScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (preview) return
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -210,7 +215,7 @@ export function DeliveryScannerModal({
   }
 
   async function submit() {
-    if (!code.trim() || submitting) return
+    if (preview || !code.trim() || submitting) return
     setSubmitting(true)
     try {
       await onVerify(code.trim())
@@ -224,17 +229,21 @@ export function DeliveryScannerModal({
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={!tourActive}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[70] bg-ink-900/45 backdrop-blur-xs" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[71] max-h-[92vh] w-[calc(100%-1rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-xl focus-visible:outline-2 focus-visible:outline-ume">
+        <Dialog.Content
+          onOpenAutoFocus={(event) => { if (tourActive) event.preventDefault() }}
+          onCloseAutoFocus={(event) => { if (tourActive) event.preventDefault() }}
+          className="fixed left-1/2 top-1/2 z-[71] max-h-[92vh] w-[calc(100%-1rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-xl focus-visible:outline-2 focus-visible:outline-ume"
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
               <Dialog.Title className="font-display text-xl font-semibold text-ink-900">
                 Pindai resi paket
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-sm text-muted">
-                Arahkan kamera ke QR Code atau barcode pada lembar resi paket Daisuki.
+                {preview ? 'Pratinjau panduan. Kamera dan verifikasi tidak dijalankan.' : 'Arahkan kamera ke QR Code atau barcode pada lembar resi paket Daisuki.'}
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
@@ -249,11 +258,17 @@ export function DeliveryScannerModal({
           </div>
 
           {/* Area Kamera Live */}
-          <div className="relative mt-4 overflow-hidden rounded-md border border-line bg-paper">
-            <div id={containerId} className="min-h-52 w-full" />
+          <div data-tour={preview ? 'delivery-scanner-viewfinder' : undefined} className="relative mt-4 overflow-hidden rounded-md border border-line bg-paper">
+            {preview ? (
+              <div className="flex min-h-36 flex-col items-center justify-center gap-2 p-4 text-center sm:min-h-44">
+                <Camera className="size-7 text-ink-700" aria-hidden="true" />
+                <p className="text-sm font-semibold text-ink-900">Area pindai barcode</p>
+                <p className="text-xs text-muted">Pada pesanan asli, arahkan kamera ke kode pada resi paket.</p>
+              </div>
+            ) : <div id={containerId} className="min-h-52 w-full" />}
             <div id={fileReaderId} className="hidden" />
 
-            {isStarting ? (
+            {!preview && isStarting ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-paper/90 p-4 text-center">
                 <Loader2 className="size-6 animate-spin text-ume" />
                 <p className="text-xs font-medium text-ink-700">Mempersiapkan kamera...</p>
@@ -262,7 +277,7 @@ export function DeliveryScannerModal({
           </div>
 
           {/* Pesan Error & Opsi Coba Lagi */}
-          {cameraError ? (
+          {!preview && cameraError ? (
             <div className="mt-3 rounded-lg border border-warn/30 bg-warn-bg/20 p-3 text-xs text-warn-fg">
               <div className="flex items-start gap-2">
                 <Camera className="mt-0.5 size-4 shrink-0 text-warn" />
@@ -287,7 +302,7 @@ export function DeliveryScannerModal({
           ) : null}
 
           {/* Fallback Foto / Upload File */}
-          <div className="mt-3">
+          <div data-tour={preview ? 'delivery-scanner-photo' : undefined} className="mt-3">
             <input
               ref={fileInputRef}
               type="file"
@@ -299,8 +314,8 @@ export function DeliveryScannerModal({
             />
             <button
               type="button"
-              disabled={fileScanning || isStarting || pending || submitting}
-              onClick={() => fileInputRef.current?.click()}
+              disabled={preview || fileScanning || isStarting || pending || submitting}
+              onClick={() => { if (!preview) fileInputRef.current?.click() }}
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-line bg-paper/80 px-3 text-xs font-semibold text-ink-900 transition hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume disabled:opacity-50"
             >
               {fileScanning ? (
@@ -308,12 +323,12 @@ export function DeliveryScannerModal({
               ) : (
                 <ImageIcon className="size-4 text-muted" />
               )}
-              {fileScanning ? 'Membaca barcode dari foto...' : 'Unggah atau Ambil Foto Barcode Resi'}
+              {preview ? 'Unggah atau Ambil Foto Barcode Resi (contoh)' : fileScanning ? 'Membaca barcode dari foto...' : 'Unggah atau Ambil Foto Barcode Resi'}
             </button>
           </div>
 
           {/* Manual Input Kode */}
-          <div className="mt-4 border-t border-line/70 pt-4">
+          <div data-tour={preview ? 'delivery-scanner-manual' : undefined} className="mt-4 border-t border-line/70 pt-4">
             <label
               htmlFor={`${id}-code`}
               className="flex items-center gap-2 text-sm font-semibold text-ink-900"
@@ -324,14 +339,16 @@ export function DeliveryScannerModal({
             <input
               id={`${id}-code`}
               value={code}
-              onChange={(event) => setCode(event.target.value)}
+              onChange={(event) => { if (!preview) setCode(event.target.value) }}
+              readOnly={preview}
               autoComplete="off"
               placeholder="DSK-..."
               className="mt-2 h-12 w-full rounded-md border border-line bg-white px-3 font-mono text-base text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
             />
             <button
+              data-tour={preview ? 'delivery-scanner-verify' : undefined}
               type="button"
-              disabled={!code.trim() || pending || submitting || fileScanning}
+              disabled={preview || !code.trim() || pending || submitting || fileScanning}
               onClick={() => void submit()}
               className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-ume px-4 font-semibold text-white shadow-2xs transition hover:opacity-95 disabled:opacity-50"
             >

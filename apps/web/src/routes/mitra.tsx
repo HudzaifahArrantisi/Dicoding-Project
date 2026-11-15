@@ -594,6 +594,7 @@ function MitraPortal() {
             sessionId={chat}
             onSelectSession={(id) => void navigate({ to: '/mitra', search: { chat: id } })}
             onNewSession={() => void navigate({ to: '/mitra', search: { chat: crypto.randomUUID() } })}
+            onStartTour={setActiveTour}
           />
         ) : null}
       </main>
@@ -808,10 +809,9 @@ function StocksPanel({
 
       {/* 1. Grid Stok Gudang Pusat Daisuki */}
       <div
-        data-tour="central-stock-card"
         className="dashboard-surface mt-6 overflow-hidden border border-line"
       >
-        <div className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
+        <div data-tour="central-stock-card" className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
           <div className="flex items-center gap-3">
             <span
               className="grid size-11 shrink-0 place-items-center rounded-lg border border-line bg-white"
@@ -1590,6 +1590,54 @@ function OrderForm({
   )
 }
 
+function DeliveryTourSimulation({ step, onClose, onOpenScanner }: { step: number; onClose: () => void; onOpenScanner: () => void }) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const showDetails = step >= 2 || detailsOpen
+
+  return (
+    <div className="mt-5 space-y-3" aria-label="Simulasi penerimaan barang">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <p><strong>Simulasi penerimaan.</strong> Contoh ini tidak mengubah stok atau riwayat pesanan.</p>
+        {step < 0 ? (
+          <button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-amber-600 px-3 text-xs font-semibold hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+            Tutup simulasi
+          </button>
+        ) : null}
+      </div>
+      <article data-tour="delivery-order-card" className="rounded-lg border border-line bg-white p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-display text-base font-bold text-ink-900">Contoh kiriman</h2>
+          <span className="rounded-md bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-950">Dalam Pengiriman</span>
+        </div>
+        <p className="mt-2 text-sm text-ink-700">Seblak Jadul Instan · jumlah yang disetujui admin</p>
+        <p className="mt-1 text-xs text-muted">Pada pesanan asli, ketuk kartu ini untuk membuka detail kiriman.</p>
+        {step < 0 ? (
+          <button type="button" onClick={() => setDetailsOpen((open) => !open)} className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-ink-700 px-3 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+            {showDetails ? 'Tutup detail contoh' : 'Buka detail contoh'}
+          </button>
+        ) : null}
+      </article>
+      {showDetails ? (
+        <section className="rounded-lg border border-line bg-paper p-4 sm:p-5" aria-label="Contoh detail penerimaan">
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+            <Truck className="size-4" aria-hidden="true" />
+            Detail penerimaan contoh
+          </div>
+          <p className="mt-2 text-sm text-ink-700">Cocokkan barang fisik dan jumlah yang disetujui sebelum memindai kode resi pada dus.</p>
+          <button
+            data-tour="delivery-confirm-button"
+            type="button"
+            onClick={onOpenScanner}
+            className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+          >
+            Scan Barcode (contoh)
+          </button>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+
 function OrderHistory({
   query,
   availableProducts = [],
@@ -1622,6 +1670,8 @@ function OrderHistory({
   uploadingProof: boolean
 }) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [simulationOpen, setSimulationOpen] = useState(false)
+  const [demoScannerOpen, setDemoScannerOpen] = useState(false)
   const tourOpenedOrderId = useRef<string | null>(null)
   const [editTarget, setEditTarget] = useState<Order | null>(null)
   const [scanOpen, setScanOpen] = useState(false)
@@ -1637,8 +1687,11 @@ function OrderHistory({
     | 'selesai'
     | 'ditolak'
   >('diproses')
+  const previousTourFilter = useRef<typeof statusFilter | null>(null)
 
   const allOrders = query.data ?? []
+  const hasShipment = allOrders.some((order) => order.status === 'dalam_pengiriman')
+  const showDeliverySimulation = (deliveryTourStep >= 0 || simulationOpen) && !hasShipment && !query.isLoading && !query.isError
   const selectedOrder =
     allOrders.find((order) => order.id === selectedOrderId) ?? null
 
@@ -1646,13 +1699,19 @@ function OrderHistory({
     if (deliveryTourStep < 0) {
       if (tourOpenedOrderId.current) setSelectedOrderId(null)
       tourOpenedOrderId.current = null
+      if (previousTourFilter.current) {
+        setStatusFilter(previousTourFilter.current)
+        previousTourFilter.current = null
+      }
       return
     }
+    if (previousTourFilter.current === null) previousTourFilter.current = statusFilter
+    setStatusFilter('dalam_pengiriman')
     const shipment = query.data?.find(
       (order) => order.status === 'dalam_pengiriman',
     )
+    if (query.isSuccess && !shipment) setSimulationOpen(true)
     if (!shipment) return
-    setStatusFilter('dalam_pengiriman')
     if (deliveryTourStep >= 2) {
       tourOpenedOrderId.current = shipment.id
       setSelectedOrderId(shipment.id)
@@ -1660,7 +1719,7 @@ function OrderHistory({
       setSelectedOrderId(null)
       tourOpenedOrderId.current = null
     }
-  }, [deliveryTourStep, query.data])
+  }, [deliveryTourStep, query.data, query.isSuccess, statusFilter])
 
   const handleReceiptFile = async (file?: File) => {
     if (!file) return
@@ -1727,20 +1786,15 @@ function OrderHistory({
         </div>
       ) : null}
 
-      {!query.isLoading && allOrders.length === 0 ? (
+      {!query.isLoading && allOrders.length === 0 && !showDeliverySimulation ? (
         <div className="mt-6">
           <EmptyState
             title="Belum ada pesanan"
             description="Ajukan restock pertama untuk produk yang mulai menipis."
-            action={
-              <button
-                type="button"
-                onClick={onOpenOrder}
-                className="min-h-11 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700"
-              >
-                restock
-              </button>
-            }
+            action={<div className="flex flex-wrap justify-center gap-2">
+              <button type="button" onClick={onOpenOrder} className="min-h-11 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700">Ajukan restock</button>
+              <button type="button" onClick={() => setSimulationOpen(true)} className="min-h-11 rounded-md border border-ink-700 bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">Coba simulasi penerimaan</button>
+            </div>}
           />
         </div>
       ) : null}
@@ -1819,6 +1873,8 @@ function OrderHistory({
           </button>
         </div>
       ) : null}
+
+      {showDeliverySimulation ? <DeliveryTourSimulation step={deliveryTourStep} onClose={() => { setSimulationOpen(false); setDemoScannerOpen(false) }} onOpenScanner={() => setDemoScannerOpen(true)} /> : null}
 
       {/* List Riwayat Pesanan */}
       {filteredOrders.length > 0 ? (
@@ -1938,7 +1994,7 @@ function OrderHistory({
             )
           })}
         </div>
-      ) : allOrders.length > 0 ? (
+      ) : allOrders.length > 0 && !showDeliverySimulation ? (
         <div className="mt-6 rounded-lg border border-line bg-white p-8 text-center">
           <p className="text-sm font-semibold text-ink-900">
             Tidak ada pesanan dengan status ini
@@ -1956,6 +2012,7 @@ function OrderHistory({
       {/* Modal Popup Detail Pesanan */}
       {selectedOrder ? (
         <Dialog.Root
+          modal={deliveryTourStep < 2}
           open={Boolean(selectedOrder)}
           onOpenChange={(open) => {
             if (!open) {
@@ -1968,6 +2025,9 @@ function OrderHistory({
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
             <Dialog.Content
+              onOpenAutoFocus={(event) => {
+                if (deliveryTourStep >= 2) event.preventDefault()
+              }}
               className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-xl animate-in fade-in zoom-in-95 duration-200 focus:outline-hidden sm:p-6"
               aria-describedby="mitra-order-dialog-desc"
             >
@@ -2312,6 +2372,14 @@ function OrderHistory({
           </Dialog.Portal>
         </Dialog.Root>
       ) : null}
+      <DeliveryScannerModal
+        preview
+        tourActive={deliveryTourStep >= 3}
+        open={deliveryTourStep >= 3 || demoScannerOpen}
+        onOpenChange={setDemoScannerOpen}
+        onVerify={async () => undefined}
+        pending={false}
+      />
       <EditOrderModal
         order={editTarget}
         availableProducts={availableProducts}
@@ -2810,8 +2878,8 @@ function ProfilePanel({
           </div>
         </div>
 
-        <div data-tour="profile-section" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div data-tour="profile-section">
             <label
               htmlFor="profile-name"
               className="block text-sm font-semibold text-ink-900"
@@ -2884,7 +2952,7 @@ function ProfilePanel({
             />
           </div>
         </div>
-        <div data-tour="profile-region">
+        <div>
           <RegionPicker
             idPrefix="profile-region"
             value={region}

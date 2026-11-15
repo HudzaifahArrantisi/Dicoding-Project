@@ -6,6 +6,7 @@ import { getAuthUser } from "../../plugins/auth";
 import { answerMitraQuestion, type MitraTour } from "./knowledge";
 import { composeMitraReply, resolveMitraIntent, type AssistantIntent } from "./compose";
 import { loadMitraContext } from "./context";
+import { isOfficialProduct } from "./official-products";
 import { loadAdminContext } from "./admin-context";
 import { searchAdminKnowledge, loadCompanyProfileAndSop } from "./admin-knowledge";
 import { buildAdminRagPrompt } from "./admin-prompt";
@@ -22,6 +23,11 @@ import { addSessionTurn, buildConversationContext, clearUserSessions, endSession
 
 const emptyModel: ModelResult = { available: false, predictions: [] };
 const compactions = new Map<string, Promise<void>>();
+
+function isStockChartRequest(message: string): boolean {
+  return /\b(?:grafik|visualisasi|visualisasikan|diagram|chart)\b/i.test(message) &&
+    /\b(?:stok|stock|produk|barang|toko|cabang)\b/i.test(message);
+}
 
 function weeklyAnalysisReply(model: ModelResult, context: Awaited<ReturnType<typeof loadMitraContext>>): string {
   const documents = model.analysis_documents ?? [];
@@ -211,6 +217,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       message: row.message,
       reply: row.reply,
       intent: tours.has(row.intent as MitraTour) ? row.intent : null,
+      visualization: (row.model_results as { visualization?: unknown } | null)?.visualization ?? null,
       source: (row.model_results as { response_source?: string } | null)?.response_source === "llm" ? "llm" : "fallback",
       feedback: row.feedback,
       created_at: row.created_at,
@@ -227,6 +234,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       return { error: "Pesan tidak boleh kosong" };
     }
     const message = body.message.trim();
+    const wantsStockChart = isStockChartRequest(message);
     const sessionId = body.session_id;
     const [closedSession] = await db.select({ id: assistantChatEvents.id }).from(assistantChatEvents)
       .where(and(eq(assistantChatEvents.partner_id, user.partnerId), eq(assistantChatEvents.user_id, user.userId),
@@ -282,9 +290,24 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
         : { ...answerMitraQuestion(message), reply: /\b(?:hi|hai|halo|selamat\s+(?:pagi|siang|sore|malam)|apa\s*kabar|apaokabar|tes|test|ping)\b/i.test(message)
           ? `Halo${context.partner?.name ? `, ${context.partner.name}` : ""}! Kabar saya baik dan siap membantu. Ada yang ingin kamu tanyakan atau bahas hari ini?`
           : "Maaf, server sedang gangguan. Silakan coba lagi beberapa saat." };
+    const visualization = wantsStockChart && !refused
+      ? {
+          type: "bar" as const,
+          title: "Sisa stok produk di toko Anda",
+          unit: "pcs",
+          items: context.stocks
+            .filter((stock) => isOfficialProduct(stock.product_name))
+            .map((stock) => ({ label: stock.product_name, value: Math.max(0, stock.current_qty) })),
+        }
+      : null;
+    const chartFallback = visualization
+      ? { ...fallback, reply: visualization.items.length
+          ? "Berikut grafik perbandingan sisa stok fisik produk di toko Anda berdasarkan laporan stok terbaru."
+          : "Belum ada data stok cabang yang dapat ditampilkan pada grafik." }
+      : fallback;
     let llmReply: string | null = null;
     let grounded = false;
-    if (!refused && !approvedContextReply) {
+    if (!refused && !approvedContextReply && !visualization) {
       const needsOperationalFacts = Boolean(
         !hasDocumentMatch && (
           wantsWeeklySummary ||
@@ -319,7 +342,9 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       }
     }
     const llmStatus = getLastLlmStatus();
-    const timeoutReply = hasLocalTopic
+    const timeoutReply = visualization
+      ? chartFallback.reply
+      : hasLocalTopic
       ? `Maaf, server sedang gangguan (koneksi AI lokal sedang timeout). Berikut data langsung dari sistem cabang Anda:\n\n${fallback.reply}`
       : "Maaf, server sedang gangguan (koneksi ke server AI sedang timeout). Silakan coba lagi beberapa saat.";
     const response = refused
@@ -327,8 +352,8 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       : grounded && llmReply
         ? { ...fallback, reply: llmReply }
         : llmStatus === "timeout" || llmStatus === "error"
-          ? { ...fallback, reply: timeoutReply }
-          : fallback;
+          ? { ...chartFallback, reply: timeoutReply }
+          : chartFallback;
     const source = grounded ? "llm" : "fallback";
     const ranked = [...model.predictions].sort((a, b) => {
       const weight = { urgent_restock: 0, regular_order: 1, normal: 2 };
@@ -342,14 +367,14 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       intent,
       model_label: ranked[0]?.label ?? null,
       model_confidence: ranked[0] ? String(ranked[0].confidence) : null,
-      model_results: { intent: classified, stocks: model.predictions, response_source: source, session_active: true, session_id: sessionId,
+      model_results: { intent: classified, stocks: model.predictions, visualization, response_source: source, session_active: true, session_id: sessionId,
         model_available: understanding.available, binary_retrieval: understanding.retrieval_ready ?? false,
         public_memory: publicMemory.memory,
         knowledge_sources: knowledge?.documents.map((doc) => ({ source: doc.source, version: doc.version })) ?? [] },
     }).returning({ id: assistantChatEvents.id });
     const evicted = addSessionTurn(key, { id: saved.id, message, reply: response.reply, intent, source, feedback: null, created_at: new Date() });
     queueCompaction(key, user.partnerId, user.userId, sessionId, evicted);
-    const payload = { ...response, interactionId: saved.id, session_id: sessionId, modelAvailable: model.available, source };
+    const payload = { ...response, visualization, interactionId: saved.id, session_id: sessionId, modelAvailable: model.available, source };
     if (headers.accept?.includes("text/event-stream")) {
       return new Response(`data: ${JSON.stringify(payload)}\n\n`, {
         headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
