@@ -1,7 +1,7 @@
 {
   "category": "corporate_knowledge",
   "name": "rag_policy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "approved_sources": [
     "company-profile.public.md",
     "company_knowledge.public.md",

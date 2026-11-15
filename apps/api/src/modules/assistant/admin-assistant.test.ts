@@ -75,10 +75,10 @@ describe("Admin AI Assistant", () => {
 
   it("composeAdminFallbackReply memakai referensi privat saat model bahasa gagal", async () => {
     const context = await loadAdminContext();
-    const reply = composeAdminFallbackReply("siapa itu Dea?", context, mockEmptyModel, [{
-      source: "pdf/CV DEA.pdf", version: "daisuki.pkl", title: "CV DEA.pdf",
-      excerpt: "Dea adalah mahasiswi aktif yang tertarik pada teknologi dan organisasi.",
+    const reply = composeAdminFallbackReply("siapa itu Contoh?", context, mockEmptyModel, [{
+      source: "pdf/CV Contoh.pdf", version: "daisuki.pkl", title: "CV Contoh.pdf",
+      excerpt: "Contoh adalah mahasiswi aktif yang tertarik pada teknologi dan organisasi.",
     }]);
-    expect(reply.reply).toContain("Dea adalah mahasiswi aktif");
+    expect(reply.reply).toContain("Contoh adalah mahasiswi aktif");
   });
 });
