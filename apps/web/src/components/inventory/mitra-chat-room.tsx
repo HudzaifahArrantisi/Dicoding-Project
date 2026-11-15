@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from 'radix-ui'
-import { ArrowUp, Loader2, LockKeyhole, LockKeyholeOpen, Menu, MessageSquare, Plus, Trash2, X } from 'lucide-react'
+import { ArrowUp, Loader2, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Plus, Trash2, X } from 'lucide-react'
 import {
   askMitraAssistant, deleteMitraChatSession, endMitraAssistantSession, getMitraChatSession, getMitraChatSessions,
   reopenMitraChatSession,
@@ -24,6 +24,7 @@ export function MitraChatRoom({ sessionId, onSelectSession, onNewSession }: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true)
   const [deleteTarget, setDeleteTarget] = useState<MitraChatSession | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -141,13 +142,14 @@ export function MitraChatRoom({ sessionId, onSelectSession, onNewSession }: {
 
   return <section aria-label="Ruang chat Daisuki AI" className="flex h-[calc(100dvh-12rem)] min-h-[420px] overflow-hidden rounded-2xl border border-line bg-white shadow-xs sm:h-[calc(100dvh-11rem)]">
     {sidebarOpen ? <button type="button" aria-label="Tutup daftar sesi" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-30 bg-ink-950/30 lg:hidden" /> : null}
-    <aside className={`${sidebarOpen ? 'fixed inset-y-0 left-0 z-40 flex w-[min(84vw,320px)] flex-col' : 'hidden'} shrink-0 border-r border-line bg-paper/70 lg:relative lg:flex lg:w-72 lg:flex-col`}>
+    <aside id="mitra-chat-history-sidebar" className={`${sidebarOpen ? 'fixed inset-y-0 left-0 z-40 flex w-[min(84vw,320px)] flex-col' : 'hidden'} shrink-0 border-r border-line bg-paper/70 lg:relative ${desktopSidebarOpen ? 'lg:flex' : 'lg:hidden'} lg:w-72 lg:flex-col`}>
       <div className="flex items-center justify-between border-b border-line px-4 py-4">
         <div>
           <p className="dashboard-eyebrow">Daisuki AI</p>
           <h2 className="font-display text-base font-bold text-ink-900">Riwayat chat</h2>
         </div>
-        <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Tutup daftar sesi" className="grid size-11 place-items-center rounded-md lg:hidden"><X className="size-5" /></button>
+        <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Sembunyikan sidebar riwayat chat" className="grid size-11 place-items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 lg:hidden"><X className="size-5" /></button>
+        <button type="button" onClick={() => setDesktopSidebarOpen(false)} aria-label="Sembunyikan sidebar riwayat chat" aria-controls="mitra-chat-history-sidebar" aria-expanded={desktopSidebarOpen} className="hidden size-11 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 lg:grid"><PanelLeftClose className="size-5" aria-hidden="true" /></button>
       </div>
       <div className="p-3">
         <button type="button" onClick={() => { setSidebarOpen(false); onNewSession() }} className="flex min-h-11 w-full items-center gap-2 rounded-lg bg-ink-900 px-3 text-sm font-semibold text-white hover:bg-ink-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
@@ -166,8 +168,8 @@ export function MitraChatRoom({ sessionId, onSelectSession, onNewSession }: {
           <button type="button" onClick={() => void toggleSession(item)} disabled={deleting || busy || ending || Boolean(togglingSessionId) || (item.is_closed && item.message_count === 0)}
             aria-label={`${item.is_closed ? 'Buka kembali' : 'Tutup'} sesi ${item.title || 'Percakapan'}`}
             title={item.is_closed && item.message_count === 0 ? 'Sesi lama hanya memiliki ringkasan' : item.is_closed ? 'Buka kembali sesi' : 'Tutup sesi'}
-            className="grid size-11 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-40">
-            {togglingSessionId === item.session_id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : item.is_closed ? <LockKeyholeOpen className="size-4" aria-hidden="true" /> : <LockKeyhole className="size-4" aria-hidden="true" />}
+            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-40">
+            {togglingSessionId === item.session_id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : item.is_closed ? 'Buka' : 'Tutup'}
           </button>
           <button type="button" onClick={() => { setDeleteError(''); setDeleteTarget(item) }} disabled={deleting || busy || ending || Boolean(togglingSessionId)}
             aria-label={`Hapus sesi ${item.title || 'Percakapan'}`} title="Hapus sesi"
@@ -181,7 +183,8 @@ export function MitraChatRoom({ sessionId, onSelectSession, onNewSession }: {
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex min-h-16 items-center justify-between gap-3 border-b border-line px-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
-          <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Buka daftar sesi" className="grid size-11 shrink-0 place-items-center rounded-md lg:hidden"><Menu className="size-5" /></button>
+          <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Tampilkan sidebar riwayat chat" aria-controls="mitra-chat-history-sidebar" aria-expanded={sidebarOpen} className="grid size-11 shrink-0 place-items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 lg:hidden"><Menu className="size-5" /></button>
+          {!desktopSidebarOpen ? <button type="button" onClick={() => setDesktopSidebarOpen(true)} aria-label="Tampilkan sidebar riwayat chat" aria-controls="mitra-chat-history-sidebar" aria-expanded={desktopSidebarOpen} className="hidden size-11 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 lg:grid"><PanelLeftOpen className="size-5" aria-hidden="true" /></button> : null}
           <img src="/icons/logo.jpg" alt="" className="size-10 shrink-0 rounded-full object-cover" />
           <div className="min-w-0"><h1 className="truncate font-display text-base font-bold text-ink-900">Daisuki AI</h1><p className="truncate text-xs text-muted">{closed ? 'Sesi selesai' : 'Asisten stok dan pemesanan'}</p></div>
         </div>

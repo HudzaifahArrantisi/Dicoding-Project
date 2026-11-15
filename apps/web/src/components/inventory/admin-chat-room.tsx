@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from 'radix-ui'
-import { ArrowUp, Loader2, LockKeyhole, LockKeyholeOpen, Menu, MessageSquare, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { ArrowUp, Loader2, Menu, MessageSquare, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import {
   askAdminAssistant, deleteAdminChatSession, endAdminAssistantSession, getAdminChatSession, getAdminChatSessions,
   reopenAdminChatSession,
@@ -189,9 +189,9 @@ export function AdminChatRoom({ sessionId, onSelectSession, onNewSession }: {
                 disabled={deleting || busy || ending || Boolean(togglingSessionId) || (item.is_closed && item.message_count === 0)}
                 aria-label={`${item.is_closed ? 'Buka kembali' : 'Tutup'} sesi ${item.title || 'Percakapan'}`}
                 title={item.is_closed && item.message_count === 0 ? 'Sesi lama hanya memiliki ringkasan' : item.is_closed ? 'Buka kembali sesi' : 'Tutup sesi'}
-                className="grid size-11 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-40"
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg px-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-40"
               >
-                {togglingSessionId === item.session_id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : item.is_closed ? <LockKeyholeOpen className="size-4" aria-hidden="true" /> : <LockKeyhole className="size-4" aria-hidden="true" />}
+                {togglingSessionId === item.session_id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : item.is_closed ? 'Buka' : 'Tutup'}
               </button>
               <button
                 type="button"

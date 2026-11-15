@@ -1,4 +1,4 @@
-type LlmRequest = { systemPrompt: string; userMessage: string };
+type LlmRequest = { systemPrompt: string; userMessage: string; timeoutMs?: number };
 export type LlmCallStatus = "ok" | "timeout" | "error" | "disabled";
 
 let lastLlmStatus: LlmCallStatus = "disabled";
@@ -43,12 +43,13 @@ function configuredEndpoints(): string[] {
     .filter((value, index, all) => all.indexOf(value) === index && /^https?:\/\//i.test(value));
 }
 
-export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest): Promise<string | null> {
+export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }: LlmRequest): Promise<string | null> {
   if (process.env.LLM_ENABLED !== "true" || !process.env.LLM_API_KEY) {
     lastLlmStatus = "disabled";
     return null;
   }
-  const timeout = Math.min(120_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 35_000));
+  const configuredTimeout = Math.min(120_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 35_000));
+  const timeout = timeoutMs === undefined ? configuredTimeout : Math.min(configuredTimeout, Math.max(1, timeoutMs));
   const deadline = Date.now() + timeout;
   const endpoints = configuredEndpoints();
   if (!endpoints.length) {

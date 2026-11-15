@@ -90,6 +90,14 @@ export function composeAdminFallbackReply(
     };
   }
 
+  const privateReference = knowledgeExcerpts.find((item) => item.version === "daisuki.pkl");
+  if (privateReference) {
+    return {
+      reply: `Menurut referensi privat **${privateReference.title}**:\n\n${privateReference.excerpt.slice(0, 1000)}\n\nSumber: ${privateReference.source}`,
+      quickReplies,
+    };
+  }
+
   // 6. Default / Sapaan
   return {
     reply: `Halo Admin Daisuki Pusat! 👋\n\nBerikut ringkasan operasional realtime jaringan Daisuki saat ini:\n• **Cabang Aktif**: ${context.summary.total_active_partners} mitra\n• **Cabang Kritis**: ${context.summary.critical_branches_count} mitra butuh pasokan\n• **Pesanan Pending**: ${context.summary.pending_orders_count} pesanan menunggu approval\n• **Stok Gudang Pusat**: ${context.summary.total_central_stock.toLocaleString("id-ID")} pcs tersedia\n\nAda informasi operasional, logistik cabang, analisis model, atau dokumen penelitian yang ingin Anda tanyakan?`,

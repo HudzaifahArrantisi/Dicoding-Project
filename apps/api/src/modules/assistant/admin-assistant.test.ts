@@ -72,4 +72,13 @@ describe("Admin AI Assistant", () => {
     expect(reply.reply).toContain("Ketersediaan Stok Gudang Pusat Daisuki");
     expect(reply.reply).toContain("pcs");
   });
+
+  it("composeAdminFallbackReply memakai referensi privat saat model bahasa gagal", async () => {
+    const context = await loadAdminContext();
+    const reply = composeAdminFallbackReply("siapa itu Dea?", context, mockEmptyModel, [{
+      source: "pdf/CV DEA.pdf", version: "daisuki.pkl", title: "CV DEA.pdf",
+      excerpt: "Dea adalah mahasiswi aktif yang tertarik pada teknologi dan organisasi.",
+    }]);
+    expect(reply.reply).toContain("Dea adalah mahasiswi aktif");
+  });
 });

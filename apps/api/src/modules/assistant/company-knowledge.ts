@@ -20,12 +20,17 @@ export function filterRagDocuments(files: Array<{ name: string; content: string 
 }
 const companyData: Promise<{ company_profile?: unknown; sop_procedures?: unknown }> = readFile(companyFile, "utf8")
   .then((text) => JSON.parse(text)).catch(() => ({}));
-const publicDocuments = readdir(mainbrainDir)
-  .then(async (names) => Promise.all(names.filter((name) => approvedSources.has(name)).slice(0, ragPolicy.max_documents)
-    .map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, ragPolicy.max_chars_per_document) }))))
-  .then(filterRagDocuments)
-  .catch(() => [] as Array<{ name: string; content: string }>);
-const publicIndex = publicDocuments.then(indexMainbrain);
+let publicIndex: Promise<MainbrainIndex> | null = null;
+
+function getPublicIndex(): Promise<MainbrainIndex> {
+  publicIndex ??= readdir(mainbrainDir)
+    .then(async (names) => Promise.all(names.filter((name) => approvedSources.has(name)).slice(0, ragPolicy.max_documents)
+      .map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, ragPolicy.max_chars_per_document) }))))
+    .then(filterRagDocuments)
+    .catch(() => [] as Array<{ name: string; content: string }>)
+    .then(indexMainbrain);
+  return publicIndex;
+}
 
 type SopStep = { step_number: number; name: string; action: string };
 type Sop = { title: string; steps: SopStep[]; important_notes?: string[] };
@@ -35,6 +40,23 @@ export type CompanyKnowledge = {
   documents: Array<{ source: string; version: string; excerpt: string }>;
   policyVersion?: string;
 };
+
+type BinaryExcerpt = { source: string; version: string; excerpt: string; score: number };
+
+export function selectPublicRagMemory(binary: BinaryExcerpt[] | undefined, markdown: CompanyKnowledge["documents"]): {
+  documents: CompanyKnowledge["documents"];
+  memory: "daisuki.pkl" | ".public.md" | "none";
+} {
+  const relevant = (binary ?? [])
+    .filter((doc) => Number.isFinite(doc.score) && doc.score >= 0.08)
+    .filter((doc) => filterRagDocuments([{ name: doc.source, content: doc.excerpt }]).length > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map(({ source, version, excerpt }) => ({ source, version, excerpt }));
+  if (relevant.length) return { documents: relevant, memory: "daisuki.pkl" };
+  const fallback = markdown.slice(0, 4);
+  return { documents: fallback, memory: fallback.length ? ".public.md" : "none" };
+}
 
 export function knowledgeIntent(message: string, previousIntent: string | null): "company" | "sop" | null {
   if (matchesWordPack("intent/company", message)) return "company";
@@ -109,9 +131,9 @@ export function selectMainbrainExcerpts(query: string, files: Array<{ name: stri
   return searchMainbrain(query, indexMainbrain(files));
 }
 
-export async function loadCompanyKnowledge(message: string, intent: "company" | "sop" | null): Promise<CompanyKnowledge> {
-  const [raw, index] = await Promise.all([companyData, publicIndex]);
-  const documents = searchMainbrain(message, index);
+export async function loadCompanyKnowledge(message: string, intent: "company" | "sop" | null, includeMarkdown = true): Promise<CompanyKnowledge> {
+  const [raw, index] = await Promise.all([companyData, includeMarkdown ? getPublicIndex() : Promise.resolve(null)]);
+  const documents = index ? searchMainbrain(message, index) : [];
   return {
     company: intent === "company" ? cleanProfile(raw.company_profile) : null,
     sop: intent === "sop" ? selectSop(raw.sop_procedures, message) : null,
