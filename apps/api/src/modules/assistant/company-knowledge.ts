@@ -36,6 +36,23 @@ export type CompanyKnowledge = {
   policyVersion?: string;
 };
 
+type BinaryExcerpt = { source: string; version: string; excerpt: string; score: number };
+
+export function selectPublicRagMemory(binary: BinaryExcerpt[] | undefined, markdown: CompanyKnowledge["documents"]): {
+  documents: CompanyKnowledge["documents"];
+  memory: "daisuki.pkl" | ".public.md" | "none";
+} {
+  const relevant = (binary ?? [])
+    .filter((doc) => Number.isFinite(doc.score) && doc.score >= 0.08)
+    .filter((doc) => filterRagDocuments([{ name: doc.source, content: doc.excerpt }]).length > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map(({ source, version, excerpt }) => ({ source, version, excerpt }));
+  if (relevant.length) return { documents: relevant, memory: "daisuki.pkl" };
+  const fallback = markdown.slice(0, 4);
+  return { documents: fallback, memory: fallback.length ? ".public.md" : "none" };
+}
+
 export function knowledgeIntent(message: string, previousIntent: string | null): "company" | "sop" | null {
   if (matchesWordPack("intent/company", message)) return "company";
   if (matchesWordPack("intent/sop", message)) return "sop";

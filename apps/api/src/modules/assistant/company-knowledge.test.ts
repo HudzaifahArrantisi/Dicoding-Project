@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts } from "./company-knowledge";
+import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts, selectPublicRagMemory } from "./company-knowledge";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadAssistantFixture } from "./test-data";
@@ -36,6 +36,15 @@ test("kebijakan RAG hanya menerima sumber terdaftar tanpa data kontak", () => {
     { name: "dokumen-baru.public.md", content: "Dokumen ini belum disetujui." },
   ]);
   expect(files.map((file) => file.name)).toEqual(["inventory_rules.public.md"]);
+});
+
+test("RAG memilih vektor publik yang relevan lalu fallback ke Markdown saat tidak ada", () => {
+  const markdown = [{ source: "inventory_rules.public.md", version: "md", excerpt: "Aturan stok dari cadangan." }];
+  const binary = [{ source: "inventory_rules.public.md", version: "pkl", excerpt: "Aturan stok dari vektor.", score: 0.4 }];
+  expect(selectPublicRagMemory(binary, markdown)).toEqual({ documents: [{ source: binary[0].source, version: "pkl", excerpt: binary[0].excerpt }], memory: "daisuki.pkl" });
+  expect(selectPublicRagMemory([{ ...binary[0], score: 0.01 }], markdown)).toEqual({ documents: markdown, memory: ".public.md" });
+  expect(selectPublicRagMemory([{ ...binary[0], source: "private.pdf" }], markdown).memory).toBe(".public.md");
+  expect(selectPublicRagMemory(undefined, []).memory).toBe("none");
 });
 
 test("pertanyaan profil dan panduan dikenali tanpa mengubah pertanyaan stok", () => {

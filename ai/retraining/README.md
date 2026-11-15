@@ -2,7 +2,7 @@
 
 ## Training manual dengan tiga pilihan
 
-Panduan per pilihan: [analisis internal](../../docs/training/01-analisis-internal.md), [referensi mentah](../../docs/training/02-referensi-mentah.md), dan [gabungan](../../docs/training/03-gabungan.md). [Indeks panduan](../../docs/training/README.md) menjelaskan perbedaan sumber dan hasil model.
+Panduan per pilihan: [analisis internal](../../docs/training/01-analisis-internal.md), [semua referensi mentah](../../docs/training/02-referensi-mentah.md), dan [satu file](../../docs/training/03-satu-file.md). [Indeks panduan](../../docs/training/README.md) menjelaskan perbedaan sumber dan hasil model.
 
 Jalankan dari root proyek dengan Python virtual environment AI:
 
@@ -12,17 +12,17 @@ ai/.venv/Scripts/python.exe ai/retraining/train.py
 
 Jika terminal berada di `ai/retraining/`, panggil interpreter AI yang berisi dependensi dengan `..\.venv\Scripts\python.exe train.py --mode 2`. Virtual environment terpisah di `ai/retraining/.venv` tidak otomatis memiliki paket dari `ai/requirements.txt`; prompt `(.venv)` saja tidak menunjukkan lokasi interpreter yang aktif.
 
-Menu menawarkan **1** analisis perusahaan, **2** referensi mentah, atau **3** keduanya. Untuk otomasi, pakai `--mode 1`, `--mode 2`, atau `--mode 3`. Opsi 1 dan 3 memakai run Data Science valid terbaru yang memiliki empat kategori JSON (`products`, `partners`, `regions`, `reporting`) beserta CSV pasangan mitra-produk. Gunakan `--run-id UUID` untuk memilih run tertentu. Empat JSON divalidasi; classifier risiko dilatih dari CSV run yang sama. Data per mitra tetap privat dan tidak masuk indeks dokumen mitra.
+Menu menawarkan **1** hasil analisis Data Science, **2** semua berkas `raw_references`, atau **3** satu berkas berdasarkan nama. Untuk otomasi, pakai `--mode 1`, `--mode 2`, atau `--mode 3 --file "nama-file.pdf"`. Opsi 1 memakai run Data Science valid terbaru yang memiliki empat kategori JSON (`products`, `partners`, `regions`, `reporting`) beserta CSV pasangan mitra-produk. Gunakan `--run-id UUID` untuk memilih run tertentu. Empat JSON divalidasi; classifier risiko dilatih dari CSV run yang sama. Data per mitra tetap privat.
 
-Opsi 2 dan 3 memasukkan teks seluruh PDF yang berhasil diekstrak ke indeks vektor **privat** dalam `daisuki.pkl`, serta memperbarui indeks TF-IDF dokumen publik. Pilih PDF, DOCX, MD, atau TXT yang boleh dibaca **semua mitra** secara eksplisit, misalnya:
+Opsi 2 mengindeks seluruh PDF, DOCX, MD, TXT, JSON, dan CSV yang didukung di `raw_references`; opsi 3 mengindeks **hanya satu file** yang disebutkan. Keduanya menulis vektor **privat** ke `daisuki.pkl` serta memperbarui indeks dokumen publik yang sudah disetujui. Pilih PDF, DOCX, MD, atau TXT yang boleh dibaca **semua mitra** secara eksplisit, misalnya:
 
 ```powershell
 ai/.venv/Scripts/python.exe ai/retraining/train.py --mode 2 --public-source "artikel-ai.pdf"
 ```
 
-File harus ada di `ai/data/raw_references/pdf/` atau `ai/data/raw_references/docs/`. Skrip mengekstrak teks ke Markdown privat, memeriksa pola sensitif, lalu membuat `.public.md` dan menambahkannya ke `rag_policy.json`. Periksa isi PDF terlebih dahulu: persetujuan file adalah persetujuan publikasi isinya ke chatbot mitra. PDF hasil scan memerlukan OCR; DOC lama perlu dikonversi ke DOCX. Tanpa `--public-source`, opsi 2 hanya membangun ulang indeks dari sumber publik yang sudah disetujui. Maksimum sumber dan panjang per dokumen mengikuti `rag_policy.json`.
+File yang diterbitkan harus ada di `ai/data/raw_references/pdf/` atau `ai/data/raw_references/docs/`. Skrip mengekstrak teks ke Markdown privat, memeriksa pola sensitif, lalu membuat `.public.md` dan menambahkannya ke `rag_policy.json`. Periksa isi PDF terlebih dahulu: persetujuan file adalah persetujuan publikasi isinya ke chatbot mitra. PDF hasil scan memerlukan OCR; DOC lama perlu dikonversi ke DOCX. Tanpa `--public-source`, indeks publik hanya dibangun ulang dari sumber yang sudah disetujui. Maksimum sumber dan panjang per dokumen mengikuti `rag_policy.json`.
 
-Opsi 1 dan 3 juga menaruh **vektor numerik analisis mingguan** dari empat JSON kategori dan CSV run valid ke dalam `analysis_retrieval`. Cuplikan kategori mitra/pelaporan dan produk diberi `partner_id`; worker hanya mengembalikan cuplikan milik mitra dari JWT. Agregat produk/wilayah tersimpan untuk analisis privat, tetapi tidak dikirim ke chatbot mitra. Untuk ringkasan mingguan, prompt membedakan snapshot periode model dari stok dan konsumsi terbaru yang dibaca dari PostgreSQL.
+Opsi 1 menaruh **vektor numerik analisis mingguan** dari empat JSON kategori dan CSV run valid ke dalam `analysis_retrieval`. Cuplikan kategori mitra/pelaporan dan produk diberi `partner_id`; worker hanya mengembalikan cuplikan milik mitra dari JWT. Agregat produk/wilayah tersimpan untuk analisis privat, tetapi tidak dikirim ke chatbot mitra. Untuk ringkasan mingguan, prompt membedakan snapshot periode model dari stok dan konsumsi terbaru yang dibaca dari PostgreSQL.
 
 Training manual menulis model ke `ai/data/private/manual/daisuki.pkl` (diabaikan Git karena berisi data mitra dan PDF mentah). Arahkan `DAISUKI_MODEL_PATH=ai/data/private/manual/daisuki.pkl` di `apps/api/.env`, lalu restart API. Model run yang dipublikasikan lewat alur Admin tetap punya lokasi sendiri.
 

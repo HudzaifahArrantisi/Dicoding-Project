@@ -16,7 +16,6 @@ export function isCrossTenantQuestion(message: string): boolean {
 export function shouldRefuseMitraMessage(message: string, _previousIntent: string | null): boolean {
   const normalized = message.trim();
   if (isCrossTenantQuestion(normalized)) return true;
-  if (process.env.ASSISTANT_RELAXED_CHAT === "true") return false;
   return isInjection(normalized) || isSystemProbe(normalized);
 }
 

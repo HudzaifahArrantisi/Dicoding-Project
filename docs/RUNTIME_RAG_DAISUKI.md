@@ -7,12 +7,14 @@ Log startup menunjukkan lokasi artefak serta status `intent aktif, retrieval bin
 ## Alur pesan
 
 1. API menentukan mitra dari JWT dan memuat memori UUID sesi.
-2. Worker menerima pesan, lalu mengembalikan label intent Naive Bayes dan cuplikan relevan dari indeks TF-IDF dalam `.pkl`. Karakter n-gram membantu mencocokkan variasi penulisan dan typo.
-3. API mengambil stok, profil, pesanan, dan log PostgreSQL khusus mitra tersebut. Gudang saya memakai `current_stock`; gudang pusat memakai `central_stock_available`.
-4. Intent, cuplikan publik, fakta database, dan memori masuk ke prompt 9Router. Cuplikan biner diperiksa kembali terhadap daftar sumber publik yang diizinkan.
-5. Jawaban serta metadata intent, kesiapan retrieval, dan sumber dokumen disimpan bersama UUID sesi. Worker yang sama melayani pesan berikutnya.
+2. Guardrail menolak prompt injection, permintaan konfigurasi internal, dan akses mitra lain, termasuk saat `ASSISTANT_RELAXED_CHAT=true`. Pertanyaan aman dapat ditulis ulang untuk membantu pencarian.
+3. Worker menerima pertanyaan, lalu mengembalikan label intent Naive Bayes dan cuplikan relevan dari indeks TF-IDF dalam `.pkl`. Karakter n-gram membantu mencocokkan variasi penulisan dan typo.
+4. API memakai cuplikan biner yang skornya minimal `0.08` dan sumbernya tercantum dalam kebijakan publik. Jika tidak ada yang memenuhi syarat atau worker tidak tersedia, API mencari kata kunci dalam dokumen `.public.md` yang disetujui. Jika kedua memori kosong, chatbot tidak mengarang isi dokumen.
+5. API mengambil stok, profil, pesanan, dan log PostgreSQL khusus mitra dari JWT untuk setiap pesan. Pertanyaan tentang kondisi sekarang memakai angka database ini; cuplikan training adalah snapshot historis. Gudang saya memakai `current_stock`; gudang pusat memakai `central_stock_available`.
+6. Intent, sumber pengetahuan terpilih, fakta database, dan memori percakapan masuk ke prompt 9Router. Analisis mingguan privat dari `.pkl` hanya diambil untuk `partner_id` JWT yang sama, dan jawaban membedakannya dari kondisi database terbaru.
+7. Jawaban serta metadata intent, kesiapan retrieval, jenis memori publik, dan sumber dokumen disimpan bersama UUID sesi. Worker yang sama melayani pesan berikutnya.
 
-TF-IDF adalah indeks vektor pencarian teks, bukan embedding neural atau LLM. Angka stok dalam training merupakan snapshot analitik; angka stok yang dijawab chatbot diambil dari database terbaru. Memperbarui `.pkl` tidak memperbaiki gangguan koneksi penyedia 9Router.
+TF-IDF adalah indeks vektor angka untuk pencarian teks, bukan embedding neural atau LLM yang dilatih ulang. Mode training referensi menyimpan vektor dokumen mentah ke dalam `.pkl` privat. Dokumen mentah tidak otomatis masuk konteks chatbot mitra atau menjadi `.public.md`: publikasi memerlukan `--public-source`, lolos filter privasi, dan tercatat dalam `rag_policy.json`. Cadangan Markdown hanya mencakup sumber publik yang disetujui. Setelah sumber publik baru diterbitkan saat API masih berjalan, mulai ulang API agar daftar izin dan indeks Markdown yang dimuat saat startup ikut diperbarui. Angka stok dalam training merupakan snapshot analitik; angka stok yang dijawab chatbot diambil dari database terbaru. Memperbarui `.pkl` tidak memperbaiki gangguan koneksi penyedia 9Router.
 
 ## Memilih model
 
@@ -25,6 +27,8 @@ DAISUKI_MODEL_PATH=ai/data/mainbrain/models/daisuki.pkl
 ```
 
 Override ini juga memilih classifier risiko dari berkas lokal. Kosongkan variabel untuk kembali mengikuti model run analisis yang dipublikasikan.
+
+Training manual `python ai/retraining/train.py --mode 1|2|3` menyimpan hasil ke `ai/data/private/manual/daisuki.pkl`. Agar chatbot memakai hasil training manual tersebut, atur `DAISUKI_MODEL_PATH=ai/data/private/manual/daisuki.pkl` di `apps/api/.env`, lalu mulai ulang API. Jika path masih menunjuk `ai/data/mainbrain/models/daisuki.pkl`, chatbot tetap memakai model lama di lokasi itu.
 
 ## Memperbarui model
 

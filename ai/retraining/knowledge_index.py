@@ -6,7 +6,8 @@ import re
 from pathlib import Path
 
 from sklearn.feature_extraction.text import TfidfVectorizer
-from doc_loader import RAW_DIR, extract_text_from_pdf
+from doc_loader import (RAW_DIR, extract_text_from_docx,
+                        extract_text_from_json, extract_text_from_pdf, extract_text_from_plain)
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
@@ -51,21 +52,48 @@ def search_knowledge(index: dict, query: str) -> list[dict]:
             for i in ranked[:index.get("max_excerpts", 3)] if scores[i] >= 0.08]
 
 
-def build_raw_pdf_index() -> dict:
-    """Store all readable PDFs as private vectors; public access uses the approved index."""
+RAW_FORMATS = {".pdf", ".docx", ".md", ".markdown", ".txt", ".json", ".csv"}
+
+
+def list_raw_references(raw_dir: Path = RAW_DIR) -> list[Path]:
+    return sorted(path for path in raw_dir.rglob("*")
+                  if path.is_file() and path.suffix.lower() in RAW_FORMATS
+                  and path.name.lower() != "readme.md" and not any(part.startswith(".") for part in path.relative_to(raw_dir).parts))
+
+
+def build_raw_reference_index(paths: list[Path], raw_dir: Path = RAW_DIR) -> dict:
+    """Index only selected raw files as private numeric vectors."""
     documents = []
-    paths = sorted((RAW_DIR / "pdf").glob("*.pdf"))
+    unreadable = []
+    extractors = {
+        ".pdf": extract_text_from_pdf, ".docx": extract_text_from_docx,
+        ".json": extract_text_from_json,
+        ".csv": lambda path: path.read_text(encoding="utf-8-sig", errors="replace"),
+        ".md": extract_text_from_plain, ".markdown": extract_text_from_plain,
+        ".txt": extract_text_from_plain,
+    }
     for path in paths:
-        content = extract_text_from_pdf(path)
+        if path.suffix.lower() not in RAW_FORMATS or not path.is_file() or not path.resolve().is_relative_to(raw_dir.resolve()):
+            raise ValueError(f"Referensi tidak valid: {path}")
+        content = extractors[path.suffix.lower()](path)
+        if not content.strip() or content.startswith(("[Error ", "[Perlu library")):
+            unreadable.append(path.name)
+            continue
         for paragraph in re.split(r"\n\s*\n", content):
             for offset in range(0, len(paragraph), 1000):
                 excerpt = paragraph[offset:offset + 1200].strip()
                 if len(excerpt) >= 40:
-                    documents.append({"source": path.name, "excerpt": excerpt, "visibility": "private"})
+                    documents.append({"source": path.relative_to(raw_dir).as_posix(), "excerpt": excerpt, "visibility": "private"})
+    if unreadable:
+        raise ValueError(f"Teks referensi tidak dapat diekstrak: {', '.join(unreadable)}. PDF scan memerlukan OCR.")
     if paths and not documents:
-        raise ValueError("Tidak ada teks PDF yang berhasil diekstrak; pasang pypdf atau lakukan OCR sebelum training")
+        raise ValueError("Tidak ada teks referensi yang cukup panjang untuk diindeks")
     if not documents:
         return {"documents": []}
     vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), max_features=30000)
     vectors = vectorizer.fit_transform([item["excerpt"] for item in documents])
     return {"documents": documents, "vectorizer": vectorizer, "vectors": vectors}
+
+
+def build_raw_pdf_index() -> dict:
+    return build_raw_reference_index(sorted((RAW_DIR / "pdf").glob("*.pdf")))

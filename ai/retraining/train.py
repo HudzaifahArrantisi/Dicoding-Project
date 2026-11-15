@@ -19,7 +19,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from source import build_intent_samples
 from doc_loader import RAW_DIR, MAINBRAIN_DIR, collect_mainbrain_knowledge_snippets, process_single_file, sanitize_filename, scan_and_generate_mainbrain
-from knowledge_index import build_knowledge_index, build_raw_pdf_index
+from knowledge_index import build_knowledge_index, build_raw_pdf_index, build_raw_reference_index, list_raw_references
 from analysis_index import build_analysis_index
 from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, load_samples, prepare_handoff
 
@@ -135,7 +135,16 @@ def publish_references(names: list[str]) -> list[str]:
     return [name for name, _ in selected]
 
 
-def train_manual(mode: int, selected_run_id: str | None, public_sources: list[str]) -> None:
+def select_raw_reference(name: str, paths: list[Path]) -> Path:
+    if Path(name).name != name or not name.strip():
+        raise ValueError("Masukkan nama file saja, misalnya nama-file.pdf")
+    matches = [path for path in paths if path.name.casefold() == name.casefold()]
+    if len(matches) != 1:
+        raise ValueError(f"File {name} harus ada tepat satu kali di raw_references; ditemukan {len(matches)}")
+    return matches[0]
+
+
+def train_manual(mode: int, selected_run_id: str | None, public_sources: list[str], source_file_name: str | None = None) -> None:
     if mode == 1 and public_sources:
         raise ValueError("--public-source hanya berlaku untuk opsi 2 atau 3")
     previous_model = MANUAL_MODEL_FILE if MANUAL_MODEL_FILE.is_file() else LEGACY_MODEL_FILE
@@ -151,7 +160,7 @@ def train_manual(mode: int, selected_run_id: str | None, public_sources: list[st
     metadata = dict(bundle.get("metadata") or {})
     metadata.update(name="Daisuki AI Assistant", identity_bio=IDENTITY_BIO)
     bundle["metadata"] = metadata
-    if mode in (1, 3):
+    if mode == 1:
         folder = analysis_source(selected_run_id)
         samples, risks, _ = load_samples(folder / "cleaned_inventory_summary.csv")
         if len(set(risks)) >= 2:
@@ -163,12 +172,19 @@ def train_manual(mode: int, selected_run_id: str | None, public_sources: list[st
         bundle["analysis_retrieval"] = build_analysis_index(folder)
         print(f"Analisis privat: {folder.name}; empat kategori tervalidasi; {len(samples)} pasangan mitra-produk")
     if mode in (2, 3):
+        available = list_raw_references()
+        paths = available if mode == 2 else [select_raw_reference(source_file_name or "", available)]
+        if not paths:
+            raise ValueError("Tidak ada data PDF/DOCX/MD/TXT/JSON/CSV di raw_references")
+        if mode == 3 and any(name.casefold() != paths[0].name.casefold() for name in public_sources):
+            raise ValueError("Mode 3 hanya boleh menerbitkan file yang sedang dilatih")
+        reference_index = build_raw_reference_index(paths)
         published = publish_references(public_sources)
         bundle["retrieval"] = build_knowledge_index()
-        bundle["raw_pdf_retrieval"] = build_raw_pdf_index()
+        bundle["raw_pdf_retrieval"] = reference_index
         print(f"Referensi publik baru: {', '.join(published) if published else 'tidak ada'}")
         print(f"Cuplikan retrieval: {len(bundle['retrieval']['documents'])}")
-        print(f"Cuplikan PDF privat dalam biner: {len(bundle['raw_pdf_retrieval']['documents'])}")
+        print(f"Berkas mentah terindeks: {len(paths)}; cuplikan privat dalam biner: {len(reference_index['documents'])}")
     MANUAL_MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
     save_model_safely(bundle, MANUAL_MODEL_FILE, MANUAL_MODEL_FILE.with_name("daisuki.pkl.tmp"))
     print(f"Model tersimpan: {MANUAL_MODEL_FILE}")
@@ -262,32 +278,40 @@ def run_retraining_loop() -> bool:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group()
-    action.add_argument("--mode", type=int, choices=(1, 2, 3), help="1=analisis, 2=referensi, 3=keduanya")
+    action.add_argument("--mode", type=int, choices=(1, 2, 3), help="1=analisis Data Science, 2=semua raw_references, 3=satu file")
     action.add_argument("--weekly", action="store_true", help="Training pipeline mingguan dari CSV Data Science")
     action.add_argument("--intent-only", action="store_true", help="Perbarui classifier intent tanpa melatih ulang risiko")
-    parser.add_argument("--run-id", help="ID run Data Science untuk mode 1/3; default run valid terbaru")
+    parser.add_argument("--run-id", help="ID run Data Science untuk mode 1; default run valid terbaru")
+    parser.add_argument("--file", dest="source_file_name", help="Nama satu file dalam raw_references untuk mode 3")
     parser.add_argument("--public-source", action="append", default=[], metavar="FILE",
                         help="Nama PDF/DOCX/MD/TXT di raw_references/pdf atau docs yang disetujui untuk chatbot mitra")
     args = parser.parse_args()
     if run_id() or args.weekly:
-        if args.run_id or args.public_source or args.intent_only or args.mode:
+        if args.run_id or args.source_file_name or args.public_source or args.intent_only or args.mode:
             parser.error("Pipeline mingguan tidak menerima opsi training manual")
         raise SystemExit(0 if run_retraining_loop() else 1)
     if args.intent_only:
-        if args.run_id or args.public_source:
-            parser.error("--intent-only tidak menerima --run-id atau --public-source")
+        if args.run_id or args.source_file_name or args.public_source:
+            parser.error("--intent-only tidak menerima --run-id, --file, atau --public-source")
         try:
             refresh_intent()
         except (OSError, ValueError) as error:
             parser.exit(1, f"Training gagal: {error}\n")
         return
     try:
-        mode = args.mode or int(input("Pilih training (1=analisis, 2=referensi, 3=keduanya): ").strip())
+        if args.mode is None:
+            print("1. Training hasil analisis Data Science (empat kategori)")
+            print("2. Training semua data di raw_references")
+            print("3. Training satu file dari raw_references")
+        mode = args.mode or int(input("Pilih training (1/2/3): ").strip())
         if mode not in (1, 2, 3):
             parser.error("Pilihan harus 1, 2, atau 3")
-        if args.run_id and mode == 2:
-            parser.error("--run-id hanya berlaku untuk mode 1 atau 3")
-        train_manual(mode, args.run_id, args.public_source)
+        if args.run_id and mode != 1:
+            parser.error("--run-id hanya berlaku untuk mode 1")
+        if args.source_file_name and mode != 3:
+            parser.error("--file hanya berlaku untuk mode 3")
+        source_file_name = args.source_file_name or (input("Nama file (contoh: nama-file.pdf): ").strip() if mode == 3 else None)
+        train_manual(mode, args.run_id, args.public_source, source_file_name)
     except (OSError, ValueError) as error:
         parser.exit(1, f"Training gagal: {error}\n")
 

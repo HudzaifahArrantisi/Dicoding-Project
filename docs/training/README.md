@@ -5,8 +5,8 @@ Jalankan perintah dari root proyek. Ketiga pilihan di bawah memakai satu skrip, 
 | Pilihan | Panduan | Sumber utama | Bagian `daisuki.pkl` yang diperbarui |
 | --- | --- | --- | --- |
 | 1 | [Analisis internal](01-analisis-internal.md) | Run Data Science: empat JSON dan CSV | Indeks analisis per mitra, classifier risiko, classifier intent |
-| 2 | [Referensi mentah](02-referensi-mentah.md) | PDF di `raw_references/pdf/`; dokumen yang dipilih di `pdf/` atau `docs/` | Indeks PDF privat, indeks dokumen publik, classifier intent |
-| 3 | [Gabungan](03-gabungan.md) | Kedua kelompok sumber di atas | Seluruh bagian pada pilihan 1 dan 2 |
+| 2 | [Semua referensi mentah](02-referensi-mentah.md) | Semua PDF, DOCX, MD, TXT, JSON, dan CSV di `raw_references/` | Indeks referensi privat, indeks dokumen publik, classifier intent |
+| 3 | [Satu file](03-satu-file.md) | Satu berkas yang dipilih dengan nama file | Indeks referensi privat khusus file itu, indeks dokumen publik, classifier intent |
 
 Model manual disimpan di `ai/data/private/manual/daisuki.pkl`. File ini diabaikan Git karena dapat berisi data analisis mitra dan teks PDF mentah. Vektornya adalah TF-IDF numerik dari potongan karakter, bukan embedding neural atau model bahasa pembuat jawaban. Saat chat, API mengambil fakta operasional terbaru dari PostgreSQL; `daisuki.pkl` menyumbang klasifikasi dan cuplikan yang relevan. Hanya cuplikan analisis dengan `partner_id` dari JWT yang dapat diteruskan ke chatbot mitra.
 

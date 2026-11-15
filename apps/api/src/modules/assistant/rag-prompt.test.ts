@@ -98,6 +98,7 @@ test("mode percobaan memakai prompt ringkas dan tidak menolak angka obrolan umum
     expect(prompt).toContain('"current_stock":8');
     expect(prompt).not.toContain("GUARDRAILS_POLICY:");
     expect(isGroundedLlmReply("Halo! Ada 3 hal yang bisa kita bahas.", context, model)).toBe(true);
+    expect(isGroundedLlmReply("Sisa stok Anda 2023 pcs.", context, model)).toBe(false);
   } finally {
     if (previous === undefined) delete process.env.ASSISTANT_RELAXED_CHAT;
     else process.env.ASSISTANT_RELAXED_CHAT = previous;
