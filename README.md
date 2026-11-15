@@ -170,8 +170,82 @@ Buka dan sesuaikan file berikut:
   DATABASE_URL=postgresql://<user>:<password>@<host-neon>/neondb?sslmode=require
   WEB_ORIGIN=http://localhost:3000
   JWT_SECRET=daisuki-super-secret-key-min-32-characters-change-in-production
+
+  # --- Konfigurasi Python Worker (daisuki.pkl) ---
+  DAISUKI_PYTHON_BIN=python
+  # Opsional: override path berkas model jika di luar lokasi default (ai/data/mainbrain/models/daisuki.pkl)
+  DAISUKI_MODEL_PATH=
+
+  # --- Konfigurasi Layanan LLM & Chatbot Cerdas RAG ---
+  LLM_ENABLED=true
+  LLM_BASE_URL=
+  LLM_TUNNEL_URL=
+  LLM_API_KEY=sk-your-llm-api-key-here
+  LLM_MODEL=daisuki
+  LLM_TIMEOUT_MS=35000
+  ASSISTANT_RELAXED_CHAT=true
   ```
   *(Ambil connection string `DATABASE_URL` dari dashboard [Neon DB](https://neon.tech) pada menu **Connect**).*
+
+  #### Rincian Variabel Konfigurasi LLM & AI (`apps/api/.env`):
+
+  | Variabel | Tipe / Nilai Default | Keterangan & Panduan Setup |
+  |---|---|---|
+  | `LLM_ENABLED` | `true` / `false` (default: `true`) | Mengaktifkan remote LLM. Jika diset `false`, chatbot tetap berfungsi menggunakan *deterministic local fallback* tanpa memanggil API eksternal. |
+  | `LLM_BASE_URL` | URL (default: `http://localhost:20128/v1`) | Endpoint API gateway yang kompatibel dengan protokol OpenAI (`/chat/completions`). |
+  | `LLM_TUNNEL_URL` | URL (opsional) | Endpoint URL tunnel publik cadangan (failover otomatis jika endpoint lokal gagal). Kosongkan jika tidak memakai tunnel. |
+  | `LLM_API_KEY` | String | API Key otentikasi ke penyedia model LLM (9Router, Google AI Studio, atau Groq). |
+  | `LLM_MODEL` | String (default: `daisuki`) | Identifier model yang dituju (misal: `daisuki`, `gemini-1.5-flash`, atau `llama-3.3-70b-versatile`). |
+  | `LLM_TIMEOUT_MS` | Angka ms (default: `35000`) | Batas waktu tunggu panggilan LLM dalam milidetik (maksimum 120.000 ms). Jika timeout tercapai, sistem langsung merespons dengan data faktual lokal. |
+  | `ASSISTANT_RELAXED_CHAT` | `true` / `false` (default: `true`) | Saat bernilai `true`, asisten merespons pertanyaan umum dan obrolan kasual dengan ramah layaknya chatbot biasa. Saat `false`, filter guardrail ketat diaktifkan hanya untuk topik inventaris dan penelitian. |
+  | `DAISUKI_PYTHON_BIN` | String (default: `python`) | Path binary Python yang digunakan untuk menjalankan worker inferensi `daisuki.pkl`. Di server produksi dapat diarahkan ke virtual environment (misal `ai/.venv/bin/python`). |
+  | `DAISUKI_MODEL_PATH` | Path String (opsional) | Jalur relatif atau absolut ke berkas artefak model `.pkl` jika ingin mengganti model bawaan. |
+
+  #### Contoh Setup Penyedia LLM Populer:
+
+  <details>
+  <summary><b>1. Menggunakan 9Router Lokal / Tunnel (Bawaan)</b></summary>
+
+  ```env
+  LLM_ENABLED=true
+  LLM_BASE_URL=http://localhost:20128/v1
+  LLM_TUNNEL_URL=https://your-subdomain.abc-tunnel.us/v1
+  LLM_API_KEY=sk-xxxx-your-9router-key
+  LLM_MODEL=daisuki
+  LLM_TIMEOUT_MS=35000
+  ASSISTANT_RELAXED_CHAT=true
+  ```
+  </details>
+
+  <details>
+  <summary><b>2. Menggunakan Google Gemini (Gratis via Google AI Studio)</b></summary>
+
+  Dapatkan API Key gratis di [Google AI Studio](https://aistudio.google.com/):
+  ```env
+  LLM_ENABLED=true
+  LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+  LLM_TUNNEL_URL=
+  LLM_API_KEY=AIzaSyYourGeminiApiKeyHere
+  LLM_MODEL=gemini-1.5-flash
+  LLM_TIMEOUT_MS=30000
+  ASSISTANT_RELAXED_CHAT=true
+  ```
+  </details>
+
+  <details>
+  <summary><b>3. Menggunakan Groq Cloud (Gratis & Sangat Cepat)</b></summary>
+
+  Dapatkan API Key gratis di [Groq Console](https://console.groq.com/):
+  ```env
+  LLM_ENABLED=true
+  LLM_BASE_URL=https://api.groq.com/openai/v1
+  LLM_TUNNEL_URL=
+  LLM_API_KEY=gsk_YourGroqApiKeyHere
+  LLM_MODEL=llama-3.3-70b-versatile
+  LLM_TIMEOUT_MS=20000
+  ASSISTANT_RELAXED_CHAT=true
+  ```
+  </details>
 
 - **`apps/web/.env`**:
   ```env
