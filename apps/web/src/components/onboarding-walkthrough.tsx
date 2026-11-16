@@ -59,7 +59,33 @@ function WelcomeVisual() {
     <div className="intro-welcome-hero">
       <h1 className="intro-welcome-title font-display">
         <span className="intro-welcome-greeting">Selamat datang di</span>
-        <span className="intro-welcome-brand">Daisuki<span className="intro-welcome-inventory">Inventory</span></span>
+        <span className="intro-welcome-brand">
+          <svg className="intro-welcome-splatter" viewBox="0 0 440 110" aria-hidden="true">
+            <path d="M18 73C105 49 270 92 420 59" fill="none" stroke="#d79a38" strokeWidth="16" strokeLinecap="round" />
+            <path d="M24 82C132 62 281 94 405 70" fill="none" stroke="#a9000c" strokeWidth="7" strokeLinecap="round" />
+            <path d="M94 77l-4 18m40-17-1 12m190-13 3 19m45-29 5 14" fill="none" stroke="#a9000c" strokeWidth="5" strokeLinecap="round" />
+            <path d="M31 33l-10-7m20 5 3-12m354 16 10-9m-23 8 1-13M58 66l-12 2m326 10 13 4" fill="none" stroke="#1e2337" strokeWidth="3" strokeLinecap="round" />
+            <path d="M54 48l-7-5m336 2 8-6m-307 48 2 9m255-9 5 8" fill="none" stroke="#d79a38" strokeWidth="4" strokeLinecap="round" />
+            <circle cx="32" cy="43" r="4" fill="#a9000c" />
+            <circle cx="408" cy="39" r="5" fill="#d79a38" />
+            <circle cx="378" cy="87" r="3" fill="#1e2337" />
+            <circle cx="66" cy="91" r="2.5" fill="#1e2337" />
+            <circle cx="20" cy="59" r="2" fill="#d79a38" />
+            <circle cx="421" cy="52" r="2.5" fill="#a9000c" />
+          </svg>
+          <span className="intro-welcome-graffiti" aria-label="Daisuki">
+            {'DAISUKI'.split('').map((letter, index) => (
+              <span
+                key={`${letter}-${index}`}
+                className="intro-graffiti-letter"
+                style={{ transform: `translateY(${[1, -2, 2, -1, 2, -2, 1][index]}px) rotate(${[-4, 2, -2, 3, -3, 2, -4][index]}deg)` }}
+              >
+                {letter}
+              </span>
+            ))}
+          </span>
+          <span className="intro-welcome-inventory">Inventory</span>
+        </span>
       </h1>
       <p className="intro-welcome-promise">Stok toko terpantau.<br />Pasokan lebih terencana.</p>
       <p className="intro-welcome-lead">
