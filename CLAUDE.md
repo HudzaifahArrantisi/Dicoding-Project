@@ -163,6 +163,7 @@ daisuki-inventory/
 ## Catatan Perubahan Harian (Daily Changelog)
 
 ### 2026-11-16
+- **Motif grafiti onboarding diperkuat**: Huruf Daisuki kini memiliki kemiringan dan tinggi yang bervariasi, bayangan seperti lapisan cat, serta percikan garis dan titik yang lebih organik; outline tetap menjaga keterbacaan pada layar kecil.
 - **Logo Resmi Daisuki pada Judul Stok Gudang Pusat Admin**: Menggantikan ikon toko generik (`Store`) pada panel Stok Gudang Pusat di [apps/web/src/routes/admin.tsx](apps/web/src/routes/admin.tsx) dengan lencana logo resmi Daisuki (`/icons/logo.jpg`), selaras dengan identitas visual pada portal Mitra.
 - **Penerapan Font Google Sans di Seluruh Proyek**: Mengintegrasikan Google Sans sebagai font utama untuk seluruh elemen aplikasi (body, form, tombol, dialog, tabel, serta heading dan display): (1) Mengimpor Google Sans via Google Fonts `@import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap')` pada `apps/web/src/styles.css`; (2) Mengonfigurasi `--font-sans` dan `--font-display` pada Tailwind CSS v4 `@theme inline` dan `@layer base` agar seluruh hierarki teks otomatis mewarisi Google Sans; (3) Menambahkan preconnect dan stylesheet link di `apps/web/src/routes/__root.tsx` untuk loading instan bebas FOUT/FOIT; (4) Memperbarui template cetak surat jalan & resi thermal pada `delivery-receipt-modal.tsx`. Seluruh typecheck dan build production web sukses 100%.
 

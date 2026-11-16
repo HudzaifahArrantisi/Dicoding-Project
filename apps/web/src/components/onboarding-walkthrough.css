@@ -190,8 +190,43 @@
 
 .intro-welcome-brand {
   display: block;
+  position: relative;
   color: #a9000c;
   margin-top: 4px;
+}
+
+.intro-welcome-splatter {
+  position: absolute;
+  z-index: 0;
+  top: 0.02em;
+  left: 50%;
+  width: 112%;
+  height: 1.12em;
+  overflow: visible;
+  transform: translateX(-50%) rotate(-2deg);
+  pointer-events: none;
+}
+
+.intro-welcome-graffiti {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  color: #a9000c;
+  font-family: Impact, 'Arial Black', sans-serif;
+  font-size: 1em;
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: 0.015em;
+  text-transform: uppercase;
+  -webkit-text-stroke: 2px #fffaf1;
+  paint-order: stroke fill;
+  text-shadow: 3px 4px 0 #1e2337, 5px 6px 0 #d79a38;
+  transform: rotate(-2deg) skewX(-2deg);
+}
+
+.intro-graffiti-letter {
+  display: inline-block;
+  transform-origin: 50% 80%;
 }
 
 .intro-welcome-lead {

@@ -4279,9 +4279,6 @@ function StockPanel({
                 Stok gudang pusat
               </h2>
             </div>
-            <p className="mt-1 text-sm text-muted">
-              Perbarui stok siap kirim yang dilihat mitra saat memesan.
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
