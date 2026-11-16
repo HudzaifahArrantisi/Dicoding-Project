@@ -39,7 +39,7 @@ function cleanLatexMath(text: string): string {
   if (!text.includes('$')) return text
   return text
     .replace(/\$\$([\s\S]+?)\$\$/g, (_, f: string) => `**${cleanLatexFormula(f)}**`)
-    .replace(/(^|[^\\])\$([^\$\n]+?)\$/g, (_, prefix: string, f: string) => `${prefix}**${cleanLatexFormula(f)}**`)
+    .replace(/(^|[^\\])\$([^$\n]+?)\$/g, (_, prefix: string, f: string) => `${prefix}**${cleanLatexFormula(f)}**`)
 }
 
 function inlineText(text: string): ReactNode[] {
@@ -96,7 +96,7 @@ function parseMermaidDiagram(source: string):
     const participants = new Map<string, string>()
     for (const line of lines.slice(1)) {
       const actor = /^(?:participant|actor)\s+([A-Za-z0-9_]+)(?:\s+as\s+(.+))?$/i.exec(line)
-      if (actor) participants.set(actor[1], actor[2]?.trim() ?? actor[1])
+      if (actor) participants.set(actor[1], actor[2] ? actor[2].trim() : actor[1])
     }
     const edges = lines.slice(1).flatMap((line) => {
       const message = /^([A-Za-z0-9_]+)\s*(?:-->>|->>|-->|->|--x|-x|--\)|-\))\s*([A-Za-z0-9_]+)\s*(?::\s*(.*))?$/.exec(line)
@@ -115,7 +115,7 @@ function parseMermaidDiagram(source: string):
   const direction = flowHeader[1].toUpperCase() as FlowDiagramData['direction']
   const readNode = (sourceNode: string): string | null => {
     const node = /^\s*[A-Za-z0-9_]+\s*(?:\(\(([^)]+)\)\)|\[([^\]]+)\]|\(([^)]+)\)|\{([^}]+)\})?\s*$/.exec(sourceNode)
-    return node ? (node[1] ?? node[2] ?? node[3] ?? node[4] ?? sourceNode).trim() : null
+    return node ? (node[1] || node[2] || node[3] || node[4] || sourceNode).trim() : null
   }
   const edges = lines.slice(1).flatMap((line) => {
     const edge = /^\s*(.+?)\s*(-->|---|==>|-\.->)(?:\|([^|]+)\|)?\s*(.+?)\s*$/.exec(line)

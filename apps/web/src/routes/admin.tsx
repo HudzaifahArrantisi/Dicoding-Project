@@ -4262,9 +4262,15 @@ function StockPanel({
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-md bg-ink-100 text-ink-700">
-                <Store className="size-4" aria-hidden="true" />
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-line/80 bg-white shadow-2xs">
+                <img
+                  src="/icons/logo.jpg"
+                  alt="Daisuki"
+                  width={32}
+                  height={32}
+                  className="size-full object-cover"
+                />
               </span>
               <h2
                 id="central-stock-admin-title"

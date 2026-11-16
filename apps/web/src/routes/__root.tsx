@@ -39,6 +39,19 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     ],
     links: [
       {
+        rel: 'preconnect',
+        href: 'https://fonts.googleapis.com',
+      },
+      {
+        rel: 'preconnect',
+        href: 'https://fonts.gstatic.com',
+        crossOrigin: 'anonymous',
+      },
+      {
+        rel: 'stylesheet',
+        href: 'https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap',
+      },
+      {
         rel: 'icon',
         type: 'image/jpeg',
         href: '/icons/logo.jpg',
@@ -84,6 +97,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap"
+        />
         <link rel="icon" type="image/jpeg" href="/icons/logo.jpg" />
         <link rel="shortcut icon" type="image/jpeg" href="/icons/logo.jpg" />
         <link rel="apple-touch-icon" href="/icons/logo.jpg" />
