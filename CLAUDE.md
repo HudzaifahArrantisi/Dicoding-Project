@@ -132,14 +132,14 @@ daisuki-inventory/
    - **Concurrency Safety**: Stock updates in Elysia must wrap operations in transactions and use `SELECT ... FOR UPDATE` row locks to prevent race conditions when writing to `partner_stocks` and `stock_logs`.
 
 5. **Shared Business Logic ([packages/shared/src/index.ts](packages/shared/src/index.ts))**:
-   - **Unbounded Partner Stock**: No maximum stock per product, category, or branch. Never use 40 pcs or any other fixed ceiling for stock reports or restock requests. In Admin and Mitra UI, show stock as `{current_qty} pcs` or `Sisa Stok`, without `/40`, `/par`, or `Sisa Stok / Par`. Do not call a branch's stock ceiling `Kapasitas Rak` or `Max Stock`; use `Sisa Stok`, `Buffer Minimal`, or `Saran Pasokan` as appropriate. `par_level` and status thresholds are safety buffers and demand signals, never capacity caps. Restock requests are limited only by `products.central_stock` at transaction time.
+   - **Unbounded Partner Stock**: No maximum stock per product, category, or branch. Never use 40 pcs or any other fixed ceiling for stock reports or restock requests. In Admin and Mitra UI, show stock as `{current_qty} pcs` or `Sisa Stok`, without `/40`, `/par`, or `Sisa Stok / Par`. Do not call a branch's stock ceiling `Kapasitas Rak` or `Max Stock`; use `Sisa Stok`, `Buffer Minimal`, or `Saran Pasokan` as appropriate. `par_level` and status thresholds are safety buffers and demand signals, never capacity caps. Ready stock reservations are limited by `products.central_stock`; excess requests enter `ditunda`.
    - **Stock Status**: Calculated relative to buffer thresholds:
      - `aman`: > 50%
      - `waspada`: > 20% to 50%
      - `kritis`: <= 20%
      - Stale: `updated_at` older than 24 hours (`isStale()`).
    - **Order State Machine**:
-     - Statuses: `diproses` → `disetujui` (or `ditolak` / `dibatalkan`) → `dalam_pengiriman` → `selesai`.
+     - Statuses: `ditunda` (when supply is insufficient) → `diproses` → `disetujui` (or `ditolak` / `dibatalkan`) → `dipacking` → `dalam_pengiriman` → `selesai`.
      - Validated using `canTransition(from, to)`.
      - Stock quantities increase only when the partner confirms delivery (`dalam_pengiriman` → `selesai`).
 
@@ -163,6 +163,8 @@ daisuki-inventory/
 ## Catatan Perubahan Harian (Daily Changelog)
 
 ### 2026-11-16
+- **Perbaikan enum status pada analitik admin dan migrasi database**: Query analitik dan konteks asisten membandingkan status pesanan melalui `status::text` agar pembacaan tidak gagal dengan PostgreSQL `22P02` ketika enum lama masih aktif. Database API telah dimigrasikan dengan `dipacking`, `ditunda`, dan kolom finansial. Migrasi finansial diperbaiki supaya pesanan lama tidak otomatis dianggap belum lunas; nilai historis dihitung dari harga produk saat migrasi.
+- **Fitur lanjutan distribusi dan operasional**: Menambahkan skema konsinyasi/beli putus, nilai pesanan selesai, termin H+7 beli putus, aksi catat lunas, ringkasan nilai beli putus dan estimasi terjual konsinyasi dari penurunan stok fisik. Pengajuan melebihi stok masuk `ditunda` dengan reservasi parsial; tambahan stok pusat mengalokasikan FIFO dan mengaktifkan pesanan siap tinjau. Alur `disetujui → dipacking → dalam_pengiriman` kini dipakai admin. Dashboard memuat kandidat deadstock, prioritas pemeriksaan, dan estimasi kebutuhan pabrik. Portal Mitra mendapat akses cepat Chat AI; Dockerfile API memuat Bun/Python dengan model privat dipasang sebagai volume. Estimasi dari laporan fisik perlu verifikasi lapangan; tagihan konsinyasi belum dibukukan otomatis. Typecheck, build web, dan 107 tes lulus; migrasi dan transaksi stok baru belum diuji pada database yang dimigrasikan.
 - **Motif grafiti onboarding diperkuat**: Huruf Daisuki kini memiliki kemiringan dan tinggi yang bervariasi, bayangan seperti lapisan cat, serta percikan garis dan titik yang lebih organik; outline tetap menjaga keterbacaan pada layar kecil.
 - **Logo Resmi Daisuki pada Judul Stok Gudang Pusat Admin**: Menggantikan ikon toko generik (`Store`) pada panel Stok Gudang Pusat di [apps/web/src/routes/admin.tsx](apps/web/src/routes/admin.tsx) dengan lencana logo resmi Daisuki (`/icons/logo.jpg`), selaras dengan identitas visual pada portal Mitra.
 - **Penerapan Font Google Sans di Seluruh Proyek**: Mengintegrasikan Google Sans sebagai font utama untuk seluruh elemen aplikasi (body, form, tombol, dialog, tabel, serta heading dan display): (1) Mengimpor Google Sans via Google Fonts `@import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap')` pada `apps/web/src/styles.css`; (2) Mengonfigurasi `--font-sans` dan `--font-display` pada Tailwind CSS v4 `@theme inline` dan `@layer base` agar seluruh hierarki teks otomatis mewarisi Google Sans; (3) Menambahkan preconnect dan stylesheet link di `apps/web/src/routes/__root.tsx` untuk loading instan bebas FOUT/FOIT; (4) Memperbarui template cetak surat jalan & resi thermal pada `delivery-receipt-modal.tsx`. Seluruh typecheck dan build production web sukses 100%.

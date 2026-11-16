@@ -74,11 +74,15 @@ const MITRA_SUGGESTION_CARDS = [
 
 export function MitraChatRoom({
   sessionId,
+  suggestedDraft,
+  onDraftConsumed,
   onSelectSession,
   onNewSession,
   onStartTour,
 }: {
   sessionId: string
+  suggestedDraft?: string
+  onDraftConsumed?: () => void
   onSelectSession: (id: string) => void
   onNewSession: () => void
   onStartTour: (tour: MitraTour) => void
@@ -87,6 +91,11 @@ export function MitraChatRoom({
   const [messages, setMessages] = useState<Message[]>([])
   const [summary, setSummary] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  useEffect(() => {
+    if (!suggestedDraft) return
+    setDraft(suggestedDraft)
+    onDraftConsumed?.()
+  }, [suggestedDraft, onDraftConsumed])
   const [pendingSessionIds, setPendingSessionIds] = useState<Set<string>>(() => new Set())
   const [ending, setEnding] = useState(false)
   const [loading, setLoading] = useState(true)

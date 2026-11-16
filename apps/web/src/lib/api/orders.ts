@@ -6,9 +6,45 @@ export interface CreateOrderItemPayload {
   qty_requested: number
 }
 
+export interface FinanceSummary {
+  gross_7d: string
+  gross_30d: string
+  consignment_estimate_7d: string
+  consignment_estimate_30d: string
+  unpaid_count: number
+  overdue_count: number
+  unpaid_amount: string
+}
+
+export async function getFinanceSummary(): Promise<FinanceSummary> {
+  const response = await apiClient.get<{ data: FinanceSummary }>('/orders/finance/summary')
+  return response.data
+}
+
+export interface OperationalInsights {
+  deadstock: Array<{ partner_id: string; partner_name: string; product_name: string; current_qty: number; inactive_days: number }>
+  audit: Array<{ partner_id: string; partner_name: string; stale_days: number; large_changes: number; priority_score: number }>
+  factory: Array<{ product_id: string; product_name: string; central_stock: number; sold_30d: number; forecast_14d: number; suggested_qty: number }>
+  method: string
+}
+
+export async function getOperationalInsights(): Promise<OperationalInsights> {
+  const response = await apiClient.get<{ data: OperationalInsights }>('/orders/finance/insights')
+  return response.data
+}
+
+export async function markOrderPaid(id: string): Promise<void> {
+  await apiClient.patch(`/orders/finance/${encodeURIComponent(id)}/paid`, {})
+}
+
+export async function updatePartnerScheme(id: string, distribution_scheme: 'konsinyasi' | 'beli_putus'): Promise<void> {
+  await apiClient.patch(`/orders/finance/partners/${encodeURIComponent(id)}/scheme`, { distribution_scheme })
+}
+
 export interface CreateOrderPayload {
   items: CreateOrderItemPayload[]
   note?: string
+  allow_backorder?: boolean
 }
 
 export interface UpdateOrderPayload {

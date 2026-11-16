@@ -170,7 +170,7 @@ export async function loadAdminContext(): Promise<AdminContext> {
       })
       .from(orders)
       .innerJoin(partners, eq(orders.partner_id, partners.id))
-      .where(eq(orders.status, "diproses"))
+      .where(sql`${orders.status}::text in ('ditunda', 'diproses')`)
       .orderBy(desc(orders.created_at))
       .limit(20),
 

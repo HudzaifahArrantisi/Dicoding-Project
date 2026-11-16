@@ -5,6 +5,8 @@ import {
   auditLogs,
   partnerStocks,
   products,
+  orders,
+  orderItems,
   partners,
   stockLogs,
   notifications,
@@ -411,8 +413,37 @@ export const productsModule = new Elysia({ prefix: "/products" })
           .update(products)
           .set({ central_stock: body.central_stock })
           .where(and(eq(products.id, params.id), eq(products.is_active, true)))
-          .returning({ id: products.id });
+          .returning({ id: products.id, central_stock: products.central_stock });
         if (product) {
+          let available = product.central_stock;
+          const waiting = await tx.select({
+            order_id: orders.id,
+            item_id: orderItems.id,
+            partner_id: orders.partner_id,
+            qty_requested: orderItems.qty_requested,
+            qty_reserved: orderItems.qty_reserved,
+          }).from(orderItems)
+            .innerJoin(orders, eq(orderItems.order_id, orders.id))
+            .where(and(eq(orderItems.product_id, product.id), eq(orders.status, "ditunda")))
+            .orderBy(orders.created_at, orders.id)
+            .for("update");
+          for (const item of waiting) {
+            if (available <= 0) break;
+            const reserve = Math.min(available, item.qty_requested - item.qty_reserved);
+            if (reserve <= 0) continue;
+            await tx.update(orderItems).set({ qty_reserved: item.qty_reserved + reserve }).where(eq(orderItems.id, item.item_id));
+            available -= reserve;
+            const [remaining] = await tx.select({ count: sql<number>`count(*)::int` }).from(orderItems)
+              .where(and(eq(orderItems.order_id, item.order_id), sql`${orderItems.qty_reserved} < ${orderItems.qty_requested}`));
+            if (!remaining?.count) {
+              await tx.update(orders).set({ status: "diproses" }).where(eq(orders.id, item.order_id));
+              await tx.insert(notifications).values({ audience: "mitra", type: "order_update", partner_id: item.partner_id,
+                title: "Stok pre-order sudah tersedia", body: "Pesanan Anda siap ditinjau admin Daisuki." });
+            }
+          }
+          if (available !== product.central_stock) {
+            await tx.update(products).set({ central_stock: available }).where(eq(products.id, product.id));
+          }
           await tx.insert(auditLogs).values({
             actor_id: user.userId, action: "product.central_stock.update",
             target_type: "product", target_id: product.id,
@@ -428,7 +459,7 @@ export const productsModule = new Elysia({ prefix: "/products" })
 
       publishInventoryChange({
         partnerId: null,
-        topics: ["products"],
+        topics: ["products", "orders", "notifications"],
       });
 
       return { status: "ok" };

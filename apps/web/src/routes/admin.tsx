@@ -61,6 +61,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { getFinanceSummary, getOperationalInsights, markOrderPaid, updatePartnerScheme, type FinanceSummary, type OperationalInsights } from '@/lib/api/orders'
 import {
   EmptyState,
   ErrorState,
@@ -2637,6 +2638,18 @@ function AdminDashboard() {
     enabled: user?.role === 'admin',
     staleTime: Infinity,
   })
+  const finance = useQuery<FinanceSummary>({
+    queryKey: ['admin-finance-summary'],
+    queryFn: getFinanceSummary,
+    enabled: user?.role === 'admin' && tab === 'stocks',
+    staleTime: 60_000,
+  })
+  const operationalInsights = useQuery<OperationalInsights>({
+    queryKey: ['admin-operational-insights'],
+    queryFn: getOperationalInsights,
+    enabled: user?.role === 'admin' && tab === 'stocks',
+    staleTime: 60_000,
+  })
   const stocks = useQuery<StockItem[]>({
     queryKey: ['admin-stocks'],
     queryFn: () => getStocks(),
@@ -2931,6 +2944,40 @@ function AdminDashboard() {
         </header>
 
         <main className="mx-auto min-w-0 max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28 lg:pb-8">
+          {tab === 'stocks' && finance.data ? (
+            <section aria-label="Omzet dan pembayaran" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Nilai beli putus 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.gross_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Nilai beli putus 30 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.gross_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi terjual konsinyasi 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.consignment_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">Dari penurunan stok fisik; periksa retur dan selisih.</p></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Tagihan belum lunas</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{finance.data.unpaid_count} pesanan</strong><p className="text-sm text-crit-fg">{finance.data.overdue_count} lewat jatuh tempo</p></div>
+            </section>
+          ) : null}
+          {tab === 'stocks' && operationalInsights.data ? (
+            <section aria-label="Prioritas operasional" className="grid gap-3 lg:grid-cols-3">
+              <div className="rounded-xl border border-line bg-white p-4">
+                <h2 className="font-display text-base font-semibold text-ink-900">Potensi deadstock</h2>
+                <p className="mt-1 text-xs text-muted">Stok tersisa tanpa perubahan fisik lebih dari 30 hari. Verifikasi sebelum penarikan.</p>
+                {operationalInsights.data.deadstock.length ? operationalInsights.data.deadstock.slice(0, 3).map((item) => (
+                  <p key={`${item.partner_id}-${item.product_name}`} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong> · {item.product_name}<br /><span className="tabular-nums text-crit-fg">{item.current_qty} pcs · {item.inactive_days} hari</span></p>
+                )) : <p className="mt-3 text-sm text-muted">Tidak ada stok yang memenuhi kriteria.</p>}
+              </div>
+              <div className="rounded-xl border border-line bg-white p-4">
+                <h2 className="font-display text-base font-semibold text-ink-900">Prioritas pemeriksaan</h2>
+                <p className="mt-1 text-xs text-muted">Urutan dari keterlambatan laporan dan perubahan stok besar.</p>
+                {operationalInsights.data.audit.length ? operationalInsights.data.audit.slice(0, 3).map((item) => (
+                  <p key={item.partner_id} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong><br /><span className="tabular-nums text-warn-fg">{item.stale_days} hari tanpa laporan · {item.large_changes} perubahan besar</span></p>
+                )) : <p className="mt-3 text-sm text-muted">Tidak ada cabang yang memenuhi kriteria.</p>}
+              </div>
+              <div className="rounded-xl border border-line bg-white p-4">
+                <h2 className="font-display text-base font-semibold text-ink-900">Estimasi kebutuhan pabrik</h2>
+                <p className="mt-1 text-xs text-muted">Kebutuhan 14 hari berdasarkan penurunan stok fisik 30 hari.</p>
+                {operationalInsights.data.factory.map((item) => (
+                  <p key={item.product_id} className="mt-2 border-t border-line pt-2 text-sm text-ink-800">{item.product_name}: <strong className="tabular-nums">{item.suggested_qty} pcs</strong> tambahan</p>
+                ))}
+                <p className="mt-3 text-xs text-muted">Konfirmasi penjualan riil dan kapasitas produksi dengan PT Kim Manufaktur sebelum membuat PO.</p>
+              </div>
+            </section>
+          ) : null}
           {tab === 'stocks' ? (
             <section aria-labelledby="summary-title" className="dashboard-panel-enter">
               <div className="mb-4 flex items-end justify-between gap-3">
@@ -3012,6 +3059,9 @@ function AdminDashboard() {
               }
               onShip={(id) =>
                 updateOrder.mutateAsync({ id, status: 'dalam_pengiriman' })
+              }
+              onPack={(id) =>
+                updateOrder.mutateAsync({ id, status: 'dipacking' })
               }
               selectedOrderId={selectedOrderId}
               onSelectOrder={setSelectedOrderId}
@@ -3534,6 +3584,16 @@ function PartnerManagementPanel() {
     onError: (error: unknown) => toast.error(getErrorMessage(error)),
   })
 
+  const changeScheme = useMutation({
+    mutationFn: (input: { id: string; scheme: 'konsinyasi' | 'beli_putus' }) => updatePartnerScheme(input.id, input.scheme),
+    onSuccess: async (_result, input) => {
+      setSelectedDetailPartner((current) => current?.id === input.id ? { ...current, distribution_scheme: input.scheme } : current)
+      toast.success('Skema distribusi mitra diperbarui untuk pesanan berikutnya')
+      await refresh()
+    },
+    onError: (error: unknown) => toast.error(getErrorMessage(error)),
+  })
+
   const [selectedPartnerIds, setSelectedPartnerIds] = useState<Set<string>>(new Set())
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
@@ -3899,6 +3959,8 @@ function PartnerManagementPanel() {
       {/* Popup Modal Detail Mitra */}
       <PartnerDetailModal
         partner={selectedDetailPartner}
+        onSchemeChange={(partner, scheme) => changeScheme.mutate({ id: partner.id, scheme })}
+        schemePending={changeScheme.isPending}
         open={selectedDetailPartner !== null}
         onOpenChange={(open) => {
           if (!open) setSelectedDetailPartner(null)
@@ -4654,6 +4716,7 @@ function OrderPanel({
   onApprove,
   onReject,
   onShip,
+  onPack,
   selectedOrderId: controlledSelectedOrderId,
   onSelectOrder,
   activeCategory: controlledCategory,
@@ -4669,6 +4732,7 @@ function OrderPanel({
   onApprove: (order: Order) => Promise<unknown>
   onReject: (id: string, reason: string) => Promise<unknown>
   onShip: (id: string) => Promise<unknown>
+  onPack: (id: string) => Promise<unknown>
   selectedOrderId?: string | null
   onSelectOrder?: (orderId: string | null) => void
   activeCategory?: OrderCategoryTab
@@ -4699,7 +4763,7 @@ function OrderPanel({
   const allOrders = query.data ?? []
 
   const pendingCount = useMemo(
-    () => allOrders.filter((order) => order.status === 'diproses').length,
+    () => allOrders.filter((order) => order.status === 'diproses' || order.status === 'ditunda').length,
     [allOrders],
   )
   const shippingCount = useMemo(
@@ -4709,7 +4773,7 @@ function OrderPanel({
   const completedCount = useMemo(
     () =>
       allOrders.filter((order) =>
-        ['disetujui', 'selesai'].includes(order.status),
+        ['disetujui', 'dipacking', 'selesai'].includes(order.status),
       ).length,
     [allOrders],
   )
@@ -4723,14 +4787,14 @@ function OrderPanel({
 
   const filteredOrders = useMemo(() => {
     if (activeCategory === 'menunggu') {
-      return allOrders.filter((order) => order.status === 'diproses')
+      return allOrders.filter((order) => order.status === 'diproses' || order.status === 'ditunda')
     }
     if (activeCategory === 'dalam_pengiriman') {
       return allOrders.filter((order) => order.status === 'dalam_pengiriman')
     }
     if (activeCategory === 'selesai') {
       return allOrders.filter((order) =>
-        ['disetujui', 'selesai'].includes(order.status),
+        ['disetujui', 'dipacking', 'selesai'].includes(order.status),
       )
     }
     return allOrders.filter((order) =>
@@ -4930,7 +4994,7 @@ function OrderPanel({
                     {order.order_no}
                   </span>
                   <OrderStatusBadge status={order.status} />
-                  {order.status === 'disetujui' ? (
+                  {order.status === 'dipacking' ? (
                     <span className="inline-flex items-center gap-1 rounded bg-order-disetujui-bg px-2 py-0.5 text-[10px] font-bold text-order-disetujui border border-order-disetujui/30">
                       <Truck className="size-3" aria-hidden="true" />
                       <span>Siap Kirim</span>
@@ -4995,7 +5059,7 @@ function OrderPanel({
                     ) : null}
                   </div>
 
-                  {order.status === 'disetujui' ? (
+                  {order.status === 'dipacking' ? (
                     <span className="inline-flex items-center gap-1 rounded-md bg-order-pengiriman text-white px-2.5 py-1 text-xs font-bold shadow-2xs group-hover:bg-order-pengiriman/90 transition-all">
                       <Truck className="size-3.5" aria-hidden="true" />
                       <span>Kirim sekarang</span>
@@ -5046,6 +5110,7 @@ function OrderPanel({
           setActiveCategory('selesai')
         }}
         onReject={onReject}
+        onPack={onPack}
         onShip={async (id) => {
           await onShip(id)
           setReceiptOrderId(id)
@@ -5080,6 +5145,7 @@ function ApprovalDialog({
   onApprove,
   onReject,
   onShip,
+  onPack,
 }: {
   order: Order | null
   open: boolean
@@ -5093,6 +5159,7 @@ function ApprovalDialog({
   onApprove: (order: Order) => Promise<unknown>
   onReject: (id: string, reason: string) => Promise<unknown>
   onShip: (id: string) => Promise<unknown>
+  onPack: (id: string) => Promise<unknown>
 }) {
   const [rejectionMode, setRejectionMode] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
@@ -5312,6 +5379,33 @@ function ApprovalDialog({
           </div>
 
           <div className="space-y-5 p-5 sm:p-6">
+            {order.status === 'ditunda' ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-semibold">Menunggu pasokan pabrik</p>
+                <p className="mt-1">Pesanan diproses otomatis sesuai urutan pengajuan ketika stok pusat ditambah. Estimasi pre-order hingga dua minggu perlu dikonfirmasi ke pabrik.</p>
+                {order.items.map((item) => <p key={item.id} className="mt-2 tabular-nums">{item.product_name}: {item.qty_reserved} dari {item.qty_requested} pcs sudah direservasi</p>)}
+              </div>
+            ) : null}
+            {order.status === 'selesai' ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-paper/50 p-4 text-sm">
+                <div>
+                  <p className="font-semibold text-ink-900">{order.distribution_scheme === 'beli_putus' ? 'Tagihan beli putus' : 'Nilai barang konsinyasi'}</p>
+                  <p className="tabular-nums text-ink-800">{Number(order.total_amount ?? 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</p>
+                  {order.payment_due_date ? <p className="text-xs text-muted">Jatuh tempo {new Date(order.payment_due_date).toLocaleDateString('id-ID')}</p> : null}
+                  {order.payment_status ? <p className="text-xs text-muted">Status: {order.payment_status === 'lunas' ? 'Lunas' : order.payment_status === 'jatuh_tempo' ? 'Lewat jatuh tempo' : 'Belum lunas'}</p> : null}
+                </div>
+                {order.distribution_scheme === 'beli_putus' && order.payment_status !== 'lunas' ? (
+                  <button type="button" className="min-h-12 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-white" onClick={() => void runAction(async () => {
+                    await markOrderPaid(order.id)
+                    await Promise.all([
+                      queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
+                      queryClient.invalidateQueries({ queryKey: ['admin-finance-summary'] }),
+                    ])
+                    toast.success('Pembayaran dicatat lunas')
+                  }, false)}>Catat sudah lunas</button>
+                ) : null}
+              </div>
+            ) : null}
             {/* Banner Status Persetujuan & Informasi Kesiapan Pengiriman */}
             {order.status === 'disetujui' ? (
               <div className="rounded-lg border border-order-disetujui/40 bg-order-disetujui-bg/60 p-4 text-sm text-ink-900">
@@ -5325,11 +5419,11 @@ function ApprovalDialog({
                 <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
                   <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
                     <span className="size-2 rounded-full bg-order-pengiriman" />
-                    <strong>Kirim sekarang ke mitra:</strong> jika armada ekspedisi & barang sudah siap
+                    <strong>Mulai packing:</strong> saat gudang menyiapkan barang
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
                     <span className="size-2 rounded-full bg-muted" />
-                    <strong>Tahan dulu pengiriman:</strong> jika fisik barang masih dipersiapkan
+                    <strong>Kirim ke mitra:</strong> tersedia setelah packing selesai
                   </span>
                 </div>
               </div>
@@ -5840,7 +5934,7 @@ function ApprovalDialog({
             ) : null}
 
             {/* Box Konfirmasi Kesiapan Pengiriman ke Mitra */}
-            {order.status === 'disetujui' && shippingConfirmMode ? (
+            {order.status === 'dipacking' && shippingConfirmMode ? (
               <div className="rounded-lg border-2 border-order-pengiriman bg-order-pengiriman-bg/40 p-4 space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-order-pengiriman text-white shadow-xs">
@@ -5945,21 +6039,26 @@ function ApprovalDialog({
                         type="button"
                         className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-paper hover:text-ink-900 cursor-pointer"
                       >
-                        Tahan dulu pengiriman
+                        Siapkan nanti
                       </button>
                     </Dialog.Close>
                     <button
                       type="button"
                       disabled={pending || hasChanges}
-                      onClick={() => setShippingConfirmMode(true)}
+                      onClick={() => void runAction(() => onPack(order.id), false)}
                       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-order-pengiriman px-5 text-sm font-bold text-white hover:bg-order-pengiriman/90 shadow-xs disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                     >
                       <Truck className="size-4" aria-hidden="true" />
-                      <span>Kirim sekarang ke mitra</span>
+                      <span>Mulai packing</span>
                     </button>
                   </>
                 ) : null}
               </>
+            ) : null}
+            {order.status === 'dipacking' && !shippingConfirmMode ? (
+              <button type="button" disabled={pending} onClick={() => setShippingConfirmMode(true)} className="inline-flex min-h-11 items-center justify-center rounded-md bg-order-pengiriman px-5 text-sm font-bold text-white disabled:opacity-50">
+                Kirim sekarang ke mitra
+              </button>
             ) : null}
             {!editable ? (
               <Dialog.Close asChild>
