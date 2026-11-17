@@ -1,6 +1,7 @@
 import type { AdminContext } from "./admin-context";
 import type { AdminIndexedExcerpt } from "./admin-knowledge";
 import type { ModelResult } from "./model";
+import { retailPriceReply } from "./retail-price-reply";
 
 export interface AdminAssistantReply {
   reply: string;
@@ -14,12 +15,15 @@ export function composeAdminFallbackReply(
   knowledgeExcerpts: AdminIndexedExcerpt[],
 ): AdminAssistantReply {
   const normalized = message.toLowerCase();
+  const priceReply = retailPriceReply(message);
   const quickReplies = [
     "Ringkasan stok pusat & cabang kritis",
     "Daftar pesanan menunggu persetujuan",
     "Analisis model Naive Bayes & risiko wilayah",
     "Jelaskan temuan Karya Ilmiah Hudzaifah",
   ];
+
+  if (priceReply) return { reply: priceReply, quickReplies };
 
   // 1. Pertanyaan tentang Karya Ilmiah / Jurnal / Penelitian / NLP / SGD / Hudzaifah
   const isResearchQuery = /\b(?:karya\s*ilmiah|jurnal|penelitian|hudzaifah|rantisi|sgd|logistic|regression|nlp|sentimen|sentiment|mbg|makan\s*bergizi|prabowo|jatisi|akurasi|dataset)\b/i.test(normalized);

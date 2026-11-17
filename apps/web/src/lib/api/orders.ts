@@ -11,6 +11,9 @@ export interface FinanceSummary {
   gross_30d: string
   consignment_estimate_7d: string
   consignment_estimate_30d: string
+  stock_outflow_gross_7d: string
+  stock_outflow_units_7d: number
+  stock_outflow_by_partner_7d: Array<{ partner_id: string; gross_7d: string; units_7d: number }>
   unpaid_count: number
   overdue_count: number
   unpaid_amount: string

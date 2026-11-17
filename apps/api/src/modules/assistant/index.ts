@@ -10,6 +10,7 @@ import { isOfficialProduct } from "./official-products";
 import { loadAdminContext } from "./admin-context";
 import { searchAdminKnowledge, loadCompanyProfileAndSop } from "./admin-knowledge";
 import { buildAdminRagPrompt } from "./admin-prompt";
+import { isStaleCatalogExcerpt, retailPriceReply } from "./retail-price-reply";
 import { composeAdminFallbackReply } from "./admin-compose";
 import { understandAdminMessage, understandMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
@@ -250,6 +251,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
     const [memory] = await memoryPromise;
     const standaloneQuery = scopeRefused || relaxedChat ? message : await rewriteMitraQuery(message, turns, memory?.summary ?? "");
+    const priceReply = scopeRefused ? null : retailPriceReply(standaloneQuery);
     const knowledgeTopic = scopeRefused ? null : knowledgeIntent(standaloneQuery, previousIntent);
     const identityQuestion = !scopeRefused && isAssistantIdentityQuestion(standaloneQuery);
     const contextPromise = loadMitraContext(user.partnerId);
@@ -271,12 +273,14 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const wantsWeeklySummary = /\b(?:merangkum|rangkuman|rangkum|ringkasan|ringkas|rekap|analisis)\b/i.test(standaloneQuery) && /\b(?:seminggu|sepekan|mingguan|minggu|7\s*hari)\b/i.test(standaloneQuery);
     const approvedContextReply = approvedModelContextReply(standaloneQuery, knowledge?.documents ?? []);
     const hasDocumentMatch = Boolean(approvedContextReply || (!intent && !knowledgeTopic && knowledge?.documents?.length));
-    const hasLocalTopic = Boolean(wantsWeeklySummary || (knowledgeTopic && knowledge) || intent || hasDocumentMatch);
+    const hasLocalTopic = Boolean(priceReply || wantsWeeklySummary || (knowledgeTopic && knowledge) || intent || hasDocumentMatch);
     const ruleRefusalReply = crossTenant
       ? TENANT_SCOPE_REPLY
       : "Maaf, permintaan tersebut tidak dapat diproses karena melanggar aturan keamanan sistem Daisuki AI (akses instruksi internal atau konfigurasi sistem tidak diizinkan).";
     const fallback = refused
       ? { ...answerMitraQuestion(message), reply: ruleRefusalReply }
+      : priceReply
+        ? { ...answerMitraQuestion(message), reply: priceReply }
       : wantsWeeklySummary
         ? { ...answerMitraQuestion(message), reply: weeklyAnalysisReply(understanding, context) }
       : approvedContextReply
@@ -307,14 +311,14 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       : fallback;
     let llmReply: string | null = null;
     let grounded = false;
-    if (!refused && !approvedContextReply && !visualization) {
+    if (!refused && !priceReply && !approvedContextReply && !visualization) {
       const needsOperationalFacts = Boolean(
         !hasDocumentMatch && (
           wantsWeeklySummary ||
           (knowledgeTopic && knowledge) ||
           intent ||
           identityQuestion ||
-          /\b(?:stok|stock|restock|restok|barang|produk|pesan|order|po-|gudang|cabang|toko|basreng|seblak|makaroni|keripik|resi|kirim|daisuki|laporan|buffer|konsumsi|laku|terjual|mitra|profil|alamat|pic)\b/i.test(standaloneQuery)
+          /\b(?:stok|stock|restock|restok|barang|produk|pesan|order|po-|gudang|cabang|toko|basreng|seblak|makaroni|keripik|resi|kirim|daisuki|laporan|buffer|konsumsi|laku|terjual|harga|price|omset|omzet|penjualan|mitra|profil|alamat|pic)\b/i.test(standaloneQuery)
         ),
       );
       const systemPrompt = needsOperationalFacts
@@ -643,12 +647,16 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       kind: doc.kind,
       aliases: doc.aliases,
     }));
-    const knowledgeExcerpts = binaryReady ? [...rawExcerpts, ...publicExcerpts].slice(0, 5) : markdownExcerpts;
+    const knowledgeExcerpts = (binaryReady ? [...rawExcerpts, ...publicExcerpts] : markdownExcerpts)
+      .filter((doc) => !isStaleCatalogExcerpt(doc.source, doc.excerpt))
+      .slice(0, 5);
 
     // 4. Fallback cerdas lokal
     const baseFallback = composeAdminFallbackReply(message, context, model, knowledgeExcerpts);
+    const priceReply = retailPriceReply(message);
     const approvedAdminContextReply = approvedModelContextReply(message, knowledgeExcerpts);
-    const fallback = approvedAdminContextReply ? { ...baseFallback, reply: approvedAdminContextReply } : baseFallback;
+    const fallback = priceReply ? { ...baseFallback, reply: priceReply }
+      : approvedAdminContextReply ? { ...baseFallback, reply: approvedAdminContextReply } : baseFallback;
 
     // 5. LLM Prompt
     let llmReply: string | null = null;
@@ -665,7 +673,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       },
     });
 
-    if (!approvedAdminContextReply) {
+    if (!approvedAdminContextReply && !priceReply) {
       try {
         llmReply = await generateLlmReply({
           systemPrompt,

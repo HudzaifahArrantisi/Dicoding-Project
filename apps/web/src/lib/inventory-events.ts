@@ -28,6 +28,7 @@ const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
       ['admin-stock-logs-partner'],
       ['admin-stock-log-partners'],
       ['admin-weekly-summary'],
+      ['admin-finance-summary'],
     ],
     products: [
       ['admin-central-products'],
@@ -44,7 +45,7 @@ const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
   mitra: {
     orders: [['mitra-orders']],
     stocks: [['mitra-stocks']],
-    logs: [['mitra-stock-logs']],
+    logs: [['mitra-stock-logs'], ['mitra-finance-summary']],
     products: [['central-products'], ['mitra-stocks']],
   },
 }

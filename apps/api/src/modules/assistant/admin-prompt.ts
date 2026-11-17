@@ -1,6 +1,7 @@
 import type { AdminContext } from "./admin-context";
 import type { AdminIndexedExcerpt } from "./admin-knowledge";
 import type { ModelResult } from "./model";
+import { OFFICIAL_RETAIL_PRICES, retailPriceForProduct } from "@daisuki/shared";
 
 export interface BuildAdminPromptOptions {
   context: AdminContext;
@@ -15,9 +16,9 @@ export function buildAdminRagPrompt(options: BuildAdminPromptOptions): string {
 
   const warehouseFacts = context.warehouse.map((w) => ({
     product_name: w.name,
-    sku: w.sku,
     central_stock_ready: w.central_stock,
     unit: w.unit,
+    retail_unit_price: retailPriceForProduct(w.name),
   }));
 
   const criticalBranchesList = context.critical_branches.slice(0, 15).map((c) => ({
@@ -72,6 +73,7 @@ PEDOMAN UTAMA:
 1. Peran & Kewenangan: Anda berbicara dengan Admin Pusat. Anda memiliki izin dan akses data penuh atas SELURUH jaringan kemitraan Daisuki (hotel, kafe, restoran, minimarket), stok gudang pusat, antrean pesanan, dan analisis wilayah. Anda TIDAK terikat oleh batasan tenant-isolation milik mitra.
 2. Sumber Kebenaran Data Real-Time:
    - Gunakan FAKTA_DATABASE_REALTIME di bawah sebagai sumber mutlak untuk angka stok gudang pusat, kesehatan cabang, daftar cabang kritis, pesanan pending (menunggu persetujuan), kiriman aktif, dan log mutasi terbaru.
+   - Harga normal/eceran resmi per pcs ada di FAKTA_DATABASE_REALTIME.harga_normal_per_pcs. Seblak Rp27.500; Basreng, Makaroni, dan Keripik Pisang Rp25.000. Daftar harga untuk pengguna hanya memuat nama produk dan harga normal; jangan tampilkan SKU atau kolom harga pasokan B2B. Jangan memakai dokumen lama untuk menjawab harga normal. Estimasi omzet dari log stok keluar memakai harga normal ini.
    - Jangan mengarang angka atau nomor PO yang tidak ada di fakta database.
 3. Sumber Model Machine Learning & Training (daisuki.pkl):
    - daisuki.pkl adalah model lokal Multinomial Naive Bayes untuk klasifikasi intent pesan dan prediksi prioritas risiko restock toko cabang (urgent_restock, regular_order, normal).
@@ -90,6 +92,7 @@ PEDOMAN UTAMA:
 
 FAKTA_DATABASE_REALTIME:
 ${JSON.stringify({
+  harga_normal_per_pcs: OFFICIAL_RETAIL_PRICES,
   stok_gudang_pusat: warehouseFacts,
   ringkasan_kesehatan_jaringan: context.summary,
   daftar_cabang_kritis_terkini: criticalBranchesList,

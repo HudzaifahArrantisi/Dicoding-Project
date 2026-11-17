@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { getStopwords, matchSopSelection, matchesWordPack, matchesWordPattern } from "./word-loader";
 import { assistantCopy } from "./assistant-copy";
+import { isStaleCatalogExcerpt } from "./retail-price-reply";
 
 const dataDir = resolve(import.meta.dir, "../../../../../ai/data/mainbrain");
 const mainbrainDir = resolve(dataDir, "context_embeddings");
@@ -74,6 +75,7 @@ export function selectPublicRagMemory(binary: BinaryExcerpt[] | undefined, markd
   const { blockedContent } = currentPolicy();
   const relevant = (binary ?? [])
     .filter((doc) => Number.isFinite(doc.score) && doc.score >= 0.08)
+    .filter((doc) => !isStaleCatalogExcerpt(doc.source, doc.excerpt))
     .filter((doc) => doc.kind === "approved_summary" && doc.visibility === "mitra"
       ? !blockedContent.some((pattern) => pattern.test(doc.excerpt))
       : filterRagDocuments([{ name: doc.source, content: doc.excerpt }]).length > 0)

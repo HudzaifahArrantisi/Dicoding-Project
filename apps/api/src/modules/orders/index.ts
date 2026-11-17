@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { RETAIL_PRICE_OTHER, RETAIL_PRICE_SEBLAK } from "@daisuki/shared";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
@@ -181,20 +182,46 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       FROM orders o WHERE o.status = 'selesai'
         AND (${partnerId}::uuid IS NULL OR o.partner_id = ${partnerId}::uuid)
     `);
-    const [consignment] = await db.execute<{ estimate_7d: string; estimate_30d: string }>(sql`
+    const outflowRows = await db.execute<{
+      partner_id: string;
+      distribution_scheme: "konsinyasi" | "beli_putus";
+      units_7d: number;
+      gross_7d: string;
+      gross_30d: string;
+    }>(sql`
       SELECT
-        COALESCE(SUM(greatest(sl.qty_before - sl.qty_after, 0) * pr.b2b_price)
-          FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::text AS estimate_7d,
-        COALESCE(SUM(greatest(sl.qty_before - sl.qty_after, 0) * pr.b2b_price)
-          FILTER (WHERE sl.created_at >= now() - interval '30 days'), 0)::text AS estimate_30d
+        sl.partner_id::text AS partner_id,
+        pa.distribution_scheme,
+        COALESCE(SUM(sl.qty_before - sl.qty_after)
+          FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::int AS units_7d,
+        COALESCE(SUM((sl.qty_before - sl.qty_after) *
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK} ELSE ${RETAIL_PRICE_OTHER} END)
+          FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::text AS gross_7d,
+        COALESCE(SUM((sl.qty_before - sl.qty_after) *
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK} ELSE ${RETAIL_PRICE_OTHER} END), 0)::text AS gross_30d
       FROM stock_logs sl
-      JOIN partners pa ON pa.id = sl.partner_id AND pa.distribution_scheme = 'konsinyasi'
+      JOIN partners pa ON pa.id = sl.partner_id
       JOIN products pr ON pr.id = sl.product_id
       WHERE sl.source = 'manual_update'
+        AND sl.qty_before > sl.qty_after
+        AND sl.created_at >= now() - interval '30 days'
+        AND pr.sku IN ('DSK-SB-001', 'DSK-BR-002', 'DSK-MK-003', 'DSK-KP-004')
         AND (${partnerId}::uuid IS NULL OR sl.partner_id = ${partnerId}::uuid)
+      GROUP BY sl.partner_id, pa.distribution_scheme
     `);
-    return { data: { ...row, consignment_estimate_7d: consignment.estimate_7d,
-      consignment_estimate_30d: consignment.estimate_30d } };
+    const sum = (rows: Array<{ gross_7d: string; gross_30d: string }>, key: "gross_7d" | "gross_30d") =>
+      rows.reduce((total, item) => total + Number(item[key]), 0).toString();
+    const consignmentRows = outflowRows.filter((item) => item.distribution_scheme === "konsinyasi");
+    return { data: {
+      ...row,
+      consignment_estimate_7d: sum(consignmentRows, "gross_7d"),
+      consignment_estimate_30d: sum(consignmentRows, "gross_30d"),
+      stock_outflow_gross_7d: sum(outflowRows, "gross_7d"),
+      stock_outflow_units_7d: outflowRows.reduce((total, item) => total + Number(item.units_7d), 0),
+      stock_outflow_by_partner_7d: user.role === "admin"
+        ? outflowRows.map((item) => ({ partner_id: item.partner_id, gross_7d: item.gross_7d, units_7d: Number(item.units_7d) }))
+        : [],
+    } };
   })
   .get("/finance/insights", async ({ headers, set }) => {
     const user = await getAuthUser(headers);

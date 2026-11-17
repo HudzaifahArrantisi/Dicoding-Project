@@ -21,7 +21,6 @@ export interface ModelRecord {
   requested_30d: number;
   approved_30d: number;
   has_active_order: boolean;
-  b2b_price?: number;
   updated_at: Date;
 }
 
@@ -58,7 +57,7 @@ export async function loadMitraContext(partnerId: string) {
       )
       select ps.partner_id::text, pa.name as partner_name, pa.type::text as partner_type,
         ps.product_id::text, pr.name as product_name, ps.current_qty, ps.par_level,
-        pr.central_stock, ps.updated_at, coalesce(pr.b2b_price, 15000)::float as b2b_price,
+        pr.central_stock, ps.updated_at,
         coalesce(s.sold_7d, 0)::int as sold_7d,
         coalesce(s.sold_prev_7d, 0)::int as sold_prev_7d,
         coalesce(s.sold_30d, 0)::int as sold_30d,
@@ -100,7 +99,6 @@ export async function loadMitraContext(partnerId: string) {
     requested_30d: Number(row.requested_30d),
     approved_30d: Number(row.approved_30d),
     has_active_order: row.has_active_order === true,
-    b2b_price: Number(row.b2b_price ?? 15000),
     updated_at: row.updated_at instanceof Date ? row.updated_at : new Date(String(row.updated_at)),
   }));
   const relevantOrders = [...new Map([...latestOrders, ...activeOrders].map((order) => [order.id, order])).values()];

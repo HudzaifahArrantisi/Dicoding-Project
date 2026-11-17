@@ -1,4 +1,5 @@
 export type StockStatus = "aman" | "waspada" | "kritis";
+export { OFFICIAL_RETAIL_PRICES, RETAIL_PRICE_SEBLAK, RETAIL_PRICE_OTHER, retailPriceForProduct } from "./retail-pricing";
 
 export const STOCK_THRESHOLDS = { aman: 50, kritis: 20 } as const;
 

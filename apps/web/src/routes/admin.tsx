@@ -2948,9 +2948,12 @@ function AdminDashboard() {
             <section aria-label="Omzet dan pembayaran" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Nilai beli putus 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.gross_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
               <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Nilai beli putus 30 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.gross_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi terjual konsinyasi 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.consignment_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">Dari penurunan stok fisik; periksa retur dan selisih.</p></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Total omzet kotor 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.stock_outflow_gross_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">{finance.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs keluar dari seluruh mitra. Seblak Rp27.500, lainnya Rp25.000/pcs. Estimasi dari perubahan stok.</p></div>
               <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Tagihan belum lunas</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{finance.data.unpaid_count} pesanan</strong><p className="text-sm text-crit-fg">{finance.data.overdue_count} lewat jatuh tempo</p></div>
             </section>
+          ) : null}
+          {tab === 'stocks' && finance.isError ? (
+            <ErrorState message={getErrorMessage(finance.error)} onRetry={() => void finance.refetch()} />
           ) : null}
           {tab === 'stocks' && operationalInsights.data ? (
             <section aria-label="Prioritas operasional" className="grid gap-3 lg:grid-cols-3">
@@ -3004,6 +3007,7 @@ function AdminDashboard() {
               query={stocks}
               centralProductsQuery={centralProducts}
               rows={filteredStocks}
+              financeQuery={finance}
               search={search}
               partner={partner}
               status={status}
@@ -4107,6 +4111,7 @@ function StockPanel({
   query,
   centralProductsQuery,
   rows,
+  financeQuery,
   search,
   partner,
   status,
@@ -4118,6 +4123,7 @@ function StockPanel({
   query: UseQueryResult<StockItem[]>
   centralProductsQuery: UseQueryResult<Product[]>
   rows: StockItem[]
+  financeQuery: UseQueryResult<FinanceSummary>
   search: string
   partner: string
   status: StockStatus | 'semua' | 'belum_update'
@@ -4126,9 +4132,10 @@ function StockPanel({
   onPartner: (value: string) => void
   onStatus: (value: StockStatus | 'semua' | 'belum_update') => void
 }) {
+  const finance = financeQuery.data
   const queryClient = useQueryClient()
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null)
-  const [visibleBranches, setVisibleBranches] = useState(24)
+  const [visibleBranches, setVisibleBranches] = useState(100)
   const [centralStockDrafts, setCentralStockDrafts] = useState<
     Record<string, string>
   >({})
@@ -4136,7 +4143,7 @@ function StockPanel({
   const [isBatchSaving, setIsBatchSaving] = useState(false)
 
   useEffect(() => {
-    setVisibleBranches(24)
+    setVisibleBranches(100)
   }, [search, partner, status])
 
   useEffect(() => {
@@ -4277,6 +4284,11 @@ function StockPanel({
     }))
   }
 
+  const branchGross = useMemo(
+    () => new Map((finance?.stock_outflow_by_partner_7d ?? []).map((item) => [item.partner_id, item])),
+    [finance?.stock_outflow_by_partner_7d],
+  )
+
   const branchGroups = useMemo<PartnerStockGroup[]>(() => {
     const map = new Map<string, PartnerStockGroup>()
     for (const item of rows) {
@@ -4308,8 +4320,11 @@ function StockPanel({
         ...group,
         overall_status,
       }
-    })
-  }, [rows])
+    }).sort((a, b) =>
+      Number(branchGross.get(b.partner_id)?.gross_7d ?? 0) - Number(branchGross.get(a.partner_id)?.gross_7d ?? 0)
+      || a.partner_name.localeCompare(b.partner_name, 'id-ID'),
+    )
+  }, [rows, branchGross])
 
   const selectedGroup = useMemo(() => {
     if (!selectedPartnerId) return null
@@ -4579,7 +4594,7 @@ function StockPanel({
               Stok cabang mitra
             </h2>
             <span className="text-xs text-muted">
-              {branchGroups.length} cabang · Diperbarui otomatis
+              {branchGroups.length} cabang · {finance ? 'Urut omzet kotor 7 hari' : 'Data omzet sedang dimuat'}
             </span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_220px_180px]">
@@ -4654,7 +4669,7 @@ function StockPanel({
                 type="button"
                 onClick={() => setSelectedPartnerId(group.partner_id)}
                 aria-haspopup="dialog"
-                className="group flex min-h-16 w-full items-center justify-between gap-3 p-3.5 text-left hover:bg-ink-50 sm:p-4"
+                className="group flex min-h-16 w-full flex-col items-stretch justify-between gap-3 p-3.5 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:flex-row sm:items-center sm:p-4"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="grid size-8 shrink-0 place-items-center rounded-md bg-ink-100 font-display text-xs font-bold tabular-nums text-ink-700">
@@ -4670,7 +4685,18 @@ function StockPanel({
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex min-w-0 items-center justify-between gap-3 sm:shrink-0 sm:justify-end">
+                  <div className="min-w-0 sm:text-right">
+                    <p className="text-[11px] text-muted">Omzet kotor 7 hari</p>
+                    {finance ? (
+                      <>
+                        <p className="num font-display text-sm font-semibold tabular-nums text-ink-900">
+                          {Number(branchGross.get(group.partner_id)?.gross_7d ?? 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
+                        </p>
+                        <p className="num text-[11px] tabular-nums text-muted">{Number(branchGross.get(group.partner_id)?.units_7d ?? 0).toLocaleString('id-ID')} pcs keluar</p>
+                      </>
+                    ) : <p className="text-xs text-muted">{financeQuery.isError ? 'Belum tersedia' : 'Memuat...'}</p>}
+                  </div>
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
                     <StockStatusBadge status={group.overall_status} />
                     {group.is_stale ? <StaleBadge /> : null}
@@ -4685,7 +4711,7 @@ function StockPanel({
           {branchGroups.length > visibleBranches ? (
             <button
               type="button"
-              onClick={() => setVisibleBranches((current) => current + 24)}
+              onClick={() => setVisibleBranches((current) => current + 100)}
               className="min-h-11 w-full rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
             >
               Tampilkan cabang Lainnya

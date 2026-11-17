@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { MitraContext } from "./context";
 import type { ModelResult } from "./model";
-import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
+import { buildMitraRagFacts, buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
 import type { CompanyKnowledge } from "./company-knowledge";
 
 const context = {
@@ -15,6 +15,17 @@ const context = {
   logs: [], weeklyFacts: null,
 } as MitraContext;
 const model: ModelResult = { available: true, predictions: [{ product_id: "b1", label: "urgent_restock", confidence: 0.91 }] };
+
+test("harga normal dan omzet chat mengikuti log keluar, bukan harga B2B", () => {
+  const priced = { ...context, stocks: [
+    { ...context.stocks[0], sold_7d: 1 },
+    { ...context.stocks[0], product_id: "s1", product_name: "Seblak Jadul Instan", sold_7d: 1 },
+  ] } as MitraContext;
+  const facts = buildMitraRagFacts(priced, model);
+  expect(facts.operational_facts.stocks.map((stock) => stock.unit_price)).toEqual([25_000, 27_500]);
+  expect(facts.operational_facts.totals.total_omzet_7d).toBe(52_500);
+  expect(isGroundedLlmReply("Harga Basreng Rp15.000/pcs.", priced, model, undefined, undefined, "berapa harga Basreng?")).toBe(false);
+});
 
 test("prompt memakai fakta mitra dan model tanpa batas stok tetap", () => {
   const prompt = buildMitraRagPrompt(context, model, "restock");

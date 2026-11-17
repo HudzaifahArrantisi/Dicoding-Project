@@ -1,7 +1,6 @@
 # Brain Knowledge: Company Knowledge
 > **Sumber Dokumen**: `company_knowledge.json`
 > **Tipe Dokumen**: Dataset JSON / Knowledge Base (Publik)
-> **Ukuran Asli**: 9,209 bytes
 > **Status Ingestion**: Terverifikasi dan siap digunakan oleh Daisuki AI RAG
 
 ---
@@ -27,10 +26,10 @@
 ---
 
 ## 2. 4 Official Products
-1. **Seblak Jadul Instan** (`DSK-SB-001`): Rp12.000 / pcs, camilan berkuah instan racikan kencur alami dan aneka kerupuk kenyal khas Bandung pedas daun jeruk.
-2. **Basreng Daun Jeruk** (`DSK-BR-002`): Rp10.000 / pcs, bakso goreng renyah bumbu cabai rawit merah berpadu irisan daun jeruk segar gurih pedas.
-3. **Makaroni Daun Jeruk** (`DSK-MK-003`): Rp8.500 / pcs, makaroni spiral renyah gurih pedas taburan daun jeruk.
-4. **Keripik Pisang Rasa Coklat** (`DSK-KP-004`): Rp15.000 / pcs, keripik pisang kepok renyah dengan balutan cokelat lumer tebal.
+1. **Seblak Jadul Instan**: Rp27.500 / pcs, camilan berkuah instan racikan kencur alami dan aneka kerupuk kenyal khas Bandung pedas daun jeruk.
+2. **Basreng Daun Jeruk**: Rp25.000 / pcs, bakso goreng renyah bumbu cabai rawit merah berpadu irisan daun jeruk segar gurih pedas.
+3. **Makaroni Daun Jeruk**: Rp25.000 / pcs, makaroni spiral renyah gurih pedas taburan daun jeruk.
+4. **Keripik Pisang Rasa Coklat**: Rp25.000 / pcs, keripik pisang kepok renyah dengan balutan cokelat lumer tebal.
 
 ---
 
