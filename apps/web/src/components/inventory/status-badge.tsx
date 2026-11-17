@@ -37,8 +37,18 @@ const orderConfig = {
     className: 'bg-order-diproses-bg text-order-diproses',
     Icon: Clock3,
   },
+  ditunda: {
+    label: 'Ditunda · menunggu stok',
+    className: 'bg-warn-bg text-warn-fg',
+    Icon: Clock3,
+  },
   disetujui: {
     label: 'Disetujui',
+    className: 'bg-order-disetujui-bg text-order-disetujui',
+    Icon: PackageCheck,
+  },
+  dipacking: {
+    label: 'Dipacking',
     className: 'bg-order-disetujui-bg text-order-disetujui',
     Icon: PackageCheck,
   },

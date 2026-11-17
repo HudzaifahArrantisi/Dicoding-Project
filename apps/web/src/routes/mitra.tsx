@@ -63,6 +63,7 @@ import {
 import { useInventoryEvents } from '@/lib/inventory-events'
 import { useAuth, type User } from '@/lib/auth'
 import type { MitraTour } from '@/lib/api/assistant'
+import { getFinanceSummary, type FinanceSummary } from '@/lib/api/orders'
 import type { Order, Product, StockItem, StockLog } from '@/lib/inventory-types'
 
 export const Route = createFileRoute('/mitra')({
@@ -150,6 +151,7 @@ function MitraPortal() {
   useInventoryEvents(user?.role === 'mitra', 'mitra')
   const [activeTab, setActiveTab] = useState<PortalTab>(chat ? 'chat' : 'stocks')
   const [lastChatId, setLastChatId] = useState<string | null>(chat ?? null)
+  const [chatDraft, setChatDraft] = useState('')
   useEffect(() => { if (chat) { setActiveTab('chat'); setLastChatId(chat) } }, [chat])
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const activeIndex = Math.max(
@@ -199,6 +201,10 @@ function MitraPortal() {
     refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   })
+  const financeQuery = useQuery<FinanceSummary>({
+    queryKey: ['mitra-finance-summary'], queryFn: getFinanceSummary,
+    enabled: user?.role === 'mitra' && activeTab === 'stocks', staleTime: 60_000,
+  })
 
   const ordersQuery = useQuery<Order[]>({
     queryKey: ['mitra-orders'],
@@ -207,7 +213,7 @@ function MitraPortal() {
     refetchInterval: (query) => {
       // Jika ada pesanan aktif yang diproses atau dalam perjalanan kurir, polling cepat 4 detik
       const hasActiveOrders = query.state.data?.some(
-        (o) => o.status === 'diproses' || o.status === 'dalam_pengiriman',
+        (o) => o.status === 'ditunda' || o.status === 'diproses' || o.status === 'dipacking' || o.status === 'dalam_pengiriman',
       )
       return hasActiveOrders ? 4_000 : 10_000
     },
@@ -253,7 +259,9 @@ function MitraPortal() {
       (ordersQuery.data ?? []).filter(
         (order) =>
           order.status === 'diproses' ||
+          order.status === 'ditunda' ||
           order.status === 'disetujui' ||
+          order.status === 'dipacking' ||
           order.status === 'dalam_pengiriman' ||
           (order.status === 'selesai' &&
             Boolean(order.receipt_proof_requested_at) &&
@@ -319,6 +327,7 @@ function MitraPortal() {
     mutationFn: async () => {
       return apiCreateOrder({
         note: orderNote.trim() || undefined,
+        allow_backorder: true,
         items: orderItems.map((item) => ({
           product_id: item.product_id,
           qty_requested: Number(item.qty),
@@ -519,6 +528,33 @@ function MitraPortal() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:pr-28">
+        {activeTab === 'stocks' && financeQuery.data ? (
+          <div className="mb-4 rounded-xl border border-line bg-white p-3 text-sm text-ink-800">
+            <p>Nilai beli putus 7 hari: <strong className="num tabular-nums">{Number(financeQuery.data.gross_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
+            <p className="mt-1">Estimasi terjual konsinyasi: <strong className="num tabular-nums">{Number(financeQuery.data.consignment_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
+          </div>
+        ) : null}
+        {activeTab === 'stocks' ? (
+          <section aria-label="Akses cepat asisten Daisuki" className="mb-6 rounded-2xl border border-line bg-white p-4 sm:p-5">
+            <div className="flex items-center gap-3">
+              <img src="/icons/logo.jpg" alt="" className="size-12 rounded-full object-cover" />
+              <div className="min-w-0 flex-1">
+                <h2 className="font-display text-base font-bold text-ink-900">Butuh bantuan stok atau penjualan?</h2>
+                <p className="text-sm text-ink-700">Tanya Asisten Daisuki dengan bahasa sehari-hari.</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => openTab('chat')} className="mt-4 min-h-12 w-full rounded-xl bg-ink-900 px-4 text-sm font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:w-auto">
+              Tanya Asisten Daisuki (Stok & Penjualan)
+            </button>
+            <div className="mt-3 flex flex-wrap gap-2" aria-label="Contoh pertanyaan cepat">
+              {['Cek sisa stok saya', 'Berapa penjualan minggu ini?', 'Bantu pesan barang'].map((prompt) => (
+                <button key={prompt} type="button" onClick={() => { setChatDraft(prompt); openTab('chat') }} className="min-h-12 rounded-xl border border-line bg-paper px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {activeTab === 'stocks' ? (
           <StocksPanel
             query={stocksQuery}
@@ -592,6 +628,8 @@ function MitraPortal() {
         {activeTab === 'chat' && chat ? (
           <MitraChatRoom
             sessionId={chat}
+            suggestedDraft={chatDraft}
+            onDraftConsumed={() => setChatDraft('')}
             onSelectSession={(id) => void navigate({ to: '/mitra', search: { chat: id } })}
             onNewSession={() => void navigate({ to: '/mitra', search: { chat: crypto.randomUUID() } })}
             onStartTour={setActiveTour}
@@ -1153,7 +1191,7 @@ function OrderForm({
                 Ajukan restock
               </h1>
               <p className="mt-0.5 text-xs text-muted sm:text-sm">
-                Pilih barang yang ingin dipesan dan sesuaikan jumlahnya dengan stok pusat.
+                Pilih barang dan jumlahnya. Jika stok pusat kurang, sisanya menjadi pre-order.
               </p>
             </div>
           </div>
@@ -1449,8 +1487,8 @@ function OrderForm({
                             aria-hidden="true"
                           />
                           <span>
-                            Melebihi stok pusat ({centralQty.toLocaleString('id-ID')}{' '}
-                            {stock.product_unit} tersedia).
+                            Stok pusat tersedia {centralQty.toLocaleString('id-ID')}{' '}
+                            {stock.product_unit}. Sisanya akan menunggu pasokan pabrik.
                           </span>
                         </div>
                       ) : null}
@@ -1528,10 +1566,10 @@ function OrderForm({
               />
               <div>
                 <p className="font-bold text-amber-900">
-                  Kuantitas melebihi stok gudang pusat
+                  Sebagian pesanan menjadi pre-order
                 </p>
                 <p className="mt-0.5 text-amber-800">
-                  Sesuaikan jumlah agar tidak melebihi stok pusat yang tersedia sebelum mengirim.
+                  Stok yang tersedia langsung dipesan. Sisanya ditunda sampai pasokan pabrik masuk, lalu diproses sesuai urutan pengajuan.
                 </p>
               </div>
             </div>
@@ -1571,7 +1609,6 @@ function OrderForm({
               disabled={
                 orderItems.length === 0 ||
                 hasInvalidQty ||
-                hasAnyExceeded ||
                 isSubmitting
               }
               className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto cursor-pointer"
@@ -1681,12 +1718,14 @@ function OrderHistory({
   const [preparingPhoto, setPreparingPhoto] = useState(false)
   const [statusFilter, setStatusFilter] = useState<
     | 'semua'
+    | 'ditunda'
     | 'diproses'
     | 'disetujui'
+    | 'dipacking'
     | 'dalam_pengiriman'
     | 'selesai'
     | 'ditolak'
-  >('diproses')
+  >('semua')
   const previousTourFilter = useRef<typeof statusFilter | null>(null)
 
   const allOrders = query.data ?? []
@@ -1763,7 +1802,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={onOpenOrder}
-            className="mt-2 inline-flex min-h-11 items-center justify-center gap-1.5 self-start rounded-md bg-gray-400 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 sm:mt-0 sm:self-auto"
+            className="mt-2 inline-flex min-h-12 items-center justify-center gap-1.5 self-start rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 sm:mt-0 sm:self-auto"
           >
             <PackagePlus className="size-4" />
             <span>Ajukan Restock Baru</span>
@@ -1792,7 +1831,7 @@ function OrderHistory({
             title="Belum ada pesanan"
             description="Ajukan restock pertama untuk produk yang mulai menipis."
             action={<div className="flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={onOpenOrder} className="min-h-11 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700">Ajukan restock</button>
+              <button type="button" onClick={onOpenOrder} className="min-h-12 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700">Ajukan restock</button>
               <button type="button" onClick={() => setSimulationOpen(true)} className="min-h-11 rounded-md border border-ink-700 bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">Coba simulasi penerimaan</button>
             </div>}
           />
@@ -1812,6 +1851,13 @@ function OrderHistory({
             }`}
           >
             Semua ({allOrders.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('ditunda')}
+            className={`min-h-12 rounded-lg px-4 text-sm font-semibold ${statusFilter === 'ditunda' ? 'border border-amber-300 bg-amber-50 text-amber-950' : 'border border-line bg-white text-ink-800'}`}
+          >
+            Menunggu stok ({allOrders.filter((o) => o.status === 'ditunda').length})
           </button>
           <button
             type="button"
@@ -1836,6 +1882,13 @@ function OrderHistory({
           >
             Disetujui (
             {allOrders.filter((o) => o.status === 'disetujui').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('dipacking')}
+            className={`min-h-12 rounded-lg px-4 text-sm font-semibold ${statusFilter === 'dipacking' ? 'border border-sky-300 bg-sky-50 text-sky-950' : 'border border-line bg-white text-ink-800'}`}
+          >
+            Dipacking ({allOrders.filter((o) => o.status === 'dipacking').length})
           </button>
           <button
             type="button"
@@ -1927,6 +1980,14 @@ function OrderHistory({
                         {order.order_no}
                       </h2>
                       <OrderStatusBadge status={order.status} />
+                      {order.status === 'selesai' && order.total_amount ? (
+                        <span className="num text-xs font-semibold tabular-nums text-ink-800">
+                          Nilai pesanan {Number(order.total_amount).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
+                          {order.distribution_scheme === 'beli_putus' && order.payment_status
+                            ? ` · ${order.payment_status === 'lunas' ? 'Lunas' : order.payment_status === 'jatuh_tempo' ? 'Lewat jatuh tempo' : `Tempo ${order.payment_due_date ? new Date(order.payment_due_date).toLocaleDateString('id-ID') : ''}`}`
+                            : ''}
+                        </span>
+                      ) : null}
                       {order.status === 'selesai' &&
                       !order.receipt_photo_present ? (
                         <span className="rounded-md bg-warn-bg px-2 py-1 text-xs font-semibold text-warn-fg">
@@ -2123,6 +2184,13 @@ function OrderHistory({
               </div>
 
               {/* Penjelasan / Catatan Admin Pusat */}
+              {selectedOrder.status === 'ditunda' ? (
+                <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                  <p className="font-semibold">Pesanan menunggu pasokan pabrik</p>
+                  <p className="mt-1">Stok yang sudah ada telah dicadangkan. Sisanya akan dialokasikan sesuai urutan saat stok pusat ditambah.</p>
+                  {selectedOrder.items.map((item) => <p key={item.id} className="mt-2 tabular-nums">{item.product_name}: {item.qty_reserved} dari {item.qty_requested} pcs dicadangkan</p>)}
+                </div>
+              ) : null}
               {selectedOrder.admin_note ? (
                 <div className="mt-4 rounded-md border border-line bg-ink-50/80 p-3.5 text-sm">
                   <div className="flex items-center gap-2 font-semibold text-ink-900">
@@ -2163,7 +2231,8 @@ function OrderHistory({
 
               {/* Status Banner & Aksi Pengiriman */}
               <div className="mt-5 border-t border-line pt-4">
-                {selectedOrder.status === 'diproses' ||
+                {selectedOrder.status === 'ditunda' ||
+                selectedOrder.status === 'diproses' ||
                 selectedOrder.status === 'disetujui' ? (
                   <div className="mb-4 flex flex-wrap gap-2">
                     {selectedOrder.status === 'diproses' ? (
@@ -2289,7 +2358,7 @@ function OrderHistory({
                       type="button"
                       onClick={() => setScanOpen(true)}
                       disabled={confirming}
-                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-ink-700 px-4 text-sm font-semibold text-white hover:bg-ink-900 disabled:opacity-50"
+                      className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-md bg-ink-700 px-4 text-sm font-semibold text-white hover:bg-ink-900 disabled:opacity-50"
                     >
                      Scan Barcode
                     </button>

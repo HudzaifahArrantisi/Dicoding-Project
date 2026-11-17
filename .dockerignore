@@ -1,0 +1,12 @@
+.git
+**/node_modules
+**/.venv
+**/__pycache__
+**/.env
+**/.env.*
+ai/data/private
+ai/data/mainbrain/models
+ai/data/raw_references
+data-science/reports
+apps/web/.output
+apps/web/dist

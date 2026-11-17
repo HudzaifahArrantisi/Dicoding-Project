@@ -175,6 +175,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       const rows = await db.execute<{
         id: string;
         name: string;
+        distribution_scheme: "konsinyasi" | "beli_putus";
         type: string;
         type_other: string | null;
         address: string | null;
@@ -194,6 +195,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         SELECT 
           p.id,
           p.name,
+          p.distribution_scheme,
           p.type,
           p.type_other,
           p.address,
@@ -250,6 +252,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       const data = rows.map((row) => ({
         id: row.id,
         name: row.name,
+        distribution_scheme: row.distribution_scheme,
         type: row.type,
         type_other: row.type_other,
         address: row.address,
@@ -1122,7 +1125,7 @@ async function computeCompanyAiAnalyticsUncached() {
             FROM order_items oi
             JOIN orders o ON o.id = oi.order_id
             WHERE o.created_at >= NOW() - INTERVAL '30 days'
-              AND o.status IN ('disetujui', 'dalam_pengiriman', 'selesai')
+              AND o.status::text IN ('disetujui', 'dipacking', 'dalam_pengiriman', 'selesai')
           ), 100.0)::float as fulfillment_rate
       `),
     ),
@@ -1164,7 +1167,7 @@ async function computeCompanyAiAnalyticsUncached() {
         active_orders AS (
           SELECT DISTINCT partner_id
           FROM orders
-          WHERE status IN ('diproses', 'disetujui', 'dalam_pengiriman')
+          WHERE status::text IN ('ditunda', 'diproses', 'disetujui', 'dipacking', 'dalam_pengiriman')
         )
         SELECT ps.partner_id, pa.name as partner_name, pa.type as partner_type,
           ps.product_id, pr.name as product_name, pr.sku as product_sku,
@@ -1368,7 +1371,7 @@ async function computeCompanyAiAnalyticsUncached() {
           SELECT DISTINCT o.partner_id, oi.product_id
           FROM orders o
           JOIN order_items oi ON oi.order_id = o.id
-          WHERE o.status IN ('diproses', 'disetujui', 'dalam_pengiriman')
+          WHERE o.status::text IN ('ditunda', 'diproses', 'disetujui', 'dipacking', 'dalam_pengiriman')
         )
         SELECT
           p.id::text AS partner_id,

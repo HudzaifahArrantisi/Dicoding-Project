@@ -77,7 +77,7 @@ daisuki-inventory/
    - Tidak ada plafon stok per produk, kategori, atau mitra cabang. Angka 40 pcs maupun angka tetap lain tidak boleh menjadi kapasitas maksimum atau batas validasi laporan stok fisik.
    - Di seluruh UI Admin dan Mitra, tampilkan stok sebagai kuantitas riil (`{current_qty} pcs` atau `Sisa Stok`). Jangan tampilkan pembagi kapasitas seperti `/ 40 pcs`, `/ par`, atau `Sisa Stok / Par`.
    - Jangan memakai istilah `Kapasitas Rak` atau `Max Stock` untuk stok cabang. Gunakan `Sisa Stok`, `Buffer Minimal`, atau `Saran Pasokan` sesuai konteks.
-   - Form pengajuan restok tidak memiliki plafon tetap. Jumlah yang dapat dipesan dibatasi hanya oleh stok fisik gudang pusat (`products.central_stock`) pada saat transaksi.
+   - Form pengajuan restok tidak memiliki plafon tetap. Stok siap kirim yang direservasi dibatasi oleh `products.central_stock` pada saat transaksi; kelebihan pengajuan menjadi `ditunda` sampai pasokan pabrik tersedia.
    - `par_level`, safety stock, dan threshold status hanya dipakai sebagai buffer pengaman serta analisis laju pemakaian; nilainya bukan kapasitas maksimum.
 
 2. **Kalkulasi Status Stok Cabang**:
@@ -88,13 +88,13 @@ daisuki-inventory/
 
 3. **Siklus Status Pesanan Restock**:
    ```text
-   diproses ➔ disetujui (atau ditolak / dibatalkan) ➔ dalam_pengiriman ➔ selesai
+   ditunda (jika pasokan belum cukup) ➔ diproses ➔ disetujui (atau ditolak / dibatalkan) ➔ dipacking ➔ dalam_pengiriman ➔ selesai
    ```
    - Stok cabang **hanya bertambah** saat pesanan berpindah dari `dalam_pengiriman` ke `selesai` melalui konfirmasi penerimaan oleh Mitra.
    - Penambahan stok di cabang menggunakan nilai `qty_approved` (bukan `qty_requested`).
    - Stok gudang pusat berkurang sebesar `qty_requested` saat Mitra mengajukan pesanan dalam transaksi dengan kunci baris produk (`FOR UPDATE`). Pesanan bersamaan tidak boleh memesan melebihi stok yang tersisa.
    - Penolakan atau pembatalan sebelum pengiriman mengembalikan seluruh reservasi. Persetujuan parsial mengembalikan selisih `qty_requested - qty_approved`; revisi persetujuan menyesuaikan selisih terhadap reservasi terakhir. Pengiriman dan penerimaan tidak mengurangi stok pusat lagi.
-   - Mitra dapat mengedit pesanan `diproses` dan membatalkan pesanan `diproses` atau `disetujui` sebelum pengiriman.
+   - Mitra dapat mengedit pesanan `diproses` dan membatalkan pesanan `ditunda`, `diproses`, atau `disetujui` sebelum packing.
 
 4. **Batasan Mutasi Database (Strict Mutation Boundary)**:
    - Frontend **tidak boleh** melakukan mutasi atau query langsung ke database.
@@ -168,6 +168,8 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-16
+- **Perbaikan enum status pada analitik admin dan migrasi database**: Query analitik dan konteks asisten membandingkan status pesanan melalui `status::text` agar pembacaan tidak gagal dengan PostgreSQL `22P02` ketika enum lama masih aktif. Database API telah dimigrasikan dengan `dipacking`, `ditunda`, dan kolom finansial. Migrasi finansial diperbaiki supaya pesanan lama tidak otomatis dianggap belum lunas; nilai historis dihitung dari harga produk saat migrasi.
+- **Fitur lanjutan distribusi dan operasional**: Menambahkan skema konsinyasi/beli putus, nilai pesanan selesai, termin H+7 beli putus, aksi catat lunas, ringkasan nilai beli putus dan estimasi terjual konsinyasi dari penurunan stok fisik. Pengajuan melebihi stok masuk `ditunda` dengan reservasi parsial; tambahan stok pusat mengalokasikan FIFO dan mengaktifkan pesanan siap tinjau. Alur `disetujui → dipacking → dalam_pengiriman` kini dipakai admin. Dashboard memuat kandidat deadstock, prioritas pemeriksaan, dan estimasi kebutuhan pabrik. Portal Mitra mendapat akses cepat Chat AI; Dockerfile API memuat Bun/Python dengan model privat dipasang sebagai volume. Estimasi dari laporan fisik perlu verifikasi lapangan; tagihan konsinyasi belum dibukukan otomatis. Typecheck, build web, dan 107 tes lulus; migrasi dan transaksi stok baru belum diuji pada database yang dimigrasikan.
 - **Motif grafiti onboarding diperkuat**: Huruf Daisuki kini memiliki kemiringan dan tinggi yang bervariasi, bayangan seperti lapisan cat, serta percikan garis dan titik yang lebih organik; outline tetap menjaga keterbacaan pada layar kecil.
 - **Logo Resmi Daisuki pada Judul Stok Gudang Pusat Admin**: Menggantikan ikon toko generik (`Store`) pada panel Stok Gudang Pusat di [apps/web/src/routes/admin.tsx](apps/web/src/routes/admin.tsx) dengan lencana logo resmi Daisuki (`/icons/logo.jpg`), selaras dengan identitas visual pada portal Mitra.
 - **Penerapan Font Google Sans di Seluruh Proyek**: Mengintegrasikan Google Sans sebagai font utama untuk seluruh elemen aplikasi (body, form, tombol, dialog, tabel, serta heading dan display): (1) Mengimpor Google Sans via Google Fonts `@import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap')` pada `apps/web/src/styles.css`; (2) Mengonfigurasi `--font-sans` dan `--font-display` pada Tailwind CSS v4 `@theme inline` dan `@layer base` agar seluruh hierarki teks otomatis mewarisi Google Sans; (3) Menambahkan preconnect dan stylesheet link di `apps/web/src/routes/__root.tsx` untuk loading instan bebas FOUT/FOIT; (4) Memperbarui template cetak surat jalan & resi thermal pada `delivery-receipt-modal.tsx`. Seluruh typecheck dan build production web sukses 100%.

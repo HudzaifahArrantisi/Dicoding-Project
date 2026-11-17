@@ -23,7 +23,9 @@ begin
   if not exists (select 1 from pg_type where typname = 'order_status') then
     create type order_status as enum (
       'diproses',
+      'ditunda',
       'disetujui',
+      'dipacking',
       'dalam_pengiriman',
       'selesai',
       'ditolak',
@@ -31,10 +33,15 @@ begin
     );
   end if;
 
+  alter type order_status add value if not exists 'dipacking';
+  alter type order_status add value if not exists 'ditunda';
+
   if not exists (select 1 from pg_type where typname = 'stock_source') then
     create type stock_source as enum ('manual_update', 'order_received', 'adjustment');
   end if;
 end $$;
+DO $$ BEGIN CREATE TYPE distribution_scheme AS ENUM ('konsinyasi', 'beli_putus'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('belum_lunas', 'lunas', 'jatuh_tempo'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 alter type user_role add value if not exists 'data_science';
 alter type user_role add value if not exists 'ai_engineer';
 
@@ -43,6 +50,7 @@ alter type user_role add value if not exists 'ai_engineer';
 -- A. Mitra Cabang (Partners)
 create table if not exists partners (
   id uuid primary key default gen_random_uuid(),
+  distribution_scheme distribution_scheme not null default 'konsinyasi',
   name text not null,
   type partner_type not null,
   type_other text,
@@ -218,6 +226,10 @@ create table if not exists orders (
   order_no text not null unique,
   partner_id uuid not null references partners(id) on delete cascade,
   status order_status not null default 'diproses',
+  distribution_scheme distribution_scheme not null default 'konsinyasi',
+  payment_status payment_status,
+  payment_due_date timestamptz,
+  total_amount numeric(14,2) not null default 0,
   note text,
   admin_note text,
   rejected_reason text,
@@ -240,6 +252,12 @@ alter table orders add column if not exists delivery_code varchar(32);
 alter table orders add column if not exists delivery_qr_token text;
 alter table orders add column if not exists delivery_code_claimed_at timestamptz;
 alter table orders add column if not exists cycle_period varchar(20) not null default 'weekly';
+alter table partners add column if not exists distribution_scheme distribution_scheme not null default 'konsinyasi';
+alter table orders add column if not exists distribution_scheme distribution_scheme not null default 'konsinyasi';
+alter table orders add column if not exists payment_status payment_status;
+alter table orders add column if not exists payment_due_date timestamptz;
+alter table orders add column if not exists total_amount numeric(14,2) not null default 0;
+create index if not exists orders_payment_due_idx on orders (payment_due_date) where payment_status = 'belum_lunas';
 create unique index if not exists idx_orders_delivery_code on orders (delivery_code);
 create unique index if not exists idx_orders_qr_token on orders (delivery_qr_token);
 create index if not exists orders_partner_created_idx on orders (partner_id, created_at desc);
