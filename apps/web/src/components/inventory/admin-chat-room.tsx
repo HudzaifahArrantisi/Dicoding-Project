@@ -44,7 +44,7 @@ const ADMIN_SUGGESTION_CARDS = [
     icon: AlertTriangle,
     title: 'Cabang Kritis & Belum Lapor',
     desc: 'Daftar cabang mitra dengan stok ≤ 20% atau belum update > 24 jam',
-    prompt: 'Tolong tampilkan daftar cabang mitra yang stoknya kritis atau belum lapor stok fisik hari ini.',
+    prompt: 'Tolong tampilkan daftar cabang mitra yang stoknya kritis atau belum lapor/update stok fisik hari ini.',
   },
   {
     icon: PackageCheck,
@@ -89,6 +89,15 @@ export function AdminChatRoom({
 
   const active = sessions.find((item) => item.session_id === sessionId)
   const closed = active?.is_closed ?? false
+
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSidebarOpen(false)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [sidebarOpen])
 
   async function refreshSessions() {
     try {
@@ -274,7 +283,7 @@ export function AdminChatRoom({
                 type="button"
                 onClick={() => setSidebarOpen(false)}
                 aria-label="Tutup sidebar"
-                className="grid size-9 place-items-center rounded-lg text-ink-500 hover:bg-ink-100 hover:text-ink-900"
+                className="grid size-11 place-items-center rounded-lg text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-900"
               >
                 <X className="size-4" />
               </button>
@@ -395,7 +404,7 @@ export function AdminChatRoom({
                           ? 'Buka kembali sesi'
                           : 'Tutup sesi'
                     }
-                    className="grid min-h-[38px] min-w-[38px] place-items-center rounded-lg text-[11px] font-semibold text-ink-600 hover:bg-ink-200/70 hover:text-ink-950 disabled:opacity-30"
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg text-[11px] font-semibold text-ink-600 hover:bg-ink-200/70 hover:text-ink-950 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-ink-900"
                   >
                     {togglingSessionId === item.session_id ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -413,7 +422,7 @@ export function AdminChatRoom({
                     }}
                     disabled={deleting || busy || ending || Boolean(togglingSessionId)}
                     title="Hapus sesi ini"
-                    className="grid min-h-[38px] min-w-[38px] place-items-center rounded-lg text-ink-400 hover:bg-red-50 hover:text-crit-fg disabled:opacity-30"
+                    className="grid min-h-11 min-w-11 place-items-center rounded-lg text-ink-400 hover:bg-red-50 hover:text-crit-fg disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-ink-900"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
@@ -429,7 +438,7 @@ export function AdminChatRoom({
   return (
     <section
       aria-label="Ruang Chat AI Admin Daisuki Pusat"
-      className="flex h-[calc(100dvh-12rem)] min-h-[500px] overflow-hidden rounded-2xl border border-line bg-surface shadow-xs transition-all sm:h-[calc(100dvh-11rem)]"
+      className="flex h-[calc(100dvh-13rem)] min-h-[320px] overflow-hidden rounded-xl border border-line bg-surface shadow-xs sm:h-[calc(100dvh-13rem)] sm:min-h-[500px] lg:h-[calc(100dvh-11rem)] lg:rounded-2xl"
     >
       {/* Mobile Drawer Backdrop with Smooth Fade */}
       <div
@@ -444,7 +453,9 @@ export function AdminChatRoom({
       <aside
         id="admin-chat-history-drawer-mobile"
         aria-label="Riwayat Chat Admin Mobile"
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(86vw,320px)] flex-col border-r border-line bg-white shadow-2xl transition-transform duration-300 ease-out lg:hidden ${
+        aria-hidden={!sidebarOpen}
+        inert={!sidebarOpen}
+        className={`fixed inset-y-0 left-0 z-50 flex w-[min(86vw,320px)] flex-col border-r border-line bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl transition-transform duration-300 ease-out lg:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -467,13 +478,13 @@ export function AdminChatRoom({
       {/* Main Admin Conversation Feed */}
       <div className="flex min-w-0 flex-1 flex-col bg-white">
         {/* Header Ruang Chat */}
-        <header className="flex min-h-16 items-center justify-between gap-3 border-b border-line px-4 sm:px-6">
+        <header className="flex flex-col gap-2 border-b border-line px-3 py-3 sm:min-h-16 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-0">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
               aria-label="Buka riwayat chat"
-              className="grid size-10 shrink-0 place-items-center rounded-lg border border-line text-ink-700 hover:bg-paper lg:hidden"
+              className="grid size-11 shrink-0 place-items-center rounded-lg border border-line text-ink-700 hover:bg-paper focus-visible:outline-2 focus-visible:outline-ink-900 lg:hidden"
             >
               <Menu className="size-5" />
             </button>
@@ -506,7 +517,7 @@ export function AdminChatRoom({
                 <h1 className="truncate font-display text-sm font-bold text-ink-950 sm:text-base">
                   Pusat Analisis Admin
                 </h1>
-                <span className="rounded-md border border-line bg-paper px-2 py-0.5 text-[10px] font-medium text-ink-700">
+                <span className="hidden rounded-md border border-line bg-paper px-2 py-0.5 text-[10px] font-medium text-ink-700 sm:inline">
                   Admin Pusat
                 </span>
               </div>
@@ -517,13 +528,13 @@ export function AdminChatRoom({
           </div>
 
           {/* Action Header */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             {closed ? (
               <button
                 type="button"
                 onClick={() => active && void toggleSession(active)}
                 disabled={busy || Boolean(togglingSessionId)}
-                className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-xs font-semibold text-ink-800 hover:bg-white active:scale-95 transition-colors"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-xs font-semibold text-ink-800 hover:bg-white active:scale-95 transition-colors focus-visible:outline-2 focus-visible:outline-ink-900"
               >
                 <RefreshCw className="size-3.5" />
                 <span>Buka Kembali</span>
@@ -533,7 +544,7 @@ export function AdminChatRoom({
                 type="button"
                 onClick={() => void closeSession()}
                 disabled={busy || ending || closed || messages.length === 0}
-                className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-semibold text-ink-700 hover:bg-paper hover:text-ink-950 disabled:opacity-40 transition-colors"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-semibold text-ink-700 hover:bg-paper hover:text-ink-950 disabled:opacity-40 transition-colors focus-visible:outline-2 focus-visible:outline-ink-900"
               >
                 {ending ? (
                   <>
@@ -554,7 +565,7 @@ export function AdminChatRoom({
         {/* Feed Percakapan */}
         <div
           ref={feedRef}
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
+          className="min-h-0 min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
           aria-live="polite"
         >
           {loading ? (
@@ -612,7 +623,7 @@ export function AdminChatRoom({
             return (
               <div
                 key={item.id}
-                className={`flex max-w-3xl gap-2.5 ${
+                className={`flex w-full min-w-0 max-w-3xl gap-2 ${
                   isUser ? 'ml-auto justify-end' : 'mr-auto justify-start'
                 }`}
               >
@@ -623,14 +634,14 @@ export function AdminChatRoom({
                 ) : null}
 
                 <div
-                  className={`relative max-w-[88%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed transition-all ${
+                  className={`relative min-w-0 max-w-[calc(100%-2.5rem)] break-words rounded-2xl px-3 py-2.5 text-sm leading-relaxed transition-all sm:max-w-[88%] sm:px-4 sm:py-3 ${
                     isUser
                       ? 'rounded-tr-xs bg-ink-900 text-white shadow-xs'
                       : 'rounded-tl-xs border border-line bg-surface/60 text-ink-900 shadow-xs'
                   }`}
                 >
                   {isUser ? (
-                    <p className="whitespace-pre-wrap">{item.text}</p>
+                    <p className="whitespace-pre-wrap break-words">{item.text}</p>
                   ) : (
                     <AssistantMessageText text={item.text} />
                   )}
@@ -679,7 +690,7 @@ export function AdminChatRoom({
         </div>
 
         {/* Footer Input Area */}
-        <footer className="border-t border-line bg-surface/30 p-3 sm:p-4">
+        <footer className="border-t border-line bg-surface/30 p-2.5 sm:p-4">
           {error ? (
             <p role="alert" className="mb-2 text-center text-xs font-medium text-crit-fg">
               {error}
@@ -687,12 +698,12 @@ export function AdminChatRoom({
           ) : null}
 
           {closed ? (
-            <div className="flex items-center justify-between rounded-xl border border-line bg-surface/60 px-4 py-3 text-xs text-muted">
+            <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface/60 px-3 py-3 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:px-4">
               <span>Sesi ini telah diakhiri. Buka kembali sesi atau buat chat baru.</span>
               <button
                 type="button"
                 onClick={() => active && void toggleSession(active)}
-                className="font-bold text-ink-900 hover:underline"
+                className="min-h-11 self-start font-bold text-ink-900 hover:underline sm:self-auto"
               >
                 Buka Kembali Sesi Ini
               </button>
@@ -703,7 +714,7 @@ export function AdminChatRoom({
                 e.preventDefault()
                 void send()
               }}
-              className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-line bg-white p-2 shadow-xs focus-within:border-ink-900 focus-within:ring-1 focus-within:ring-ink-900"
+              className="mx-auto flex max-w-3xl min-w-0 items-end gap-2 rounded-xl border border-line bg-white p-1.5 shadow-xs focus-within:border-ink-900 focus-within:ring-1 focus-within:ring-ink-900 sm:p-2"
             >
               <label htmlFor="admin-chat-draft" className="sr-only">
                 Tulis pertanyaan analitik untuk Asisten Admin
@@ -721,9 +732,9 @@ export function AdminChatRoom({
                   }
                 }}
                 maxLength={600}
-                placeholder="Tanyakan stok gudang pusat, cabang kritis, model ML, atau dokumen penelitian..."
+                placeholder="Tulis pertanyaan..."
                 disabled={busy || Boolean(togglingSessionId)}
-                className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2 text-xs sm:text-sm text-ink-950 placeholder:text-ink-400 focus:outline-hidden"
+                className="max-h-32 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink-950 placeholder:text-ink-400 focus:outline-hidden sm:px-3 sm:text-sm"
               />
               <button
                 type="submit"

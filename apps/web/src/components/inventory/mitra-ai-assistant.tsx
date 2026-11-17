@@ -178,7 +178,7 @@ export function AssistantMessageText({ text }: { text: string }) {
     else blocks.push({ kind, lines: [content] })
     startNewBlock = false
   }
-  return <div className="space-y-2.5 break-words">
+  return <div className="min-w-0 max-w-full space-y-2.5 break-words [overflow-wrap:anywhere]">
     {blocks.map((block, index) => {
       if (block.kind === 'heading') {
         return <h3 key={index} className="font-display text-sm font-bold text-ink-950 pt-1">{inlineText(block.lines[0])}</h3>
@@ -210,8 +210,9 @@ export function AssistantMessageText({ text }: { text: string }) {
         if (rows.length === 0) return null
         const [header, ...body] = rows
         return (
-          <div key={index} className="my-2 overflow-x-auto rounded-lg border border-line bg-white">
-            <table className="w-full border-collapse text-left text-xs tabular-nums">
+          <div key={index} className="my-2 max-w-full">
+            <div role="region" aria-label="Tabel jawaban" tabIndex={0} className="max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-line bg-white focus-visible:outline-2 focus-visible:outline-ink-900">
+              <table className={`w-full border-collapse text-left text-xs tabular-nums ${header.length >= 3 ? 'min-w-[440px]' : ''}`}>
               <thead>
                 <tr className="border-b border-line bg-ink-900/5 text-ink-900">
                   {header.map((cell, cellIdx) => (
@@ -228,7 +229,9 @@ export function AssistantMessageText({ text }: { text: string }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
+            {header.length >= 3 ? <p className="mt-1 text-[11px] text-muted sm:hidden">Geser tabel untuk melihat kolom lainnya.</p> : null}
           </div>
         )
       }

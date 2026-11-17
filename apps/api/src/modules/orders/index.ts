@@ -195,10 +195,10 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         COALESCE(SUM(sl.qty_before - sl.qty_after)
           FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::int AS units_7d,
         COALESCE(SUM((sl.qty_before - sl.qty_after) *
-          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK} ELSE ${RETAIL_PRICE_OTHER} END)
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END)
           FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::text AS gross_7d,
         COALESCE(SUM((sl.qty_before - sl.qty_after) *
-          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK} ELSE ${RETAIL_PRICE_OTHER} END), 0)::text AS gross_30d
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END), 0)::text AS gross_30d
       FROM stock_logs sl
       JOIN partners pa ON pa.id = sl.partner_id
       JOIN products pr ON pr.id = sl.product_id
