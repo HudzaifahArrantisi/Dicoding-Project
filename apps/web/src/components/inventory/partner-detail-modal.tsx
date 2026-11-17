@@ -20,16 +20,12 @@ export function PartnerDetailModal({
   onOpenChange,
   onEdit,
   onDelete,
-  onSchemeChange,
-  schemePending = false,
 }: {
   partner: ManagedPartner | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onEdit: (partner: ManagedPartner) => void
   onDelete: (partner: ManagedPartner) => void
-  onSchemeChange: (partner: ManagedPartner, scheme: 'konsinyasi' | 'beli_putus') => void
-  schemePending?: boolean
 }) {
   const [copied, setCopied] = useState(false)
 
@@ -89,13 +85,9 @@ export function PartnerDetailModal({
 
           {/* Body Content */}
           <div className="space-y-4 p-5">
-            <div className="rounded-lg border border-line bg-white p-4">
-              <label htmlFor="partner-distribution-scheme" className="block text-sm font-semibold text-ink-900">Skema distribusi</label>
-              <select id="partner-distribution-scheme" value={partner.distribution_scheme} disabled={schemePending} onChange={(event) => onSchemeChange(partner, event.target.value as 'konsinyasi' | 'beli_putus')} className="mt-2 min-h-12 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink-900">
-                <option value="konsinyasi">Konsinyasi · bayar barang terjual</option>
-                <option value="beli_putus">Beli putus · tempo 7 hari</option>
-              </select>
-              <p className="mt-2 text-xs text-muted">Perubahan berlaku untuk pesanan baru. Tagihan pesanan yang sudah dibuat tetap mengikuti skema awal.</p>
+            <div className="rounded-lg border border-line bg-white p-4 text-sm text-ink-800">
+              <p className="font-semibold text-ink-900">Titip jual</p>
+              <p className="mt-1 text-xs text-muted">Penjualan diestimasi dari log stok keluar yang dicatat mitra.</p>
             </div>
             {/* PIC Information */}
             <div className="rounded-lg border border-line bg-white p-4 shadow-2xs">

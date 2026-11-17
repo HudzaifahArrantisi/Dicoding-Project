@@ -31,8 +31,7 @@ export const orderStatusEnum = pgEnum("order_status", [
   "ditolak",
   "dibatalkan",
 ]);
-export const distributionSchemeEnum = pgEnum("distribution_scheme", ["konsinyasi", "beli_putus"]);
-export const paymentStatusEnum = pgEnum("payment_status", ["belum_lunas", "lunas", "jatuh_tempo"]);
+export const distributionSchemeEnum = pgEnum("distribution_scheme", ["konsinyasi"]);
 export const stockSourceEnum = pgEnum("stock_source", [
   "manual_update",
   "order_received",
@@ -193,9 +192,6 @@ export const orders = pgTable("orders", {
     .references(() => partners.id),
   status: orderStatusEnum("status").notNull().default("diproses"),
   distribution_scheme: distributionSchemeEnum("distribution_scheme").notNull().default("konsinyasi"),
-  payment_status: paymentStatusEnum("payment_status"),
-  payment_due_date: timestamp("payment_due_date", { withTimezone: true }),
-  total_amount: numeric("total_amount", { precision: 14, scale: 2 }).notNull().default("0"),
   note: text("note"),
   admin_note: text("admin_note"),
   rejected_reason: text("rejected_reason"),

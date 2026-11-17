@@ -23,9 +23,8 @@ Bacalah seluruh pedoman bisnis, arsitektur teknis, dan batasan sistem di bawah i
      3. Makaroni Daun Jeruk
      4. Keripik Pisang Rasa Coklat
 
-2. **Skema Distribusi & Transisi Bisnis**:
-   - **Konsinyasi (Titip Jual)**: Stok opname mingguan via pelaporan fisik mitra, pembayaran berbasis barang yang terjual.
-   - **Beli Putus (Prioritas Baru)**: Mitra membeli langsung dengan termin pembayaran tempo 1 minggu setelah barang diterima.
+2. **Skema Distribusi**:
+   - **Titip Jual**: Barang yang diterima mitra menjadi stok cabang. Estimasi penjualan dihitung dari log penurunan stok fisik yang dicatat mitra, dengan harga normal Rp27.500/pcs untuk Seblak dan Rp25.000/pcs untuk produk lain.
    - **Aturan Deadstock (Pencegahan Macet)**: Barang yang tidak terjual dalam waktu 1 bulan (maksimal 3 bulan) wajib diberi tanda peringatan untuk ditarik kembali oleh tim direct sales lapangan agar perputaran kas sehat dan mencegah barang kadaluarsa.
 
 3. **Siklus Restock Pabrik & Pre-Order (PO)**:
@@ -50,19 +49,10 @@ Bacalah seluruh pedoman bisnis, arsitektur teknis, dan batasan sistem di bawah i
 
 ## 3. RENCANA TUGAS & TAHAPAN IMPLEMENTASI (PHASE-BY-PHASE)
 
-### FASE 1: Modul Finansial, Omzet, & Skema Pembayaran
-- [ ] **Skema Database**:
-  - Tambahkan kolom pada tabel `orders` / `partners`:
-    - `distribution_scheme`: `'konsinyasi'` | `'beli_putus'`
-    - `payment_status`: `'belum_lunas'` | `'lunas'` | `'jatuh_tempo'`
-    - `payment_due_date`: `timestamptz` (dihitung H+7 dari `completed_at` untuk skema beli putus)
-    - `total_amount`: `numeric(14, 2)` (kalkulasi dari `sum(qty_approved * b2b_price)`)
-- [ ] **API & Backend**:
-  - Endpoint kalkulasi total omzet kotor mingguan & bulanan mitra.
-  - Endpoint pelacakan status penagihan tempo pembayaran untuk pesanan yang telah selesai.
-- [ ] **Frontend**:
-  - Widget metrik Omzet Kotor & Status Pembayaran di Dashboard Admin.
-  - Ringkasan nilai pesanan dan status tempo di detail pesanan portal Mitra.
+### FASE 1: Estimasi Penjualan Titip Jual
+- [x] **API & Backend**: Agregasi log `manual_update` dengan `qty_before > qty_after` untuk estimasi penjualan 7 dan 30 hari, terisolasi menurut mitra pada portal Mitra.
+- [x] **Frontend**: Tampilkan estimasi penjualan mitra dan seluruh cabang di dashboard; rincian per mitra tersedia di daftar Stok Cabang.
+- [ ] **Verifikasi lapangan**: Cocokkan penurunan stok fisik dengan penjualan sebelum dipakai untuk penagihan.
 
 ### FASE 2: Penyempurnaan Alur Pesanan (`Dipacking` & `Ditunda / Backorder`)
 - [ ] **Siklus Status Baru**:

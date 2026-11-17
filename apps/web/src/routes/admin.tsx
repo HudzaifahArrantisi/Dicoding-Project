@@ -61,7 +61,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { getFinanceSummary, getOperationalInsights, markOrderPaid, updatePartnerScheme, type FinanceSummary, type OperationalInsights } from '@/lib/api/orders'
+import { getFinanceSummary, getOperationalInsights, type FinanceSummary, type OperationalInsights } from '@/lib/api/orders'
 import {
   EmptyState,
   ErrorState,
@@ -2643,6 +2643,7 @@ function AdminDashboard() {
     queryFn: getFinanceSummary,
     enabled: user?.role === 'admin' && tab === 'stocks',
     staleTime: 60_000,
+    refetchInterval: 60_000,
   })
   const operationalInsights = useQuery<OperationalInsights>({
     queryKey: ['admin-operational-insights'],
@@ -2886,7 +2887,7 @@ function AdminDashboard() {
   }
 
   return (
-    <div className="dashboard-page admin-dashboard min-h-screen pb-24 text-text lg:flex lg:pb-0">
+    <div className={`dashboard-page admin-dashboard text-text ${tab === 'chat' ? 'flex h-dvh flex-col overflow-hidden lg:flex-row' : 'min-h-screen pb-24 lg:flex lg:pb-0'}`}>
       <AdminSidebar
         tab={tab}
         onSelectTab={setTab}
@@ -2896,7 +2897,7 @@ function AdminDashboard() {
         onLogout={() => { void logout().then(() => navigate({ to: '/login' })).catch((error) => toast.error(getErrorMessage(error))) }}
       />
 
-      <div className="min-w-0 flex-1">
+      <div className={tab === 'chat' ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'min-w-0 flex-1'}>
         <header className="admin-topbar sticky top-0 z-30 border-b border-line bg-white">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
@@ -2943,13 +2944,13 @@ function AdminDashboard() {
           </div>
         </header>
 
-        <main className="mx-auto min-w-0 max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28 lg:pb-8">
+        <main className={`mx-auto min-w-0 max-w-7xl px-4 sm:px-6 lg:px-8 ${tab === 'chat' ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pt-4 lg:pb-4' : 'space-y-6 py-6 pb-28 sm:py-8 lg:pb-8'}`}>
           {tab === 'stocks' && finance.data ? (
-            <section aria-label="Omzet dan pembayaran" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Nilai beli putus 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.gross_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Nilai beli putus 30 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.gross_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Total omzet kotor 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.stock_outflow_gross_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">{finance.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs keluar dari seluruh mitra. Seblak Rp27.500, lainnya Rp25.000/pcs. Estimasi dari perubahan stok.</p></div>
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Tagihan belum lunas</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{finance.data.unpaid_count} pesanan</strong><p className="text-sm text-crit-fg">{finance.data.overdue_count} lewat jatuh tempo</p></div>
+            <section aria-label="Estimasi penjualan titip jual" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan hari ini</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">{finance.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini · WIB</p></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">Dari {finance.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs keluar di seluruh mitra.</p></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan 30 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm font-semibold text-ink-900">Dasar perhitungan</p><p className="mt-1 text-xs text-muted">Log stok keluar mitra. Seblak Rp27.500/pcs, produk lainnya Rp25.000/pcs. Angka ini estimasi sampai stok fisik diverifikasi.</p></div>
             </section>
           ) : null}
           {tab === 'stocks' && finance.isError ? (
@@ -3588,16 +3589,6 @@ function PartnerManagementPanel() {
     onError: (error: unknown) => toast.error(getErrorMessage(error)),
   })
 
-  const changeScheme = useMutation({
-    mutationFn: (input: { id: string; scheme: 'konsinyasi' | 'beli_putus' }) => updatePartnerScheme(input.id, input.scheme),
-    onSuccess: async (_result, input) => {
-      setSelectedDetailPartner((current) => current?.id === input.id ? { ...current, distribution_scheme: input.scheme } : current)
-      toast.success('Skema distribusi mitra diperbarui untuk pesanan berikutnya')
-      await refresh()
-    },
-    onError: (error: unknown) => toast.error(getErrorMessage(error)),
-  })
-
   const [selectedPartnerIds, setSelectedPartnerIds] = useState<Set<string>>(new Set())
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
@@ -3963,8 +3954,6 @@ function PartnerManagementPanel() {
       {/* Popup Modal Detail Mitra */}
       <PartnerDetailModal
         partner={selectedDetailPartner}
-        onSchemeChange={(partner, scheme) => changeScheme.mutate({ id: partner.id, scheme })}
-        schemePending={changeScheme.isPending}
         open={selectedDetailPartner !== null}
         onOpenChange={(open) => {
           if (!open) setSelectedDetailPartner(null)
@@ -5410,26 +5399,6 @@ function ApprovalDialog({
                 <p className="font-semibold">Menunggu pasokan pabrik</p>
                 <p className="mt-1">Pesanan diproses otomatis sesuai urutan pengajuan ketika stok pusat ditambah. Estimasi pre-order hingga dua minggu perlu dikonfirmasi ke pabrik.</p>
                 {order.items.map((item) => <p key={item.id} className="mt-2 tabular-nums">{item.product_name}: {item.qty_reserved} dari {item.qty_requested} pcs sudah direservasi</p>)}
-              </div>
-            ) : null}
-            {order.status === 'selesai' ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-paper/50 p-4 text-sm">
-                <div>
-                  <p className="font-semibold text-ink-900">{order.distribution_scheme === 'beli_putus' ? 'Tagihan beli putus' : 'Nilai barang konsinyasi'}</p>
-                  <p className="tabular-nums text-ink-800">{Number(order.total_amount ?? 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</p>
-                  {order.payment_due_date ? <p className="text-xs text-muted">Jatuh tempo {new Date(order.payment_due_date).toLocaleDateString('id-ID')}</p> : null}
-                  {order.payment_status ? <p className="text-xs text-muted">Status: {order.payment_status === 'lunas' ? 'Lunas' : order.payment_status === 'jatuh_tempo' ? 'Lewat jatuh tempo' : 'Belum lunas'}</p> : null}
-                </div>
-                {order.distribution_scheme === 'beli_putus' && order.payment_status !== 'lunas' ? (
-                  <button type="button" className="min-h-12 rounded-lg bg-ink-900 px-4 text-sm font-semibold text-white" onClick={() => void runAction(async () => {
-                    await markOrderPaid(order.id)
-                    await Promise.all([
-                      queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
-                      queryClient.invalidateQueries({ queryKey: ['admin-finance-summary'] }),
-                    ])
-                    toast.success('Pembayaran dicatat lunas')
-                  }, false)}>Catat sudah lunas</button>
-                ) : null}
               </div>
             ) : null}
             {/* Banner Status Persetujuan & Informasi Kesiapan Pengiriman */}

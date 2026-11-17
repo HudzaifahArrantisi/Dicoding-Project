@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Loader2, MessageCircle, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
-import { ChatToolChart, ChatToolFlowDiagram, ChatToolPdfExport, type ChartToolData, type FlowDiagramData } from '@/components/inventory/chat-tools'
+import {
+  ChatToolChart,
+  ChatToolFlowDiagram,
+  ChatToolPdfExport,
+  CopyButton,
+  type ChartToolData,
+  type FlowDiagramData,
+} from '@/components/inventory/chat-tools'
 import {
   askMitraAssistant,
   clearMitraAssistantHistory,
@@ -187,7 +194,22 @@ export function AssistantMessageText({ text }: { text: string }) {
         const diagram = parseMermaidDiagram(block.lines.join('\n'))
         if (diagram?.kind === 'chart') return <ChatToolChart key={index} data={diagram.data} />
         if (diagram?.kind === 'flow') return <ChatToolFlowDiagram key={index} data={diagram.data} />
-        return <pre key={index} className="overflow-x-auto rounded-lg bg-ink-900 p-3 text-xs leading-relaxed text-white"><code>{block.lines.join('\n')}</code></pre>
+        const codeText = block.lines.join('\n')
+        return (
+          <div key={index} className="my-2.5 overflow-hidden rounded-xl border border-line bg-ink-950 shadow-xs">
+            <div className="flex items-center justify-between border-b border-ink-800 bg-ink-900/90 px-3.5 py-1.5 text-[11px] text-ink-300">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-ink-400">Kode / Output</span>
+              <CopyButton
+                text={codeText}
+                label="Salin Kode"
+                className="inline-flex min-h-[26px] items-center gap-1 rounded-md border border-ink-700/60 bg-ink-800/80 px-2 py-0.5 text-[10px] font-medium text-ink-200 transition-colors hover:bg-ink-700 hover:text-white focus-visible:outline-2 focus-visible:outline-ink-400"
+              />
+            </div>
+            <pre className="overflow-x-auto p-3.5 text-xs font-mono leading-relaxed text-ink-50">
+              <code>{codeText}</code>
+            </pre>
+          </div>
+        )
       }
       if (block.kind === 'tool_chart') {
         try {
@@ -210,21 +232,21 @@ export function AssistantMessageText({ text }: { text: string }) {
         if (rows.length === 0) return null
         const [header, ...body] = rows
         return (
-          <div key={index} className="my-2 max-w-full">
-            <div role="region" aria-label="Tabel jawaban" tabIndex={0} className="max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-line bg-white focus-visible:outline-2 focus-visible:outline-ink-900">
+          <div key={index} className="my-3 max-w-full">
+            <div role="region" aria-label="Tabel jawaban" tabIndex={0} className="max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-line bg-white shadow-2xs focus-visible:outline-2 focus-visible:outline-ink-900">
               <table className={`w-full border-collapse text-left text-xs tabular-nums ${header.length >= 3 ? 'min-w-[440px]' : ''}`}>
               <thead>
-                <tr className="border-b border-line bg-ink-900/5 text-ink-900">
+                <tr className="border-b border-line bg-surface/90 text-ink-950">
                   {header.map((cell, cellIdx) => (
-                    <th key={cellIdx} className="px-3 py-2 font-semibold">{inlineText(cell)}</th>
+                    <th key={cellIdx} className="px-3.5 py-2.5 font-bold tracking-tight">{inlineText(cell)}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line">
+              <tbody className="divide-y divide-line/60">
                 {body.map((row, rowIdx) => (
-                  <tr key={rowIdx} className="hover:bg-paper/60">
+                  <tr key={rowIdx} className="hover:bg-paper/70 transition-colors">
                     {row.map((cell, cellIdx) => (
-                      <td key={cellIdx} className="px-3 py-2 align-top text-ink-800">{inlineText(cell)}</td>
+                      <td key={cellIdx} className="px-3.5 py-2.5 align-top text-ink-800">{inlineText(cell)}</td>
                     ))}
                   </tr>
                 ))}

@@ -52,10 +52,6 @@ export interface Order {
   partner_type: string
   partner_address?: string | null
   status: OrderStatus
-  distribution_scheme?: 'konsinyasi' | 'beli_putus'
-  payment_status?: 'belum_lunas' | 'lunas' | 'jatuh_tempo' | null
-  payment_due_date?: string | null
-  total_amount?: string
   status_label: string
   note: string | null
   admin_note?: string | null
@@ -103,7 +99,6 @@ export type PartnerType = 'hotel' | 'restoran' | 'kafe' | 'minimarket' | 'lainny
 export interface ManagedPartner {
   id: string
   name: string
-  distribution_scheme: 'konsinyasi' | 'beli_putus'
   type: PartnerType
   type_other: string | null
   address: string | null

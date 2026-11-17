@@ -7,16 +7,12 @@ export interface CreateOrderItemPayload {
 }
 
 export interface FinanceSummary {
-  gross_7d: string
-  gross_30d: string
-  consignment_estimate_7d: string
-  consignment_estimate_30d: string
-  stock_outflow_gross_7d: string
+  sales_estimate_today: string
+  sales_estimate_7d: string
+  sales_estimate_30d: string
+  stock_outflow_units_today: number
   stock_outflow_units_7d: number
   stock_outflow_by_partner_7d: Array<{ partner_id: string; gross_7d: string; units_7d: number }>
-  unpaid_count: number
-  overdue_count: number
-  unpaid_amount: string
 }
 
 export async function getFinanceSummary(): Promise<FinanceSummary> {
@@ -34,14 +30,6 @@ export interface OperationalInsights {
 export async function getOperationalInsights(): Promise<OperationalInsights> {
   const response = await apiClient.get<{ data: OperationalInsights }>('/orders/finance/insights')
   return response.data
-}
-
-export async function markOrderPaid(id: string): Promise<void> {
-  await apiClient.patch(`/orders/finance/${encodeURIComponent(id)}/paid`, {})
-}
-
-export async function updatePartnerScheme(id: string, distribution_scheme: 'konsinyasi' | 'beli_putus'): Promise<void> {
-  await apiClient.patch(`/orders/finance/partners/${encodeURIComponent(id)}/scheme`, { distribution_scheme })
 }
 
 export interface CreateOrderPayload {

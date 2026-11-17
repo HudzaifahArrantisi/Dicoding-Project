@@ -40,8 +40,7 @@ begin
     create type stock_source as enum ('manual_update', 'order_received', 'adjustment');
   end if;
 end $$;
-DO $$ BEGIN CREATE TYPE distribution_scheme AS ENUM ('konsinyasi', 'beli_putus'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('belum_lunas', 'lunas', 'jatuh_tempo'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE distribution_scheme AS ENUM ('konsinyasi'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 alter type user_role add value if not exists 'data_science';
 alter type user_role add value if not exists 'ai_engineer';
 
@@ -227,9 +226,6 @@ create table if not exists orders (
   partner_id uuid not null references partners(id) on delete cascade,
   status order_status not null default 'diproses',
   distribution_scheme distribution_scheme not null default 'konsinyasi',
-  payment_status payment_status,
-  payment_due_date timestamptz,
-  total_amount numeric(14,2) not null default 0,
   note text,
   admin_note text,
   rejected_reason text,
@@ -254,10 +250,11 @@ alter table orders add column if not exists delivery_code_claimed_at timestamptz
 alter table orders add column if not exists cycle_period varchar(20) not null default 'weekly';
 alter table partners add column if not exists distribution_scheme distribution_scheme not null default 'konsinyasi';
 alter table orders add column if not exists distribution_scheme distribution_scheme not null default 'konsinyasi';
-alter table orders add column if not exists payment_status payment_status;
-alter table orders add column if not exists payment_due_date timestamptz;
-alter table orders add column if not exists total_amount numeric(14,2) not null default 0;
-create index if not exists orders_payment_due_idx on orders (payment_due_date) where payment_status = 'belum_lunas';
+update partners set distribution_scheme = 'konsinyasi' where distribution_scheme <> 'konsinyasi';
+DO $$ BEGIN
+  ALTER TABLE partners ADD CONSTRAINT partners_consignment_only
+    CHECK (distribution_scheme = 'konsinyasi');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 create unique index if not exists idx_orders_delivery_code on orders (delivery_code);
 create unique index if not exists idx_orders_qr_token on orders (delivery_qr_token);
 create index if not exists orders_partner_created_idx on orders (partner_id, created_at desc);

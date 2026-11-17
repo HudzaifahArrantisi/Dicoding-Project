@@ -151,7 +151,6 @@ function MitraPortal() {
   useInventoryEvents(user?.role === 'mitra', 'mitra')
   const [activeTab, setActiveTab] = useState<PortalTab>(chat ? 'chat' : 'stocks')
   const [lastChatId, setLastChatId] = useState<string | null>(chat ?? null)
-  const [chatDraft, setChatDraft] = useState('')
   useEffect(() => { if (chat) { setActiveTab('chat'); setLastChatId(chat) } }, [chat])
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const activeIndex = Math.max(
@@ -204,6 +203,7 @@ function MitraPortal() {
   const financeQuery = useQuery<FinanceSummary>({
     queryKey: ['mitra-finance-summary'], queryFn: getFinanceSummary,
     enabled: user?.role === 'mitra' && activeTab === 'stocks', staleTime: 60_000,
+    refetchInterval: 60_000,
   })
 
   const ordersQuery = useQuery<Order[]>({
@@ -317,6 +317,7 @@ function MitraPortal() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mitra-stocks'] }),
         queryClient.invalidateQueries({ queryKey: ['mitra-stock-logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['mitra-finance-summary'] }),
       ])
       toast.success('Stok tersimpan')
     },
@@ -489,7 +490,7 @@ function MitraPortal() {
   }
 
   return (
-    <div className="dashboard-page mitra-dashboard min-h-screen bg-[#f6f7f9] pb-44 sm:pb-48 font-sans text-text">
+    <div className={`dashboard-page mitra-dashboard bg-[#f6f7f9] font-sans text-text ${activeTab === 'chat' ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen pb-44 sm:pb-48'}`}>
       <header className="sticky top-0 z-20 border-b border-line bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <button
@@ -527,33 +528,14 @@ function MitraPortal() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:pr-28">
+      <main className={`mx-auto max-w-6xl px-4 sm:px-6 lg:pr-28 ${activeTab === 'chat' ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pt-4 lg:pb-4' : 'py-6 sm:py-8'}`}>
         {activeTab === 'stocks' && financeQuery.data ? (
           <div className="mb-4 rounded-xl border border-line bg-white p-3 text-sm text-ink-800">
-            <p>Nilai beli putus 7 hari: <strong className="num tabular-nums">{Number(financeQuery.data.gross_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
-            <p className="mt-1">Estimasi terjual konsinyasi: <strong className="num tabular-nums">{Number(financeQuery.data.consignment_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
+            <p>Estimasi penjualan hari ini (WIB): <strong className="num tabular-nums">{Number(financeQuery.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
+            <p className="mt-1 text-xs text-muted">{financeQuery.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini.</p>
+            <p className="mt-3 border-t border-line pt-3">Estimasi penjualan 7 hari: <strong className="num tabular-nums">{Number(financeQuery.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
+            <p className="mt-1 text-xs text-muted">Dihitung dari {financeQuery.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs pada log stok keluar Anda.</p>
           </div>
-        ) : null}
-        {activeTab === 'stocks' ? (
-          <section aria-label="Akses cepat asisten Daisuki" className="mb-6 rounded-2xl border border-line bg-white p-4 sm:p-5">
-            <div className="flex items-center gap-3">
-              <img src="/icons/logo.jpg" alt="" className="size-12 rounded-full object-cover" />
-              <div className="min-w-0 flex-1">
-                <h2 className="font-display text-base font-bold text-ink-900">Butuh bantuan stok atau penjualan?</h2>
-                <p className="text-sm text-ink-700">Tanya Asisten Daisuki dengan bahasa sehari-hari.</p>
-              </div>
-            </div>
-            <button type="button" onClick={() => openTab('chat')} className="mt-4 min-h-12 w-full rounded-xl bg-ink-900 px-4 text-sm font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:w-auto">
-              Tanya Asisten Daisuki (Stok & Penjualan)
-            </button>
-            <div className="mt-3 flex flex-wrap gap-2" aria-label="Contoh pertanyaan cepat">
-              {['Cek sisa stok saya', 'Berapa penjualan minggu ini?', 'Bantu pesan barang'].map((prompt) => (
-                <button key={prompt} type="button" onClick={() => { setChatDraft(prompt); openTab('chat') }} className="min-h-12 rounded-xl border border-line bg-paper px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </section>
         ) : null}
         {activeTab === 'stocks' ? (
           <StocksPanel
@@ -628,8 +610,6 @@ function MitraPortal() {
         {activeTab === 'chat' && chat ? (
           <MitraChatRoom
             sessionId={chat}
-            suggestedDraft={chatDraft}
-            onDraftConsumed={() => setChatDraft('')}
             onSelectSession={(id) => void navigate({ to: '/mitra', search: { chat: id } })}
             onNewSession={() => void navigate({ to: '/mitra', search: { chat: crypto.randomUUID() } })}
             onStartTour={setActiveTour}
@@ -1980,14 +1960,6 @@ function OrderHistory({
                         {order.order_no}
                       </h2>
                       <OrderStatusBadge status={order.status} />
-                      {order.status === 'selesai' && order.total_amount ? (
-                        <span className="num text-xs font-semibold tabular-nums text-ink-800">
-                          Nilai pesanan {Number(order.total_amount).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
-                          {order.distribution_scheme === 'beli_putus' && order.payment_status
-                            ? ` · ${order.payment_status === 'lunas' ? 'Lunas' : order.payment_status === 'jatuh_tempo' ? 'Lewat jatuh tempo' : `Tempo ${order.payment_due_date ? new Date(order.payment_due_date).toLocaleDateString('id-ID') : ''}`}`
-                            : ''}
-                        </span>
-                      ) : null}
                       {order.status === 'selesai' &&
                       !order.receipt_photo_present ? (
                         <span className="rounded-md bg-warn-bg px-2 py-1 text-xs font-semibold text-warn-fg">

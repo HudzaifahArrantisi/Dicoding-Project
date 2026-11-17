@@ -126,6 +126,12 @@ export function MitraChatRoom({
     return () => document.removeEventListener('keydown', closeOnEscape)
   }, [sidebarOpen])
 
+  useEffect(() => {
+    if (!textareaRef.current) return
+    textareaRef.current.style.height = 'auto'
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 144)}px`
+  }, [draft])
+
   async function refreshSessions() {
     try {
       const list = await getMitraChatSessions()
@@ -482,7 +488,7 @@ export function MitraChatRoom({
   return (
     <section
       aria-label="Ruang Chat AI Mitra Daisuki"
-      className="flex h-[calc(100dvh-13rem)] min-h-[320px] overflow-hidden rounded-xl border border-line bg-surface shadow-xs sm:h-[calc(100dvh-13rem)] sm:min-h-[500px] lg:h-[calc(100dvh-10.5rem)] lg:rounded-2xl"
+      className="flex min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-line bg-surface shadow-xs lg:rounded-2xl"
     >
       {/* Mobile Backdrop with Smooth Fade */}
       <div
@@ -561,9 +567,6 @@ export function MitraChatRoom({
                 <h1 className="truncate font-display text-sm font-bold text-ink-950 sm:text-base">
                   Asisten Inventaris Toko
                 </h1>
-                <span className="hidden rounded-md border border-line bg-paper px-2 py-0.5 text-[10px] font-medium text-ink-700 sm:inline">
-                  Mitra Cabang
-                </span>
               </div>
               <p className="truncate text-[11px] text-muted">
                 {closed ? 'Sesi percakapan diarsipkan' : 'Aktif • Terhubung ke data cabang Anda'}
@@ -788,7 +791,7 @@ export function MitraChatRoom({
         </div>
 
         {/* Footer Input Area */}
-        <footer className="border-t border-line bg-surface/30 p-2.5 sm:p-4">
+        <footer className="border-t border-line/60 bg-gradient-to-b from-white/70 via-white/85 to-white/95 p-2.5 backdrop-blur-xl transition-all sm:p-4">
           {error ? (
             <p role="alert" className="mb-2 text-center text-xs font-medium text-crit-fg">
               {error}
@@ -796,12 +799,12 @@ export function MitraChatRoom({
           ) : null}
 
           {closed ? (
-            <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface/60 px-3 py-3 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:px-4">
-              <span>Sesi ini telah diakhiri. Buka kembali sesi atau buat chat baru.</span>
+            <div className="mx-auto flex max-w-3xl flex-col gap-2 rounded-2xl border border-line/70 bg-white/75 p-3 text-xs text-muted shadow-xs backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-4">
+              <span className="text-ink-700">Sesi ini telah diakhiri. Buka kembali sesi atau buat chat baru.</span>
               <button
                 type="button"
                 onClick={() => active && void toggleSession(active)}
-                className="min-h-11 self-start font-bold text-ink-900 hover:underline sm:self-auto"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line bg-surface/90 px-3.5 py-1.5 font-bold text-ink-900 shadow-2xs transition-all hover:bg-ink-50 active:scale-95 sm:self-auto"
               >
                 Buka Kembali Sesi Ini
               </button>
@@ -812,36 +815,38 @@ export function MitraChatRoom({
                 e.preventDefault()
                 void send()
               }}
-              className="mx-auto flex max-w-3xl min-w-0 items-end gap-2 rounded-xl border border-line bg-white p-1.5 shadow-xs focus-within:border-ink-900 focus-within:ring-1 focus-within:ring-ink-900 sm:p-2"
+              className="group relative mx-auto flex max-w-3xl min-w-0 flex-col rounded-2xl border border-line/70 bg-white/80 p-2 shadow-[0_4px_20px_-2px_rgba(20,27,61,0.06),0_1px_2px_rgba(20,27,61,0.03),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-2xl backdrop-saturate-150 transition-all duration-300 ease-out hover:border-ink-900/25 hover:bg-white/90 hover:shadow-[0_6px_24px_-2px_rgba(20,27,61,0.09),inset_0_1px_1px_rgba(255,255,255,1)] focus-within:border-ink-900/35 focus-within:bg-white/95 focus-within:ring-2 focus-within:ring-ink-900/10 focus-within:shadow-[0_10px_32px_-4px_rgba(20,27,61,0.12),0_2px_6px_rgba(20,27,61,0.04),inset_0_1px_2px_rgba(255,255,255,1)] sm:p-2.5"
             >
-              <label htmlFor="mitra-chat-draft" className="sr-only">
-                Tulis pesan untuk Asisten Inventaris
-              </label>
-              <textarea
-                id="mitra-chat-draft"
-                ref={textareaRef}
-                rows={1}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    void send()
-                  }
-                }}
-                maxLength={600}
-                placeholder="Tulis pertanyaan..."
-                disabled={busy || Boolean(togglingSessionId)}
-                className="max-h-32 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-base text-ink-950 placeholder:text-ink-400 focus:outline-hidden sm:px-3 sm:text-sm"
-              />
-              <button
-                type="submit"
-                disabled={busy || Boolean(togglingSessionId) || !draft.trim()}
-                aria-label="Kirim pesan"
-                className="grid size-11 shrink-0 place-items-center rounded-lg bg-ink-900 text-white shadow-xs transition-colors hover:bg-ink-800 disabled:opacity-30 active:scale-95 focus-visible:outline-2 focus-visible:outline-ink-900"
-              >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
-              </button>
+              <div className="flex min-w-0 items-end gap-2">
+                <label htmlFor="mitra-chat-draft" className="sr-only">
+                  Tulis pesan untuk Asisten Inventaris
+                </label>
+                <textarea
+                  id="mitra-chat-draft"
+                  ref={textareaRef}
+                  rows={1}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      void send()
+                    }
+                  }}
+                  maxLength={600}
+                  placeholder="Tulis pertanyaan stok, restock, atau penerimaan..."
+                  disabled={busy || Boolean(togglingSessionId)}
+                  className="max-h-36 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2.5 py-2 text-base leading-relaxed text-ink-950 placeholder:text-ink-400 focus:outline-hidden sm:px-3 sm:text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || Boolean(togglingSessionId) || !draft.trim()}
+                  aria-label="Kirim pesan"
+                  className="grid size-11 shrink-0 place-items-center rounded-xl bg-ink-900 text-white shadow-[0_2px_8px_rgba(20,27,61,0.18),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all duration-200 ease-out hover:scale-[1.02] hover:bg-ink-800 hover:shadow-[0_4px_12px_rgba(20,27,61,0.25)] active:scale-95 disabled:pointer-events-none disabled:opacity-25 disabled:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
+                </button>
+              </div>
             </form>
           )}
         </footer>

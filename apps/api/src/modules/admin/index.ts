@@ -175,7 +175,6 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       const rows = await db.execute<{
         id: string;
         name: string;
-        distribution_scheme: "konsinyasi" | "beli_putus";
         type: string;
         type_other: string | null;
         address: string | null;
@@ -195,7 +194,6 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         SELECT 
           p.id,
           p.name,
-          p.distribution_scheme,
           p.type,
           p.type_other,
           p.address,
@@ -252,7 +250,6 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       const data = rows.map((row) => ({
         id: row.id,
         name: row.name,
-        distribution_scheme: row.distribution_scheme,
         type: row.type,
         type_other: row.type_other,
         address: row.address,

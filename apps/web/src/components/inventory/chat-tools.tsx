@@ -1,6 +1,66 @@
 import { useState } from 'react'
-import { ArrowRight, BarChart3, CheckCircle2, Download, FileText, PieChart } from 'lucide-react'
+import { ArrowRight, BarChart3, Check, CheckCircle2, Copy, Download, FileText, PieChart } from 'lucide-react'
 import { generateDaisukiPdf, type PdfExportData } from '@/lib/pdf/sales-report-pdf'
+
+export function CopyButton({
+  text,
+  label = 'Salin',
+  className,
+}: {
+  text: string
+  label?: string
+  className?: string
+}) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Fallback if clipboard API is not available
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      try {
+        document.execCommand('copy')
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } finally {
+        document.body.removeChild(textarea)
+      }
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={copied ? 'Teks berhasil disalin' : 'Salin teks ke papan klip'}
+      title={copied ? 'Tersalin ke clipboard!' : 'Salin teks'}
+      className={
+        className ??
+        'inline-flex min-h-[32px] items-center gap-1.5 rounded-lg border border-line/80 bg-white/90 px-2.5 py-1 text-[11px] font-medium text-ink-700 shadow-2xs backdrop-blur-xs transition-colors hover:border-ink-400 hover:bg-white hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-ink-900 active:scale-95'
+      }
+    >
+      {copied ? (
+        <>
+          <Check className="size-3.5 text-emerald-600" aria-hidden="true" />
+          <span className="font-semibold text-emerald-700">Tersalin</span>
+        </>
+      ) : (
+        <>
+          <Copy className="size-3.5 text-ink-500" aria-hidden="true" />
+          <span>{label}</span>
+        </>
+      )}
+    </button>
+  )
+}
 
 export interface ChartToolData {
   type?: 'bar' | 'pie' | 'line'

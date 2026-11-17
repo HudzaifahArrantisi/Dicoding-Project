@@ -82,10 +82,6 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           partner_type: partners.type,
           partner_address: partners.address,
           status: orders.status,
-          distribution_scheme: orders.distribution_scheme,
-          payment_status: sql<string | null>`case when ${orders.payment_status} = 'belum_lunas' and ${orders.payment_due_date} < now() then 'jatuh_tempo' else ${orders.payment_status}::text end`,
-          payment_due_date: orders.payment_due_date,
-          total_amount: orders.total_amount,
           note: orders.note,
           admin_note: orders.admin_note,
           rejected_reason: orders.rejected_reason,
@@ -170,28 +166,21 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       set.status = 403; return { error: "Akses tidak diizinkan" };
     }
     const partnerId = user.role === "mitra" ? user.partnerId : null;
-    const [row] = await db.execute<{
-      gross_7d: string; gross_30d: string; unpaid_count: number; overdue_count: number; unpaid_amount: string;
-    }>(sql`
-      SELECT
-        COALESCE(SUM(o.total_amount) FILTER (WHERE o.distribution_scheme = 'beli_putus' AND o.completed_at >= now() - interval '7 days'), 0)::text AS gross_7d,
-        COALESCE(SUM(o.total_amount) FILTER (WHERE o.distribution_scheme = 'beli_putus' AND o.completed_at >= now() - interval '30 days'), 0)::text AS gross_30d,
-        count(*) FILTER (WHERE o.payment_status = 'belum_lunas')::int AS unpaid_count,
-        count(*) FILTER (WHERE o.payment_status = 'belum_lunas' AND o.payment_due_date < now())::int AS overdue_count,
-        COALESCE(SUM(o.total_amount) FILTER (WHERE o.payment_status = 'belum_lunas'), 0)::text AS unpaid_amount
-      FROM orders o WHERE o.status = 'selesai'
-        AND (${partnerId}::uuid IS NULL OR o.partner_id = ${partnerId}::uuid)
-    `);
     const outflowRows = await db.execute<{
       partner_id: string;
-      distribution_scheme: "konsinyasi" | "beli_putus";
+      units_today: number;
+      gross_today: string;
       units_7d: number;
       gross_7d: string;
       gross_30d: string;
     }>(sql`
       SELECT
         sl.partner_id::text AS partner_id,
-        pa.distribution_scheme,
+        COALESCE(SUM(sl.qty_before - sl.qty_after)
+          FILTER (WHERE sl.created_at >= ((now() AT TIME ZONE 'Asia/Jakarta')::date::timestamp AT TIME ZONE 'Asia/Jakarta')), 0)::int AS units_today,
+        COALESCE(SUM((sl.qty_before - sl.qty_after) *
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END)
+          FILTER (WHERE sl.created_at >= ((now() AT TIME ZONE 'Asia/Jakarta')::date::timestamp AT TIME ZONE 'Asia/Jakarta')), 0)::text AS gross_today,
         COALESCE(SUM(sl.qty_before - sl.qty_after)
           FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::int AS units_7d,
         COALESCE(SUM((sl.qty_before - sl.qty_after) *
@@ -200,23 +189,21 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         COALESCE(SUM((sl.qty_before - sl.qty_after) *
           CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END), 0)::text AS gross_30d
       FROM stock_logs sl
-      JOIN partners pa ON pa.id = sl.partner_id
       JOIN products pr ON pr.id = sl.product_id
       WHERE sl.source = 'manual_update'
         AND sl.qty_before > sl.qty_after
         AND sl.created_at >= now() - interval '30 days'
         AND pr.sku IN ('DSK-SB-001', 'DSK-BR-002', 'DSK-MK-003', 'DSK-KP-004')
         AND (${partnerId}::uuid IS NULL OR sl.partner_id = ${partnerId}::uuid)
-      GROUP BY sl.partner_id, pa.distribution_scheme
+      GROUP BY sl.partner_id
     `);
-    const sum = (rows: Array<{ gross_7d: string; gross_30d: string }>, key: "gross_7d" | "gross_30d") =>
+    const sum = (rows: Array<{ gross_today: string; gross_7d: string; gross_30d: string }>, key: "gross_today" | "gross_7d" | "gross_30d") =>
       rows.reduce((total, item) => total + Number(item[key]), 0).toString();
-    const consignmentRows = outflowRows.filter((item) => item.distribution_scheme === "konsinyasi");
     return { data: {
-      ...row,
-      consignment_estimate_7d: sum(consignmentRows, "gross_7d"),
-      consignment_estimate_30d: sum(consignmentRows, "gross_30d"),
-      stock_outflow_gross_7d: sum(outflowRows, "gross_7d"),
+      sales_estimate_today: sum(outflowRows, "gross_today"),
+      sales_estimate_7d: sum(outflowRows, "gross_7d"),
+      sales_estimate_30d: sum(outflowRows, "gross_30d"),
+      stock_outflow_units_today: outflowRows.reduce((total, item) => total + Number(item.units_today), 0),
       stock_outflow_units_7d: outflowRows.reduce((total, item) => total + Number(item.units_7d), 0),
       stock_outflow_by_partner_7d: user.role === "admin"
         ? outflowRows.map((item) => ({ partner_id: item.partner_id, gross_7d: item.gross_7d, units_7d: Number(item.units_7d) }))
@@ -277,30 +264,6 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
     `);
     return { data: { deadstock, audit, factory, method: "Estimasi dari penurunan stok fisik 30 hari; perlu verifikasi lapangan sebelum PO." } };
   })
-  .patch("/finance/:id/paid", async ({ headers, params, set }) => {
-    const user = await getAuthUser(headers);
-    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
-    if (user.role !== "admin") { set.status = 403; return { error: "Hanya admin yang dapat mencatat pembayaran" }; }
-    const [updated] = await db.update(orders).set({ payment_status: "lunas" })
-      .where(and(eq(orders.id, params.id), eq(orders.status, "selesai"), eq(orders.distribution_scheme, "beli_putus"), eq(orders.payment_status, "belum_lunas")))
-      .returning({ id: orders.id, partner_id: orders.partner_id });
-    if (!updated) { set.status = 409; return { error: "Tagihan tidak ditemukan atau sudah lunas" }; }
-    publishInventoryChange({ partnerId: updated.partner_id, topics: ["orders"] });
-    return { status: "ok" };
-  }, { params: t.Object({ id: t.String({ format: "uuid" }) }) })
-  .patch("/finance/partners/:id/scheme", async ({ headers, params, body, set }) => {
-    const user = await getAuthUser(headers);
-    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
-    if (user.role !== "admin") { set.status = 403; return { error: "Hanya admin yang dapat mengubah skema distribusi" }; }
-    const [updated] = await db.update(partners).set({ distribution_scheme: body.distribution_scheme })
-      .where(eq(partners.id, params.id)).returning({ id: partners.id });
-    if (!updated) { set.status = 404; return { error: "Mitra tidak ditemukan" }; }
-    publishInventoryChange({ partnerId: params.id, topics: ["partners"] });
-    return { status: "ok" };
-  }, {
-    params: t.Object({ id: t.String({ format: "uuid" }) }),
-    body: t.Object({ distribution_scheme: t.Union([t.Literal("konsinyasi"), t.Literal("beli_putus")]) }),
-  })
   .post(
     "/",
     async ({ headers, body, set }) => {
@@ -335,7 +298,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       }
 
       const [partner] = await db
-        .select({ name: partners.name, distribution_scheme: partners.distribution_scheme })
+        .select({ name: partners.name })
         .from(partners)
         .where(eq(partners.id, partnerId))
         .limit(1);
@@ -371,7 +334,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
             order_no: orderNo,
             partner_id: partnerId,
             status: hasBackorder ? "ditunda" : "diproses",
-            distribution_scheme: partner.distribution_scheme,
+            distribution_scheme: "konsinyasi",
             note: body.note || null,
             created_by: user.userId,
           })
@@ -535,15 +498,9 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           await tx.update(partnerStocks).set({ current_qty: after, updated_at: new Date(), updated_by: user.userId }).where(and(eq(partnerStocks.partner_id, ord.partner_id), eq(partnerStocks.product_id, item.product_id)));
           await tx.insert(stockLogs).values({ partner_id: ord.partner_id, product_id: item.product_id, qty_before: before, qty_after: after, source: "order_received", created_by: user.userId });
         }
-        const [amount] = await tx.select({ total: sql<string>`coalesce(sum(${orderItems.qty_approved} * ${products.b2b_price}), 0)::text` })
-          .from(orderItems).innerJoin(products, eq(orderItems.product_id, products.id))
-          .where(eq(orderItems.order_id, ord.id));
         const completedAt = new Date();
         await tx.update(orders).set({
           status: "selesai", completed_at: completedAt, delivery_code_claimed_at: completedAt,
-          total_amount: amount?.total ?? "0",
-          payment_status: ord.distribution_scheme === "beli_putus" ? "belum_lunas" : null,
-          payment_due_date: ord.distribution_scheme === "beli_putus" ? new Date(completedAt.getTime() + 7 * 86_400_000) : null,
         }).where(eq(orders.id, ord.id));
         const [receivingPartner] = await tx
           .select({ name: partners.name })
