@@ -63,6 +63,10 @@ export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }:
       lastLlmStatus = "timeout";
       break;
     }
+    const localTimeout = Math.max(1, Number(process.env.LLM_LOCAL_TIMEOUT_MS) || 15_000);
+    const attemptTimeout = index === 0 && endpoints.length > 1
+      ? Math.min(remaining, localTimeout)
+      : remaining;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -89,7 +93,7 @@ export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }:
         return content;
       })();
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => { controller.abort(); reject(new Error("LLM timeout")); }, remaining);
+        timer = setTimeout(() => { controller.abort(); reject(new Error("LLM timeout")); }, attemptTimeout);
       });
       const content = await Promise.race([request, timeoutPromise]);
       lastLlmStatus = "ok";
@@ -98,7 +102,7 @@ export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }:
       console.warn(`[ASSISTANT] 9Router ${index === 0 ? "lokal" : "tunnel"} gagal:`, error instanceof Error ? error.message : "Error");
       if (error instanceof Error && error.message === "LLM timeout") {
         lastLlmStatus = "timeout";
-        return null;
+        continue;
       }
       lastLlmStatus = "error";
     } finally {

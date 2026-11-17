@@ -3,7 +3,7 @@ import { generateLlmReply } from "./llm-client";
 
 const originalFetch = globalThis.fetch;
 const original = Object.fromEntries(
-  ["LLM_ENABLED", "LLM_API_KEY", "LLM_BASE_URL", "LLM_TUNNEL_URL", "LLM_MODEL", "LLM_TIMEOUT_MS"]
+  ["LLM_ENABLED", "LLM_API_KEY", "LLM_BASE_URL", "LLM_TUNNEL_URL", "LLM_MODEL", "LLM_TIMEOUT_MS", "LLM_LOCAL_TIMEOUT_MS"]
     .map((key) => [key, process.env[key]]),
 );
 
@@ -55,6 +55,27 @@ test("9Router yang menggantung dibatalkan pada batas waktu", async () => {
     init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
   })) as unknown as typeof fetch;
   expect(await generateLlmReply({ systemPrompt: "fakta", userMessage: "pesan" })).toBeNull();
+});
+
+test("timeout lokal mencoba tunnel sebelum batas waktu keseluruhan habis", async () => {
+  process.env.LLM_ENABLED = "true";
+  process.env.LLM_API_KEY = "test-key";
+  process.env.LLM_BASE_URL = "http://local-slow/v1";
+  process.env.LLM_TUNNEL_URL = "https://tunnel-ready/v1";
+  process.env.LLM_TIMEOUT_MS = "1000";
+  process.env.LLM_LOCAL_TIMEOUT_MS = "20";
+  const urls: string[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    urls.push(String(input));
+    if (urls.length === 1) {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      });
+    }
+    return Promise.resolve(new Response('data: {"choices":[{"delta":{"content":"Jawaban dari tunnel"}}]}\n\ndata: [DONE]\n\n'));
+  }) as typeof fetch;
+  expect(await generateLlmReply({ systemPrompt: "fakta", userMessage: "pesan" })).toBe("Jawaban dari tunnel");
+  expect(urls).toEqual(["http://local-slow/v1/chat/completions", "https://tunnel-ready/v1/chat/completions"]);
 });
 
 test("timeout model tidak mengulang permintaan pada tunnel yang sama", async () => {
