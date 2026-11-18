@@ -64,9 +64,9 @@ export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }:
       break;
     }
     const localTimeout = Math.max(1, Number(process.env.LLM_LOCAL_TIMEOUT_MS) || 15_000);
-    const attemptTimeout = index === 0 && endpoints.length > 1
-      ? Math.min(remaining, localTimeout)
-      : remaining;
+    const tunnelTimeout = Math.max(1, Number(process.env.LLM_TUNNEL_TIMEOUT_MS) || 10_000);
+    const attemptTimeout = Math.min(remaining,
+      index === 0 && endpoints.length > 1 ? localTimeout : index > 0 ? tunnelTimeout : remaining);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {

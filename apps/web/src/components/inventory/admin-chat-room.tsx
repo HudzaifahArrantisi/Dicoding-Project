@@ -354,7 +354,8 @@ export function AdminChatRoom({
                     if (isMobile) setSidebarOpen(false)
                     onSelectSession(item.session_id)
                   }}
-                  className="flex min-h-[48px] min-w-0 flex-1 items-start gap-2.5 rounded-lg px-2.5 py-2 text-left focus-visible:outline-hidden"
+                  aria-current={isCurrent ? 'page' : undefined}
+                  className="flex min-h-[48px] min-w-0 flex-1 items-start gap-2.5 rounded-lg px-2.5 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
                 >
                   <div
                     className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md ${
@@ -444,7 +445,7 @@ export function AdminChatRoom({
   return (
     <section
       aria-label="Ruang Chat AI Admin Daisuki Pusat"
-      className="flex min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-line bg-surface shadow-xs lg:rounded-2xl"
+      className="flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-line bg-white"
     >
       {/* Mobile Drawer Backdrop with Smooth Fade */}
       <div
@@ -472,7 +473,9 @@ export function AdminChatRoom({
       <aside
         id="admin-chat-history-sidebar-desktop"
         aria-label="Riwayat Chat Admin Desktop"
-        className={`hidden lg:flex flex-col shrink-0 border-r border-line bg-surface/40 transition-[width,opacity] duration-300 ease-in-out overflow-hidden ${
+        aria-hidden={!desktopSidebarOpen}
+        inert={!desktopSidebarOpen}
+        className={`hidden lg:flex flex-col shrink-0 border-r border-line bg-paper transition-[width,opacity] duration-300 ease-in-out overflow-hidden ${
           desktopSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0 border-r-0 pointer-events-none'
         }`}
       >
@@ -571,9 +574,10 @@ export function AdminChatRoom({
         {/* Feed Percakapan */}
         <div
           ref={feedRef}
-          className="min-h-0 min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
+          className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
           aria-live="polite"
         >
+          <div className="mx-auto min-h-full w-full max-w-4xl space-y-5 px-3 py-5 sm:px-6 sm:py-7">
           {loading ? (
             <div className="flex h-full items-center justify-center py-16 text-center text-xs text-muted">
               <Loader2 className="mr-2 size-4 animate-spin text-ink-700" />
@@ -583,7 +587,7 @@ export function AdminChatRoom({
 
           {/* State Sesi Kosong / Onboarding Admin */}
           {!loading && messages.length === 0 && !closed ? (
-            <div className="mx-auto max-w-xl py-8 sm:py-12">
+            <div className="mx-auto max-w-xl py-4 sm:py-10">
               <div className="text-center">
                 <div className="mx-auto mb-3 size-12 overflow-hidden rounded-xl border border-line bg-surface">
                   <img src="/icons/logo.jpg" alt="Daisuki" className="size-full object-cover" />
@@ -605,15 +609,15 @@ export function AdminChatRoom({
                       key={idx}
                       type="button"
                       onClick={() => void send(card.prompt)}
-                      className="group flex flex-col items-start rounded-xl border border-line bg-surface/50 p-3.5 text-left transition-colors hover:border-ink-400 hover:bg-white active:bg-paper"
+                      className="group flex min-h-24 flex-col items-start rounded-lg border border-line bg-white p-4 text-left transition-colors hover:border-ink-700 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
                     >
                       <div className="mb-2 flex size-7 items-center justify-center rounded-lg border border-line bg-white text-ink-700 transition-colors group-hover:border-ink-300 group-hover:text-ink-950">
                         <Icon className="size-3.5" />
                       </div>
-                      <span className="font-display text-xs font-bold text-ink-950">
+                      <span className="font-display text-sm font-semibold text-ink-950">
                         {card.title}
                       </span>
-                      <span className="mt-0.5 text-[11px] leading-relaxed text-muted">
+                      <span className="mt-1 text-xs leading-relaxed text-ink-700">
                         {card.desc}
                       </span>
                     </button>
@@ -643,7 +647,7 @@ export function AdminChatRoom({
                   className={`relative min-w-0 max-w-[calc(100%-2.5rem)] break-words rounded-2xl px-3 py-2.5 text-sm leading-relaxed transition-all sm:max-w-[88%] sm:px-4 sm:py-3 ${
                     isUser
                       ? 'rounded-tr-xs bg-ink-900 text-white shadow-xs'
-                      : 'rounded-tl-xs border border-line bg-surface/60 text-ink-900 shadow-xs'
+                      : 'rounded-tl-xs border border-line bg-white text-ink-900'
                   }`}
                 >
                   {isUser ? (
@@ -693,10 +697,11 @@ export function AdminChatRoom({
               </p>
             </div>
           ) : null}
+          </div>
         </div>
 
         {/* Footer Input Area */}
-        <footer className="border-t border-line/60 bg-gradient-to-b from-white/70 via-white/85 to-white/95 p-2.5 backdrop-blur-xl transition-all sm:p-4">
+        <footer className="border-t border-line bg-paper p-2.5 sm:p-4">
           {error ? (
             <p role="alert" className="mb-2 text-center text-xs font-medium text-crit-fg">
               {error}
@@ -720,7 +725,7 @@ export function AdminChatRoom({
                 e.preventDefault()
                 void send()
               }}
-              className="group relative mx-auto flex max-w-3xl min-w-0 flex-col rounded-2xl border border-line/70 bg-white/80 p-2 shadow-[0_4px_20px_-2px_rgba(20,27,61,0.06),0_1px_2px_rgba(20,27,61,0.03),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-2xl backdrop-saturate-150 transition-all duration-300 ease-out hover:border-ink-900/25 hover:bg-white/90 hover:shadow-[0_6px_24px_-2px_rgba(20,27,61,0.09),inset_0_1px_1px_rgba(255,255,255,1)] focus-within:border-ink-900/35 focus-within:bg-white/95 focus-within:ring-2 focus-within:ring-ink-900/10 focus-within:shadow-[0_10px_32px_-4px_rgba(20,27,61,0.12),0_2px_6px_rgba(20,27,61,0.04),inset_0_1px_2px_rgba(255,255,255,1)] sm:p-2.5"
+              className="mx-auto flex max-w-3xl min-w-0 flex-col rounded-lg border border-line bg-white p-2 transition-colors focus-within:border-ink-900 focus-within:ring-2 focus-within:ring-ink-900/10 sm:p-2.5"
             >
               <div className="flex min-w-0 items-end gap-2">
                 <label htmlFor="admin-chat-draft" className="sr-only">
@@ -747,7 +752,7 @@ export function AdminChatRoom({
                   type="submit"
                   disabled={busy || Boolean(togglingSessionId) || !draft.trim()}
                   aria-label="Kirim pesan"
-                  className="grid size-11 shrink-0 place-items-center rounded-xl bg-ink-900 text-white shadow-[0_2px_8px_rgba(20,27,61,0.18),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all duration-200 ease-out hover:scale-[1.02] hover:bg-ink-800 hover:shadow-[0_4px_12px_rgba(20,27,61,0.25)] active:scale-95 disabled:pointer-events-none disabled:opacity-25 disabled:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+                  className="grid size-11 shrink-0 place-items-center rounded-md bg-ink-900 text-white transition-colors hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
                 </button>

@@ -184,6 +184,7 @@ Buka dan sesuaikan file berikut:
   LLM_MODEL=daisuki
   LLM_TIMEOUT_MS=35000
   LLM_LOCAL_TIMEOUT_MS=15000
+  LLM_TUNNEL_TIMEOUT_MS=10000
   ASSISTANT_RELAXED_CHAT=true
   ```
   *(Ambil connection string `DATABASE_URL` dari dashboard [Neon DB](https://neon.tech) pada menu **Connect**).*
@@ -199,6 +200,7 @@ Buka dan sesuaikan file berikut:
   | `LLM_MODEL` | String (default: `daisuki`) | Identifier model yang dituju (misal: `daisuki`, `gemini-1.5-flash`, atau `llama-3.3-70b-versatile`). |
   | `LLM_TIMEOUT_MS` | Angka ms (default: `35000`) | Batas waktu tunggu panggilan LLM dalam milidetik (maksimum 120.000 ms). Jika timeout tercapai, sistem langsung merespons dengan data faktual lokal. |
   | `LLM_LOCAL_TIMEOUT_MS` | Angka ms (default: `15000`) | Batas waktu percobaan endpoint lokal ketika `LLM_TUNNEL_URL` juga tersedia. Setelah batas ini, API mencoba tunnel dengan sisa waktu `LLM_TIMEOUT_MS`. |
+  | `LLM_TUNNEL_TIMEOUT_MS` | Angka ms (default: `10000`) | Batas waktu percobaan tunnel agar tunnel yang tidak merespons tidak menahan chat sampai batas waktu total. |
   | `ASSISTANT_RELAXED_CHAT` | `true` / `false` (default: `true`) | Saat bernilai `true`, asisten merespons pertanyaan umum dan obrolan kasual dengan ramah layaknya chatbot biasa. Saat `false`, filter guardrail ketat diaktifkan hanya untuk topik inventaris dan penelitian. |
   | `DAISUKI_PYTHON_BIN` | String (default: `python`) | Path binary Python yang digunakan untuk menjalankan worker inferensi `daisuki.pkl`. Di server produksi dapat diarahkan ke virtual environment (misal `ai/.venv/bin/python`). |
   | `DAISUKI_MODEL_PATH` | Path String (opsional) | Jalur relatif atau absolut ke berkas artefak model `.pkl` jika ingin mengganti model bawaan. |
@@ -216,6 +218,7 @@ Buka dan sesuaikan file berikut:
   LLM_MODEL=daisuki
   LLM_TIMEOUT_MS=35000
   LLM_LOCAL_TIMEOUT_MS=15000
+  LLM_TUNNEL_TIMEOUT_MS=10000
   ASSISTANT_RELAXED_CHAT=true
   ```
   </details>
