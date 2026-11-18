@@ -61,6 +61,32 @@ Dataset eksperimen disimpan di `data-science/data/` dan dihasilkan oleh script [
 | 13 | `data_source` | String | `primary_daisuki`, `synthetic_seed` | Label eksplisit asal baris data (mitra riil Daisuki vs generator sintetis). |
 | 14 | `is_synthetic` | Boolean | `True` / `False` | `True` jika baris berasal dari seed demo; `False` jika data primer lapangan. |
 
+### Dataset Fitur Lanjutan: `featured_partner_metrics.csv` (Tiket #2)
+Dihasilkan oleh modul reusable [feature_engineering.py](file:///C:/daisuki-inventory/data-science/src/feature_engineering.py) untuk keperluan pemodelan lanjutan, clustering profil mitra (Tipe A/B/C), dan deteksi kecepatan penyerapan stok:
+
+| Kategori Fitur | Nama Kolom | Tipe Data | Keterangan & Rumus Matematis |
+|---|---|---|---|
+| **Kecepatan & Tren** | `absorption_rate` | Float | Rasio penyerapan stok mingguan terhadap ketersediaan: $\frac{\text{weekly\_consumption}}{\text{current\_qty} + \text{weekly\_consumption}}$ (0.0 jika pembagi 0). |
+| | `buffer_absorption_rate` | Float | Rasio pemakaian terhadap target buffer: $\frac{\text{weekly\_consumption}}{\text{par\_level}}$. |
+| | `wow_growth_rate` | Float | Pertumbuhan konsumsi Week-over-Week: $\frac{C_{\text{curr}} - C_{\text{prev}}}{C_{\text{prev}}}$ (1.0 jika baru ada konsumsi; 0.0 jika tidak ada perubahan). |
+| | `prev_weekly_consumption` | Float | Akumulasi konsumsi pada minggu sebelumnya (hari ke-8 hingga ke-14). |
+| **Pola Waktu Transaksi** | `weekend_share` | Float | Proporsi konsumsi hari Sabtu & Minggu (Indikator Tipe A: Ramai Akhir Pekan). |
+| | `midweek_share` | Float | Proporsi konsumsi hari Rabu & Kamis (Indikator Tipe C: Lonjakan Tengah Minggu). |
+| | `weekday_base_share` | Float | Proporsi konsumsi hari Senin, Selasa, dan Jumat. |
+| | `daily_cv` | Float | Koefisien Variasi konsumsi harian ($\sigma / \mu$, Indikator Tipe B: Stabil Harian). |
+| **Utilisasi & Kepatuhan** | `stock_utilization_ratio` | Float | Rasio sisa stok fisik terhadap buffer acuan: $\frac{\text{current\_qty}}{\text{par\_level}}$. |
+| | `hours_since_last_report` | Float | Jeda waktu (jam) sejak laporan stok fisik terakhir dari pasangan item tersebut (sentinel `999.0` jika belum pernah). |
+| | `item_profile_type` | String | Profil pola transaksi item (`Tipe A`, `Tipe B`, `Tipe C`, `Tipe Campuran`, atau `Inaktif`). |
+| **Agregat Toko (Partner)** | `partner_total_stock` | Integer | Total sisa stok fisik seluruh produk di toko cabang. |
+| | `partner_total_weekly_consumption` | Float | Total volume konsumsi mingguan seluruh produk di toko cabang. |
+| | `partner_stock_utilization_ratio` | Float | Rasio utilisasi total stok toko terhadap total buffer par level. |
+| | `partner_weekend_share` | Float | Proporsi transaksi akhir pekan toko secara menyeluruh. |
+| | `partner_midweek_share` | Float | Proporsi transaksi tengah minggu toko secara menyeluruh. |
+| | `partner_weekday_base_share` | Float | Proporsi transaksi hari dasar (Senin, Selasa, Jumat) toko secara menyeluruh. |
+| | `partner_daily_cv` | Float | Koefisien variasi konsumsi harian di tingkat toko cabang. |
+| | `partner_hours_since_last_report` | Float | Jeda waktu (jam) sejak laporan fisik terakhir toko cabang. |
+| | `partner_profile_type` | String | Profil dominan toko cabang untuk clustering strategi distribusi (`Tipe A`, `Tipe B`, `Tipe C`, `Tipe Campuran`, `Inaktif`). |
+
 ---
 
 ## 3. Kamus Data Kontrak Handoff Produksi
