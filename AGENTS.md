@@ -168,6 +168,16 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-18
+- **Tiket #4: Customer/Partner Segmentation & Clustering Profil Mitra Tipe A/B/C (`partner_clustering.py` & Notebook `03_partner_clustering.ipynb`)**:
+  - Mengimplementasikan modul produksi [data-science/src/partner_clustering.py](file:///C:/daisuki-inventory/data-science/src/partner_clustering.py) yang memuat 106 cabang mitra dari `featured_partner_metrics.csv` dan memisahkan mitra aktif ber-riwayat (11 cabang) dari mitra inaktif/baru (95 cabang).
+  - Melakukan penskalaan `StandardScaler` dan evaluasi komparatif K-Means ($k=2, 3, 4$) dengan Elbow Method (Inertia 16.51) dan Silhouette Score tertinggi (**0.4339 pada $k=4$**).
+  - Memetakan 106 cabang ke dalam 4 segmen operasional bisnis Daisuki:
+    - **Tipe A: Ramai Akhir Pekan (Weekend Peak)**: 1 cabang (Jadwal: Kamis Sore / Jumat Pagi, buffer +25-30%).
+    - **Tipe B: Stabil Harian (Steady Regular Daily)**: 8 cabang (Jadwal: Senin Pagi & Kamis Pagi terjadwal 2x seminggu).
+    - **Tipe C: Lonjakan Tengah Minggu (Midweek Spike)**: 2 cabang (Jadwal: Senin Sore / Selasa Pagi).
+    - **Mitra Baru / Inaktif**: 95 cabang (Jadwal: On-Demand saat pesanan perdana, program outreach sales).
+  - Menyimpan artefak model ke `data-science/models/partner_clustering.joblib`, laporan evaluasi ke `data-science/reports/partner_clustering_evaluation.json`, dataset segmentasi 106 cabang ke `data-science/data/partner_clusters.csv`, dan fungsi reusable `predict_partner_cluster()`.
+  - Membuat dan mengeksekusi secara lengkap Jupyter Notebook [data-science/notebooks/03_partner_clustering.ipynb](file:///C:/daisuki-inventory/data-science/notebooks/03_partner_clustering.ipynb) mencakup visualisasi distribusi fitur, grafik Elbow & Silhouette, scatter plot 2D PCA, grafik profil rata-rata fitur centroid, tabel strategi operasional pengiriman, serta catatan keterbatasan data sintetis. Skrip tim AI di `ai/jobs/` tetap aman dan tidak tersentuh.
 - **Tiket #3: Modeling Analitik Risiko Stockout & Proyeksi Kehabisan Barang (`stockout_model.py` & Notebook `02_stockout_risk_modeling.ipynb`)**:
   - Mengimplementasikan modul produksi [data-science/src/stockout_model.py](file:///C:/daisuki-inventory/data-science/src/stockout_model.py) yang memuat dataset time-based split (`train_inventory_summary.csv` & `test_inventory_summary.csv`) dengan 14 fitur prediktor kaya (bebas target leakage, mengeksklusikan `days_of_cover` dan `is_critical`).
   - Membandingkan 3 pendekatan klasifikasi risiko (*Aman*, *Waspada*, *Kritis*): Rule-Based Heuristic Baseline (Akurasi 99.76%, Macro F1 0.9975, Recall Kritis 100%), Gaussian Naive Bayes (Akurasi 32.55%, Macro F1 0.2701, Recall Kritis 7.83%), dan Random Forest Classifier dengan `class_weight='balanced'` (Akurasi 99.53%, Macro F1 0.9944, Recall Kritis 100.00% tanpa ada False Negative pada kasus kritis).
