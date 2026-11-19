@@ -156,7 +156,7 @@ async function publishRecommendations(runId: string, actorId: string, action: "a
   });
 }
 
-export function processAnalysisRun(id: string, actorId: string): void {
+export function processAnalysisRun(id: string, actorId: string, requestedTrainingSource?: "analysis" | "raw_references"): void {
   if (running.has(id)) return;
   running.add(id);
   void (async () => {
@@ -166,14 +166,23 @@ export function processAnalysisRun(id: string, actorId: string): void {
     const steps: Step[] = [];
     let cleanupRaw: (() => Promise<void>) | null = null;
     try {
+      const [run] = await db.select({ manifest: analysisRuns.manifest }).from(analysisRuns).where(eq(analysisRuns.id, id)).limit(1);
+      const manifest = run?.manifest as Record<string, unknown> | null;
+      const trainingSource = requestedTrainingSource ?? (manifest?.training_source === "raw_references" ? "raw_references" : "analysis");
+      if (requestedTrainingSource) {
+        await db.update(analysisRuns).set({ manifest: { ...(manifest ?? {}), training_source: requestedTrainingSource } })
+          .where(eq(analysisRuns.id, id));
+      }
       await hydrateDataScienceArtifacts(id);
-      const staged = await stageRawReferences();
+      const staged = await stageRawReferences(trainingSource === "raw_references");
       cleanupRaw = staged.cleanup;
       for (const job of jobs) {
         steps.push({ label: job.label, status: "running" });
         await db.update(analysisRuns).set({ current_step: job.label, steps: [...steps] }).where(eq(analysisRuns.id, id));
         try {
-          await pythonJob(job.path, id, [], staged.directory);
+          const args = job.path === "ai/retraining/train.py"
+            ? ["--weekly", "--training-source", trainingSource] : [];
+          await pythonJob(job.path, id, args, staged.directory);
           steps[steps.length - 1].status = "succeeded";
         } catch (error) {
           steps[steps.length - 1].status = "failed";

@@ -466,7 +466,7 @@ function DataSciencePanel({
       const created = await createAnalysisRun(start, end)
       setAnalysisRun(created.id)
       await queryClient.invalidateQueries({ queryKey: ['analysis-runs'] })
-      toast.success('Laporan Data Science selesai dibuat. Buka AI Insights untuk meninjau file.')
+      toast.success('Laporan Data Science selesai dibuat. Buka AI Insights untuk meninjau dan Muaizzzzng.')
       onAnalysisCreated()
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -2170,6 +2170,7 @@ function AIInsightsPanel({
   onReviewOrders: () => void
 }) {
   const [startingAi, setStartingAi] = useState(false)
+  const [trainingSource, setTrainingSource] = useState<'analysis' | 'raw_references'>('analysis')
   const activeRun = useRef<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const analysisRuns = useQuery<{ runs: AnalysisRun[]; active_run_id: string | null }>({
@@ -2178,11 +2179,19 @@ function AIInsightsPanel({
     refetchInterval: (query) => query.state.data?.runs.some((run) => run.status === 'processing' || run.status === 'creating') ? 1500 : false,
   })
   const selectedAnalysisRun = analysisRuns.data?.runs.find((run) => ['draft', 'approved', 'processing'].includes(run.status)) ?? analysisRuns.data?.runs[0] ?? null
+  const rawReferences = useQuery<{ files: RawReference[] }>({
+    queryKey: ['admin-raw-references'],
+    queryFn: getRawReferences,
+  })
+  const adminReferenceCount = rawReferences.data?.files.filter((file) => file.origin === 'admin').length ?? 0
   const artifacts = useQuery<AnalysisArtifacts>({
     queryKey: ['analysis-artifacts', selectedAnalysisRun?.id],
     queryFn: () => getAnalysisArtifacts(selectedAnalysisRun!.id),
     enabled: previewOpen && selectedAnalysisRun !== null,
   })
+  useEffect(() => {
+    setTrainingSource(selectedAnalysisRun?.manifest?.training_source === 'raw_references' ? 'raw_references' : 'analysis')
+  }, [selectedAnalysisRun?.id, selectedAnalysisRun?.manifest?.training_source])
   const runStatus = useQuery<AiRunStatus>({
     queryKey: ['admin-ai-run'],
     queryFn: getAiRunStatus,
@@ -2448,10 +2457,10 @@ function AIInsightsPanel({
     if (!selectedAnalysisRun) return
     setStartingAi(true)
     try {
-      await actionAnalysisRun(selectedAnalysisRun.id, 'process')
+      await actionAnalysisRun(selectedAnalysisRun.id, 'process', undefined, trainingSource)
       await analysisRuns.refetch()
       await artifacts.refetch()
-      toast.success('Analisis AI dimulai. Progres akan tampil di modal ini.')
+      toast.success(`Training model dimulai dengan sumber ${trainingSource === 'analysis' ? 'hasil analisis' : 'data mentah unggahan'}.`)
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -2496,7 +2505,7 @@ function AIInsightsPanel({
             ) : (
               <>
                 <RotateCcw className="size-4" aria-hidden="true" />
-                <span>Buka alur analisis</span>
+                <span>Training model</span>
               </>
             )}
           </button>
@@ -2602,6 +2611,9 @@ function AIInsightsPanel({
             artifacts={artifacts.data}
             loading={artifacts.isLoading || analysisRuns.isLoading}
             continuing={startingAi || selectedAnalysisRun?.status === 'processing'}
+            trainingSource={trainingSource}
+            rawReferenceCount={adminReferenceCount}
+            onTrainingSourceChange={setTrainingSource}
             onContinue={() => void handleContinueWithArtifacts()}
           />
         </>

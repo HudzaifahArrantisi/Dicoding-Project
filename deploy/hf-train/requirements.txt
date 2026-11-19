@@ -1,0 +1,14 @@
+# Dependensi pipeline training Daisuki.
+# scikit-learn dan numpy DI-PIN ke versi venv pelatihan (ai/.venv).
+scikit-learn==1.7.2
+numpy==2.2.6
+
+psycopg[binary]>=3.1.0
+python-dotenv>=1.0.0
+
+# doc_loader.py mengimpor keduanya secara lazy saat memindai raw_references.
+pypdf>=3.17.0
+python-docx>=1.0.0
+
+# Mengunggah daisuki.pkl hasil training ke repo model.
+huggingface_hub>=0.26.0

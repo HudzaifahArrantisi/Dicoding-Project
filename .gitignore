@@ -38,6 +38,9 @@ data-science/reports/runs/
 apps/api/uploads/*
 !apps/api/uploads/.gitkeep
 
+# Staging Hugging Face: berisi salinan model dan PDF, jangan pernah dikomit
+deploy/.staging/
+
 ai/data/mainbrain/models/*.pkl
 ai/data/mainbrain/models/*.pkl.tmp
 ai/data/raw_references/**/*

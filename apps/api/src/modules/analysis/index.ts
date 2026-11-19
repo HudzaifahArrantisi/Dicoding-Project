@@ -123,7 +123,7 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
       target_type: "analysis_run", target_id: params.id });
     return { id: run.id, status: run.status };
   }, { params: t.Object({ id: t.String({ format: "uuid" }) }), body: t.Object({ reason: t.String({ minLength: 3, maxLength: 500 }) }) })
-  .post("/runs/:id/process", async ({ headers, params, set }) => {
+  .post("/runs/:id/process", async ({ headers, params, body, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
     if (user.role !== "ai_engineer" && user.role !== "admin") { set.status = 403; return { error: "Hanya Admin atau AI Engineer dapat memproses laporan" }; }
@@ -131,10 +131,11 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     if (run?.status === "draft" && user.role === "admin") {
       await approveAnalysisRun(params.id, user.userId);
     } else if (run?.status !== "approved") { set.status = 409; return { error: "Run belum disetujui Admin" }; }
-    processAnalysisRun(params.id, user.userId);
+    processAnalysisRun(params.id, user.userId, body?.training_source);
     set.status = 202;
     return { id: params.id, status: "processing" };
-  }, { params: t.Object({ id: t.String({ format: "uuid" }) }) })
+  }, { params: t.Object({ id: t.String({ format: "uuid" }) }),
+    body: t.Optional(t.Object({ training_source: t.Optional(t.Union([t.Literal("analysis"), t.Literal("raw_references")])) })) })
   .post("/runs/:id/rollback", async ({ headers, params, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }

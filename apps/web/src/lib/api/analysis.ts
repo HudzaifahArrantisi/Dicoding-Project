@@ -11,7 +11,7 @@ export interface AnalysisRun {
   published_at: string | null
   current_step: string | null
   error: string | null
-  manifest: { partner_product_rows?: number; product_count?: number; sha256?: Record<string, string> } | null
+  manifest: { partner_product_rows?: number; product_count?: number; sha256?: Record<string, string>; training_source?: 'analysis' | 'raw_references' } | null
   steps: Array<{ label: string; status: 'running' | 'succeeded' | 'failed' }>
 }
 
@@ -60,8 +60,10 @@ export async function deleteRawReference(id: string) {
   return apiRequest<{ deleted: boolean; id: string }>(`/analysis/raw-references/${id}`, { method: 'DELETE' })
 }
 
-export async function actionAnalysisRun(id: string, action: 'approve' | 'process' | 'rollback' | 'reject', reason?: string) {
-  return apiRequest(`/analysis/runs/${id}/${action}`, { method: 'POST', body: reason ? JSON.stringify({ reason }) : undefined })
+export async function actionAnalysisRun(id: string, action: 'approve' | 'process' | 'rollback' | 'reject', reason?: string,
+  training_source?: 'analysis' | 'raw_references') {
+  const body = reason || training_source ? JSON.stringify({ ...(reason ? { reason } : {}), ...(training_source ? { training_source } : {}) }) : undefined
+  return apiRequest(`/analysis/runs/${id}/${action}`, { method: 'POST', body })
 }
 
 export async function createAnalysisTeamUser(input: { full_name: string; email: string; password: string; role: 'data_science' | 'ai_engineer' }) {

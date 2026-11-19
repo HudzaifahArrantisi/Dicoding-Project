@@ -242,7 +242,7 @@ def refresh_intent() -> None:
     print(f"Daisuki AI: {len(texts)} contoh intent dan {len(bundle['retrieval']['documents'])} cuplikan retrieval diperbarui; model risiko dipertahankan.")
 
 
-def run_retraining_loop() -> bool:
+def run_retraining_loop(training_source: str = "analysis") -> bool:
     try:
         csv_texts: list[str] = []
         csv_labels: list[str] = []
@@ -264,7 +264,19 @@ def run_retraining_loop() -> bool:
 
         # 2. Pipeline Klasifikasi Operasional Database & Intent
         texts, labels = csv_texts, csv_labels
-        training_source = "data_science_csv"
+        risk_training_source = "data_science_csv"
+        raw_paths = list_raw_references() if training_source == "raw_references" else []
+        raw_input_sha256: str | None = None
+        if training_source == "raw_references":
+            if not raw_paths:
+                raise ValueError("Belum ada file referensi mentah di database untuk training")
+            texts, labels = [], []
+            risk_training_source = "raw_references"
+            raw_digest = hashlib.sha256()
+            for path in raw_paths:
+                raw_digest.update(path.relative_to(RAW_DIR).as_posix().encode("utf-8"))
+                raw_digest.update(path.read_bytes())
+            raw_input_sha256 = raw_digest.hexdigest()
         intent_texts, intent_labels = build_intent_samples()
         bundle: dict[str, Any] = {
             "intent": train_pipeline(intent_texts, intent_labels, fit_prior=False),
@@ -273,10 +285,11 @@ def run_retraining_loop() -> bool:
             "mainbrain_meta": {
                 "total_documents": mainbrain_stats["total"],
                 "converted_markdowns": mainbrain_stats["success"],
-                "training_input_source": training_source,
+                "training_input_source": risk_training_source,
                 "training_input_samples": len(texts),
                 "source_run_id": run_id(),
-                "training_input_sha256": hashlib.sha256(handoff.read_bytes()).hexdigest(),
+                "training_input_sha256": raw_input_sha256 if training_source == "raw_references"
+                else hashlib.sha256(handoff.read_bytes()).hexdigest(),
             },
             "metadata": {
                 "name": "Daisuki AI Assistant",
@@ -289,11 +302,13 @@ def run_retraining_loop() -> bool:
             },
         }
         if run_id():
-            bundle["analysis_retrieval"] = build_analysis_index(handoff.parent)
-            bundle["raw_pdf_retrieval"] = build_raw_reference_index(list_raw_references())
+            if training_source == "analysis":
+                bundle["analysis_retrieval"] = build_analysis_index(handoff.parent)
+            else:
+                bundle["raw_pdf_retrieval"] = build_raw_reference_index(raw_paths)
         if len(set(labels)) >= 2:
             bundle["risk"] = train_pipeline(texts, labels)
-            bundle["mainbrain_meta"]["risk_model_source"] = training_source
+            bundle["mainbrain_meta"]["risk_model_source"] = risk_training_source
         elif MODEL_OUTPUT_FILE.exists():
             from filter import DaisukiFilter
             previous = DaisukiFilter(MODEL_OUTPUT_FILE, model_key="risk")
@@ -302,7 +317,8 @@ def run_retraining_loop() -> bool:
                 bundle["mainbrain_meta"]["risk_model_source"] = "retained_previous"
         if "risk" not in bundle:
             LOGGER.warning("Data stok hanya satu kelas; model intent tetap dilatih, prediksi risiko belum tersedia")
-        LOGGER.info("Training intent dari %d frasa dan risiko dari %d pasangan mitra-produk", len(intent_texts), len(texts))
+        LOGGER.info("Training intent dari %d frasa; sumber model risiko: %s (%d pasangan mitra-produk)",
+                    len(intent_texts), risk_training_source, len(texts))
         save_model_safely(bundle, MODEL_OUTPUT_FILE, TEMP_MODEL_FILE)
         return True
     except (OSError, ValueError, RuntimeError) as error:
@@ -316,6 +332,8 @@ def main() -> None:
     action.add_argument("--mode", type=int, choices=(1, 2, 3), help="1=analisis Data Science, 2=semua raw_references, 3=satu file")
     action.add_argument("--weekly", action="store_true", help="Training pipeline mingguan dari CSV Data Science")
     action.add_argument("--intent-only", action="store_true", help="Perbarui classifier intent tanpa melatih ulang risiko")
+    parser.add_argument("--training-source", choices=("analysis", "raw_references"), default="analysis",
+                        help="Sumber data untuk training pipeline; raw_references mempertahankan model risiko saat ini")
     parser.add_argument("--run-id", help="ID run Data Science untuk mode 1; default run valid terbaru")
     parser.add_argument("--file", dest="source_file_name", help="Nama satu file dalam raw_references untuk mode 3")
     parser.add_argument("--public-source", action="append", default=[], metavar="FILE",
@@ -328,7 +346,7 @@ def main() -> None:
     if run_id() or args.weekly:
         if args.run_id or args.source_file_name or args.public_source or args.mitra_summary or args.revoke_mitra_source or args.intent_only or args.mode:
             parser.error("Pipeline mingguan tidak menerima opsi training manual")
-        raise SystemExit(0 if run_retraining_loop() else 1)
+        raise SystemExit(0 if run_retraining_loop(args.training_source) else 1)
     if args.intent_only:
         if args.run_id or args.source_file_name or args.public_source or args.mitra_summary or args.revoke_mitra_source:
             parser.error("--intent-only tidak menerima --run-id, --file, --public-source, atau --mitra-summary")

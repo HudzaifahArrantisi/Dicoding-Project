@@ -129,11 +129,12 @@ export async function hydrateDataScienceArtifacts(runId: string): Promise<void> 
   }
 }
 
-export async function stageRawReferences(): Promise<{ directory: string; cleanup: () => Promise<void> }> {
+export async function stageRawReferences(onlyAdminUploads = false): Promise<{ directory: string; cleanup: () => Promise<void> }> {
   const directory = await mkdtemp(join(tmpdir(), "daisuki-raw-"));
   try {
     const rows = await db.select({ category: rawReferences.category, file_name: rawReferences.file_name,
-      content: rawReferences.content }).from(rawReferences);
+      content: rawReferences.content }).from(rawReferences)
+      .where(onlyAdminUploads ? isNotNull(rawReferences.uploaded_by) : undefined);
     for (const row of rows) {
       const { category, fileName } = validateRawReference({ name: row.file_name, size: row.content.length });
       if (category !== row.category) throw new Error("Kategori referensi tidak cocok");
