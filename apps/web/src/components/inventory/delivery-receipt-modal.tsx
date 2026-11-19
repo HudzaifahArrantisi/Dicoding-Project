@@ -147,6 +147,7 @@ export function DeliveryReceiptModal({
   <meta charset="UTF-8">
   <title>Surat Jalan - ${order.order_no}</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap');
     @page {
       size: A4 portrait;
       margin: 12mm 14mm;
@@ -157,7 +158,7 @@ export function DeliveryReceiptModal({
       padding: 0;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       color: #111827;
       background: #ffffff;
       font-size: 10pt;
@@ -507,6 +508,7 @@ export function DeliveryReceiptModal({
   <meta charset="UTF-8">
   <title>Resi Thermal - ${order.order_no}</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap');
     @page {
       size: 80mm auto;
       margin: 3mm 4mm;
@@ -517,7 +519,7 @@ export function DeliveryReceiptModal({
       padding: 0;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       color: #000000;
       background: #ffffff;
       font-size: 8.5pt;

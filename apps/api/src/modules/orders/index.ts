@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
-import { eq, and, desc, gte, inArray, sql } from "drizzle-orm";
+import { RETAIL_PRICE_OTHER, RETAIL_PRICE_SEBLAK } from "@daisuki/shared";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
   auditLogs,
@@ -24,7 +25,8 @@ import { saveBase64Image } from "../../lib/storage";
 class CentralStockConflictError extends Error {}
 function canAdminChangeStatus(from: OrderStatus, to: OrderStatus): boolean {
   return (from === "diproses" && to === "ditolak") ||
-    (from === "disetujui" && to === "dalam_pengiriman");
+    (from === "disetujui" && to === "dipacking") ||
+    (from === "dipacking" && to === "dalam_pengiriman");
 }
 class OrderWorkflowError extends Error {
   constructor(
@@ -157,6 +159,111 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       }),
     },
   )
+  .get("/finance/summary", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin" && (user.role !== "mitra" || !user.partnerId)) {
+      set.status = 403; return { error: "Akses tidak diizinkan" };
+    }
+    const partnerId = user.role === "mitra" ? user.partnerId : null;
+    const outflowRows = await db.execute<{
+      partner_id: string;
+      units_today: number;
+      gross_today: string;
+      units_7d: number;
+      gross_7d: string;
+      gross_30d: string;
+    }>(sql`
+      SELECT
+        sl.partner_id::text AS partner_id,
+        COALESCE(SUM(sl.qty_before - sl.qty_after)
+          FILTER (WHERE sl.created_at >= ((now() AT TIME ZONE 'Asia/Jakarta')::date::timestamp AT TIME ZONE 'Asia/Jakarta')), 0)::int AS units_today,
+        COALESCE(SUM((sl.qty_before - sl.qty_after) *
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END)
+          FILTER (WHERE sl.created_at >= ((now() AT TIME ZONE 'Asia/Jakarta')::date::timestamp AT TIME ZONE 'Asia/Jakarta')), 0)::text AS gross_today,
+        COALESCE(SUM(sl.qty_before - sl.qty_after)
+          FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::int AS units_7d,
+        COALESCE(SUM((sl.qty_before - sl.qty_after) *
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END)
+          FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::text AS gross_7d,
+        COALESCE(SUM((sl.qty_before - sl.qty_after) *
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END), 0)::text AS gross_30d
+      FROM stock_logs sl
+      JOIN products pr ON pr.id = sl.product_id
+      WHERE sl.source = 'manual_update'
+        AND sl.qty_before > sl.qty_after
+        AND sl.created_at >= now() - interval '30 days'
+        AND pr.sku IN ('DSK-SB-001', 'DSK-BR-002', 'DSK-MK-003', 'DSK-KP-004')
+        AND (${partnerId}::uuid IS NULL OR sl.partner_id = ${partnerId}::uuid)
+      GROUP BY sl.partner_id
+    `);
+    const sum = (rows: Array<{ gross_today: string; gross_7d: string; gross_30d: string }>, key: "gross_today" | "gross_7d" | "gross_30d") =>
+      rows.reduce((total, item) => total + Number(item[key]), 0).toString();
+    return { data: {
+      sales_estimate_today: sum(outflowRows, "gross_today"),
+      sales_estimate_7d: sum(outflowRows, "gross_7d"),
+      sales_estimate_30d: sum(outflowRows, "gross_30d"),
+      stock_outflow_units_today: outflowRows.reduce((total, item) => total + Number(item.units_today), 0),
+      stock_outflow_units_7d: outflowRows.reduce((total, item) => total + Number(item.units_7d), 0),
+      stock_outflow_by_partner_7d: user.role === "admin"
+        ? outflowRows.map((item) => ({ partner_id: item.partner_id, gross_7d: item.gross_7d, units_7d: Number(item.units_7d) }))
+        : [],
+    } };
+  })
+  .get("/finance/insights", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Hanya admin yang dapat melihat analisis jaringan" }; }
+    const deadstock = await db.execute<{
+      partner_id: string; partner_name: string; product_name: string; current_qty: number; inactive_days: number;
+    }>(sql`
+      SELECT ps.partner_id, pa.name AS partner_name, pr.name AS product_name, ps.current_qty,
+        floor(extract(epoch FROM (now() - coalesce(m.last_movement, ps.updated_at))) / 86400)::int AS inactive_days
+      FROM partner_stocks ps
+      JOIN partners pa ON pa.id = ps.partner_id
+      JOIN products pr ON pr.id = ps.product_id
+      LEFT JOIN LATERAL (
+        SELECT max(sl.created_at) AS last_movement FROM stock_logs sl
+        WHERE sl.partner_id = ps.partner_id AND sl.product_id = ps.product_id
+          AND sl.qty_before <> sl.qty_after
+      ) m ON true
+      WHERE ps.current_qty > 0 AND coalesce(m.last_movement, ps.updated_at) < now() - interval '30 days'
+      ORDER BY inactive_days DESC, ps.current_qty DESC LIMIT 30
+    `);
+    const audit = await db.execute<{
+      partner_id: string; partner_name: string; stale_days: number; large_changes: number; priority_score: number;
+    }>(sql`
+      SELECT pa.id AS partner_id, pa.name AS partner_name,
+        floor(extract(epoch FROM (now() - max(ps.updated_at))) / 86400)::int AS stale_days,
+        count(sl.id) FILTER (WHERE sl.created_at >= now() - interval '30 days'
+          AND sl.source IN ('manual_update', 'adjustment') AND abs(sl.qty_after - sl.qty_before) > greatest(10, sl.qty_before * 0.5))::int AS large_changes,
+        (greatest(0, floor(extract(epoch FROM (now() - max(ps.updated_at))) / 86400) - 7)
+          + 3 * count(sl.id) FILTER (WHERE sl.created_at >= now() - interval '30 days'
+          AND sl.source IN ('manual_update', 'adjustment') AND abs(sl.qty_after - sl.qty_before) > greatest(10, sl.qty_before * 0.5)))::int AS priority_score
+      FROM partners pa JOIN partner_stocks ps ON ps.partner_id = pa.id
+      LEFT JOIN stock_logs sl ON sl.partner_id = ps.partner_id AND sl.product_id = ps.product_id
+      GROUP BY pa.id, pa.name
+      HAVING max(ps.updated_at) < now() - interval '7 days'
+        OR count(sl.id) FILTER (WHERE sl.created_at >= now() - interval '30 days'
+          AND sl.source IN ('manual_update', 'adjustment') AND abs(sl.qty_after - sl.qty_before) > greatest(10, sl.qty_before * 0.5)) > 0
+      ORDER BY priority_score DESC LIMIT 20
+    `);
+    const factory = await db.execute<{
+      product_id: string; product_name: string; central_stock: number; sold_30d: number; forecast_14d: number; suggested_qty: number;
+    }>(sql`
+      SELECT pr.id AS product_id, pr.name AS product_name, pr.central_stock,
+        coalesce(sum(greatest(sl.qty_before - sl.qty_after, 0)) FILTER
+          (WHERE sl.source = 'manual_update' AND sl.created_at >= now() - interval '30 days'), 0)::int AS sold_30d,
+        ceil(coalesce(sum(greatest(sl.qty_before - sl.qty_after, 0)) FILTER
+          (WHERE sl.source = 'manual_update' AND sl.created_at >= now() - interval '30 days'), 0) * 14.0 / 30)::int AS forecast_14d,
+        greatest(0, ceil(coalesce(sum(greatest(sl.qty_before - sl.qty_after, 0)) FILTER
+          (WHERE sl.source = 'manual_update' AND sl.created_at >= now() - interval '30 days'), 0) * 14.0 / 30) - pr.central_stock)::int AS suggested_qty
+      FROM products pr LEFT JOIN stock_logs sl ON sl.product_id = pr.id
+      WHERE pr.is_active = true GROUP BY pr.id, pr.name, pr.central_stock
+      ORDER BY suggested_qty DESC, pr.name
+    `);
+    return { data: { deadstock, audit, factory, method: "Estimasi dari penurunan stok fisik 30 hari; perlu verifikasi lapangan sebelum PO." } };
+  })
   .post(
     "/",
     async ({ headers, body, set }) => {
@@ -207,24 +314,27 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
 
       try {
         await db.transaction(async (tx) => {
+          const reservedQuantities = new Map<string, number>();
+          let hasBackorder = false;
           for (const item of [...body.items].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
-            const [reserved] = await tx.update(products)
-              .set({ central_stock: sql`${products.central_stock} - ${item.qty_requested}` })
-              .where(and(eq(products.id, item.product_id), eq(products.is_active, true), gte(products.central_stock, item.qty_requested)))
-              .returning({ id: products.id });
-            if (!reserved) {
-              const [product] = await tx.select({ name: products.name, central_stock: products.central_stock, is_active: products.is_active })
-                .from(products).where(eq(products.id, item.product_id));
-              if (!product || !product.is_active) throw new OrderWorkflowError(422, "Produk tidak ditemukan atau tidak aktif");
-              throw new OrderWorkflowError(409, `Stok pusat ${product.name} tersisa ${product.central_stock} pcs. Kurangi jumlah pengajuan dan coba lagi.`);
+            const [product] = await tx.select({ name: products.name, central_stock: products.central_stock, is_active: products.is_active })
+              .from(products).where(eq(products.id, item.product_id)).for("update");
+            if (!product || !product.is_active) throw new OrderWorkflowError(422, "Produk tidak ditemukan atau tidak aktif");
+            if (!body.allow_backorder && product.central_stock < item.qty_requested) {
+              throw new OrderWorkflowError(409, `Stok pusat ${product.name} tersisa ${product.central_stock} pcs. Kurangi jumlah pengajuan atau pilih pre-order pabrik.`);
             }
+            const reserve = Math.min(product.central_stock, item.qty_requested);
+            if (reserve < item.qty_requested) hasBackorder = true;
+            if (reserve > 0) await tx.update(products).set({ central_stock: sql`${products.central_stock} - ${reserve}` }).where(eq(products.id, item.product_id));
+            reservedQuantities.set(item.product_id, reserve);
           }
           const [ord] = await tx
           .insert(orders)
           .values({
             order_no: orderNo,
             partner_id: partnerId,
-            status: "diproses",
+            status: hasBackorder ? "ditunda" : "diproses",
+            distribution_scheme: "konsinyasi",
             note: body.note || null,
             created_by: user.userId,
           })
@@ -235,7 +345,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           product_id: item.product_id,
           qty_requested: item.qty_requested,
           qty_approved: null,
-          qty_reserved: item.qty_requested,
+          qty_reserved: reservedQuantities.get(item.product_id) ?? 0,
         }));
 
         const insertedItems = await tx
@@ -248,12 +358,14 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           type: "new_order",
           partner_id: partnerId,
           title: `Mitra ${partner.name} mau restok barang nih`,
-          body: `${partner.name} mengajukan restock untuk ${body.items.length} jenis produk (${ord.order_no}). Pesanan menunggu persetujuan pusat.`,
+          body: hasBackorder
+            ? `${partner.name} mengajukan pre-order ${ord.order_no}. Sebagian stok pusat belum tersedia; pesanan menunggu pasokan pabrik.`
+            : `${partner.name} mengajukan restock untuk ${body.items.length} jenis produk (${ord.order_no}). Pesanan menunggu persetujuan pusat.`,
         });
 
         return {
           ...ord,
-          status_label: ORDER_STATUS_LABEL["diproses"],
+          status_label: ORDER_STATUS_LABEL[hasBackorder ? "ditunda" : "diproses"],
           items: insertedItems,
         };
         });
@@ -273,6 +385,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
     {
       body: t.Object({
         note: t.Optional(t.String()),
+        allow_backorder: t.Optional(t.Boolean()),
         items: t.Array(
           t.Object({
             product_id: t.String(),
@@ -326,10 +439,20 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
     if (user.role !== "mitra" || !user.partnerId) { set.status = 403; return { error: "Hanya mitra yang dapat membatalkan pesanan" }; }
     try {
       await db.transaction(async (tx) => {
+        const [candidate] = await tx.select({ status: orders.status, partner_id: orders.partner_id }).from(orders).where(eq(orders.id, params.id));
+        if (!candidate) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
+        if (candidate.partner_id !== user.partnerId) throw new OrderWorkflowError(403, "Pesanan bukan milik cabang ini");
+        if (candidate?.status === "ditunda") {
+          const pendingItems = await tx.select({ product_id: orderItems.product_id })
+            .from(orderItems).where(eq(orderItems.order_id, params.id));
+          for (const item of [...pendingItems].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
+            await tx.select({ id: products.id }).from(products).where(eq(products.id, item.product_id)).for("update");
+          }
+        }
         const [ord] = await tx.select().from(orders).where(eq(orders.id, params.id)).for("update");
         if (!ord) throw new OrderWorkflowError(404, "Pesanan tidak ditemukan");
         if (ord.partner_id !== user.partnerId) throw new OrderWorkflowError(403, "Pesanan bukan milik cabang ini");
-        if (ord.status !== "diproses" && ord.status !== "disetujui") throw new OrderWorkflowError(409, "Pesanan sudah dikirim atau selesai");
+        if (ord.status !== "diproses" && ord.status !== "ditunda" && ord.status !== "disetujui") throw new OrderWorkflowError(409, "Pesanan sudah dikirim atau selesai");
         const items = await tx.select({ product_id: orderItems.product_id, qty_reserved: orderItems.qty_reserved }).from(orderItems).where(eq(orderItems.order_id, ord.id));
         for (const item of [...items].sort((a, b) => a.product_id.localeCompare(b.product_id))) {
           if (item.qty_reserved === 0) continue;
@@ -375,7 +498,10 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
           await tx.update(partnerStocks).set({ current_qty: after, updated_at: new Date(), updated_by: user.userId }).where(and(eq(partnerStocks.partner_id, ord.partner_id), eq(partnerStocks.product_id, item.product_id)));
           await tx.insert(stockLogs).values({ partner_id: ord.partner_id, product_id: item.product_id, qty_before: before, qty_after: after, source: "order_received", created_by: user.userId });
         }
-        await tx.update(orders).set({ status: "selesai", completed_at: new Date(), delivery_code_claimed_at: new Date() }).where(eq(orders.id, ord.id));
+        const completedAt = new Date();
+        await tx.update(orders).set({
+          status: "selesai", completed_at: completedAt, delivery_code_claimed_at: completedAt,
+        }).where(eq(orders.id, ord.id));
         const [receivingPartner] = await tx
           .select({ name: partners.name })
           .from(partners)
@@ -993,6 +1119,7 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         status: t.Union([
           t.Literal("diproses"),
           t.Literal("disetujui"),
+          t.Literal("dipacking"),
           t.Literal("dalam_pengiriman"),
           t.Literal("selesai"),
           t.Literal("ditolak"),

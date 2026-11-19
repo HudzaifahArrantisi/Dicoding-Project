@@ -11,13 +11,13 @@ Empat JSON berisi ringkasan produk, mitra, wilayah, dan disiplin pelaporan. Inde
 ## Jalankan
 
 ```powershell
-ai/.venv/Scripts/python.exe ai/retraining/train_daisuki.py --mode 1
+ai/.venv/Scripts/python.exe ai/retraining/train.py --mode 1
 ```
 
 Untuk memilih periode tertentu:
 
 ```powershell
-ai/.venv/Scripts/python.exe ai/retraining/train_daisuki.py --mode 1 --run-id "30b2d67b-7dc6-4cb9-b63e-d49e04005921"
+ai/.venv/Scripts/python.exe ai/retraining/train.py --mode 1 --run-id "30b2d67b-7dc6-4cb9-b63e-d49e04005921"
 ```
 
 Ganti UUID contoh dengan ID run yang ingin dilatih.

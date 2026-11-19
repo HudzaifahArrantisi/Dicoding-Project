@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Loader2, MessageCircle, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { ArrowUp, Loader2, MessageCircle, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import {
+  ChatToolChart,
+  ChatToolFlowDiagram,
+  ChatToolPdfExport,
+  CopyButton,
+  type ChartToolData,
+  type FlowDiagramData,
+} from '@/components/inventory/chat-tools'
 import {
   askMitraAssistant,
   clearMitraAssistantHistory,
@@ -12,34 +20,251 @@ import {
 
 type ChatMessage = { id: number; author: 'mitra' | 'assistant'; text: string; source?: 'llm' | 'fallback'; tour?: MitraTour; tourLabel?: string; interactionId?: string; feedback?: -1 | 1 | null }
 
-function inlineText(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-    part.startsWith('**') && part.endsWith('**')
-      ? <strong key={index} className="font-semibold">{part.slice(2, -2)}</strong>
-      : part,
-  )
+function cleanLatexFormula(formula: string): string {
+  let res = formula
+  for (let i = 0; i < 5; i++) {
+    const next = res.replace(/\\(?:text|mathbf|mathrm|mathit|textbf|bm)\{([^{}]+)\}/g, '$1')
+    if (next === res) break
+    res = next
+  }
+  return res
+    .replace(/\\times/g, '×')
+    .replace(/\\div/g, '÷')
+    .replace(/\\pm/g, '±')
+    .replace(/\\approx/g, '≈')
+    .replace(/\\leq/g, '≤')
+    .replace(/\\geq/g, '≥')
+    .replace(/\\neq/g, '≠')
+    .replace(/\\cdot/g, '•')
+    .replace(/\\[a-zA-Z]+/g, ' ')
+    .replace(/[{}]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
-function AssistantMessageText({ text }: { text: string }) {
-  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered'; lines: string[] }> = []
-  for (const rawLine of text.split('\n')) {
+function cleanLatexMath(text: string): string {
+  if (!text.includes('$')) return text
+  return text
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, f: string) => `**${cleanLatexFormula(f)}**`)
+    .replace(/(^|[^\\])\$([^$\n]+?)\$/g, (_, prefix: string, f: string) => `${prefix}**${cleanLatexFormula(f)}**`)
+}
+
+function inlineText(text: string): ReactNode[] {
+  return text.split(/(`[^`\n]+`|\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).map((part, index) => {
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={index} className="rounded bg-ink-900/8 px-1 py-0.5 font-mono text-xs">{part.slice(1, -1)}</code>
+    }
+    if (part.startsWith('***') && part.endsWith('***')) {
+      return <strong key={index} className="font-semibold text-ink-950"><em>{part.slice(3, -3)}</em></strong>
+    }
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={index} className="font-semibold text-ink-950">{part.slice(2, -2)}</strong>
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={index}>{part.slice(1, -1)}</em>
+    }
+    return part
+  })
+}
+
+function parseTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = parseTableRow(line)
+  return cells.length > 0 && cells.every((cell) => /^:?-{2,}:?$/.test(cell))
+}
+
+function parseMermaidDiagram(source: string):
+  | { kind: 'chart'; data: ChartToolData }
+  | { kind: 'flow'; data: FlowDiagramData }
+  | null {
+  const lines = source.split('\n').map((line) => line.trim()).filter(Boolean)
+  const first = lines[0] ?? ''
+
+  if (/^pie\b/i.test(first)) {
+    const title = first.replace(/^pie\s+(?:showData\s+)?title\s*/i, '').trim() || 'Diagram Pie'
+    const data = lines.slice(1).flatMap((line) => {
+      const item = /^\s*(?:"([^"]+)"|'([^']+)'|([^:]+))\s*:\s*(-?\d+(?:\.\d+)?)\s*$/.exec(line)
+      const value = item ? Number(item[4]) : NaN
+      const label = item?.[1] ?? item?.[2] ?? item?.[3]?.trim()
+      return item && label && Number.isFinite(value) && value >= 0 ? [{ label, value }] : []
+    })
+    return data.length ? { kind: 'chart', data: { type: 'pie', title, data } } : null
+  }
+
+  if (/^sequenceDiagram\b/i.test(first)) {
+    const participants = new Map<string, string>()
+    for (const line of lines.slice(1)) {
+      const actor = /^(?:participant|actor)\s+([A-Za-z0-9_]+)(?:\s+as\s+(.+))?$/i.exec(line)
+      if (actor) participants.set(actor[1], actor[2] ? actor[2].trim() : actor[1])
+    }
+    const edges = lines.slice(1).flatMap((line) => {
+      const message = /^([A-Za-z0-9_]+)\s*(?:-->>|->>|-->|->|--x|-x|--\)|-\))\s*([A-Za-z0-9_]+)\s*(?::\s*(.*))?$/.exec(line)
+      if (!message) return []
+      return [{
+        from: participants.get(message[1]) ?? message[1],
+        to: participants.get(message[2]) ?? message[2],
+        ...(message[3] ? { label: message[3].trim() } : {}),
+      }]
+    })
+    return edges.length ? { kind: 'flow', data: { title: 'Diagram Urutan Interaksi', direction: 'LR', edges } } : null
+  }
+
+  const flowHeader = /^(?:flowchart|graph)\s+(LR|RL|TB|TD|BT)\b/i.exec(first)
+  if (!flowHeader) return null
+  const direction = flowHeader[1].toUpperCase() as FlowDiagramData['direction']
+  const readNode = (sourceNode: string): string | null => {
+    const node = /^\s*[A-Za-z0-9_]+\s*(?:\(\(([^)]+)\)\)|\[([^\]]+)\]|\(([^)]+)\)|\{([^}]+)\})?\s*$/.exec(sourceNode)
+    return node ? (node[1] || node[2] || node[3] || node[4] || sourceNode).trim() : null
+  }
+  const edges = lines.slice(1).flatMap((line) => {
+    const edge = /^\s*(.+?)\s*(-->|---|==>|-\.->)(?:\|([^|]+)\|)?\s*(.+?)\s*$/.exec(line)
+    if (!edge) return []
+    const from = readNode(edge[1])
+    const to = readNode(edge[4])
+    return from && to ? [{ from, to, ...(edge[3] ? { label: edge[3].trim() } : {}) }] : []
+  })
+  return edges.length ? { kind: 'flow', data: { title: 'Diagram Alur', direction, edges } } : null
+}
+
+export function AssistantMessageText({ text }: { text: string }) {
+  const blocks: Array<{ kind: 'paragraph' | 'bullets' | 'numbered' | 'heading' | 'table' | 'code' | 'tool_chart' | 'tool_pdf'; lines: string[] }> = []
+  let inCodeBlock = false
+  let startNewBlock = false
+  for (const rawLine of cleanLatexMath(text).split('\n')) {
     const line = rawLine.trim()
-    if (!line) continue
-    const bullet = /^[-*]\s+(.+)$/.exec(line)
+    if (line.startsWith('```')) {
+      if (!inCodeBlock) {
+        const tag = line.slice(3).trim().toLowerCase()
+        if (tag.startsWith('tool:chart') || tag.startsWith('chart:')) {
+          blocks.push({ kind: 'tool_chart', lines: [] })
+        } else if (tag.startsWith('tool:pdf_export') || tag === 'pdf_export' || tag === 'pdf') {
+          blocks.push({ kind: 'tool_pdf', lines: [] })
+        } else {
+          blocks.push({ kind: 'code', lines: [] })
+        }
+      }
+      inCodeBlock = !inCodeBlock
+      startNewBlock = true
+      continue
+    }
+    if (inCodeBlock) {
+      blocks.at(-1)?.lines.push(rawLine)
+      continue
+    }
+    if (!line || /^-{3,}$/.test(line)) {
+      startNewBlock = true
+      continue
+    }
+    if (line.startsWith('|') && line.endsWith('|') && line.includes('|', 1)) {
+      const previous = blocks.at(-1)
+      if (previous?.kind === 'table' && !startNewBlock) previous.lines.push(line)
+      else blocks.push({ kind: 'table', lines: [line] })
+      startNewBlock = false
+      continue
+    }
+    const heading = /^#{1,4}\s+(.+)$/.exec(line)
+    if (heading) {
+      blocks.push({ kind: 'heading', lines: [heading[1]] })
+      startNewBlock = false
+      continue
+    }
+    const bullet = /^[-*•]\s+(.+)$/.exec(line)
     const numbered = /^\d+[.)]\s+(.+)$/.exec(line)
     const kind = bullet ? 'bullets' : numbered ? 'numbered' : 'paragraph'
     const content = bullet?.[1] ?? numbered?.[1] ?? line
     const previous = blocks.at(-1)
-    if (previous?.kind === kind) previous.lines.push(content)
+    if (previous?.kind === kind && !startNewBlock) previous.lines.push(content)
     else blocks.push({ kind, lines: [content] })
+    startNewBlock = false
   }
-  return <div className="space-y-2 break-words">
-    {blocks.map((block, index) => block.kind === 'paragraph'
-      ? <p key={index}>{block.lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex ? <br /> : null}{inlineText(line)}</span>)}</p>
-      : block.kind === 'bullets'
-        ? <ul key={index} className="list-disc space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ul>
-        : <ol key={index} className="list-decimal space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ol>,
-    )}
+  return <div className="min-w-0 max-w-full space-y-2.5 break-words [overflow-wrap:anywhere]">
+    {blocks.map((block, index) => {
+      if (block.kind === 'heading') {
+        return <h3 key={index} className="font-display text-sm font-bold text-ink-950 pt-1">{inlineText(block.lines[0])}</h3>
+      }
+      if (block.kind === 'code') {
+        const diagram = parseMermaidDiagram(block.lines.join('\n'))
+        if (diagram?.kind === 'chart') return <ChatToolChart key={index} data={diagram.data} />
+        if (diagram?.kind === 'flow') return <ChatToolFlowDiagram key={index} data={diagram.data} />
+        const codeText = block.lines.join('\n')
+        return (
+          <div key={index} className="my-2.5 overflow-hidden rounded-xl border border-line bg-ink-950 shadow-xs">
+            <div className="flex items-center justify-between border-b border-ink-800 bg-ink-900/90 px-3.5 py-1.5 text-[11px] text-ink-300">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-ink-400">Kode / Output</span>
+              <CopyButton
+                text={codeText}
+                label="Salin Kode"
+                className="inline-flex min-h-[26px] items-center gap-1 rounded-md border border-ink-700/60 bg-ink-800/80 px-2 py-0.5 text-[10px] font-medium text-ink-200 transition-colors hover:bg-ink-700 hover:text-white focus-visible:outline-2 focus-visible:outline-ink-400"
+              />
+            </div>
+            <pre className="overflow-x-auto p-3.5 text-xs font-mono leading-relaxed text-ink-50">
+              <code>{codeText}</code>
+            </pre>
+          </div>
+        )
+      }
+      if (block.kind === 'tool_chart') {
+        try {
+          const json = JSON.parse(block.lines.join('\n'))
+          return <ChatToolChart key={index} data={json} />
+        } catch {
+          return <pre key={index} className="overflow-x-auto rounded-lg bg-ink-900 p-3 text-xs leading-relaxed text-white"><code>{block.lines.join('\n')}</code></pre>
+        }
+      }
+      if (block.kind === 'tool_pdf') {
+        try {
+          const json = JSON.parse(block.lines.join('\n'))
+          return <ChatToolPdfExport key={index} data={json} />
+        } catch {
+          return <pre key={index} className="overflow-x-auto rounded-lg bg-ink-900 p-3 text-xs leading-relaxed text-white"><code>{block.lines.join('\n')}</code></pre>
+        }
+      }
+      if (block.kind === 'table') {
+        const rows = block.lines.filter((line) => !isTableSeparator(line)).map(parseTableRow)
+        if (rows.length === 0) return null
+        const [header, ...body] = rows
+        return (
+          <div key={index} className="my-3 max-w-full">
+            <div role="region" aria-label="Tabel jawaban" tabIndex={0} className="max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-line bg-white shadow-2xs focus-visible:outline-2 focus-visible:outline-ink-900">
+              <table className={`w-full border-collapse text-left text-xs tabular-nums ${header.length >= 3 ? 'min-w-[440px]' : ''}`}>
+              <thead>
+                <tr className="border-b border-line bg-surface/90 text-ink-950">
+                  {header.map((cell, cellIdx) => (
+                    <th key={cellIdx} className="px-3.5 py-2.5 font-bold tracking-tight">{inlineText(cell)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line/60">
+                {body.map((row, rowIdx) => (
+                  <tr key={rowIdx} className="hover:bg-paper/70 transition-colors">
+                    {row.map((cell, cellIdx) => (
+                      <td key={cellIdx} className="px-3.5 py-2.5 align-top text-ink-800">{inlineText(cell)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+              </table>
+            </div>
+            {header.length >= 3 ? <p className="mt-1 text-[11px] text-muted sm:hidden">Geser tabel untuk melihat kolom lainnya.</p> : null}
+          </div>
+        )
+      }
+      if (block.kind === 'paragraph') {
+        return <p key={index}>{block.lines.map((line, lineIndex) => <span key={lineIndex}>{lineIndex ? <br /> : null}{inlineText(line)}</span>)}</p>
+      }
+      if (block.kind === 'bullets') {
+        return <ul key={index} className="list-disc space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ul>
+      }
+      return <ol key={index} className="list-decimal space-y-1 pl-5">{block.lines.map((line, lineIndex) => <li key={lineIndex}>{inlineText(line)}</li>)}</ol>
+    })}
   </div>
 }
 
@@ -212,7 +437,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
           <header className="flex items-center justify-between border-b border-line/70 bg-white/95 px-4 py-3 backdrop-blur-md">
             <div className="flex items-center gap-3 min-w-0">
               <div className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-white shadow-2xs">
-                <Sparkles className="size-5 text-amber-300" aria-hidden="true" />
+                <img src="/icons/logo.jpg" alt="Logo" className="size-full rounded-xl object-cover" />
                 <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-500" />
               </div>
               <div className="min-w-0 flex-1">
@@ -309,7 +534,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                 >
                   {!isMitra ? (
                     <div className="grid size-7 shrink-0 place-items-center rounded-full bg-ink-900 text-amber-300 shadow-2xs mt-0.5">
-                      <Sparkles className="size-3.5" aria-hidden="true" />
+                      <img src="/icons/logo.jpg" alt="" className="size-full rounded-full object-cover" />
                     </div>
                   ) : null}
 
@@ -329,7 +554,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                     {/* Badge Sumber AI */}
                     {message.source === 'llm' ? (
                       <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-indigo-600">
-                        <Sparkles className="size-3" />
+
                         <span>Daisuki Asisten</span>
                       </div>
                     ) : null}

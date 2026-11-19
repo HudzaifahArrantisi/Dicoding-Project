@@ -23,6 +23,21 @@ export interface WeeklySummary {
 }
 
 export interface AIInsights {
+  partner_analysis?: {
+    metadata: { generated_at: string; period_days: number; start_date: string; end_date: string }
+    rows: Array<{
+      partner_id: string
+      partner_name: string
+      province_name: string
+      regency_name: string
+      weekly_units: number
+      log_count: number
+      active_days: number
+      critical_frequency: number
+      stockout_events: number
+      restock_requests: number
+    }>
+  }
   weekly_facts?: WeeklyFacts | null
   model_evaluation?: { source_run_id: string; calibrated: boolean; decision: string; evaluation_samples: number; evaluation_events: number } | null
   model_sync?: { trained_at: string | null; synchronized: boolean }

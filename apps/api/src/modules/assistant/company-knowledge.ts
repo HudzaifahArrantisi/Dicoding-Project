@@ -1,40 +1,91 @@
 import { readFile, readdir } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { getStopwords, matchSopSelection, matchesWordPack, matchesWordPattern } from "./word-loader";
 import { assistantCopy } from "./assistant-copy";
+import { isStaleCatalogExcerpt } from "./retail-price-reply";
 
 const dataDir = resolve(import.meta.dir, "../../../../../ai/data/mainbrain");
 const mainbrainDir = resolve(dataDir, "context_embeddings");
 const companyFile = resolve(dataDir, "corporate_knowledge/company_knowledge.json");
 type RagPolicy = { version: string; approved_sources: string[]; max_documents: number; max_chars_per_document: number; max_excerpts: number; blocked_content_patterns: string[] };
-const ragPolicy = JSON.parse(readFileSync(resolve(dataDir, "corporate_knowledge/rag_policy.json"), "utf8")) as RagPolicy;
-const approvedSources = new Set(ragPolicy.approved_sources.filter((name) => name.endsWith(".public.md")));
-const blockedContent = ragPolicy.blocked_content_patterns.map((pattern) => new RegExp(pattern, "i"));
+const ragPolicyFile = resolve(dataDir, "corporate_knowledge/rag_policy.json");
+let policyCache: { mtimeMs: number; policy: RagPolicy; approvedSources: Set<string>; blockedContent: RegExp[] } | null = null;
+let publicIndex: Promise<MainbrainIndex> | null = null;
+
+function currentPolicy() {
+  const mtimeMs = statSync(ragPolicyFile).mtimeMs;
+  if (!policyCache || policyCache.mtimeMs !== mtimeMs) {
+    const policy = JSON.parse(readFileSync(ragPolicyFile, "utf8")) as RagPolicy;
+    policyCache = {
+      mtimeMs, policy,
+      approvedSources: new Set(policy.approved_sources.filter((name) => name.endsWith(".public.md"))),
+      blockedContent: policy.blocked_content_patterns.map((pattern) => new RegExp(pattern, "i")),
+    };
+    publicIndex = null;
+  }
+  return policyCache;
+}
 const retrievalAliases = JSON.parse(readFileSync(resolve(dataDir, "../mega_data_word/dictionary/retrieval_aliases.json"), "utf8")) as {
   version: string; aliases: Record<string, string[]>;
 };
 export function filterRagDocuments(files: Array<{ name: string; content: string }>): Array<{ name: string; content: string }> {
+  const { approvedSources, blockedContent } = currentPolicy();
   return files.filter((file) => approvedSources.has(file.name) && !blockedContent.some((pattern) => pattern.test(file.content)));
 }
 const companyData: Promise<{ company_profile?: unknown; sop_procedures?: unknown }> = readFile(companyFile, "utf8")
   .then((text) => JSON.parse(text)).catch(() => ({}));
-const publicDocuments = readdir(mainbrainDir)
-  .then(async (names) => Promise.all(names.filter((name) => approvedSources.has(name)).slice(0, ragPolicy.max_documents)
-    .map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, ragPolicy.max_chars_per_document) }))))
-  .then(filterRagDocuments)
-  .catch(() => [] as Array<{ name: string; content: string }>);
-const publicIndex = publicDocuments.then(indexMainbrain);
+function getPublicIndex(): Promise<MainbrainIndex> {
+  const { policy, approvedSources } = currentPolicy();
+  publicIndex ??= readdir(mainbrainDir)
+    .then(async (names) => Promise.all(names.filter((name) => approvedSources.has(name)).slice(0, policy.max_documents)
+      .map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, policy.max_chars_per_document) }))))
+    .then(filterRagDocuments)
+    .catch(() => [] as Array<{ name: string; content: string }>)
+    .then(indexMainbrain);
+  return publicIndex;
+}
 
 type SopStep = { step_number: number; name: string; action: string };
 type Sop = { title: string; steps: SopStep[]; important_notes?: string[] };
 export type CompanyKnowledge = {
   company: Record<string, unknown> | null;
   sop: Sop | null;
-  documents: Array<{ source: string; version: string; excerpt: string }>;
+  documents: Array<{ source: string; version: string; excerpt: string; visibility?: string; kind?: string; aliases?: string[] }>;
   policyVersion?: string;
 };
+
+export function approvedModelContextReply(message: string, documents: CompanyKnowledge["documents"]): string | null {
+  const normalized = ` ${message.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+  for (const document of documents) {
+    if (document.kind !== "approved_summary" || document.visibility !== "mitra") continue;
+    if (!document.aliases?.some((alias) => normalized.includes(` ${alias.toLowerCase()} `))) continue;
+    return `Berdasarkan ringkasan yang disetujui dari ${document.source.split("/").pop()}: ${document.excerpt}`;
+  }
+  return null;
+}
+
+type BinaryExcerpt = { source: string; version: string; excerpt: string; score: number; visibility?: string; kind?: string; aliases?: string[] };
+
+export function selectPublicRagMemory(binary: BinaryExcerpt[] | undefined, markdown: CompanyKnowledge["documents"]): {
+  documents: CompanyKnowledge["documents"];
+  memory: "daisuki.pkl" | ".public.md" | "none";
+} {
+  const { blockedContent } = currentPolicy();
+  const relevant = (binary ?? [])
+    .filter((doc) => Number.isFinite(doc.score) && doc.score >= 0.08)
+    .filter((doc) => !isStaleCatalogExcerpt(doc.source, doc.excerpt))
+    .filter((doc) => doc.kind === "approved_summary" && doc.visibility === "mitra"
+      ? !blockedContent.some((pattern) => pattern.test(doc.excerpt))
+      : filterRagDocuments([{ name: doc.source, content: doc.excerpt }]).length > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map(({ score: _score, ...document }) => document);
+  if (relevant.length) return { documents: relevant, memory: "daisuki.pkl" };
+  const fallback = markdown.slice(0, 4);
+  return { documents: fallback, memory: fallback.length ? ".public.md" : "none" };
+}
 
 export function knowledgeIntent(message: string, previousIntent: string | null): "company" | "sop" | null {
   if (matchesWordPack("intent/company", message)) return "company";
@@ -63,7 +114,7 @@ type IndexedExcerpt = { source: string; version: string; excerpt: string };
 type MainbrainIndex = { excerpts: IndexedExcerpt[]; terms: Map<string, Map<number, number>> };
 
 function words(text: string): string[] {
-  return (text.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).filter((word) => !getStopwords().has(word));
+  return (text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((word) => !getStopwords().has(word));
 }
 
 function indexMainbrain(files: Array<{ name: string; content: string }>): MainbrainIndex {
@@ -71,10 +122,21 @@ function indexMainbrain(files: Array<{ name: string; content: string }>): Mainbr
   const terms = new Map<string, Map<number, number>>();
   for (const file of files.filter((item) => item.name.endsWith(".public.md"))) {
     const version = createHash("sha256").update(file.content).digest("hex").slice(0, 12);
-    for (const part of file.content.split(/\n\s*\n/).filter((item) => item.length >= 40)) {
-      const excerpt = part.slice(0, 1200);
+    const headerLine = file.content.split(/\r?\n/, 6).join(" ");
+    const headerWords = new Set(words(`${file.name.replace(/\.public\.md$/i, "").replace(/[_-]+/g, " ")} ${headerLine}`));
+    const rawSections = file.content.split(/\n---\n|\n(?=#{1,3}\s)/).map((s) => s.trim()).filter((item) => item.length >= 40);
+    const chunks = rawSections.length > 1 ? rawSections : file.content.split(/\n\s*\n/).map((s) => s.trim()).filter((item) => item.length >= 40);
+    for (const part of chunks) {
+      const excerpt = part.slice(0, 1500);
       const index = excerpts.push({ source: file.name, version, excerpt }) - 1;
-      for (const word of new Set(words(excerpt))) {
+      const excerptWords = new Set(words(excerpt));
+      for (const word of excerptWords) {
+        const postings = terms.get(word) ?? new Map<number, number>();
+        postings.set(index, (postings.get(index) ?? 0) + 2);
+        terms.set(word, postings);
+      }
+      for (const word of headerWords) {
+        if (excerptWords.has(word)) continue;
         const postings = terms.get(word) ?? new Map<number, number>();
         postings.set(index, (postings.get(index) ?? 0) + 1);
         terms.set(word, postings);
@@ -91,21 +153,21 @@ function searchMainbrain(query: string, index: MainbrainIndex): IndexedExcerpt[]
   for (const word of terms) {
     for (const [id, weight] of index.terms.get(word) ?? []) scores.set(id, (scores.get(id) ?? 0) + weight);
   }
-  return [...scores].sort((a, b) => b[1] - a[1]).slice(0, ragPolicy.max_excerpts).map(([id]) => index.excerpts[id]);
+  return [...scores].sort((a, b) => b[1] - a[1]).slice(0, currentPolicy().policy.max_excerpts).map(([id]) => index.excerpts[id]);
 }
 
 export function selectMainbrainExcerpts(query: string, files: Array<{ name: string; content: string }>): IndexedExcerpt[] {
   return searchMainbrain(query, indexMainbrain(files));
 }
 
-export async function loadCompanyKnowledge(message: string, intent: "company" | "sop" | null): Promise<CompanyKnowledge> {
-  const [raw, index] = await Promise.all([companyData, publicIndex]);
-  const documents = searchMainbrain(message, index);
+export async function loadCompanyKnowledge(message: string, intent: "company" | "sop" | null, includeMarkdown = true): Promise<CompanyKnowledge> {
+  const [raw, index] = await Promise.all([companyData, includeMarkdown ? getPublicIndex() : Promise.resolve(null)]);
+  const documents = index ? searchMainbrain(message, index) : [];
   return {
     company: intent === "company" ? cleanProfile(raw.company_profile) : null,
     sop: intent === "sop" ? selectSop(raw.sop_procedures, message) : null,
     documents,
-    policyVersion: ragPolicy.version,
+    policyVersion: currentPolicy().policy.version,
   };
 }
 

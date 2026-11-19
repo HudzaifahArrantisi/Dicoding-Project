@@ -1,4 +1,4 @@
-﻿import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Dialog } from 'radix-ui'
@@ -32,7 +32,7 @@ import {
 } from '@/components/inventory/query-state'
 import { RegionPicker, emptyRegion } from '@/components/inventory/region-picker'
 import { DeliveryScannerModal } from '@/components/inventory/delivery-scanner-modal'
-import { MitraAiAssistant } from '@/components/inventory/mitra-ai-assistant'
+import { MitraChatRoom } from '@/components/inventory/mitra-chat-room'
 import {
   MitraProductTour,
   type MitraTab,
@@ -63,9 +63,15 @@ import {
 import { useInventoryEvents } from '@/lib/inventory-events'
 import { useAuth, type User } from '@/lib/auth'
 import type { MitraTour } from '@/lib/api/assistant'
+import { getFinanceSummary, type FinanceSummary } from '@/lib/api/orders'
 import type { Order, Product, StockItem, StockLog } from '@/lib/inventory-types'
 
-export const Route = createFileRoute('/mitra')({ component: MitraPortal })
+export const Route = createFileRoute('/mitra')({
+  validateSearch: (search: Record<string, unknown>) => ({ chat: typeof search.chat === 'string' && /^[0-9a-f-]{36}$/i.test(search.chat) ? search.chat : undefined }),
+  component: MitraPortal,
+})
+
+type PortalTab = MitraTab | 'chat'
 
 type DraftOrderItem = { product_id: string; qty: string }
 
@@ -80,7 +86,7 @@ function validOrderQuantity(qty: string): boolean {
 }
 
 const tabItems: Array<{
-  id: MitraTab
+  id: PortalTab
   label: string
   Icon: typeof Store
 }> = [
@@ -89,6 +95,7 @@ const tabItems: Array<{
   { id: 'history', label: 'Lacak', Icon: Truck },
   { id: 'logs', label: 'Log Stok', Icon: History },
   { id: 'profile', label: 'Profil', Icon: UserRound },
+  { id: 'chat', label: 'Chat AI', Icon: MessageSquare },
 ]
 
 function errorMessage(error: unknown) {
@@ -139,9 +146,12 @@ function MitraPortal() {
   const refreshUserRef = useRef(refreshUser)
   refreshUserRef.current = refreshUser
   const navigate = useNavigate()
+  const { chat } = Route.useSearch()
   const queryClient = useQueryClient()
   useInventoryEvents(user?.role === 'mitra', 'mitra')
-  const [activeTab, setActiveTab] = useState<MitraTab>('stocks')
+  const [activeTab, setActiveTab] = useState<PortalTab>(chat ? 'chat' : 'stocks')
+  const [lastChatId, setLastChatId] = useState<string | null>(chat ?? null)
+  useEffect(() => { if (chat) { setActiveTab('chat'); setLastChatId(chat) } }, [chat])
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const activeIndex = Math.max(
     0,
@@ -149,22 +159,28 @@ function MitraPortal() {
   )
   const [activeTour, setActiveTour] = useState<MitraTour | null>(null)
   const [deliveryTourStep, setDeliveryTourStep] = useState(-1)
-  const [editedStocks, setEditedStocks] = useState<Record<string, number>>({})
+  const [editedStocks, setEditedStocks] = useState<Partial<Record<string, number>>>({})
+  const previousStockQtyRef = useRef<Partial<Record<string, number>>>({})
   const [orderItems, setOrderItems] = useState<DraftOrderItem[]>([])
   const [skippedProductIds, setSkippedProductIds] = useState<Set<string>>(
     () => new Set(),
   )
   const [orderNote, setOrderNote] = useState('')
 
-  const openTab = useCallback((nextTab: MitraTab) => {
+  const openTab = useCallback((nextTab: PortalTab) => {
     setActiveTab(nextTab)
     setHoveredIndex(null)
+    if (nextTab === 'chat') {
+      void navigate({ to: '/mitra', search: { chat: chat ?? lastChatId ?? crypto.randomUUID() } })
+    } else if (chat) {
+      void navigate({ to: '/mitra', search: { chat: undefined } })
+    }
     if (nextTab === 'profile') {
       void refreshUserRef
         .current()
         .catch(() => toast.error('Profil terbaru belum dapat dimuat'))
     }
-  }, [])
+  }, [chat, lastChatId, navigate])
 
   const closeTour = useCallback(() => {
     setActiveTour(null)
@@ -184,6 +200,11 @@ function MitraPortal() {
     refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   })
+  const financeQuery = useQuery<FinanceSummary>({
+    queryKey: ['mitra-finance-summary'], queryFn: getFinanceSummary,
+    enabled: user?.role === 'mitra' && activeTab === 'stocks', staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
 
   const ordersQuery = useQuery<Order[]>({
     queryKey: ['mitra-orders'],
@@ -192,7 +213,7 @@ function MitraPortal() {
     refetchInterval: (query) => {
       // Jika ada pesanan aktif yang diproses atau dalam perjalanan kurir, polling cepat 4 detik
       const hasActiveOrders = query.state.data?.some(
-        (o) => o.status === 'diproses' || o.status === 'dalam_pengiriman',
+        (o) => o.status === 'ditunda' || o.status === 'diproses' || o.status === 'dipacking' || o.status === 'dalam_pengiriman',
       )
       return hasActiveOrders ? 4_000 : 10_000
     },
@@ -238,7 +259,9 @@ function MitraPortal() {
       (ordersQuery.data ?? []).filter(
         (order) =>
           order.status === 'diproses' ||
+          order.status === 'ditunda' ||
           order.status === 'disetujui' ||
+          order.status === 'dipacking' ||
           order.status === 'dalam_pengiriman' ||
           (order.status === 'selesai' &&
             Boolean(order.receipt_proof_requested_at) &&
@@ -249,17 +272,34 @@ function MitraPortal() {
 
   useEffect(() => {
     if (!stocksQuery.data) return
-    setEditedStocks(
+    const previousStockQty = previousStockQtyRef.current
+    setEditedStocks((current) =>
       Object.fromEntries(
-        stocksQuery.data.map((stock) => [stock.product_id, stock.current_qty]),
+        stocksQuery.data.map((stock) => {
+          const editedQty = current[stock.product_id]
+          const previousQty = previousStockQty[stock.product_id]
+          return [
+            stock.product_id,
+            previousQty !== undefined &&
+            editedQty !== undefined &&
+            editedQty !== previousQty
+              ? editedQty
+              : stock.current_qty,
+          ]
+        }),
       ),
+    )
+    previousStockQtyRef.current = Object.fromEntries(
+      stocksQuery.data.map((stock) => [stock.product_id, stock.current_qty]),
     )
   }, [stocksQuery.data])
 
   const changedStocks = useMemo(
     () =>
       (stocksQuery.data ?? []).filter(
-        (stock) => editedStocks[stock.product_id] !== stock.current_qty,
+        (stock) =>
+          editedStocks[stock.product_id] !== undefined &&
+          editedStocks[stock.product_id] !== stock.current_qty,
       ),
     [editedStocks, stocksQuery.data],
   )
@@ -269,7 +309,7 @@ function MitraPortal() {
       return reportDailyStock({
         items: changedStocks.map((stock) => ({
           product_id: stock.product_id,
-          current_qty: editedStocks[stock.product_id],
+          current_qty: editedStocks[stock.product_id] ?? stock.current_qty,
         })),
       })
     },
@@ -277,6 +317,7 @@ function MitraPortal() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mitra-stocks'] }),
         queryClient.invalidateQueries({ queryKey: ['mitra-stock-logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['mitra-finance-summary'] }),
       ])
       toast.success('Stok tersimpan')
     },
@@ -287,6 +328,7 @@ function MitraPortal() {
     mutationFn: async () => {
       return apiCreateOrder({
         note: orderNote.trim() || undefined,
+        allow_backorder: true,
         items: orderItems.map((item) => ({
           product_id: item.product_id,
           qty_requested: Number(item.qty),
@@ -448,7 +490,7 @@ function MitraPortal() {
   }
 
   return (
-    <div className="dashboard-page mitra-dashboard min-h-screen bg-[#f6f7f9] pb-44 sm:pb-48 font-sans text-text">
+    <div className={`dashboard-page mitra-dashboard bg-[#f6f7f9] font-sans text-text ${activeTab === 'chat' ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen pb-44 sm:pb-48'}`}>
       <header className="sticky top-0 z-20 border-b border-line bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <button
@@ -486,7 +528,15 @@ function MitraPortal() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:pr-28">
+      <main className={`mx-auto max-w-6xl px-4 sm:px-6 lg:pr-28 ${activeTab === 'chat' ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pt-4 lg:pb-4' : 'py-6 sm:py-8'}`}>
+        {activeTab === 'stocks' && financeQuery.data ? (
+          <div className="mb-4 rounded-xl border border-line bg-white p-3 text-sm text-ink-800">
+            <p>Estimasi penjualan hari ini (WIB): <strong className="num tabular-nums">{Number(financeQuery.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
+            <p className="mt-1 text-xs text-muted">{financeQuery.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini.</p>
+            <p className="mt-3 border-t border-line pt-3">Estimasi penjualan 7 hari: <strong className="num tabular-nums">{Number(financeQuery.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
+            <p className="mt-1 text-xs text-muted">Dihitung dari {financeQuery.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs pada log stok keluar Anda.</p>
+          </div>
+        ) : null}
         {activeTab === 'stocks' ? (
           <StocksPanel
             query={stocksQuery}
@@ -557,15 +607,22 @@ function MitraPortal() {
             onLogout={handleLogout}
           />
         ) : null}
+        {activeTab === 'chat' && chat ? (
+          <MitraChatRoom
+            sessionId={chat}
+            onSelectSession={(id) => void navigate({ to: '/mitra', search: { chat: id } })}
+            onNewSession={() => void navigate({ to: '/mitra', search: { chat: crypto.randomUUID() } })}
+            onStartTour={setActiveTour}
+          />
+        ) : null}
       </main>
 
-      <MitraAiAssistant onStartTour={setActiveTour} />
       {activeTour ? (
         <MitraProductTour
           key={activeTour}
           tour={activeTour}
           onClose={closeTour}
-          onTabChange={openTab}
+          onTabChange={(tab) => openTab(tab)}
           onDeliveryStepChange={setDeliveryTourStep}
         />
       ) : null}
@@ -580,14 +637,14 @@ function MitraPortal() {
                 '--hover-index': hoveredIndex ?? activeIndex,
               } as React.CSSProperties
             }
-            className="pointer-events-auto relative mx-auto grid w-full max-w-[390px] grid-cols-5 items-center overflow-hidden rounded-full border border-ink-700/30 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-ink-700/10 backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[430px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
+            className="pointer-events-auto relative mx-auto grid w-full max-w-[450px] grid-cols-6 items-center overflow-hidden rounded-full border border-ink-700/30 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-ink-700/10 backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[490px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
             aria-label="Menu mitra"
           >
             {/* Liquid Glass Gliding Hover Pill */}
             <div
               aria-hidden="true"
               className={`liquid-pill-hover-mitra pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md
-                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/5)]
+                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/6)]
                 lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]
                 ${
                   hoveredIndex !== null && hoveredIndex !== activeIndex
@@ -600,7 +657,7 @@ function MitraPortal() {
             <div
               aria-hidden="true"
               className="liquid-pill-active-mitra pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)]
-                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/5)]
+                top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/6)]
                 lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]"
             >
               {/* Glossy Liquid Specular Sheen */}
@@ -725,7 +782,7 @@ function NumericStockInput({
 interface StocksPanelProps {
   query: ReturnType<typeof useQuery<StockItem[]>>
   centralProductsQuery: ReturnType<typeof useQuery<Product[]>>
-  editedStocks: Record<string, number>
+  editedStocks: Partial<Record<string, number>>
   changedIds: Set<string>
   onQtyChange: (stock: StockItem, qty: number) => void
   onSave: () => void
@@ -770,10 +827,9 @@ function StocksPanel({
 
       {/* 1. Grid Stok Gudang Pusat Daisuki */}
       <div
-        data-tour="central-stock-card"
         className="dashboard-surface mt-6 overflow-hidden border border-line"
       >
-        <div className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
+        <div data-tour="central-stock-card" className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
           <div className="flex items-center gap-3">
             <span
               className="grid size-11 shrink-0 place-items-center rounded-lg border border-line bg-white"
@@ -911,7 +967,7 @@ function StocksPanel({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {query.data.map((stock) => {
                 const qty = editedStocks[stock.product_id] ?? stock.current_qty
-                const status = getStockStatus(qty, stock.par_level)
+                const status = getStockStatus(stock.current_qty, stock.par_level)
                 const changed = changedIds.has(stock.product_id)
                 return (
                   <article
@@ -957,7 +1013,7 @@ function StocksPanel({
                         aria-live="polite"
                       >
                         <span className="font-display text-3xl font-extrabold tabular-nums text-ink-900">
-                          {qty.toLocaleString('id-ID')}
+                          {stock.current_qty.toLocaleString('id-ID')}
                         </span>
                         <span className="text-xs font-medium text-muted">
                           /pcs sekarang
@@ -1115,7 +1171,7 @@ function OrderForm({
                 Ajukan restock
               </h1>
               <p className="mt-0.5 text-xs text-muted sm:text-sm">
-                Pilih barang yang ingin dipesan dan sesuaikan jumlahnya dengan stok pusat.
+                Pilih barang dan jumlahnya. Jika stok pusat kurang, sisanya menjadi pre-order.
               </p>
             </div>
           </div>
@@ -1411,8 +1467,8 @@ function OrderForm({
                             aria-hidden="true"
                           />
                           <span>
-                            Melebihi stok pusat ({centralQty.toLocaleString('id-ID')}{' '}
-                            {stock.product_unit} tersedia).
+                            Stok pusat tersedia {centralQty.toLocaleString('id-ID')}{' '}
+                            {stock.product_unit}. Sisanya akan menunggu pasokan pabrik.
                           </span>
                         </div>
                       ) : null}
@@ -1490,10 +1546,10 @@ function OrderForm({
               />
               <div>
                 <p className="font-bold text-amber-900">
-                  Kuantitas melebihi stok gudang pusat
+                  Sebagian pesanan menjadi pre-order
                 </p>
                 <p className="mt-0.5 text-amber-800">
-                  Sesuaikan jumlah agar tidak melebihi stok pusat yang tersedia sebelum mengirim.
+                  Stok yang tersedia langsung dipesan. Sisanya ditunda sampai pasokan pabrik masuk, lalu diproses sesuai urutan pengajuan.
                 </p>
               </div>
             </div>
@@ -1533,7 +1589,6 @@ function OrderForm({
               disabled={
                 orderItems.length === 0 ||
                 hasInvalidQty ||
-                hasAnyExceeded ||
                 isSubmitting
               }
               className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:w-auto cursor-pointer"
@@ -1549,6 +1604,54 @@ function OrderForm({
         </div>
       </div>
     </section>
+  )
+}
+
+function DeliveryTourSimulation({ step, onClose, onOpenScanner }: { step: number; onClose: () => void; onOpenScanner: () => void }) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const showDetails = step >= 2 || detailsOpen
+
+  return (
+    <div className="mt-5 space-y-3" aria-label="Simulasi penerimaan barang">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <p><strong>Simulasi penerimaan.</strong> Contoh ini tidak mengubah stok atau riwayat pesanan.</p>
+        {step < 0 ? (
+          <button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-amber-600 px-3 text-xs font-semibold hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+            Tutup simulasi
+          </button>
+        ) : null}
+      </div>
+      <article data-tour="delivery-order-card" className="rounded-lg border border-line bg-white p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-display text-base font-bold text-ink-900">Contoh kiriman</h2>
+          <span className="rounded-md bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-950">Dalam Pengiriman</span>
+        </div>
+        <p className="mt-2 text-sm text-ink-700">Seblak Jadul Instan · jumlah yang disetujui admin</p>
+        <p className="mt-1 text-xs text-muted">Pada pesanan asli, ketuk kartu ini untuk membuka detail kiriman.</p>
+        {step < 0 ? (
+          <button type="button" onClick={() => setDetailsOpen((open) => !open)} className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-ink-700 px-3 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+            {showDetails ? 'Tutup detail contoh' : 'Buka detail contoh'}
+          </button>
+        ) : null}
+      </article>
+      {showDetails ? (
+        <section className="rounded-lg border border-line bg-paper p-4 sm:p-5" aria-label="Contoh detail penerimaan">
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+            <Truck className="size-4" aria-hidden="true" />
+            Detail penerimaan contoh
+          </div>
+          <p className="mt-2 text-sm text-ink-700">Cocokkan barang fisik dan jumlah yang disetujui sebelum memindai kode resi pada dus.</p>
+          <button
+            data-tour="delivery-confirm-button"
+            type="button"
+            onClick={onOpenScanner}
+            className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+          >
+            Scan Barcode (contoh)
+          </button>
+        </section>
+      ) : null}
+    </div>
   )
 }
 
@@ -1584,6 +1687,8 @@ function OrderHistory({
   uploadingProof: boolean
 }) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [simulationOpen, setSimulationOpen] = useState(false)
+  const [demoScannerOpen, setDemoScannerOpen] = useState(false)
   const tourOpenedOrderId = useRef<string | null>(null)
   const [editTarget, setEditTarget] = useState<Order | null>(null)
   const [scanOpen, setScanOpen] = useState(false)
@@ -1593,14 +1698,19 @@ function OrderHistory({
   const [preparingPhoto, setPreparingPhoto] = useState(false)
   const [statusFilter, setStatusFilter] = useState<
     | 'semua'
+    | 'ditunda'
     | 'diproses'
     | 'disetujui'
+    | 'dipacking'
     | 'dalam_pengiriman'
     | 'selesai'
     | 'ditolak'
-  >('diproses')
+  >('semua')
+  const previousTourFilter = useRef<typeof statusFilter | null>(null)
 
   const allOrders = query.data ?? []
+  const hasShipment = allOrders.some((order) => order.status === 'dalam_pengiriman')
+  const showDeliverySimulation = (deliveryTourStep >= 0 || simulationOpen) && !hasShipment && !query.isLoading && !query.isError
   const selectedOrder =
     allOrders.find((order) => order.id === selectedOrderId) ?? null
 
@@ -1608,13 +1718,19 @@ function OrderHistory({
     if (deliveryTourStep < 0) {
       if (tourOpenedOrderId.current) setSelectedOrderId(null)
       tourOpenedOrderId.current = null
+      if (previousTourFilter.current) {
+        setStatusFilter(previousTourFilter.current)
+        previousTourFilter.current = null
+      }
       return
     }
+    if (previousTourFilter.current === null) previousTourFilter.current = statusFilter
+    setStatusFilter('dalam_pengiriman')
     const shipment = query.data?.find(
       (order) => order.status === 'dalam_pengiriman',
     )
+    if (query.isSuccess && !shipment) setSimulationOpen(true)
     if (!shipment) return
-    setStatusFilter('dalam_pengiriman')
     if (deliveryTourStep >= 2) {
       tourOpenedOrderId.current = shipment.id
       setSelectedOrderId(shipment.id)
@@ -1622,7 +1738,7 @@ function OrderHistory({
       setSelectedOrderId(null)
       tourOpenedOrderId.current = null
     }
-  }, [deliveryTourStep, query.data])
+  }, [deliveryTourStep, query.data, query.isSuccess, statusFilter])
 
   const handleReceiptFile = async (file?: File) => {
     if (!file) return
@@ -1666,7 +1782,7 @@ function OrderHistory({
           <button
             type="button"
             onClick={onOpenOrder}
-            className="mt-2 inline-flex min-h-11 items-center justify-center gap-1.5 self-start rounded-md bg-gray-400 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 sm:mt-0 sm:self-auto"
+            className="mt-2 inline-flex min-h-12 items-center justify-center gap-1.5 self-start rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700 sm:mt-0 sm:self-auto"
           >
             <PackagePlus className="size-4" />
             <span>Ajukan Restock Baru</span>
@@ -1689,20 +1805,15 @@ function OrderHistory({
         </div>
       ) : null}
 
-      {!query.isLoading && allOrders.length === 0 ? (
+      {!query.isLoading && allOrders.length === 0 && !showDeliverySimulation ? (
         <div className="mt-6">
           <EmptyState
             title="Belum ada pesanan"
             description="Ajukan restock pertama untuk produk yang mulai menipis."
-            action={
-              <button
-                type="button"
-                onClick={onOpenOrder}
-                className="min-h-11 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700"
-              >
-                restock
-              </button>
-            }
+            action={<div className="flex flex-wrap justify-center gap-2">
+              <button type="button" onClick={onOpenOrder} className="min-h-12 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700">Ajukan restock</button>
+              <button type="button" onClick={() => setSimulationOpen(true)} className="min-h-11 rounded-md border border-ink-700 bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">Coba simulasi penerimaan</button>
+            </div>}
           />
         </div>
       ) : null}
@@ -1720,6 +1831,13 @@ function OrderHistory({
             }`}
           >
             Semua ({allOrders.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('ditunda')}
+            className={`min-h-12 rounded-lg px-4 text-sm font-semibold ${statusFilter === 'ditunda' ? 'border border-amber-300 bg-amber-50 text-amber-950' : 'border border-line bg-white text-ink-800'}`}
+          >
+            Menunggu stok ({allOrders.filter((o) => o.status === 'ditunda').length})
           </button>
           <button
             type="button"
@@ -1744,6 +1862,13 @@ function OrderHistory({
           >
             Disetujui (
             {allOrders.filter((o) => o.status === 'disetujui').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('dipacking')}
+            className={`min-h-12 rounded-lg px-4 text-sm font-semibold ${statusFilter === 'dipacking' ? 'border border-sky-300 bg-sky-50 text-sky-950' : 'border border-line bg-white text-ink-800'}`}
+          >
+            Dipacking ({allOrders.filter((o) => o.status === 'dipacking').length})
           </button>
           <button
             type="button"
@@ -1781,6 +1906,8 @@ function OrderHistory({
           </button>
         </div>
       ) : null}
+
+      {showDeliverySimulation ? <DeliveryTourSimulation step={deliveryTourStep} onClose={() => { setSimulationOpen(false); setDemoScannerOpen(false) }} onOpenScanner={() => setDemoScannerOpen(true)} /> : null}
 
       {/* List Riwayat Pesanan */}
       {filteredOrders.length > 0 ? (
@@ -1900,7 +2027,7 @@ function OrderHistory({
             )
           })}
         </div>
-      ) : allOrders.length > 0 ? (
+      ) : allOrders.length > 0 && !showDeliverySimulation ? (
         <div className="mt-6 rounded-lg border border-line bg-white p-8 text-center">
           <p className="text-sm font-semibold text-ink-900">
             Tidak ada pesanan dengan status ini
@@ -1918,6 +2045,7 @@ function OrderHistory({
       {/* Modal Popup Detail Pesanan */}
       {selectedOrder ? (
         <Dialog.Root
+          modal={deliveryTourStep < 2}
           open={Boolean(selectedOrder)}
           onOpenChange={(open) => {
             if (!open) {
@@ -1930,6 +2058,9 @@ function OrderHistory({
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
             <Dialog.Content
+              onOpenAutoFocus={(event) => {
+                if (deliveryTourStep >= 2) event.preventDefault()
+              }}
               className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-xl animate-in fade-in zoom-in-95 duration-200 focus:outline-hidden sm:p-6"
               aria-describedby="mitra-order-dialog-desc"
             >
@@ -2025,6 +2156,13 @@ function OrderHistory({
               </div>
 
               {/* Penjelasan / Catatan Admin Pusat */}
+              {selectedOrder.status === 'ditunda' ? (
+                <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                  <p className="font-semibold">Pesanan menunggu pasokan pabrik</p>
+                  <p className="mt-1">Stok yang sudah ada telah dicadangkan. Sisanya akan dialokasikan sesuai urutan saat stok pusat ditambah.</p>
+                  {selectedOrder.items.map((item) => <p key={item.id} className="mt-2 tabular-nums">{item.product_name}: {item.qty_reserved} dari {item.qty_requested} pcs dicadangkan</p>)}
+                </div>
+              ) : null}
               {selectedOrder.admin_note ? (
                 <div className="mt-4 rounded-md border border-line bg-ink-50/80 p-3.5 text-sm">
                   <div className="flex items-center gap-2 font-semibold text-ink-900">
@@ -2065,7 +2203,8 @@ function OrderHistory({
 
               {/* Status Banner & Aksi Pengiriman */}
               <div className="mt-5 border-t border-line pt-4">
-                {selectedOrder.status === 'diproses' ||
+                {selectedOrder.status === 'ditunda' ||
+                selectedOrder.status === 'diproses' ||
                 selectedOrder.status === 'disetujui' ? (
                   <div className="mb-4 flex flex-wrap gap-2">
                     {selectedOrder.status === 'diproses' ? (
@@ -2191,7 +2330,7 @@ function OrderHistory({
                       type="button"
                       onClick={() => setScanOpen(true)}
                       disabled={confirming}
-                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-ink-700 px-4 text-sm font-semibold text-white hover:bg-ink-900 disabled:opacity-50"
+                      className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-md bg-ink-700 px-4 text-sm font-semibold text-white hover:bg-ink-900 disabled:opacity-50"
                     >
                      Scan Barcode
                     </button>
@@ -2274,6 +2413,14 @@ function OrderHistory({
           </Dialog.Portal>
         </Dialog.Root>
       ) : null}
+      <DeliveryScannerModal
+        preview
+        tourActive={deliveryTourStep >= 3}
+        open={deliveryTourStep >= 3 || demoScannerOpen}
+        onOpenChange={setDemoScannerOpen}
+        onVerify={async () => undefined}
+        pending={false}
+      />
       <EditOrderModal
         order={editTarget}
         availableProducts={availableProducts}
@@ -2772,8 +2919,8 @@ function ProfilePanel({
           </div>
         </div>
 
-        <div data-tour="profile-section" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div data-tour="profile-section">
             <label
               htmlFor="profile-name"
               className="block text-sm font-semibold text-ink-900"
@@ -2846,7 +2993,7 @@ function ProfilePanel({
             />
           </div>
         </div>
-        <div data-tour="profile-region">
+        <div>
           <RegionPicker
             idPrefix="profile-region"
             value={region}

@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap');
 @import '@fontsource-variable/bricolage-grotesque';
 @import '@fontsource-variable/figtree';
 @import 'tailwindcss';
@@ -86,8 +87,9 @@
 
 @theme inline {
   --font-display:
-    'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-sans: 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
+    'Google Sans', 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans:
+    'Google Sans', 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
 
   /* Daisuki Named Palette Tokens (docs/design_system.md) */
   --color-ink-950: #0a0e24;
@@ -182,9 +184,11 @@
   }
   html {
     @apply h-full font-sans antialiased text-foreground bg-background;
+    font-family: var(--font-sans);
   }
   body {
-    @apply min-h-full bg-background text-foreground;
+    @apply min-h-full font-sans bg-background text-foreground;
+    font-family: var(--font-sans);
   }
   h1,
   h2,
@@ -193,6 +197,14 @@
   h5,
   h6 {
     @apply font-display tracking-tight text-foreground;
+    font-family: var(--font-display);
+  }
+  button,
+  input,
+  optgroup,
+  select,
+  textarea {
+    font-family: inherit;
   }
   .tabular-nums {
     font-variant-numeric: tabular-nums;

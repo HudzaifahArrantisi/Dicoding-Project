@@ -106,6 +106,8 @@ function factReply(intent: AssistantIntent, context: MitraContext, message: stri
 }
 
 export function resolveMitraIntent(message: string, previousIntent: AssistantIntent | null, classified?: { label: string; confidence: number } | null): AssistantIntent | null {
+  if (/\b(?:jurnal|artikel|karya\s*ilmiah|penelitian|sentimen|sgd|logistic\s*regression|natural\s*language|omnibus\s*law|danantara|indobert|complementnb)\b/i.test(message) &&
+    !/\b(?:stok|gudang|restock|pesanan|cabang|basreng|seblak|makaroni|keripik)\b/i.test(message)) return null;
   if (/\b(?:salah+|keliru|bukan)\b/i.test(message) && /\b(?:sisa|stok|gudang|toko|cabang)\b/i.test(message)) return "own_stock";
   if (matchFactualPattern("own_stock_patterns", message) && !matchFactualPattern("central_stock_patterns", message)) return "own_stock";
   if (matchFactualPattern("central_stock_patterns", message)) return "central_stock";

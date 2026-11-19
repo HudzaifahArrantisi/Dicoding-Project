@@ -27,28 +27,28 @@
       "sku": "DSK-SB-001",
       "name": "Seblak Jadul Instan",
       "category": "Camilan Berkuah / Instan",
-      "price_b2b": 12000,
+      "retail_price": 27500,
       "description": "Seblak instan otentik dengan racikan kencur alami, aneka kerupuk kenyal khas Bandung, dan sambal pedas daun jeruk sedap."
     },
     {
       "sku": "DSK-BR-002",
       "name": "Basreng Daun Jeruk",
       "category": "Camilan Kering / Renyah",
-      "price_b2b": 10000,
+      "retail_price": 25000,
       "description": "Bakso goreng renyah bumbu cabai rawit merah berpadu irisan daun jeruk segar beraroma khas gurih pedas."
     },
     {
       "sku": "DSK-MK-003",
       "name": "Makaroni Daun Jeruk",
       "category": "Camilan Kering / Renyah",
-      "price_b2b": 8500,
+      "retail_price": 25000,
       "description": "Makaroni spiral gurih dengan tingkat kerenyahan renyah gurih pedas taburan daun jeruk."
     },
     {
       "sku": "DSK-KP-004",
       "name": "Keripik Pisang Rasa Coklat",
       "category": "Camilan Manis",
-      "price_b2b": 15000,
+      "retail_price": 25000,
       "description": "Keripik pisang kepok renyah dengan balutan cokelat lumer tebal khas oleh-oleh modern."
     }
   ],

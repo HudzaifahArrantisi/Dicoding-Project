@@ -23,7 +23,9 @@ begin
   if not exists (select 1 from pg_type where typname = 'order_status') then
     create type order_status as enum (
       'diproses',
+      'ditunda',
       'disetujui',
+      'dipacking',
       'dalam_pengiriman',
       'selesai',
       'ditolak',
@@ -31,10 +33,14 @@ begin
     );
   end if;
 
+  alter type order_status add value if not exists 'dipacking';
+  alter type order_status add value if not exists 'ditunda';
+
   if not exists (select 1 from pg_type where typname = 'stock_source') then
     create type stock_source as enum ('manual_update', 'order_received', 'adjustment');
   end if;
 end $$;
+DO $$ BEGIN CREATE TYPE distribution_scheme AS ENUM ('konsinyasi'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 alter type user_role add value if not exists 'data_science';
 alter type user_role add value if not exists 'ai_engineer';
 
@@ -43,6 +49,7 @@ alter type user_role add value if not exists 'ai_engineer';
 -- A. Mitra Cabang (Partners)
 create table if not exists partners (
   id uuid primary key default gen_random_uuid(),
+  distribution_scheme distribution_scheme not null default 'konsinyasi',
   name text not null,
   type partner_type not null,
   type_other text,
@@ -185,7 +192,7 @@ create index if not exists stock_logs_partner_product_created_idx
 
 create table if not exists assistant_chat_events (
   id uuid primary key default gen_random_uuid(),
-  partner_id uuid not null references partners(id) on delete cascade,
+  partner_id uuid references partners(id) on delete cascade,
   user_id uuid not null references users(id) on delete cascade,
   message text not null check (length(message) between 1 and 500),
   reply text not null,
@@ -198,15 +205,17 @@ create table if not exists assistant_chat_events (
 );
 create index if not exists assistant_chat_partner_user_created_idx
   on assistant_chat_events (partner_id, user_id, created_at desc);
+create index if not exists assistant_chat_user_created_idx
+  on assistant_chat_events (user_id, created_at desc);
 alter table assistant_chat_events enable row level security;
 
 create table if not exists assistant_conversation_memory (
-  partner_id uuid not null references partners(id) on delete cascade,
+  partner_id uuid references partners(id) on delete cascade,
   user_id uuid not null references users(id) on delete cascade,
   session_id uuid not null,
   summary text not null,
   updated_at timestamptz not null default now(),
-  primary key (partner_id, user_id, session_id)
+  primary key (user_id, session_id)
 );
 alter table assistant_conversation_memory enable row level security;
 
@@ -216,6 +225,7 @@ create table if not exists orders (
   order_no text not null unique,
   partner_id uuid not null references partners(id) on delete cascade,
   status order_status not null default 'diproses',
+  distribution_scheme distribution_scheme not null default 'konsinyasi',
   note text,
   admin_note text,
   rejected_reason text,
@@ -238,6 +248,13 @@ alter table orders add column if not exists delivery_code varchar(32);
 alter table orders add column if not exists delivery_qr_token text;
 alter table orders add column if not exists delivery_code_claimed_at timestamptz;
 alter table orders add column if not exists cycle_period varchar(20) not null default 'weekly';
+alter table partners add column if not exists distribution_scheme distribution_scheme not null default 'konsinyasi';
+alter table orders add column if not exists distribution_scheme distribution_scheme not null default 'konsinyasi';
+update partners set distribution_scheme = 'konsinyasi' where distribution_scheme <> 'konsinyasi';
+DO $$ BEGIN
+  ALTER TABLE partners ADD CONSTRAINT partners_consignment_only
+    CHECK (distribution_scheme = 'konsinyasi');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 create unique index if not exists idx_orders_delivery_code on orders (delivery_code);
 create unique index if not exists idx_orders_qr_token on orders (delivery_qr_token);
 create index if not exists orders_partner_created_idx on orders (partner_id, created_at desc);

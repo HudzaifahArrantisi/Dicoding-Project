@@ -1,4 +1,5 @@
 export type StockStatus = "aman" | "waspada" | "kritis";
+export { OFFICIAL_RETAIL_PRICES, RETAIL_PRICE_SEBLAK, RETAIL_PRICE_OTHER, retailPriceForProduct } from "./retail-pricing";
 
 export const STOCK_THRESHOLDS = { aman: 50, kritis: 20 } as const;
 
@@ -22,7 +23,9 @@ export function isStale(updatedAt: Date | string, now = new Date()): boolean {
 
 export const ORDER_STATUSES = [
   "diproses",
+  "ditunda",
   "disetujui",
+  "dipacking",
   "dalam_pengiriman",
   "selesai",
   "ditolak",
@@ -32,7 +35,9 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   diproses: "Menunggu persetujuan",
+  ditunda: "Ditunda · menunggu stok pabrik",
   disetujui: "Disetujui",
+  dipacking: "Dipacking",
   dalam_pengiriman: "Dalam pengiriman",
   selesai: "Selesai",
   ditolak: "Ditolak",
@@ -41,7 +46,9 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   diproses: ["disetujui", "ditolak", "dibatalkan"],
-  disetujui: ["dalam_pengiriman", "dibatalkan"],
+  ditunda: ["diproses", "dibatalkan"],
+  disetujui: ["dipacking", "dibatalkan"],
+  dipacking: ["dalam_pengiriman"],
   dalam_pengiriman: ["selesai"],
   selesai: [],
   ditolak: [],

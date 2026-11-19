@@ -6,9 +6,36 @@ export interface CreateOrderItemPayload {
   qty_requested: number
 }
 
+export interface FinanceSummary {
+  sales_estimate_today: string
+  sales_estimate_7d: string
+  sales_estimate_30d: string
+  stock_outflow_units_today: number
+  stock_outflow_units_7d: number
+  stock_outflow_by_partner_7d: Array<{ partner_id: string; gross_7d: string; units_7d: number }>
+}
+
+export async function getFinanceSummary(): Promise<FinanceSummary> {
+  const response = await apiClient.get<{ data: FinanceSummary }>('/orders/finance/summary')
+  return response.data
+}
+
+export interface OperationalInsights {
+  deadstock: Array<{ partner_id: string; partner_name: string; product_name: string; current_qty: number; inactive_days: number }>
+  audit: Array<{ partner_id: string; partner_name: string; stale_days: number; large_changes: number; priority_score: number }>
+  factory: Array<{ product_id: string; product_name: string; central_stock: number; sold_30d: number; forecast_14d: number; suggested_qty: number }>
+  method: string
+}
+
+export async function getOperationalInsights(): Promise<OperationalInsights> {
+  const response = await apiClient.get<{ data: OperationalInsights }>('/orders/finance/insights')
+  return response.data
+}
+
 export interface CreateOrderPayload {
   items: CreateOrderItemPayload[]
   note?: string
+  allow_backorder?: boolean
 }
 
 export interface UpdateOrderPayload {

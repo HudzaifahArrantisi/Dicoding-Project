@@ -16,6 +16,120 @@ Platform manajemen inventaris dan pemesanan restock multi-tenant B2B antara **Ad
 
 ---
 
+## Arsitektur RAG & Alur Kerja LLM (Sebelum Training hingga User Prompt)
+
+Sistem AI pada **Daisuki Inventory** menggabungkan **Retrieval-Augmented Generation (RAG)**, **klasifikasi Machine Learning lokal (`daisuki.pkl`)**, dan **data operasional real-time PostgreSQL** untuk menghasilkan asisten cerdas yang akurat dan bebas halusinasi.
+
+Berikut adalah diagram alir (*flowchart*) menyeluruh dari persiapan data sebelum training hingga respons diterima pengguna:
+
+```mermaid
+flowchart TD
+    %% Subgraph 1: Sebelum Training
+    subgraph P1 ["Fase 1: Persiapan Data dan Sanitasi (Sebelum Training)"]
+        D1["Dokumen Referensi Mentah: Karya Ilmiah Hudzaifah, Jurnal 1-5, PDF, DOCX"]
+        D2["Data Profil dan SOP Perusahaan: Profil Daisuki, SOP, Kamus Intent"]
+        D3["Data Analisis Historis: JSON Analitik dan CSV Handoff dari PostgreSQL"]
+        
+        P_NORM["Normalisasi dan Sanitasi Teks: Pembersihan spasi PDF dan penyamaran data sensitif PII"]
+        P_CHUNK["Pemotongan Dokumen (Chunking): Pemisah Section dan potongan ~1.500 karakter"]
+        
+        D1 --> P_NORM
+        D2 --> P_NORM
+        D3 --> P_NORM
+        P_NORM --> P_CHUNK
+    end
+
+    %% Subgraph 2: Training & Indexing
+    subgraph P2 ["Fase 2: Training, Indexing dan Kebijakan Hak Akses"]
+        T_VECT["Ekstraksi Fitur TF-IDF: N-gram kata kunci domain dan istilah ilmiah"]
+        T_MODEL["Pelatihan Model Klasifikasi: Multinomial Naive Bayes untuk Intensi dan Prediksi Risiko"]
+        T_POLICY["Pemisahan Kebijakan Akses RAG: Dokumen Publik Mitra vs Dokumen Privat Admin"]
+        T_EXPORT["Serialisasi Artefak: Pembentukan daisuki.pkl dan Dokumen Markdown Publik"]
+        
+        P_CHUNK --> T_VECT
+        T_VECT --> T_MODEL
+        T_MODEL --> T_POLICY
+        T_POLICY --> T_EXPORT
+    end
+
+    %% Subgraph 3: Runtime & Context Aggregation
+    subgraph P3 ["Fase 3: Runtime Background Worker dan Agregasi Konteks"]
+        W_WORKER["Python Inference Worker: Menjaga model daisuki.pkl aktif di RAM (IPC stdin/stdout)"]
+        API_CORE["ElysiaJS Backend API Engine: Modul asisten cerdas terintegrasi JWT"]
+        DB_LIVE[("Neon PostgreSQL Real-time: Ready stock pusat, stok cabang, pesanan diproses")]
+        DB_MEM[("Memori Sesi Percakapan: Ringkasan riwayat sesi dan sliding window pesan")]
+        
+        T_EXPORT -.->|Dimuat saat worker startup| W_WORKER
+        W_WORKER <-->|Pertukaran data inferensi via JSON| API_CORE
+        DB_LIVE -->|Data mutasi dan stok riil terkini| API_CORE
+        DB_MEM -->|Konteks percakapan aktif| API_CORE
+    end
+
+    %% Subgraph 4: User Prompt & Augmented Retrieval
+    subgraph P4 ["Fase 4: User Prompt, Pre-Guardrails dan RAG Assembly"]
+        USER["Pengguna: Mitra Cabang atau Admin Pusat"]
+        UI_CHAT["Antarmuka Chat Web: Tab Chat AI dengan Multi-Sesi dan Saran Cepat"]
+        
+        G_PRE["Pre-Guardrails dan Isolasi Tenant: Pencegahan Prompt Injection dan Validasi Hak Akses Cabang"]
+        RAG_RETRIEVE["Hybrid RAG Retrieval: Vektor TF-IDF daisuki.pkl dan Pencarian Cuplikan Markdown"]
+        PROMPT_BUILD["Penyusunan Augmented Prompt: Penggabungan Fakta DB, Hasil ML, RAG, dan Memori"]
+        
+        USER -->|Kirim Pertanyaan atau Perintah| UI_CHAT
+        UI_CHAT -->|Permintaan HTTP REST / SSE| API_CORE
+        API_CORE --> G_PRE
+        G_PRE --> RAG_RETRIEVE
+        RAG_RETRIEVE --> PROMPT_BUILD
+    end
+
+    %% Subgraph 5: LLM Inference & Post-Verification
+    subgraph P5 ["Fase 5: Eksekusi LLM, Grounding Check dan Presentasi"]
+        LLM_CALL["LLM Gateway Eksternal: 9Router / Google Gemini / Groq Cloud"]
+        G_POST["Post-Guardrails dan Grounding Check: Verifikasi angka stok riil dan anti-halusinasi nomor PO"]
+        FALLBACK["Local Deterministic Fallback: Jawaban faktual langsung jika LLM timeout atau offline"]
+        UI_OUT["Presentasi Respons: Rendering Markdown, Tabel Data, dan Badge Status"]
+        
+        PROMPT_BUILD --> LLM_CALL
+        LLM_CALL -->|Berhasil mendapatkan respons| G_POST
+        LLM_CALL -.->|Gagal atau Timeout| FALLBACK
+        G_POST -->|Lolos verifikasi fakta| UI_OUT
+        FALLBACK --> UI_OUT
+        UI_OUT --> UI_CHAT
+        UI_OUT -.->|Penyimpanan ringkasan sesi| DB_MEM
+    end
+```
+
+### Tahapan Alur Kerja Sistem RAG Daisuki:
+
+1. **Fase 1: Persiapan Data & Sanitasi (Sebelum Training)**
+   - Dokumen sumber berupa naskah ilmiah (*Karya Ilmiah Hudzaifah Ar-Rantisi* dan jurnal referensi), profil perusahaan, SOP inventaris, kamus intensi pengguna, serta data historis PostgreSQL dibaca dan dinormalisasi.
+   - Dilakukan sanitasi otomatis: teks PDF yang terpecah per kata disatukan kembali, watermark dibersihkan, dan informasi sensitif (PII seperti nomor kontak/email korespondensi) disamarkan.
+   - Dokumen dipecah menjadi potongan (*chunks*) terstruktur per bagian (`\n---\n`) berukuran ~1.500 karakter dengan tetap mempertahankan tabel empiris dan terminologi domain.
+
+2. **Fase 2: Training, Indexing & Kebijakan Hak Akses**
+   - Skrip training mengekstraksi bobot kata menggunakan TF-IDF (unigram & bigram) untuk kata kunci operasional dan penelitian (`nlp`, `sgd`, `mbg`, `sentiment`, `logistic regression`, `rop`, `safety stock`).
+   - Melatih model klasifikasi **Multinomial Naive Bayes** untuk membedakan intensi percakapan dan memprediksi risiko kehabisan stok cabang (*urgent_restock*, *regular_order*, *normal*).
+   - Menerapkan kebijakan batas akses (*RAG policy*): dokumen yang disetujui publik diekspor ke `.public.md` untuk Mitra Toko, sedangkan naskah privat dan data internal diindeks khusus untuk Admin Pusat.
+   - Seluruh bobot, kamus, dan classifier diserialisasi ke dalam satu artefak model biner `daisuki.pkl`.
+
+3. **Fase 3: Runtime Background Worker & Agregasi Konteks**
+   - Backend ElysiaJS menjalankan proses latar belakang Python (`inference_worker.py`) menggunakan `Bun.spawn` yang menjaga model `daisuki.pkl` tetap aktif di RAM agar inferensi berjalan instan (< 50ms) tanpa overhead pembacaan berkas berulang.
+   - API secara langsung melakukan agregasi data terkini dari Neon PostgreSQL: stok ready gudang pusat, kuantitas riil cabang, status buffer dinamis, pesanan yang sedang menunggu persetujuan, dan pengiriman aktif.
+   - Memori percakapan memuat riwayat 4–6 pesan terakhir ditambah ringkasan padat sesi terdahulu dari PostgreSQL.
+
+4. **Fase 4: User Prompt, Pre-Guardrails & RAG Assembly**
+   - Ketika pengguna (Mitra atau Admin) mengirimkan pesan melalui UI chat:
+     - **Pre-Guardrails** memvalidasi token JWT pengguna, menegakkan isolasi tenant (Mitra hanya dapat melihat data cabangnya sendiri, Admin memiliki akses jaringan penuh), dan menyaring upaya *prompt injection* atau pertanyaan di luar lingkup.
+     - **Hybrid Retrieval** mencocokkan intensi pengguna via `daisuki.pkl`, mengambil skor prediksi risiko, dan mengambil hingga 4 cuplikan dokumen Markdown yang paling relevan.
+     - **Penyusunan Prompt Terpadu (*Augmented Prompt*)**: Menggabungkan fakta operasional JSON database, hasil prediksi model Naive Bayes, cuplikan naskah RAG, dan ringkasan riwayat ke dalam format prompt terstruktur.
+
+5. **Fase 5: Eksekusi LLM, Grounding Check & Presentasi**
+   - Prompt dikirimkan ke LLM (9Router, Gemini, atau Groq) dengan streaming SSE untuk respon yang interaktif.
+   - **Post-Guardrails & Grounding Verification**: Memastikan jawaban LLM tidak mengarang angka kuantitas stok atau nomor pesanan yang tidak ada di fakta database.
+   - **Fallback Deterministik**: Jika layanan LLM eksternal mengalami gangguan atau melampaui batas waktu (*timeout*), mesin fallback lokal secara otomatis menyusun jawaban faktual langsung dari database dan dokumen RAG tanpa membiarkan pengguna menunggu pesan error kosong.
+   - Respons akhir dirender secara kaya di frontend React dengan format Markdown, tabel data HTML responsif, dan chip saran pertanyaan berikutnya.
+
+---
+
 ## Panduan Setup Cepat (Mulai dari Nol)
 
 Pastikan sudah menginstal **[Git](https://git-scm.com/)** dan **[Bun](https://bun.sh/)** di komputer Anda.  
@@ -56,8 +170,90 @@ Buka dan sesuaikan file berikut:
   DATABASE_URL=postgresql://<user>:<password>@<host-neon>/neondb?sslmode=require
   WEB_ORIGIN=http://localhost:3000
   JWT_SECRET=daisuki-super-secret-key-min-32-characters-change-in-production
+
+  # --- Konfigurasi Python Worker (daisuki.pkl) ---
+  DAISUKI_PYTHON_BIN=python
+  # Opsional: override path berkas model jika di luar lokasi default (ai/data/mainbrain/models/daisuki.pkl)
+  DAISUKI_MODEL_PATH=
+
+  # --- Konfigurasi Layanan LLM & Chatbot Cerdas RAG ---
+  LLM_ENABLED=true
+  LLM_BASE_URL=
+  LLM_TUNNEL_URL=
+  LLM_API_KEY=sk-your-llm-api-key-here
+  LLM_MODEL=daisuki
+  LLM_TIMEOUT_MS=35000
+  LLM_LOCAL_TIMEOUT_MS=15000
+  LLM_TUNNEL_TIMEOUT_MS=10000
+  ASSISTANT_RELAXED_CHAT=true
   ```
   *(Ambil connection string `DATABASE_URL` dari dashboard [Neon DB](https://neon.tech) pada menu **Connect**).*
+
+  #### Rincian Variabel Konfigurasi LLM & AI (`apps/api/.env`):
+
+  | Variabel | Tipe / Nilai Default | Keterangan & Panduan Setup |
+  |---|---|---|
+  | `LLM_ENABLED` | `true` / `false` (default: `true`) | Mengaktifkan remote LLM. Jika diset `false`, chatbot tetap berfungsi menggunakan *deterministic local fallback* tanpa memanggil API eksternal. |
+  | `LLM_BASE_URL` | URL (default: `http://localhost:20128/v1`) | Endpoint API gateway yang kompatibel dengan protokol OpenAI (`/chat/completions`). |
+  | `LLM_TUNNEL_URL` | URL (opsional) | Endpoint URL tunnel publik cadangan (failover otomatis jika endpoint lokal gagal). Kosongkan jika tidak memakai tunnel. |
+  | `LLM_API_KEY` | String | API Key otentikasi ke penyedia model LLM (9Router, Google AI Studio, atau Groq). |
+  | `LLM_MODEL` | String (default: `daisuki`) | Identifier model yang dituju (misal: `daisuki`, `gemini-1.5-flash`, atau `llama-3.3-70b-versatile`). |
+  | `LLM_TIMEOUT_MS` | Angka ms (default: `35000`) | Batas waktu tunggu panggilan LLM dalam milidetik (maksimum 120.000 ms). Jika timeout tercapai, sistem langsung merespons dengan data faktual lokal. |
+  | `LLM_LOCAL_TIMEOUT_MS` | Angka ms (default: `15000`) | Batas waktu percobaan endpoint lokal ketika `LLM_TUNNEL_URL` juga tersedia. Setelah batas ini, API mencoba tunnel dengan sisa waktu `LLM_TIMEOUT_MS`. |
+  | `LLM_TUNNEL_TIMEOUT_MS` | Angka ms (default: `10000`) | Batas waktu percobaan tunnel agar tunnel yang tidak merespons tidak menahan chat sampai batas waktu total. |
+  | `ASSISTANT_RELAXED_CHAT` | `true` / `false` (default: `true`) | Saat bernilai `true`, asisten merespons pertanyaan umum dan obrolan kasual dengan ramah layaknya chatbot biasa. Saat `false`, filter guardrail ketat diaktifkan hanya untuk topik inventaris dan penelitian. |
+  | `DAISUKI_PYTHON_BIN` | String (default: `python`) | Path binary Python yang digunakan untuk menjalankan worker inferensi `daisuki.pkl`. Di server produksi dapat diarahkan ke virtual environment (misal `ai/.venv/bin/python`). |
+  | `DAISUKI_MODEL_PATH` | Path String (opsional) | Jalur relatif atau absolut ke berkas artefak model `.pkl` jika ingin mengganti model bawaan. |
+
+  #### Contoh Setup Penyedia LLM Populer:
+
+  <details>
+  <summary><b>1. Menggunakan 9Router Lokal / Tunnel (Bawaan)</b></summary>
+
+  ```env
+  LLM_ENABLED=true
+  LLM_BASE_URL=http://localhost:20128/v1
+  LLM_TUNNEL_URL=https://your-subdomain.abc-tunnel.us/v1
+  LLM_API_KEY=sk-xxxx-your-9router-key
+  LLM_MODEL=daisuki
+  LLM_TIMEOUT_MS=35000
+  LLM_LOCAL_TIMEOUT_MS=15000
+  LLM_TUNNEL_TIMEOUT_MS=10000
+  ASSISTANT_RELAXED_CHAT=true
+  ```
+  </details>
+
+  Jika `GET /v1/models` berhasil tetapi `POST /v1/chat/completions` menggantung, periksa koneksi provider dan isi combo `daisuki` di dashboard 9Router. Daftar model hanya menunjukkan bahwa alias terdaftar, bukan bahwa provider dapat menjawab. Bila tunnel mengembalikan HTTP 530, perbarui `LLM_TUNNEL_URL` atau kosongkan variabel itu. Setelah mengubah `.env`, mulai ulang API.
+
+  <details>
+  <summary><b>2. Menggunakan Google Gemini (Gratis via Google AI Studio)</b></summary>
+
+  Dapatkan API Key gratis di [Google AI Studio](https://aistudio.google.com/):
+  ```env
+  LLM_ENABLED=true
+  LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+  LLM_TUNNEL_URL=
+  LLM_API_KEY=AIzaSyYourGeminiApiKeyHere
+  LLM_MODEL=gemini-1.5-flash
+  LLM_TIMEOUT_MS=30000
+  ASSISTANT_RELAXED_CHAT=true
+  ```
+  </details>
+
+  <details>
+  <summary><b>3. Menggunakan Groq Cloud (Gratis & Sangat Cepat)</b></summary>
+
+  Dapatkan API Key gratis di [Groq Console](https://console.groq.com/):
+  ```env
+  LLM_ENABLED=true
+  LLM_BASE_URL=https://api.groq.com/openai/v1
+  LLM_TUNNEL_URL=
+  LLM_API_KEY=gsk_YourGroqApiKeyHere
+  LLM_MODEL=llama-3.3-70b-versatile
+  LLM_TIMEOUT_MS=20000
+  ASSISTANT_RELAXED_CHAT=true
+  ```
+  </details>
 
 - **`apps/web/.env`**:
   ```env

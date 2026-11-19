@@ -1,4 +1,4 @@
-type LlmRequest = { systemPrompt: string; userMessage: string };
+type LlmRequest = { systemPrompt: string; userMessage: string; timeoutMs?: number };
 export type LlmCallStatus = "ok" | "timeout" | "error" | "disabled";
 
 let lastLlmStatus: LlmCallStatus = "disabled";
@@ -43,12 +43,13 @@ function configuredEndpoints(): string[] {
     .filter((value, index, all) => all.indexOf(value) === index && /^https?:\/\//i.test(value));
 }
 
-export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest): Promise<string | null> {
+export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }: LlmRequest): Promise<string | null> {
   if (process.env.LLM_ENABLED !== "true" || !process.env.LLM_API_KEY) {
     lastLlmStatus = "disabled";
     return null;
   }
-  const timeout = Math.min(120_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 35_000));
+  const configuredTimeout = Math.min(120_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 35_000));
+  const timeout = timeoutMs === undefined ? configuredTimeout : Math.min(configuredTimeout, Math.max(1, timeoutMs));
   const deadline = Date.now() + timeout;
   const endpoints = configuredEndpoints();
   if (!endpoints.length) {
@@ -62,6 +63,10 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
       lastLlmStatus = "timeout";
       break;
     }
+    const localTimeout = Math.max(1, Number(process.env.LLM_LOCAL_TIMEOUT_MS) || 15_000);
+    const tunnelTimeout = Math.max(1, Number(process.env.LLM_TUNNEL_TIMEOUT_MS) || 10_000);
+    const attemptTimeout = Math.min(remaining,
+      index === 0 && endpoints.length > 1 ? localTimeout : index > 0 ? tunnelTimeout : remaining);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -88,7 +93,7 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
         return content;
       })();
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => { controller.abort(); reject(new Error("LLM timeout")); }, remaining);
+        timer = setTimeout(() => { controller.abort(); reject(new Error("LLM timeout")); }, attemptTimeout);
       });
       const content = await Promise.race([request, timeoutPromise]);
       lastLlmStatus = "ok";
@@ -97,7 +102,7 @@ export async function generateLlmReply({ systemPrompt, userMessage }: LlmRequest
       console.warn(`[ASSISTANT] 9Router ${index === 0 ? "lokal" : "tunnel"} gagal:`, error instanceof Error ? error.message : "Error");
       if (error instanceof Error && error.message === "LLM timeout") {
         lastLlmStatus = "timeout";
-        return null;
+        continue;
       }
       lastLlmStatus = "error";
     } finally {

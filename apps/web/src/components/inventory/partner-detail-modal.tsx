@@ -85,6 +85,10 @@ export function PartnerDetailModal({
 
           {/* Body Content */}
           <div className="space-y-4 p-5">
+            <div className="rounded-lg border border-line bg-white p-4 text-sm text-ink-800">
+              <p className="font-semibold text-ink-900">Titip jual</p>
+              <p className="mt-1 text-xs text-muted">Penjualan diestimasi dari log stok keluar yang dicatat mitra.</p>
+            </div>
             {/* PIC Information */}
             <div className="rounded-lg border border-line bg-white p-4 shadow-2xs">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted mb-3">

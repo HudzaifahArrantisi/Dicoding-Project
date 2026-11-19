@@ -1,5 +1,13 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   keepPreviousData,
   useMutation,
@@ -23,7 +31,6 @@ import {
   Check,
   CheckCheck,
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -31,7 +38,6 @@ import {
   Database,
   Download,
   ExternalLink,
-  Filter,
   History,
   Loader2,
   LogOut,
@@ -53,6 +59,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { getFinanceSummary, getOperationalInsights, type FinanceSummary, type OperationalInsights } from '@/lib/api/orders'
 import {
   EmptyState,
   ErrorState,
@@ -82,6 +89,7 @@ import {
   type RegionRestockItem,
   type PartnerActivityItem,
 } from '@/components/inventory/ai-insights-modals'
+import { AdminChatRoom } from '@/components/inventory/admin-chat-room'
 import {
   OrderStatusBadge,
   StaleBadge,
@@ -144,7 +152,15 @@ import type {
   StockLog,
 } from '@/lib/inventory-types'
 
-export const Route = createFileRoute('/admin')({ component: AdminDashboard })
+export const Route = createFileRoute('/admin')({
+  validateSearch: (search: Record<string, unknown>): { chat?: string } => ({
+    chat:
+      typeof search.chat === 'string' && /^[0-9a-f-]{36}$/i.test(search.chat)
+        ? search.chat
+        : undefined,
+  }),
+  component: AdminDashboard,
+})
 
 interface Metrics {
   totalBranches: number
@@ -153,17 +169,24 @@ interface Metrics {
   criticalItemsCount: number
 }
 
-type AdminTab = 'stocks' | 'orders' | 'shipments' | 'alerts' | 'partners' | 'data-science' | 'ai-insights'
+type AdminTab =
+  | 'stocks'
+  | 'orders'
+  | 'shipments'
+  | 'partners'
+  | 'data-science'
+  | 'ai-insights'
+  | 'chat'
 type OrderCategoryTab = 'menunggu' | 'dalam_pengiriman' | 'selesai' | 'ditolak'
 
 const adminTabLabels: Record<AdminTab, string> = {
   stocks: 'Stok cabang',
   orders: 'Persetujuan pesanan',
   shipments: 'Log pengiriman',
-  alerts: 'Notifikasi',
   partners: 'Manajemen mitra',
   'data-science': 'Log & Data',
   'ai-insights': 'AI Insights',
+  chat: 'Chat AI',
 }
 
 const adminNavTabs: Array<{
@@ -176,9 +199,9 @@ const adminNavTabs: Array<{
   { id: 'orders', label: 'Persetujuan pesanan', shortLabel: 'Pesanan', Icon: ClipboardCheck },
   { id: 'shipments', label: 'Log pengiriman', shortLabel: 'Kirim', Icon: Truck },
   { id: 'partners', label: 'Manajemen mitra', shortLabel: 'Mitra', Icon: Building2 },
-  { id: 'data-science', label: 'Log & Data', shortLabel: 'Log & Data', Icon: Database },
-  { id: 'alerts', label: 'Notifikasi', shortLabel: 'Notif', Icon: Bell },
+  { id: 'data-science', label: 'Log & Data', shortLabel: 'Log', Icon: Database },
   { id: 'ai-insights', label: 'AI Insights', shortLabel: 'AI', Icon: BrainCircuit },
+  { id: 'chat', label: 'Chat AI', shortLabel: 'Chat', Icon: MessageSquare },
 ]
 
 
@@ -2486,6 +2509,7 @@ function AIInsightsPanel({
               onClick={() => setActiveModal('reporting')}
             />
           </div>
+          <PartnerAnalysisTable analysis={data?.partner_analysis} />
           {/* Rincian tiap kategori analisis */}
           <ProductSalesDetailModal
             open={activeModal === 'products'}
@@ -2534,11 +2558,94 @@ function AIInsightsPanel({
   )
 }
 
+function PartnerAnalysisTable({ analysis }: { analysis?: AIInsights['partner_analysis'] }) {
+  const [search, setSearch] = useState('')
+  const keyword = search.trim().toLocaleLowerCase('id-ID')
+  const rows = useMemo(() =>
+    [...(analysis?.rows ?? [])]
+      .filter((row) => !keyword || [row.partner_name, row.regency_name, row.province_name]
+        .some((value) => value.toLocaleLowerCase('id-ID').includes(keyword)))
+      .sort((a, b) => b.weekly_units - a.weekly_units || a.partner_name.localeCompare(b.partner_name, 'id-ID')),
+  [analysis?.rows, keyword])
+
+  return (
+    <section className="dashboard-surface min-w-0 overflow-hidden" aria-labelledby="partner-analysis-title">
+      <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 id="partner-analysis-title" className="font-display text-lg font-semibold text-ink-900">Analisis seluruh mitra</h2>
+          <p className="mt-1 text-xs text-muted">
+            {analysis ? `${analysis.rows.length.toLocaleString('id-ID')} mitra · ${analysis.metadata.start_date}–${analysis.metadata.end_date}` : 'Laporan Data Science belum tersedia'}
+          </p>
+        </div>
+        <label className="block sm:w-64">
+          <span className="sr-only">Cari mitra atau wilayah</span>
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+            placeholder="Cari mitra atau wilayah" className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-base text-ink-900 sm:text-sm" />
+        </label>
+      </div>
+      {analysis && analysis.rows.length > 0 ? (
+        <div className="max-h-[36rem] overflow-auto" role="region" aria-label="Tabel analisis mitra" tabIndex={0}>
+          <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-ink-50 text-xs text-ink-700">
+              <tr>
+                <th scope="col" className="border-b border-line px-4 py-3 font-semibold">Mitra</th>
+                <th scope="col" className="border-b border-line px-4 py-3 font-semibold">Wilayah</th>
+                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Konsumsi (pcs)</th>
+                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Hari lapor</th>
+                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Log stok</th>
+                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Kritis</th>
+                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Stok habis</th>
+                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Restock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.partner_id} className="border-b border-line/70 even:bg-ink-50/40 hover:bg-ink-50">
+                  <th scope="row" className="px-4 py-3 font-medium text-ink-900">{row.partner_name}</th>
+                  <td className="px-4 py-3 text-ink-700">{[row.regency_name, row.province_name].filter((value) => value && !/^(unknown|tidak diketahui)$/i.test(value)).join(', ') || '—'}</td>
+                  {[row.weekly_units, row.active_days, row.log_count, row.critical_frequency, row.stockout_events, row.restock_requests].map((value, index) => (
+                    <td key={index} className="px-4 py-3 text-right tabular-nums text-ink-900">{Number.isFinite(value) ? value.toLocaleString('id-ID') : '—'}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length === 0 ? <p className="p-4 text-sm text-muted">Tidak ada mitra yang cocok dengan pencarian.</p> : null}
+        </div>
+      ) : <p className="p-4 text-sm text-muted">Belum ada hasil analisis mitra untuk ditampilkan.</p>}
+    </section>
+  )
+}
+
 function AdminDashboard() {
   const { user, logout, clearSession, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const { chat } = Route.useSearch()
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<AdminTab>('stocks')
+  const [tab, setTabState] = useState<AdminTab>(chat ? 'chat' : 'stocks')
+  const [lastChatId, setLastChatId] = useState<string | null>(chat ?? null)
+
+  useEffect(() => {
+    if (chat) {
+      setTabState('chat')
+      setLastChatId(chat)
+    }
+  }, [chat])
+
+  const setTab = useCallback(
+    (nextTab: AdminTab) => {
+      setTabState(nextTab)
+      if (nextTab === 'chat') {
+        void navigate({
+          to: '/admin',
+          search: { chat: chat ?? lastChatId ?? crypto.randomUUID() },
+        })
+      } else if (chat) {
+        void navigate({ to: '/admin', search: { chat: undefined } })
+      }
+    },
+    [chat, lastChatId, navigate],
+  )
   useInventoryEvents(user?.role === 'admin', 'admin')
   const [shipmentPage, setShipmentPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -2554,6 +2661,7 @@ function AdminDashboard() {
     {},
   )
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false)
   const [activeOrderCategory, setActiveOrderCategory] =
     useState<OrderCategoryTab>('menunggu')
   const dirtyApprovalOrderIds = useRef(new Set<string>())
@@ -2586,6 +2694,19 @@ function AdminDashboard() {
     enabled: user?.role === 'admin',
     staleTime: Infinity,
   })
+  const finance = useQuery<FinanceSummary>({
+    queryKey: ['admin-finance-summary'],
+    queryFn: getFinanceSummary,
+    enabled: user?.role === 'admin' && tab === 'stocks',
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+  const operationalInsights = useQuery<OperationalInsights>({
+    queryKey: ['admin-operational-insights'],
+    queryFn: getOperationalInsights,
+    enabled: user?.role === 'admin' && tab === 'stocks',
+    staleTime: 60_000,
+  })
   const stocks = useQuery<StockItem[]>({
     queryKey: ['admin-stocks'],
     queryFn: () => getStocks(),
@@ -2613,7 +2734,7 @@ function AdminDashboard() {
   const notifications = useQuery<NotificationFeed>({
     queryKey: ['admin-notifications'],
     queryFn: () => getAdminNotifications(),
-    enabled: user?.role === 'admin' && tab === 'alerts',
+    enabled: user?.role === 'admin',
     staleTime: Infinity,
   })
 
@@ -2822,17 +2943,16 @@ function AdminDashboard() {
   }
 
   return (
-    <div className="dashboard-page admin-dashboard min-h-screen pb-24 text-text lg:flex lg:pb-0">
+    <div className={`dashboard-page admin-dashboard text-text ${tab === 'chat' ? 'flex h-dvh flex-col overflow-hidden lg:flex-row' : 'min-h-screen pb-24 lg:flex lg:pb-0'}`}>
       <AdminSidebar
         tab={tab}
         onSelectTab={setTab}
         pendingOrders={pendingOrdersCount}
-        unread={unread}
         userName={user.full_name}
         onLogout={() => { void logout().then(() => navigate({ to: '/login' })).catch((error) => toast.error(getErrorMessage(error))) }}
       />
 
-      <div className="min-w-0 flex-1">
+      <div className={tab === 'chat' ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'min-w-0 flex-1'}>
         <header className="admin-topbar sticky top-0 z-30 border-b border-line bg-white">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
@@ -2851,13 +2971,14 @@ function AdminDashboard() {
             <div className="flex items-center gap-1 sm:gap-2">
               <button
                 type="button"
-                onClick={() => setTab('alerts')}
+                onClick={() => {
+                  void notifications.refetch()
+                  setNotificationModalOpen(true)
+                }}
+                aria-haspopup="dialog"
+                aria-expanded={notificationModalOpen}
                 aria-label={`${unread} notifikasi belum dibaca`}
-                className={`relative inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition ${
-                  tab === 'alerts'
-                    ? 'bg-ume/10 text-ume ring-1 ring-ume/20'
-                    : 'text-muted hover:bg-ume/5 hover:text-ume'
-                }`}
+                className="relative inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-muted transition-colors hover:bg-ume/5 hover:text-ume focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume cursor-pointer"
               >
                 <Bell className="size-4" aria-hidden="true" />
                 <span className="hidden sm:inline">Notifikasi</span>
@@ -2866,6 +2987,19 @@ function AdminDashboard() {
                     {unread > 99 ? '99+' : unread}
                   </span>
                 ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('partners')}
+                aria-label="Manajemen mitra"
+                className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold transition ${
+                  tab === 'partners'
+                    ? 'bg-ume/10 text-ume ring-1 ring-ume/20'
+                    : 'text-muted hover:bg-ume/5 hover:text-ume'
+                }`}
+              >
+                <Building2 className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Mitra</span>
               </button>
               <button
                 type="button"
@@ -2879,7 +3013,44 @@ function AdminDashboard() {
           </div>
         </header>
 
-        <main className="mx-auto min-w-0 max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 pb-28 lg:pb-8">
+        <main className={`mx-auto min-w-0 max-w-7xl px-4 sm:px-6 lg:px-8 ${tab === 'chat' ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pt-4 lg:pb-4' : 'space-y-6 py-6 pb-28 sm:py-8 lg:pb-8'}`}>
+          {tab === 'stocks' && finance.data ? (
+            <section aria-label="Estimasi penjualan titip jual" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan hari ini</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">{finance.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini · WIB</p></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">Dari {finance.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs keluar di seluruh mitra.</p></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan 30 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
+              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm font-semibold text-ink-900">Dasar perhitungan</p><p className="mt-1 text-xs text-muted">Log stok keluar mitra. Seblak Rp27.500/pcs, produk lainnya Rp25.000/pcs. Angka ini estimasi sampai stok fisik diverifikasi.</p></div>
+            </section>
+          ) : null}
+          {tab === 'stocks' && finance.isError ? (
+            <ErrorState message={getErrorMessage(finance.error)} onRetry={() => void finance.refetch()} />
+          ) : null}
+          {tab === 'stocks' && operationalInsights.data ? (
+            <section aria-label="Prioritas operasional" className="grid gap-3 lg:grid-cols-3">
+              <div className="rounded-xl border border-line bg-white p-4">
+                <h2 className="font-display text-base font-semibold text-ink-900">Potensi deadstock</h2>
+                <p className="mt-1 text-xs text-muted">Stok tersisa tanpa perubahan fisik lebih dari 30 hari. Verifikasi sebelum penarikan.</p>
+                {operationalInsights.data.deadstock.length ? operationalInsights.data.deadstock.slice(0, 3).map((item) => (
+                  <p key={`${item.partner_id}-${item.product_name}`} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong> · {item.product_name}<br /><span className="tabular-nums text-crit-fg">{item.current_qty} pcs · {item.inactive_days} hari</span></p>
+                )) : <p className="mt-3 text-sm text-muted">Tidak ada stok yang memenuhi kriteria.</p>}
+              </div>
+              <div className="rounded-xl border border-line bg-white p-4">
+                <h2 className="font-display text-base font-semibold text-ink-900">Prioritas pemeriksaan</h2>
+                <p className="mt-1 text-xs text-muted">Urutan dari keterlambatan laporan dan perubahan stok besar.</p>
+                {operationalInsights.data.audit.length ? operationalInsights.data.audit.slice(0, 3).map((item) => (
+                  <p key={item.partner_id} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong><br /><span className="tabular-nums text-warn-fg">{item.stale_days} hari tanpa laporan · {item.large_changes} perubahan besar</span></p>
+                )) : <p className="mt-3 text-sm text-muted">Tidak ada cabang yang memenuhi kriteria.</p>}
+              </div>
+              <div className="rounded-xl border border-line bg-white p-4">
+                <h2 className="font-display text-base font-semibold text-ink-900">Estimasi kebutuhan pabrik</h2>
+                <p className="mt-1 text-xs text-muted">Kebutuhan 14 hari berdasarkan penurunan stok fisik 30 hari.</p>
+                {operationalInsights.data.factory.map((item) => (
+                  <p key={item.product_id} className="mt-2 border-t border-line pt-2 text-sm text-ink-800">{item.product_name}: <strong className="tabular-nums">{item.suggested_qty} pcs</strong> tambahan</p>
+                ))}
+                <p className="mt-3 text-xs text-muted">Konfirmasi penjualan riil dan kapasitas produksi dengan PT Kim Manufaktur sebelum membuat PO.</p>
+              </div>
+            </section>
+          ) : null}
           {tab === 'stocks' ? (
             <section aria-labelledby="summary-title" className="dashboard-panel-enter">
               <div className="mb-4 flex items-end justify-between gap-3">
@@ -2906,6 +3077,7 @@ function AdminDashboard() {
               query={stocks}
               centralProductsQuery={centralProducts}
               rows={filteredStocks}
+              financeQuery={finance}
               search={search}
               partner={partner}
               status={status}
@@ -2962,21 +3134,13 @@ function AdminDashboard() {
               onShip={(id) =>
                 updateOrder.mutateAsync({ id, status: 'dalam_pengiriman' })
               }
+              onPack={(id) =>
+                updateOrder.mutateAsync({ id, status: 'dipacking' })
+              }
               selectedOrderId={selectedOrderId}
               onSelectOrder={setSelectedOrderId}
               activeCategory={activeOrderCategory}
               onActiveCategoryChange={setActiveOrderCategory}
-            />
-          ) : null}
-          {tab === 'alerts' ? (
-            <AlertPanel
-              query={notifications}
-              marking={markRead.isPending}
-              isMarkingAll={markAllRead.isPending}
-              onRead={(id) => markRead.mutate(id)}
-              onReadAll={() => markAllRead.mutate()}
-              onViewOrderDetail={handleViewOrderDetail}
-              onNavigateToStock={handleNavigateToStock}
             />
           ) : null}
           {tab === 'shipments' ? (
@@ -3014,6 +3178,20 @@ function AdminDashboard() {
               onReviewOrders={() => setTab('orders')}
             />
           ) : null}
+          {tab === 'chat' ? (
+            <AdminChatRoom
+              sessionId={chat ?? lastChatId ?? crypto.randomUUID()}
+              onSelectSession={(id) => {
+                setLastChatId(id)
+                void navigate({ to: '/admin', search: { chat: id } })
+              }}
+              onNewSession={() => {
+                const newId = crypto.randomUUID()
+                setLastChatId(newId)
+                void navigate({ to: '/admin', search: { chat: newId } })
+              }}
+            />
+          ) : null}
         </main>
       </div>
 
@@ -3021,7 +3199,18 @@ function AdminDashboard() {
         tab={tab}
         onSelectTab={setTab}
         pendingOrdersCount={pendingOrdersCount}
-        unread={unread}
+      />
+
+      <NotificationModal
+        open={notificationModalOpen}
+        onOpenChange={setNotificationModalOpen}
+        query={notifications}
+        marking={markRead.isPending}
+        isMarkingAll={markAllRead.isPending}
+        onRead={(id) => markRead.mutate(id)}
+        onReadAll={() => markAllRead.mutate()}
+        onViewOrderDetail={handleViewOrderDetail}
+        onNavigateToStock={handleNavigateToStock}
       />
     </div>
   )
@@ -3031,18 +3220,13 @@ function AdminFloatingNavbar({
   tab,
   onSelectTab,
   pendingOrdersCount,
-  unread,
 }: {
   tab: AdminTab
   onSelectTab: (tab: AdminTab) => void
   pendingOrdersCount?: number
-  unread?: number
 }) {
   const [hoveredNavIndex, setHoveredNavIndex] = useState<number | null>(null)
-  const activeNavIndex = Math.max(
-    0,
-    adminNavTabs.findIndex((item) => item.id === tab),
-  )
+  const activeNavIndex = adminNavTabs.findIndex((item) => item.id === tab)
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 pointer-events-none bg-gradient-to-t from-[#f7f8fa] via-[#f7f8fa]/80 to-transparent px-2.5 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
@@ -3050,17 +3234,17 @@ function AdminFloatingNavbar({
         onMouseLeave={() => setHoveredNavIndex(null)}
         style={
           {
-            '--active-index': activeNavIndex,
-            '--hover-index': hoveredNavIndex ?? activeNavIndex,
+            '--active-index': activeNavIndex !== -1 ? activeNavIndex : 0,
+            '--hover-index': hoveredNavIndex ?? (activeNavIndex !== -1 ? activeNavIndex : 0),
           } as React.CSSProperties
         }
-        className="pointer-events-auto relative mx-auto grid w-full max-w-[460px] grid-cols-7 items-center overflow-hidden rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
+        className="pointer-events-auto relative mx-auto grid w-full max-w-[520px] grid-cols-6 items-center overflow-hidden rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
         aria-label="Menu navigasi admin"
       >
         {/* Liquid Glass Gliding Hover Pill */}
         <div
           aria-hidden="true"
-          className={`liquid-pill-hover-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/7)] rounded-full border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+          className={`liquid-pill-hover-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/6)] rounded-full border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
             hoveredNavIndex !== null && hoveredNavIndex !== activeNavIndex
               ? 'opacity-100 scale-100'
               : 'pointer-events-none opacity-0 scale-95'
@@ -3068,23 +3252,19 @@ function AdminFloatingNavbar({
         />
 
         {/* Liquid Glass Sliding Active Capsule */}
-        <div
-          aria-hidden="true"
-          className="liquid-pill-active-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/7)] rounded-full bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)]"
-        >
-          {/* Glossy Liquid Specular Sheen */}
-          <div className="pointer-events-none absolute inset-x-1.5 top-0.5 h-2 rounded-t-full bg-gradient-to-b from-white/25 to-transparent" />
-        </div>
+        {activeNavIndex !== -1 ? (
+          <div
+            aria-hidden="true"
+            className="liquid-pill-active-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/6)] rounded-full bg-gradient-to-b from-ink-900 via-ink-900 to-ink-950 shadow-[0_8px_20px_rgba(15,23,42,0.32),inset_0_1px_1px_rgba(255,255,255,0.35)]"
+          >
+            {/* Glossy Liquid Specular Sheen */}
+            <div className="pointer-events-none absolute inset-x-1.5 top-0.5 h-2 rounded-t-full bg-gradient-to-b from-white/25 to-transparent" />
+          </div>
+        ) : null}
 
         {adminNavTabs.map(({ id, shortLabel, Icon }, index) => {
           const isActive = tab === id
-          const badgeCount =
-            id === 'orders'
-              ? pendingOrdersCount
-              : id === 'alerts'
-                ? unread
-                : undefined
-          const isCritical = id === 'alerts'
+          const badgeCount = id === 'orders' ? pendingOrdersCount : undefined
 
           return (
             <button
@@ -3116,9 +3296,7 @@ function AdminFloatingNavbar({
                   className={`absolute -right-0.5 top-0.5 grid min-w-4 h-4 place-items-center rounded-full px-1 text-[9px] tabular-nums font-bold shadow-xs transition-colors sm:right-0.5 sm:text-[10px] ${
                     isActive
                       ? 'bg-amber-400 text-ink-950 ring-1 ring-white/50'
-                      : isCritical
-                        ? 'bg-crit text-white ring-1 ring-white'
-                        : 'bg-ink-700 text-white ring-1 ring-white'
+                      : 'bg-ink-700 text-white ring-1 ring-white'
                   }`}
                   aria-label={`${badgeCount} item`}
                 >
@@ -3137,14 +3315,12 @@ function AdminSidebar({
   tab,
   onSelectTab,
   pendingOrders,
-  unread,
   userName,
   onLogout,
 }: {
   tab: AdminTab
   onSelectTab: (tab: AdminTab) => void
   pendingOrders?: number
-  unread: number
   userName: string
   onLogout: () => void
 }) {
@@ -3156,13 +3332,12 @@ function AdminSidebar({
     { id: 'stocks' as const, label: 'Stok cabang', Icon: Boxes },
     { id: 'orders' as const, label: 'Persetujuan', Icon: ClipboardCheck, count: pendingOrders },
     { id: 'shipments' as const, label: 'Log pengiriman', Icon: Truck },
-    { id: 'alerts' as const, label: 'Notifikasi', Icon: Bell, count: unread, critical: true },
-    { id: 'partners' as const, label: 'Mitra', Icon: Building2 },
   ]
 
   const analysisNavItems = [
     { id: 'data-science' as const, label: 'Log & Data', Icon: Database },
     { id: 'ai-insights' as const, label: 'AI Insights', Icon: BrainCircuit },
+    { id: 'chat' as const, label: 'Chat AI', Icon: MessageSquare },
   ]
 
   const activeOpIndex = operationalNavItems.findIndex((item) => item.id === tab)
@@ -3223,7 +3398,7 @@ function AdminSidebar({
                 </div>
               ) : null}
 
-              {operationalNavItems.map(({ id, label, Icon, count, critical }, index) => {
+              {operationalNavItems.map(({ id, label, Icon, count }, index) => {
                 const isActive = tab === id
                 return (
                   <button
@@ -3249,12 +3424,8 @@ function AdminSidebar({
                       <span
                         className={`grid min-w-5 h-5 place-items-center rounded-full px-1.5 text-xs font-bold tabular-nums shadow-xs transition-colors ${
                           isActive
-                            ? critical
-                              ? 'bg-rose-500 text-white ring-1 ring-white/50'
-                              : 'bg-white/20 text-white ring-1 ring-white/30 backdrop-blur-xs'
-                            : critical
-                              ? 'bg-crit text-white ring-1 ring-white'
-                              : 'bg-ink-100 text-ink-900'
+                            ? 'bg-white/20 text-white ring-1 ring-white/30 backdrop-blur-xs'
+                            : 'bg-ink-100 text-ink-900'
                         }`}
                       >
                         {count > 99 ? '99+' : count}
@@ -3979,6 +4150,7 @@ function StockPanel({
   query,
   centralProductsQuery,
   rows,
+  financeQuery,
   search,
   partner,
   status,
@@ -3990,6 +4162,7 @@ function StockPanel({
   query: UseQueryResult<StockItem[]>
   centralProductsQuery: UseQueryResult<Product[]>
   rows: StockItem[]
+  financeQuery: UseQueryResult<FinanceSummary>
   search: string
   partner: string
   status: StockStatus | 'semua' | 'belum_update'
@@ -3998,9 +4171,10 @@ function StockPanel({
   onPartner: (value: string) => void
   onStatus: (value: StockStatus | 'semua' | 'belum_update') => void
 }) {
+  const finance = financeQuery.data
   const queryClient = useQueryClient()
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null)
-  const [visibleBranches, setVisibleBranches] = useState(24)
+  const [visibleBranches, setVisibleBranches] = useState(100)
   const [centralStockDrafts, setCentralStockDrafts] = useState<
     Record<string, string>
   >({})
@@ -4008,7 +4182,7 @@ function StockPanel({
   const [isBatchSaving, setIsBatchSaving] = useState(false)
 
   useEffect(() => {
-    setVisibleBranches(24)
+    setVisibleBranches(100)
   }, [search, partner, status])
 
   useEffect(() => {
@@ -4149,6 +4323,11 @@ function StockPanel({
     }))
   }
 
+  const branchGross = useMemo(
+    () => new Map((finance?.stock_outflow_by_partner_7d ?? []).map((item) => [item.partner_id, item])),
+    [finance?.stock_outflow_by_partner_7d],
+  )
+
   const branchGroups = useMemo<PartnerStockGroup[]>(() => {
     const map = new Map<string, PartnerStockGroup>()
     for (const item of rows) {
@@ -4180,8 +4359,11 @@ function StockPanel({
         ...group,
         overall_status,
       }
-    })
-  }, [rows])
+    }).sort((a, b) =>
+      Number(branchGross.get(b.partner_id)?.gross_7d ?? 0) - Number(branchGross.get(a.partner_id)?.gross_7d ?? 0)
+      || a.partner_name.localeCompare(b.partner_name, 'id-ID'),
+    )
+  }, [rows, branchGross])
 
   const selectedGroup = useMemo(() => {
     if (!selectedPartnerId) return null
@@ -4196,9 +4378,15 @@ function StockPanel({
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-md bg-ink-100 text-ink-700">
-                <Store className="size-4" aria-hidden="true" />
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-line/80 bg-white shadow-2xs">
+                <img
+                  src="/icons/logo.jpg"
+                  alt="Daisuki"
+                  width={32}
+                  height={32}
+                  className="size-full object-cover"
+                />
               </span>
               <h2
                 id="central-stock-admin-title"
@@ -4207,9 +4395,6 @@ function StockPanel({
                 Stok gudang pusat
               </h2>
             </div>
-            <p className="mt-1 text-sm text-muted">
-              Perbarui stok siap kirim yang dilihat mitra saat memesan.
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -4448,7 +4633,7 @@ function StockPanel({
               Stok cabang mitra
             </h2>
             <span className="text-xs text-muted">
-              {branchGroups.length} cabang · Diperbarui otomatis
+              {branchGroups.length} cabang · {finance ? 'Urut omzet kotor 7 hari' : 'Data omzet sedang dimuat'}
             </span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_220px_180px]">
@@ -4523,7 +4708,7 @@ function StockPanel({
                 type="button"
                 onClick={() => setSelectedPartnerId(group.partner_id)}
                 aria-haspopup="dialog"
-                className="group flex min-h-16 w-full items-center justify-between gap-3 p-3.5 text-left hover:bg-ink-50 sm:p-4"
+                className="group flex min-h-16 w-full flex-col items-stretch justify-between gap-3 p-3.5 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:flex-row sm:items-center sm:p-4"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="grid size-8 shrink-0 place-items-center rounded-md bg-ink-100 font-display text-xs font-bold tabular-nums text-ink-700">
@@ -4539,7 +4724,18 @@ function StockPanel({
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex min-w-0 items-center justify-between gap-3 sm:shrink-0 sm:justify-end">
+                  <div className="min-w-0 sm:text-right">
+                    <p className="text-[11px] text-muted">Omzet kotor 7 hari</p>
+                    {finance ? (
+                      <>
+                        <p className="num font-display text-sm font-semibold tabular-nums text-ink-900">
+                          {Number(branchGross.get(group.partner_id)?.gross_7d ?? 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
+                        </p>
+                        <p className="num text-[11px] tabular-nums text-muted">{Number(branchGross.get(group.partner_id)?.units_7d ?? 0).toLocaleString('id-ID')} pcs keluar</p>
+                      </>
+                    ) : <p className="text-xs text-muted">{financeQuery.isError ? 'Belum tersedia' : 'Memuat...'}</p>}
+                  </div>
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
                     <StockStatusBadge status={group.overall_status} />
                     {group.is_stale ? <StaleBadge /> : null}
@@ -4554,7 +4750,7 @@ function StockPanel({
           {branchGroups.length > visibleBranches ? (
             <button
               type="button"
-              onClick={() => setVisibleBranches((current) => current + 24)}
+              onClick={() => setVisibleBranches((current) => current + 100)}
               className="min-h-11 w-full rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
             >
               Tampilkan cabang Lainnya
@@ -4585,6 +4781,7 @@ function OrderPanel({
   onApprove,
   onReject,
   onShip,
+  onPack,
   selectedOrderId: controlledSelectedOrderId,
   onSelectOrder,
   activeCategory: controlledCategory,
@@ -4600,6 +4797,7 @@ function OrderPanel({
   onApprove: (order: Order) => Promise<unknown>
   onReject: (id: string, reason: string) => Promise<unknown>
   onShip: (id: string) => Promise<unknown>
+  onPack: (id: string) => Promise<unknown>
   selectedOrderId?: string | null
   onSelectOrder?: (orderId: string | null) => void
   activeCategory?: OrderCategoryTab
@@ -4630,7 +4828,7 @@ function OrderPanel({
   const allOrders = query.data ?? []
 
   const pendingCount = useMemo(
-    () => allOrders.filter((order) => order.status === 'diproses').length,
+    () => allOrders.filter((order) => order.status === 'diproses' || order.status === 'ditunda').length,
     [allOrders],
   )
   const shippingCount = useMemo(
@@ -4640,7 +4838,7 @@ function OrderPanel({
   const completedCount = useMemo(
     () =>
       allOrders.filter((order) =>
-        ['disetujui', 'selesai'].includes(order.status),
+        ['disetujui', 'dipacking', 'selesai'].includes(order.status),
       ).length,
     [allOrders],
   )
@@ -4654,14 +4852,14 @@ function OrderPanel({
 
   const filteredOrders = useMemo(() => {
     if (activeCategory === 'menunggu') {
-      return allOrders.filter((order) => order.status === 'diproses')
+      return allOrders.filter((order) => order.status === 'diproses' || order.status === 'ditunda')
     }
     if (activeCategory === 'dalam_pengiriman') {
       return allOrders.filter((order) => order.status === 'dalam_pengiriman')
     }
     if (activeCategory === 'selesai') {
       return allOrders.filter((order) =>
-        ['disetujui', 'selesai'].includes(order.status),
+        ['disetujui', 'dipacking', 'selesai'].includes(order.status),
       )
     }
     return allOrders.filter((order) =>
@@ -4861,7 +5059,7 @@ function OrderPanel({
                     {order.order_no}
                   </span>
                   <OrderStatusBadge status={order.status} />
-                  {order.status === 'disetujui' ? (
+                  {order.status === 'dipacking' ? (
                     <span className="inline-flex items-center gap-1 rounded bg-order-disetujui-bg px-2 py-0.5 text-[10px] font-bold text-order-disetujui border border-order-disetujui/30">
                       <Truck className="size-3" aria-hidden="true" />
                       <span>Siap Kirim</span>
@@ -4926,7 +5124,7 @@ function OrderPanel({
                     ) : null}
                   </div>
 
-                  {order.status === 'disetujui' ? (
+                  {order.status === 'dipacking' ? (
                     <span className="inline-flex items-center gap-1 rounded-md bg-order-pengiriman text-white px-2.5 py-1 text-xs font-bold shadow-2xs group-hover:bg-order-pengiriman/90 transition-all">
                       <Truck className="size-3.5" aria-hidden="true" />
                       <span>Kirim sekarang</span>
@@ -4977,6 +5175,7 @@ function OrderPanel({
           setActiveCategory('selesai')
         }}
         onReject={onReject}
+        onPack={onPack}
         onShip={async (id) => {
           await onShip(id)
           setReceiptOrderId(id)
@@ -5011,6 +5210,7 @@ function ApprovalDialog({
   onApprove,
   onReject,
   onShip,
+  onPack,
 }: {
   order: Order | null
   open: boolean
@@ -5024,6 +5224,7 @@ function ApprovalDialog({
   onApprove: (order: Order) => Promise<unknown>
   onReject: (id: string, reason: string) => Promise<unknown>
   onShip: (id: string) => Promise<unknown>
+  onPack: (id: string) => Promise<unknown>
 }) {
   const [rejectionMode, setRejectionMode] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
@@ -5243,6 +5444,13 @@ function ApprovalDialog({
           </div>
 
           <div className="space-y-5 p-5 sm:p-6">
+            {order.status === 'ditunda' ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-semibold">Menunggu pasokan pabrik</p>
+                <p className="mt-1">Pesanan diproses otomatis sesuai urutan pengajuan ketika stok pusat ditambah. Estimasi pre-order hingga dua minggu perlu dikonfirmasi ke pabrik.</p>
+                {order.items.map((item) => <p key={item.id} className="mt-2 tabular-nums">{item.product_name}: {item.qty_reserved} dari {item.qty_requested} pcs sudah direservasi</p>)}
+              </div>
+            ) : null}
             {/* Banner Status Persetujuan & Informasi Kesiapan Pengiriman */}
             {order.status === 'disetujui' ? (
               <div className="rounded-lg border border-order-disetujui/40 bg-order-disetujui-bg/60 p-4 text-sm text-ink-900">
@@ -5256,11 +5464,11 @@ function ApprovalDialog({
                 <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
                   <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
                     <span className="size-2 rounded-full bg-order-pengiriman" />
-                    <strong>Kirim sekarang ke mitra:</strong> jika armada ekspedisi & barang sudah siap
+                    <strong>Mulai packing:</strong> saat gudang menyiapkan barang
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
                     <span className="size-2 rounded-full bg-muted" />
-                    <strong>Tahan dulu pengiriman:</strong> jika fisik barang masih dipersiapkan
+                    <strong>Kirim ke mitra:</strong> tersedia setelah packing selesai
                   </span>
                 </div>
               </div>
@@ -5771,7 +5979,7 @@ function ApprovalDialog({
             ) : null}
 
             {/* Box Konfirmasi Kesiapan Pengiriman ke Mitra */}
-            {order.status === 'disetujui' && shippingConfirmMode ? (
+            {order.status === 'dipacking' && shippingConfirmMode ? (
               <div className="rounded-lg border-2 border-order-pengiriman bg-order-pengiriman-bg/40 p-4 space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-order-pengiriman text-white shadow-xs">
@@ -5876,21 +6084,26 @@ function ApprovalDialog({
                         type="button"
                         className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-paper hover:text-ink-900 cursor-pointer"
                       >
-                        Tahan dulu pengiriman
+                        Siapkan nanti
                       </button>
                     </Dialog.Close>
                     <button
                       type="button"
                       disabled={pending || hasChanges}
-                      onClick={() => setShippingConfirmMode(true)}
+                      onClick={() => void runAction(() => onPack(order.id), false)}
                       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-order-pengiriman px-5 text-sm font-bold text-white hover:bg-order-pengiriman/90 shadow-xs disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                     >
                       <Truck className="size-4" aria-hidden="true" />
-                      <span>Kirim sekarang ke mitra</span>
+                      <span>Mulai packing</span>
                     </button>
                   </>
                 ) : null}
               </>
+            ) : null}
+            {order.status === 'dipacking' && !shippingConfirmMode ? (
+              <button type="button" disabled={pending} onClick={() => setShippingConfirmMode(true)} className="inline-flex min-h-11 items-center justify-center rounded-md bg-order-pengiriman px-5 text-sm font-bold text-white disabled:opacity-50">
+                Kirim sekarang ke mitra
+              </button>
             ) : null}
             {!editable ? (
               <Dialog.Close asChild>
@@ -5921,21 +6134,6 @@ interface ParsedAlertInfo {
   typeBadgeColor: string
   relatedOrderId: string | null
   matchedOrder: AlertOrder | null
-}
-
-function formatSelectedDate(dateStr: string): string {
-  if (!dateStr) return ''
-  try {
-    const [year, month, day] = dateStr.split('-').map(Number)
-    const d = new Date(year, month - 1, day)
-    return new Intl.DateTimeFormat('id-ID', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }).format(d)
-  } catch {
-    return dateStr
-  }
 }
 
 interface AlertOrderLookup {
@@ -6219,7 +6417,9 @@ function parseAndFormatAlert(
 
 const EMPTY_NOTIFICATIONS: NotificationItem[] = []
 
-function AlertPanel({
+function NotificationModal({
+  open,
+  onOpenChange,
   query,
   marking,
   isMarkingAll,
@@ -6228,6 +6428,8 @@ function AlertPanel({
   onViewOrderDetail,
   onNavigateToStock,
 }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   query: UseQueryResult<NotificationFeed>
   marking: boolean
   isMarkingAll?: boolean
@@ -6236,20 +6438,6 @@ function AlertPanel({
   onViewOrderDetail: (orderId: string, category?: OrderCategoryTab) => void
   onNavigateToStock: (partnerName?: string) => void
 }) {
-  const [search, setSearch] = useState('')
-  const deferredSearch = useDeferredValue(search)
-  const [visibleAlerts, setVisibleAlerts] = useState(30)
-  const [timePreset, setTimePreset] = useState<
-    'semua' | 'hari_ini' | 'kemarin' | '7_hari' | '30_hari'
-  >('semua')
-  const [selectedDate, setSelectedDate] = useState<string>('')
-  const [typeFilter, setTypeFilter] = useState<
-    'semua' | 'new_order' | 'order_received' | 'low_stock' | 'receipt_missing_proof' | 'receipt_proof_uploaded'
-  >('semua')
-  const [readFilter, setReadFilter] = useState<'semua' | 'unread' | 'read'>(
-    'semua',
-  )
-
   const allAlerts = query.data?.data ?? EMPTY_NOTIFICATIONS
   const orders = query.data?.orders ?? EMPTY_ALERT_ORDERS
   const orderLookup = useMemo<AlertOrderLookup>(() => {
@@ -6269,516 +6457,234 @@ function AlertPanel({
     () => allAlerts.map((item) => ({ item, parsed: parseAndFormatAlert(item, orderLookup) })),
     [allAlerts, orderLookup],
   )
-  useEffect(() => {
-    setVisibleAlerts(30)
-  }, [search, timePreset, selectedDate, typeFilter, readFilter])
   const unreadCount = useMemo(
     () => allAlerts.filter((item) => !item.read_at).length,
     [allAlerts],
   )
-
-  const filteredNotifications = useMemo(() => {
-    const now = new Date()
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-
-    const yesterday = new Date(now)
-    yesterday.setDate(now.getDate() - 1)
-    const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`
-
-    return parsedAlerts.filter(({ item, parsed }) => {
-
-      if (deferredSearch.trim()) {
-        const q = deferredSearch.toLowerCase()
-        const matchTitle = parsed.title.toLowerCase().includes(q)
-        const matchBody = parsed.body.toLowerCase().includes(q)
-        const matchPartner = (item.partner_name ?? '').toLowerCase().includes(q)
-        const matchProduct = (parsed.productName ?? '').toLowerCase().includes(q)
-        if (!matchTitle && !matchBody && !matchPartner && !matchProduct)
-          return false
-      }
-
-      if (readFilter === 'unread' && item.read_at) return false
-      if (readFilter === 'read' && !item.read_at) return false
-
-      if (typeFilter !== 'semua' && parsed.type !== typeFilter) return false
-
-      const itemDate = new Date(item.created_at)
-      if (Number.isNaN(itemDate.getTime())) return true
-      const itemDateStr = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}-${String(itemDate.getDate()).padStart(2, '0')}`
-
-      if (selectedDate) {
-        if (itemDateStr !== selectedDate) return false
-      } else if (timePreset === 'hari_ini') {
-        if (itemDateStr !== todayStr) return false
-      } else if (timePreset === 'kemarin') {
-        if (itemDateStr !== yesterdayStr) return false
-      } else if (timePreset === '7_hari') {
-        const diffMs = now.getTime() - itemDate.getTime()
-        if (diffMs > 7 * 86_400_000) return false
-      } else if (timePreset === '30_hari') {
-        const diffMs = now.getTime() - itemDate.getTime()
-        if (diffMs > 30 * 86_400_000) return false
-      }
-
-      return true
-    })
-  }, [parsedAlerts, deferredSearch, timePreset, selectedDate, typeFilter, readFilter])
-
-  const hasActiveFilters =
-    Boolean(search) ||
-    timePreset !== 'semua' ||
-    Boolean(selectedDate) ||
-    typeFilter !== 'semua' ||
-    readFilter !== 'semua'
-
-  const resetFilters = () => {
-    setSearch('')
-    setTimePreset('semua')
-    setSelectedDate('')
-    setTypeFilter('semua')
-    setReadFilter('semua')
+  const closeThen = (action: () => void) => {
+    onOpenChange(false)
+    action()
   }
 
   return (
-    <section
-      aria-labelledby="alerts-title"
-      className="dashboard-panel-enter space-y-5"
-    >
-      {/* Header Halaman */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="dashboard-eyebrow">Aktivitas cabang</p>
-          <h1 id="alerts-title" className="mt-1 text-2xl font-semibold text-ink-900 sm:text-3xl">
-            Alert dan notifikasi
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Permohonan restock cabang, barang diterima, dan peringatan stok
-            kritis tercatat di sini.
-          </p>
-        </div>
-
-        {allAlerts.length > 0 ? (
-          <div className="flex items-center gap-2 self-start sm:self-auto text-xs">
-            <span className="font-medium text-muted">
-              Menampilkan <span className="font-bold text-ink-900">{Math.min(visibleAlerts, filteredNotifications.length)}</span> dari {filteredNotifications.length} alert
-            </span>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Filter Toolbar: Smooth, Clean, & Compact */}
-      <div className="dashboard-surface space-y-3.5 p-4">
-        {/* Baris 1: Pencarian & Segmented Status Pills */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Input Pencarian dengan Smooth Clear Button */}
-          <div className="relative flex-1 min-w-[240px]">
-            <Search
-              className="size-4 text-muted absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari nama mitra, produk, atau alert..."
-              className="min-h-11 w-full rounded-md border border-line bg-white pl-9.5 pr-10 text-sm text-ink-900 placeholder:text-muted"
-            />
-            {search ? (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-1 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-md text-muted hover:bg-ink-50 hover:text-ink-900"
-                aria-label="Hapus pencarian"
-              >
-                <X className="size-3.5" />
-              </button>
-            ) : null}
-          </div>
-
-          {/* Segmented Control Status Baca */}
-          <div className="grid grid-cols-3 w-full sm:inline-flex sm:w-auto gap-1 overflow-x-auto rounded-md border border-line bg-ink-50 p-1">
-            <button
-              type="button"
-              onClick={() => setReadFilter('semua')}
-              className={`min-h-10 sm:min-h-11 shrink-0 rounded-md px-2 sm:px-3 text-center justify-center text-xs font-semibold ${readFilter === 'semua'
-                  ? 'bg-white text-ink-900'
-                  : 'text-muted hover:text-ink-900'
-                }`}
-            >
-              Semua ({allAlerts.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setReadFilter('unread')}
-              className={`inline-flex min-h-10 sm:min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 sm:px-3 text-center text-xs font-semibold ${readFilter === 'unread'
-                  ? 'bg-white text-ink-900'
-                  : 'text-muted hover:text-ink-900'
-                }`}
-            >
-              <span>Belum Dibaca</span>
-              {unreadCount > 0 ? (
-                <span
-                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${readFilter === 'unread'
-                      ? 'bg-ume text-white'
-                      : 'bg-ume/15 text-ume'
-                    }`}
-                >
-                  {unreadCount}
-                </span>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              onClick={() => setReadFilter('read')}
-              className={`min-h-10 sm:min-h-11 shrink-0 rounded-md px-2 sm:px-3 text-center justify-center text-xs font-semibold ${readFilter === 'read'
-                  ? 'bg-white text-ink-900'
-                  : 'text-muted hover:text-ink-900'
-                }`}
-            >
-              Sudah Dibaca
-            </button>
-          </div>
-        </div>
-
-        {/* Baris 2: Filter Waktu (Pill Presets + Elegant Date Picker) & Jenis Alert */}
-        <div className="flex flex-col gap-3 pt-3 border-t border-line/60 lg:flex-row lg:items-center lg:justify-between">
-          {/* Quick Time Pills + Smooth Date Selector */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <span className="mr-1 flex shrink-0 items-center gap-1 text-xs font-semibold text-muted">
-              <Clock className="size-3 text-muted" aria-hidden="true" />
-              <span>Waktu:</span>
-            </span>
-
-            {(
-              [
-                { id: 'semua', label: 'Semua' },
-                { id: 'hari_ini', label: 'Hari Ini' },
-                { id: 'kemarin', label: 'Kemarin' },
-                { id: '7_hari', label: '7 Hari' },
-                { id: '30_hari', label: '30 Hari' },
-              ] as const
-            ).map((preset) => {
-              const isActive = timePreset === preset.id && !selectedDate
-              return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-xs animate-in fade-in duration-200" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100%-1rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200 sm:w-[calc(100%-2rem)]">
+          <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
+            <div className="min-w-0">
+              <Dialog.Title className="font-display text-base font-bold text-ink-900 sm:text-lg">
+                Notifikasi
+              </Dialog.Title>
+              <Dialog.Description className="mt-0.5 text-xs text-muted sm:text-sm">
+                {allAlerts.length > 0
+                  ? `${unreadCount} belum dibaca dari ${allAlerts.length} notifikasi terbaru`
+                  : 'Permohonan restock, barang diterima, dan peringatan stok kritis.'}
+              </Dialog.Description>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {unreadCount > 0 && onReadAll ? (
                 <button
-                  key={preset.id}
                   type="button"
-                  onClick={() => {
-                    setTimePreset(preset.id)
-                    setSelectedDate('')
-                  }}
-                  className={`min-h-9 sm:min-h-11 shrink-0 whitespace-nowrap rounded-md px-3 text-xs font-semibold ${isActive
-                      ? 'bg-ink-900 text-white'
-                      : 'border border-line bg-white text-muted hover:bg-ink-50 hover:text-ink-900'
-                    }`}
+                  disabled={isMarkingAll || marking}
+                  onClick={() => onReadAll()}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 transition-colors hover:bg-ink-50 disabled:opacity-50 cursor-pointer"
+                  title="Tandai semua notifikasi yang belum dibaca menjadi sudah dibaca"
                 >
-                  {preset.label}
-                </button>
-              )
-            })}
-
-            {/* Smooth Custom Date Trigger (Disguised Native Picker) */}
-            <div className="relative inline-flex items-center shrink-0">
-              {selectedDate ? (
-                <div className="inline-flex min-h-9 sm:min-h-11 items-center gap-1.5 rounded-md border border-line bg-white pl-3 text-xs font-semibold text-ink-900">
-                  <Calendar className="size-3 text-ume" aria-hidden="true" />
-                  <span>{formatSelectedDate(selectedDate)}</span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDate('')}
-                    className="grid size-9 sm:size-10 place-items-center rounded-md text-muted hover:bg-ink-50"
-                    aria-label="Hapus filter tanggal"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ) : (
-                <label className="relative inline-flex min-h-9 sm:min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-muted hover:bg-ink-50 hover:text-ink-900">
-                  <Calendar className="size-3 text-muted" aria-hidden="true" />
-                  <span className="whitespace-nowrap">Pilih Tanggal</span>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      setSelectedDate(e.target.value)
-                      if (e.target.value) setTimePreset('semua')
-                    }}
-                    className="absolute inset-0 size-full cursor-pointer opacity-0"
-                    title="Pilih tanggal spesifik (hari, bulan, tahun)"
-                  />
-                </label>
-              )}
-            </div>
-          </div>
-
-          {/* Jenis Alert Dropdown & Tombol Aksi Tambahan */}
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            {/* Filter Jenis Alert Dropdown */}
-            <div className="relative flex-1 sm:flex-initial">
-              <select
-                value={typeFilter}
-                onChange={(e) =>
-                  setTypeFilter(e.target.value as typeof typeFilter)
-                }
-                className="min-h-10 sm:min-h-11 w-full rounded-md border border-line bg-white px-3 pr-8 text-xs font-semibold text-ink-900"
-                aria-label="Filter kategori jenis alert"
-              >
-                <option value="semua">Semua Kategori</option>
-                <option value="low_stock">Stok Kritis</option>
-                <option value="new_order">Permohonan Restok</option>
-                <option value="order_received">Barang Diterima</option>
-                <option value="receipt_missing_proof">Bukti Belum Ada</option>
-                <option value="receipt_proof_uploaded">Bukti Diterima</option>
-              </select>
-              <ChevronDown
-                className="size-3 text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
-                aria-hidden="true"
-              />
-            </div>
-
-            {/* Tombol Reset Filter */}
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="inline-flex min-h-10 sm:min-h-11 items-center gap-1 rounded-md px-3 text-xs font-semibold text-warn-fg hover:bg-warn-bg"
-                title="Reset semua filter ke kondisi awal"
-              >
-                <RotateCcw className="size-3" aria-hidden="true" />
-                <span>Reset</span>
-              </button>
-            ) : null}
-
-            {/* Tombol Batch "Tandai Semua Dibaca" */}
-            {unreadCount > 0 && onReadAll ? (
-              <button
-                type="button"
-                disabled={isMarkingAll || marking}
-                onClick={() => {
-                  onReadAll()
-                }}
-                className="inline-flex min-h-10 sm:min-h-11 w-full sm:w-auto items-center justify-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
-                title="Tandai semua alert yang belum dibaca menjadi sudah dibaca"
-              >
-                {isMarkingAll ? (
-                  <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                ) : (
-                  <CheckCheck className="size-3.5 text-ok" aria-hidden="true" />
-                )}
-                <span>Tandai Semua Dibaca</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {query.isLoading ? <LoadingState label="Memuat notifikasi..." /> : null}
-      {query.isError ? (
-        <div className="mt-4">
-          <ErrorState
-            message={getErrorMessage(query.error)}
-            onRetry={() => void query.refetch()}
-          />
-        </div>
-      ) : null}
-      {!query.isLoading && allAlerts.length === 0 ? (
-        <div className="mt-4">
-          <EmptyState
-            title="Belum ada alert"
-            description="Alert dan permohonan baru dari mitra akan muncul di sini."
-          />
-        </div>
-      ) : null}
-      {!query.isLoading && allAlerts.length > 0 && filteredNotifications.length === 0 ? (
-        <div className="rounded-xl border border-line bg-white p-8 text-center shadow-2xs">
-          <Filter className="size-8 mx-auto text-muted/60" aria-hidden="true" />
-          <h3 className="mt-2 text-sm font-semibold text-ink-900">
-            Tidak ada alert yang cocok
-          </h3>
-          <p className="mt-1 text-xs text-muted">
-            Tidak ditemukan alert yang sesuai dengan filter waktu atau kata kunci yang dipilih.
-          </p>
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="mt-3 inline-flex min-h-9 items-center rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-paper transition-colors"
-          >
-            Bersihkan Filter
-          </button>
-        </div>
-      ) : null}
-
-      {/* Daftar Kartu Alert yang Bersih, Rapi, & Selaras */}
-      <div className="space-y-3">
-        {filteredNotifications.slice(0, visibleAlerts).map(({ item, parsed }) => {
-          const isUnread = !item.read_at
-
-          return (
-            <article
-              key={item.id}
-              className={`group relative rounded-xl border p-4 sm:p-4.5 transition-all duration-200 ${isUnread
-                  ? 'border-line/90 bg-white shadow-2xs hover:border-ink-300 hover:shadow-xs'
-                  : 'border-line/60 bg-white/60 hover:bg-white hover:border-line hover:shadow-2xs text-muted'
-                }`}
-            >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                {/* Bagian Kiri: Ikon Visual + Teks Notifikasi */}
-                <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                  {/* Ikon Kategori Alert dengan Background Halus */}
-                  <div className="shrink-0 mt-0.5">
-                    {parsed.type === 'new_order' ? (
-                      <span className="grid size-10 place-items-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200/80 shadow-2xs">
-                        <Clock className="size-4.5" aria-hidden="true" />
-                      </span>
-                    ) : parsed.type === 'receipt_missing_proof' ? (
-                      <span className="grid size-10 place-items-center rounded-xl border border-warn/30 bg-warn-bg text-warn-fg">
-                        <AlertTriangle className="size-4.5" aria-hidden="true" />
-                      </span>
-                    ) : parsed.type === 'order_received' || parsed.type === 'receipt_proof_uploaded' ? (
-                      <span className="grid size-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/80 shadow-2xs">
-                        <CheckCircle2 className="size-4.5" aria-hidden="true" />
-                      </span>
-                    ) : parsed.type === 'low_stock' ? (
-                      <span className="grid size-10 place-items-center rounded-xl bg-rose-50 text-rose-600 border border-rose-200/80 shadow-2xs">
-                        <AlertOctagon className="size-4.5" aria-hidden="true" />
-                      </span>
-                    ) : (
-                      <span className="grid size-10 place-items-center rounded-xl bg-ink-50 text-ink-600 border border-line shadow-2xs">
-                        <Bell className="size-4.5" aria-hidden="true" />
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Konten Judul, Body, & Metadata */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-bold text-ink-900 text-sm sm:text-base leading-snug group-hover:text-ink-950 transition-colors">
-                        {parsed.title}
-                      </h3>
-
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${parsed.typeBadgeColor}`}
-                      >
-                        {parsed.typeLabel}
-                      </span>
-
-                      {isUnread ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-ume/10 px-2 py-0.5 text-[10px] font-bold text-ume">
-                          <span className="size-1.5 rounded-full bg-ume animate-pulse" />
-                          Baru
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <p className="mt-1 text-xs sm:text-sm text-ink-700 leading-relaxed font-normal">
-                      {parsed.body}
-                    </p>
-
-                    <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
-                      {parsed.partnerName ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-paper border border-line/70 px-2.5 py-0.5 text-[11px] font-semibold text-ink-800">
-                          <Store className="size-3 text-muted" aria-hidden="true" />
-                          <span>Cabang: {parsed.partnerName}</span>
-                        </span>
-                      ) : null}
-
-                      {/* Detail Waktu, Hari, Tanggal, Jam */}
-                      <span className="inline-flex items-center gap-1 text-[11px] text-muted font-medium">
-                        <Clock className="size-3 text-muted" aria-hidden="true" />
-                        <span>{formatDetailedDateTime(item.created_at)}</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bagian Kanan: Tombol Aksi yang Selaras dan Berjajar Rapi */}
-                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto self-start sm:self-center shrink-0 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-line/60">
-                  {/* Status Sudah Dibaca / Tombol Tandai Dibaca */}
-                  {isUnread ? (
-                    <button
-                      type="button"
-                      disabled={marking}
-                      onClick={() => onRead(item.id)}
-                      className="inline-flex min-h-9 items-center gap-1 rounded-md border border-line/80 bg-white px-2.5 py-1.5 text-xs font-semibold text-muted hover:bg-paper hover:text-ink-900 transition-colors disabled:opacity-40"
-                      title="Tandai sudah dibaca"
-                    >
-                      <Check className="size-3.5 text-ok" aria-hidden="true" />
-                      <span>Tandai dibaca</span>
-                    </button>
+                  {isMarkingAll ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-muted font-medium px-2 py-1">
-                      <Check className="size-3 text-ok/70" aria-hidden="true" />
-                      <span>Sudah dibaca</span>
-                    </span>
+                    <CheckCheck className="size-3.5 text-ok" aria-hidden="true" />
                   )}
+                  <span className="hidden sm:inline">Tandai semua dibaca</span>
+                </button>
+              ) : null}
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="grid size-11 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 cursor-pointer"
+                  aria-label="Tutup notifikasi"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
+          </div>
 
-                  {/* Tombol Aksi Utama Berdasarkan Tipe Alert */}
-                  {parsed.type === 'new_order' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const targetCategory: OrderCategoryTab =
-                          parsed.matchedOrder?.status === 'dalam_pengiriman'
-                            ? 'dalam_pengiriman'
-                            : parsed.matchedOrder?.status === 'selesai' ||
-                                parsed.matchedOrder?.status === 'disetujui'
-                              ? 'selesai'
-                              : parsed.matchedOrder?.status === 'ditolak' ||
-                                  parsed.matchedOrder?.status === 'dibatalkan'
-                                ? 'ditolak'
-                                : 'menunggu'
-                        if (parsed.relatedOrderId) {
-                          onViewOrderDetail(parsed.relatedOrderId, targetCategory)
-                        } else {
-                          onViewOrderDetail('', targetCategory)
-                        }
-                      }}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-ink-700 transition-colors focus-visible:outline-2 focus-visible:outline-ink-700"
-                    >
-                      <ClipboardCheck className="size-3.5 text-emerald-400" aria-hidden="true" />
-                      <span>Detail Pesan</span>
-                      <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
-                    </button>
-                  ) : parsed.type === 'order_received' || parsed.type === 'receipt_missing_proof' || parsed.type === 'receipt_proof_uploaded' ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onViewOrderDetail(parsed.relatedOrderId || '', 'selesai')
-                      }
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-100 transition-colors"
-                    >
-                      <ClipboardCheck className="size-3.5 text-muted" aria-hidden="true" />
-                      <span>{parsed.type === 'receipt_missing_proof' ? 'Minta Bukti' : 'Detail Pesan'}</span>
-                      <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
-                    </button>
-                  ) : parsed.type === 'low_stock' ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onNavigateToStock(parsed.partnerName || undefined)
-                      }
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink-900 hover:bg-ink-100 transition-colors"
-                    >
-                      <Boxes className="size-3.5 text-muted" aria-hidden="true" />
-                      <span>Periksa Stok</span>
-                      <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </article>
-          )
-        })}
-        {filteredNotifications.length > visibleAlerts ? (
-          <button
-            type="button"
-            onClick={() => setVisibleAlerts((current) => current + 30)}
-            className="min-h-11 w-full rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
-          >
-            Tampilkan Notifikasi lainnya
-          </button>
-        ) : null}
-      </div>
-    </section>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
+
+            {query.isLoading ? <LoadingState label="Memuat notifikasi..." /> : null}
+            {query.isError ? (
+              <ErrorState
+                message={getErrorMessage(query.error)}
+                onRetry={() => void query.refetch()}
+              />
+            ) : null}
+            {!query.isLoading && !query.isError && allAlerts.length === 0 ? (
+              <EmptyState
+                title="Belum ada alert"
+                description="Alert dan permohonan baru dari mitra akan muncul di sini."
+              />
+            ) : null}
+
+            {/* Daftar kartu alert */}
+            <div className="space-y-2.5">
+              {parsedAlerts.map(({ item, parsed }) => {
+                const isUnread = !item.read_at
+
+                return (
+                  <article
+                    key={item.id}
+                    className={`group relative rounded-xl border p-3.5 transition-all duration-200 sm:p-4 ${isUnread
+                        ? 'border-line/90 bg-white shadow-2xs hover:border-ink-300 hover:shadow-xs'
+                        : 'border-line/60 bg-white/60 text-muted hover:border-line hover:bg-white hover:shadow-2xs'
+                      }`}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      {/* Bagian Kiri: Ikon Visual + Teks Notifikasi */}
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <div className="mt-0.5 shrink-0">
+                          {parsed.type === 'new_order' ? (
+                            <span className="grid size-9 place-items-center rounded-lg border border-amber-200/80 bg-amber-50 text-amber-600 shadow-2xs">
+                              <Clock className="size-4" aria-hidden="true" />
+                            </span>
+                          ) : parsed.type === 'receipt_missing_proof' ? (
+                            <span className="grid size-9 place-items-center rounded-lg border border-warn/30 bg-warn-bg text-warn-fg">
+                              <AlertTriangle className="size-4" aria-hidden="true" />
+                            </span>
+                          ) : parsed.type === 'order_received' || parsed.type === 'receipt_proof_uploaded' ? (
+                            <span className="grid size-9 place-items-center rounded-lg border border-emerald-200/80 bg-emerald-50 text-emerald-600 shadow-2xs">
+                              <CheckCircle2 className="size-4" aria-hidden="true" />
+                            </span>
+                          ) : parsed.type === 'low_stock' ? (
+                            <span className="grid size-9 place-items-center rounded-lg border border-rose-200/80 bg-rose-50 text-rose-600 shadow-2xs">
+                              <AlertOctagon className="size-4" aria-hidden="true" />
+                            </span>
+                          ) : (
+                            <span className="grid size-9 place-items-center rounded-lg border border-line bg-ink-50 text-ink-600 shadow-2xs">
+                              <Bell className="size-4" aria-hidden="true" />
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h3 className="text-sm font-bold leading-snug text-ink-900 transition-colors group-hover:text-ink-950">
+                              {parsed.title}
+                            </h3>
+
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${parsed.typeBadgeColor}`}
+                            >
+                              {parsed.typeLabel}
+                            </span>
+
+                            {isUnread ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-ume/10 px-2 py-0.5 text-[10px] font-bold text-ume">
+                                <span className="size-1.5 animate-pulse rounded-full bg-ume" />
+                                Baru
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <p className="mt-1 text-xs font-normal leading-relaxed text-ink-700">
+                            {parsed.body}
+                          </p>
+
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                            {parsed.partnerName ? (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-line/70 bg-paper px-2.5 py-0.5 text-[11px] font-semibold text-ink-800">
+                                <Store className="size-3 text-muted" aria-hidden="true" />
+                                <span>Cabang: {parsed.partnerName}</span>
+                              </span>
+                            ) : null}
+
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted">
+                              <Clock className="size-3 text-muted" aria-hidden="true" />
+                              <span>{formatDetailedDateTime(item.created_at)}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bagian Kanan: Tombol Aksi */}
+                      <div className="flex w-full shrink-0 items-center justify-between gap-2 self-start border-t border-line/60 pt-2.5 sm:w-auto sm:self-center sm:justify-end sm:border-t-0 sm:pt-0">
+                        {isUnread ? (
+                          <button
+                            type="button"
+                            disabled={marking}
+                            onClick={() => onRead(item.id)}
+                            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line/80 bg-white px-2.5 text-xs font-semibold text-muted transition-colors hover:bg-paper hover:text-ink-900 disabled:opacity-40 cursor-pointer"
+                            title="Tandai sudah dibaca"
+                          >
+                            <Check className="size-3.5 text-ok" aria-hidden="true" />
+                            <span>Tandai dibaca</span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-muted">
+                            <Check className="size-3 text-ok/70" aria-hidden="true" />
+                            <span>Sudah dibaca</span>
+                          </span>
+                        )}
+
+                        {parsed.type === 'new_order' ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const targetCategory: OrderCategoryTab =
+                                parsed.matchedOrder?.status === 'dalam_pengiriman'
+                                  ? 'dalam_pengiriman'
+                                  : parsed.matchedOrder?.status === 'selesai' ||
+                                      parsed.matchedOrder?.status === 'disetujui'
+                                    ? 'selesai'
+                                    : parsed.matchedOrder?.status === 'ditolak' ||
+                                        parsed.matchedOrder?.status === 'dibatalkan'
+                                      ? 'ditolak'
+                                      : 'menunggu'
+                              closeThen(() =>
+                                onViewOrderDetail(parsed.relatedOrderId ?? '', targetCategory),
+                              )
+                            }}
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-ink-900 px-3.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
+                          >
+                            <ClipboardCheck className="size-3.5 text-emerald-400" aria-hidden="true" />
+                            <span>Detail Pesan</span>
+                            <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
+                          </button>
+                        ) : parsed.type === 'order_received' || parsed.type === 'receipt_missing_proof' || parsed.type === 'receipt_proof_uploaded' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              closeThen(() => onViewOrderDetail(parsed.relatedOrderId ?? '', 'selesai'))
+                            }
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line bg-paper px-3 text-xs font-semibold text-ink-900 transition-colors hover:bg-ink-100 cursor-pointer"
+                          >
+                            <ClipboardCheck className="size-3.5 text-muted" aria-hidden="true" />
+                            <span>{parsed.type === 'receipt_missing_proof' ? 'Minta Bukti' : 'Detail Pesan'}</span>
+                            <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
+                          </button>
+                        ) : parsed.type === 'low_stock' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              closeThen(() => onNavigateToStock(parsed.partnerName || undefined))
+                            }
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line bg-paper px-3 text-xs font-semibold text-ink-900 transition-colors hover:bg-ink-100 cursor-pointer"
+                          >
+                            <Boxes className="size-3.5 text-muted" aria-hidden="true" />
+                            <span>Periksa Stok</span>
+                            <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

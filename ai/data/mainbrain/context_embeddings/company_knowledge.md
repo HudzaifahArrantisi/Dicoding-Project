@@ -1,7 +1,6 @@
 # Brain Knowledge: Company Knowledge
 > **Sumber Dokumen**: `company_knowledge.json`
 > **Tipe Dokumen**: Dataset JSON / Knowledge Base
-> **Ukuran Asli**: 9,209 bytes
 > **Status Ingestion**: Terverifikasi dan siap digunakan oleh Daisuki AI RAG
 
 ---
@@ -38,28 +37,28 @@
 - **Sku**: DSK-SB-001
 - **Name**: Seblak Jadul Instan
 - **Category**: Camilan Berkuah / Instan
-- **Price B2B**: 12000
+- **Harga Normal per Pcs**: Rp27.500
 - **Description**: Seblak instan otentik dengan racikan kencur alami, aneka kerupuk kenyal khas Bandung, dan sambal pedas daun jeruk sedap.
 ### Item #2
 
 - **Sku**: DSK-BR-002
 - **Name**: Basreng Daun Jeruk
 - **Category**: Camilan Kering / Renyah
-- **Price B2B**: 10000
+- **Harga Normal per Pcs**: Rp25.000
 - **Description**: Bakso goreng renyah bumbu cabai rawit merah berpadu irisan daun jeruk segar beraroma khas gurih pedas.
 ### Item #3
 
 - **Sku**: DSK-MK-003
 - **Name**: Makaroni Daun Jeruk
 - **Category**: Camilan Kering / Renyah
-- **Price B2B**: 8500
+- **Harga Normal per Pcs**: Rp25.000
 - **Description**: Makaroni spiral gurih dengan tingkat kerenyahan renyah gurih pedas taburan daun jeruk.
 ### Item #4
 
 - **Sku**: DSK-KP-004
 - **Name**: Keripik Pisang Rasa Coklat
 - **Category**: Camilan Manis
-- **Price B2B**: 15000
+- **Harga Normal per Pcs**: Rp25.000
 - **Description**: Keripik pisang kepok renyah dengan balutan cokelat lumer tebal khas oleh-oleh modern.
 ## Sop Procedures
 

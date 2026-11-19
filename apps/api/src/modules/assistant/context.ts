@@ -48,11 +48,11 @@ export async function loadMitraContext(partnerId: string) {
       ), order_summary as (
         select oi.product_id,
           coalesce(sum(oi.qty_requested) filter (where o.created_at >= now() - interval '30 days'), 0)::int as requested_30d,
-          coalesce(sum(oi.qty_approved) filter (where o.created_at >= now() - interval '30 days' and o.status in ('disetujui', 'dalam_pengiriman', 'selesai')), 0)::int as approved_30d,
-          bool_or(o.status in ('diproses', 'disetujui', 'dalam_pengiriman')) as has_active_order
+          coalesce(sum(oi.qty_approved) filter (where o.created_at >= now() - interval '30 days' and o.status::text in ('disetujui', 'dipacking', 'dalam_pengiriman', 'selesai')), 0)::int as approved_30d,
+          bool_or(o.status::text in ('ditunda', 'diproses', 'disetujui', 'dipacking', 'dalam_pengiriman')) as has_active_order
         from orders o join order_items oi on oi.order_id = o.id
         where o.partner_id = ${partnerId}::uuid
-          and (o.created_at >= now() - interval '30 days' or o.status in ('diproses', 'disetujui', 'dalam_pengiriman'))
+          and (o.created_at >= now() - interval '30 days' or o.status::text in ('ditunda', 'diproses', 'disetujui', 'dipacking', 'dalam_pengiriman'))
         group by oi.product_id
       )
       select ps.partner_id::text, pa.name as partner_name, pa.type::text as partner_type,
@@ -78,7 +78,7 @@ export async function loadMitraContext(partnerId: string) {
     `),
     db.select({ name: partners.name, type: partners.type, type_other: partners.type_other, pic_name: partners.pic_name, pic_phone: partners.pic_phone, address: partners.address, province_name: partners.province_name, regency_name: partners.regency_name, district_name: partners.district_name, village_name: partners.village_name }).from(partners).where(eq(partners.id, partnerId)).limit(1),
     db.select({ id: orders.id, order_no: orders.order_no, status: orders.status, created_at: orders.created_at, admin_note: orders.admin_note }).from(orders).where(eq(orders.partner_id, partnerId)).orderBy(desc(orders.created_at)).limit(3),
-    db.select({ id: orders.id, order_no: orders.order_no, status: orders.status, created_at: orders.created_at, admin_note: orders.admin_note }).from(orders).where(and(eq(orders.partner_id, partnerId), inArray(orders.status, ["diproses", "disetujui", "dalam_pengiriman"]))).orderBy(desc(orders.created_at)).limit(10),
+    db.select({ id: orders.id, order_no: orders.order_no, status: orders.status, created_at: orders.created_at, admin_note: orders.admin_note }).from(orders).where(and(eq(orders.partner_id, partnerId), sql`${orders.status}::text in ('ditunda', 'diproses', 'disetujui', 'dipacking', 'dalam_pengiriman')`)).orderBy(desc(orders.created_at)).limit(10),
     db.select({ product_name: products.name, qty_before: stockLogs.qty_before, qty_after: stockLogs.qty_after, source: stockLogs.source, created_at: stockLogs.created_at }).from(stockLogs).innerJoin(products, eq(stockLogs.product_id, products.id)).where(and(eq(stockLogs.partner_id, partnerId), eq(products.is_active, true), inArray(products.name, OFFICIAL_PRODUCTS))).orderBy(desc(stockLogs.created_at)).limit(10),
     loadWeeklyFacts(),
   ]);

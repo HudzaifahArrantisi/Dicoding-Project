@@ -23,12 +23,15 @@ export const partnerTypeEnum = pgEnum("partner_type", [
 ]);
 export const orderStatusEnum = pgEnum("order_status", [
   "diproses",
+  "ditunda",
   "disetujui",
+  "dipacking",
   "dalam_pengiriman",
   "selesai",
   "ditolak",
   "dibatalkan",
 ]);
+export const distributionSchemeEnum = pgEnum("distribution_scheme", ["konsinyasi"]);
 export const stockSourceEnum = pgEnum("stock_source", [
   "manual_update",
   "order_received",
@@ -38,6 +41,7 @@ export const stockSourceEnum = pgEnum("stock_source", [
 export const partners = pgTable("partners", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
+  distribution_scheme: distributionSchemeEnum("distribution_scheme").notNull().default("konsinyasi"),
   type: partnerTypeEnum("type").notNull(),
   type_other: text("type_other"),
   address: text("address"),
@@ -160,7 +164,7 @@ export const stockLogs = pgTable("stock_logs", {
 
 export const assistantChatEvents = pgTable("assistant_chat_events", {
   id: uuid("id").primaryKey().defaultRandom(),
-  partner_id: uuid("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  partner_id: uuid("partner_id").references(() => partners.id, { onDelete: "cascade" }),
   user_id: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   message: text("message").notNull(),
   reply: text("reply").notNull(),
@@ -173,12 +177,12 @@ export const assistantChatEvents = pgTable("assistant_chat_events", {
 });
 
 export const assistantConversationMemory = pgTable("assistant_conversation_memory", {
-  partner_id: uuid("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  partner_id: uuid("partner_id").references(() => partners.id, { onDelete: "cascade" }),
   user_id: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   session_id: uuid("session_id").notNull(),
   summary: text("summary").notNull(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.partner_id, table.user_id, table.session_id] })]);
+}, (table) => [primaryKey({ columns: [table.user_id, table.session_id] })]);
 
 export const orders = pgTable("orders", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -187,6 +191,7 @@ export const orders = pgTable("orders", {
     .notNull()
     .references(() => partners.id),
   status: orderStatusEnum("status").notNull().default("diproses"),
+  distribution_scheme: distributionSchemeEnum("distribution_scheme").notNull().default("konsinyasi"),
   note: text("note"),
   admin_note: text("admin_note"),
   rejected_reason: text("rejected_reason"),

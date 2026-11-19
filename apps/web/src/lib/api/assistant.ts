@@ -12,16 +12,51 @@ export interface MitraAssistantReply {
   interactionId: string
   modelAvailable: boolean
   session_id?: string
+  visualization?: MitraStockVisualization | null
+}
+
+export interface MitraStockVisualization {
+  type: 'bar'
+  title: string
+  unit: string
+  items: Array<{ label: string; value: number }>
 }
 
 export interface MitraChatHistoryItem {
   id: string
   message: string
   reply: string
+  visualization?: MitraStockVisualization | null
   source: 'llm' | 'fallback'
   intent: MitraTour | null
   feedback: -1 | 1 | null
   created_at: string
+}
+
+export interface MitraChatSession {
+  session_id: string
+  title: string | null
+  last_at: string
+  message_count: number
+  summary: string | null
+  is_closed: boolean
+}
+
+export async function getMitraChatSessions(): Promise<MitraChatSession[]> {
+  const response = await apiClient.get<{ data: MitraChatSession[] }>('/assistant/mitra/sessions')
+  return response.data
+}
+
+export async function getMitraChatSession(sessionId: string): Promise<{ data: MitraChatHistoryItem[]; summary: string | null }> {
+  return apiClient.get<{ data: MitraChatHistoryItem[]; summary: string | null }>('/assistant/mitra/history', { headers: { 'x-session-id': sessionId } })
+}
+
+export function deleteMitraChatSession(sessionId: string): Promise<{ status: string }> {
+  return apiClient.delete<{ status: string }>(`/assistant/mitra/sessions/${encodeURIComponent(sessionId)}`)
+}
+
+export function reopenMitraChatSession(sessionId: string): Promise<{ status: string; session_id: string }> {
+  return apiClient.post<{ status: string; session_id: string }>(`/assistant/mitra/sessions/${encodeURIComponent(sessionId)}/reopen`, {})
 }
 
 export async function askMitraAssistant(message: string, sessionId?: string): Promise<MitraAssistantReply> {
@@ -55,4 +90,49 @@ export function clearMitraAssistantHistory(): Promise<{ status: string }> {
 
 export function endMitraAssistantSession(sessionId?: string): Promise<{ status: string; remembered: boolean }> {
   return apiClient.post<{ status: string; remembered: boolean }>('/assistant/mitra/end', { session_id: sessionId })
+}
+
+export async function getAdminChatSessions(): Promise<MitraChatSession[]> {
+  const response = await apiClient.get<{ data: MitraChatSession[] }>('/assistant/admin/sessions')
+  return response.data
+}
+
+export async function getAdminChatSession(sessionId: string): Promise<{ data: MitraChatHistoryItem[]; summary: string | null }> {
+  return apiClient.get<{ data: MitraChatHistoryItem[]; summary: string | null }>('/assistant/admin/history', { headers: { 'x-session-id': sessionId } })
+}
+
+export function deleteAdminChatSession(sessionId: string): Promise<{ status: string }> {
+  return apiClient.delete<{ status: string }>(`/assistant/admin/sessions/${encodeURIComponent(sessionId)}`)
+}
+
+export function reopenAdminChatSession(sessionId: string): Promise<{ status: string; session_id: string }> {
+  return apiClient.post<{ status: string; session_id: string }>(`/assistant/admin/sessions/${encodeURIComponent(sessionId)}/reopen`, {})
+}
+
+export async function askAdminAssistant(message: string, sessionId?: string): Promise<MitraAssistantReply> {
+  const response = await apiFetch('/assistant/admin/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ message, session_id: sessionId }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(body?.error ?? `Permintaan gagal (${response.status})`)
+  }
+  if (!response.headers.get('Content-Type')?.includes('text/event-stream')) {
+    return response.json() as Promise<MitraAssistantReply>
+  }
+  return readAssistantSse<MitraAssistantReply>(response)
+}
+
+export function endAdminAssistantSession(sessionId?: string): Promise<{ status: string; remembered: boolean }> {
+  return apiClient.post<{ status: string; remembered: boolean }>('/assistant/admin/end', { session_id: sessionId })
+}
+
+export function rateAdminAssistantAnswer(id: string, rating: -1 | 1, sessionId?: string): Promise<{ status: string }> {
+  return apiClient.patch<{ status: string }>(`/assistant/admin/chat/${encodeURIComponent(id)}/feedback`, { rating }, sessionId ? { headers: { 'x-session-id': sessionId } } : undefined)
+}
+
+export function clearAdminAssistantHistory(): Promise<{ status: string }> {
+  return apiClient.delete<{ status: string }>('/assistant/admin/history')
 }

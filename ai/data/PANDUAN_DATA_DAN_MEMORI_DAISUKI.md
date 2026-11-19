@@ -52,12 +52,12 @@ Untuk banyak dokumen, perhatikan pengaturan `rag_policy.json`: `max_documents` s
 Untuk menambah cara bertanya, edit contoh berlabel di `mega_data_word/intent/training/`, lalu dari folder `ai/` jalankan:
 
 ```powershell
-python retraining/refresh_identity.py
+python retraining/train.py --intent-only
 ```
 
 Perintah ini memperbarui classifier intent dalam model yang sudah ada. Tambahkan contoh kalimat pertanyaan, bukan isi artikel panjang. Perubahan pola JSON/regex tetap memerlukan restart API.
 
-Untuk memperbarui classifier intent dan risiko stok sekaligus, jalankan `python retraining/train.py` setelah laporan CSV Data Science yang valid tersedia. Perintah tersebut juga memindai `raw_references/` dan menulis hasil ekstraksi Markdown. Pada alur mingguan yang memakai run, pemrosesan dari halaman analisis akan membuat artefak model di `private/runs/<run_id>/` sebelum run diaktifkan. Training lokal saja tidak otomatis mengganti versi aktif yang dipublikasikan oleh alur run.
+Untuk memperbarui classifier intent dan risiko stok sekaligus, jalankan `python retraining/train.py --weekly` setelah laporan CSV Data Science yang valid tersedia. Perintah tersebut juga memindai `raw_references/` dan menulis hasil ekstraksi Markdown. Pada alur mingguan yang memakai run, pemrosesan dari halaman analisis akan membuat artefak model di `private/runs/<run_id>/` sebelum run diaktifkan. Training lokal saja tidak otomatis mengganti versi aktif yang dipublikasikan oleh alur run.
 
 ## Menelusuri jawaban chatbot
 

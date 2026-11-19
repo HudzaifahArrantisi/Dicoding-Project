@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts } from "./company-knowledge";
+import { approvedModelContextReply, composeKnowledgeReply, filterRagDocuments, knowledgeIntent, loadCompanyKnowledge, selectMainbrainExcerpts, selectPublicRagMemory } from "./company-knowledge";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadAssistantFixture } from "./test-data";
@@ -20,6 +20,12 @@ test("profil dan SOP perusahaan dibaca dari sumber terstruktur", async () => {
   expect(JSON.stringify(sop)).not.toContain("DLV-XXXXXXXX");
 });
 
+test("saat indeks biner siap, profil tersedia tanpa membaca dokumen Markdown", async () => {
+  const result = await loadCompanyKnowledge("siapa pendiri Daisuki", "company", false);
+  expect(result.company?.legal_entity).toBe("PT Daisuki Pangan Indonesia");
+  expect(result.documents).toEqual([]);
+});
+
 test("retrieval mainbrain hanya membaca dokumen yang ditandai untuk mitra", () => {
   const results = selectMainbrainExcerpts("pendiri Daisuki", [
     { name: "cv-pribadi.md", content: "Pendiri Daisuki dan data pribadi seseorang yang tidak boleh dibagikan." },
@@ -36,6 +42,26 @@ test("kebijakan RAG hanya menerima sumber terdaftar tanpa data kontak", () => {
     { name: "dokumen-baru.public.md", content: "Dokumen ini belum disetujui." },
   ]);
   expect(files.map((file) => file.name)).toEqual(["inventory_rules.public.md"]);
+});
+
+test("ringkasan CV yang disetujui berasal dari indeks biner dan tidak membuka CV mentah", () => {
+  const document = { source: "pdf/CV Contoh.pdf", version: "pkl", excerpt: "Contoh adalah mahasiswi aktif yang menyukai teknologi dan kegiatan organisasi.", kind: "approved_summary", visibility: "mitra", aliases: ["contoh"] };
+  expect(filterRagDocuments([{ name: document.source, content: document.excerpt }])).toHaveLength(0);
+  const selected = selectPublicRagMemory([{ ...document, score: 0.1238 }], []);
+  expect(selected.memory).toBe("daisuki.pkl");
+  expect(approvedModelContextReply("siapa itu contoh??", selected.documents)).toContain("Contoh adalah mahasiswi");
+  expect(approvedModelContextReply("siapa itu contoh??", [])).toBeNull();
+  expect(selectPublicRagMemory([{ ...document, visibility: "private", score: 0.4 }], []).documents).toEqual([]);
+});
+
+test("RAG memilih vektor publik yang relevan lalu fallback ke Markdown saat tidak ada", () => {
+  const markdown = [{ source: "inventory_rules.public.md", version: "md", excerpt: "Aturan stok dari cadangan." }];
+  const binary = [{ source: "inventory_rules.public.md", version: "pkl", excerpt: "Aturan stok dari vektor.", score: 0.4 }];
+  expect(selectPublicRagMemory(binary, markdown)).toEqual({ documents: [{ source: binary[0].source, version: "pkl", excerpt: binary[0].excerpt }], memory: "daisuki.pkl" });
+  expect(selectPublicRagMemory([{ ...binary[0], score: 0.01 }], markdown)).toEqual({ documents: markdown, memory: ".public.md" });
+  expect(selectPublicRagMemory([{ ...binary[0], source: "private.pdf" }], markdown).memory).toBe(".public.md");
+  expect(selectPublicRagMemory(undefined, []).memory).toBe("none");
+  expect(selectPublicRagMemory([], []).memory).toBe("none");
 });
 
 test("pertanyaan profil dan panduan dikenali tanpa mengubah pertanyaan stok", () => {
