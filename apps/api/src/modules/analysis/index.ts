@@ -6,7 +6,7 @@ import { analysisRuns, auditLogs, users } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
 import { dataScienceRunDir } from "../../lib/analysis-artifacts";
 import { approveAnalysisRun, createAnalysisDraft, listAnalysisRuns, processAnalysisRun, rollbackAnalysisRun } from "../../lib/analysis-runs";
-import { getActiveRunId, listRawReferences, loadArtifact, saveRawReference } from "../../lib/analysis-storage";
+import { deleteAdminRawReference, getActiveRunId, listRawReferences, loadArtifact, saveRawReference } from "../../lib/analysis-storage";
 
 function validPeriod(start: string, end: string): boolean {
   const pattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -53,6 +53,14 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
       throw error;
     }
   })
+  .delete("/raw-references/:id", async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Hanya Admin dapat menghapus referensi mentah" }; }
+    const deleted = await deleteAdminRawReference(params.id, user.userId);
+    if (!deleted) { set.status = 404; return { error: "Unggahan Admin tidak ditemukan" }; }
+    return { deleted: true, id: deleted.id };
+  }, { params: t.Object({ id: t.String({ format: "uuid" }) }) })
   .get("/runs", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }

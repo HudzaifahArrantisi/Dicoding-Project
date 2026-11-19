@@ -28,8 +28,7 @@ export function AiPipelineChart({ status, pending, loading, onRun, buttonLabel =
     <section className="dashboard-surface space-y-4 p-4 sm:p-5" aria-labelledby="python-analysis-title">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 id="python-analysis-title" className="font-display text-lg font-semibold text-ink-900">Analisis Python</h2>
-          <p className="mt-1 text-sm text-muted">Perbarui grafik dan model dari CSV Data Science yang tersedia, atau data PostgreSQL.</p>
+          <h2 id="python-analysis-title" className="font-display text-lg font-semibold text-ink-900">Mulai analsisi</h2>
         </div>
         <button type="button" onClick={onRun} disabled={pending || status?.status === 'running'} className="inline-flex min-h-11 items-center justify-center rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-not-allowed disabled:opacity-50">
           {pending || status?.status === 'running' ? 'Analisis berjalan...' : buttonLabel}

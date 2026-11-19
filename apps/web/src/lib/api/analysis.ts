@@ -56,6 +56,10 @@ export async function uploadRawReference(file: File) {
   return apiRequest<{ file: RawReference }>('/analysis/raw-references', { method: 'POST', body })
 }
 
+export async function deleteRawReference(id: string) {
+  return apiRequest<{ deleted: boolean; id: string }>(`/analysis/raw-references/${id}`, { method: 'DELETE' })
+}
+
 export async function actionAnalysisRun(id: string, action: 'approve' | 'process' | 'rollback' | 'reject', reason?: string) {
   return apiRequest(`/analysis/runs/${id}/${action}`, { method: 'POST', body: reason ? JSON.stringify({ reason }) : undefined })
 }

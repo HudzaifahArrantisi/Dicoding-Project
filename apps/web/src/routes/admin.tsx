@@ -21,7 +21,6 @@ import {
   AlertOctagon,
   AlertTriangle,
   ArrowRight,
-  Award,
   BarChart3,
   Bell,
   Boxes,
@@ -52,7 +51,6 @@ import {
   Search,
   Store,
   Trash2,
-  TrendingUp,
   Truck,
   Upload,
   X,
@@ -78,7 +76,6 @@ import {
   type PartnerFastMovingGroup,
 } from '@/components/inventory/partner-fast-moving-modal'
 import { PartnerDetailModal } from '@/components/inventory/partner-detail-modal'
-import { AiPipelineChart } from '@/components/inventory/ai-pipeline-chart'
 import { AnalysisRunPreviewModal } from '@/components/inventory/analysis-run-preview-modal'
 import {
   ProductSalesDetailModal,
@@ -136,6 +133,7 @@ import {
   getAnalysisRuns,
   getRawReferences,
   uploadRawReference,
+  deleteRawReference,
   getAnalysisArtifacts,
   createAnalysisRun,
   actionAnalysisRun,
@@ -444,6 +442,8 @@ function DataSciencePanel({
   const [selectedPartner, setSelectedPartner] = useState<StockLogPartner | null>(null)
   const [selectedReference, setSelectedReference] = useState<File | null>(null)
   const [uploadingReference, setUploadingReference] = useState(false)
+  const [deleteReferenceTarget, setDeleteReferenceTarget] = useState<RawReference | null>(null)
+  const [deletingReference, setDeletingReference] = useState(false)
   const [showAllReferences, setShowAllReferences] = useState(false)
   const referenceInputRef = useRef<HTMLInputElement>(null)
   const rawReferences = useQuery<{ files: RawReference[] }>({
@@ -491,69 +491,96 @@ function DataSciencePanel({
     }
   }
 
+  const handleDeleteReference = async () => {
+    if (!deleteReferenceTarget || deletingReference) return
+    setDeletingReference(true)
+    try {
+      const deletedId = deleteReferenceTarget.id
+      await deleteRawReference(deletedId)
+      queryClient.setQueryData<{ files: RawReference[] }>(['admin-raw-references'], (current) =>
+        current ? { files: current.files.filter((file) => file.id !== deletedId) } : current)
+      setDeleteReferenceTarget(null)
+      void queryClient.invalidateQueries({ queryKey: ['admin-raw-references'] })
+      toast.success('File referensi dihapus dari database')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setDeletingReference(false)
+    }
+  }
+
   return (
-    <section className="dashboard-panel-enter space-y-5" aria-labelledby="data-science-title">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="dashboard-eyebrow">Analisis stok</p>
-          <h1 id="data-science-title" className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log & Data</h1>
-          <p className="mt-1 text-sm text-muted">Perkembangan laporan dan konsumsi stok · 7 hari terakhir</p>
+    <section className="dashboard-panel-enter space-y-4" aria-labelledby="data-science-title">
+      <h1 id="data-science-title" className="font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log & Data</h1>
+
+      <dl className="dashboard-surface grid divide-y divide-line px-4 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:px-0">
+        <div className="py-3 sm:px-4">
+          <dt className="text-xs font-medium text-muted">Log minggu ini</dt>
+          <dd className="mt-1 font-display text-xl font-semibold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : summary?.total_logs_this_week ?? 0}</dd>
         </div>
-        <button
-          type="button"
-          onClick={onExport}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700"
-        >
-          <Download className="size-4" aria-hidden="true" />
-          Export CSV
-        </button>
-      </div>
+        <div className="py-3 sm:px-4">
+          <dt className="text-xs font-medium text-muted">Mitra aktif melapor</dt>
+          <dd className="mt-1 font-display text-xl font-semibold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`}</dd>
+        </div>
+        <div className="py-3 sm:px-4">
+          <dt className="text-xs font-medium text-muted">Rata-rata konsumsi harian</dt>
+          <dd className="mt-1 font-display text-xl font-semibold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`}</dd>
+        </div>
+      </dl>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <InsightMetric label="Total Log Minggu Ini" value={summaryError ? '—' : summaryLoading ? '…' : summary?.total_logs_this_week ?? 0} />
-        <InsightMetric label="Mitra Aktif Melapor" value={summaryError ? '—' : summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`} detail="Mitra aktif yang mengirim log dalam 7 hari" />
-        <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
-      </div>
-
-      <section className="dashboard-surface p-4 sm:p-5" aria-labelledby="raw-reference-title">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 id="raw-reference-title" className="font-display text-lg font-semibold text-ink-900">Referensi mentah</h2>
-            <p className="mt-1 text-sm text-muted">File tersimpan di database · PDF, CSV, JSON, MD, TXT, DOCX · maks. 10 MB.</p>
+      <section className="dashboard-surface min-w-0 overflow-hidden" aria-labelledby="raw-reference-title">
+        <div className="p-4 sm:p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="raw-reference-title" className="font-display text-base font-semibold text-ink-900">Referensi & analisis</h2>
+            <span className="text-xs text-muted">PDF, CSV, JSON, MD, TXT, DOCX · maks. 10 MB</span>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="mt-4 grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
             <input ref={referenceInputRef} type="file" accept=".pdf,.csv,.json,.md,.txt,.docx"
               onChange={(event) => setSelectedReference(event.target.files?.[0] ?? null)}
               aria-label="Pilih file referensi mentah"
-              className="min-h-11 max-w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink-900 file:mr-3 file:rounded file:border-0 file:bg-ink-100 file:px-2 file:py-1 file:text-ink-900" />
+              className="block min-h-11 w-full min-w-0 overflow-hidden rounded-md border border-line bg-white px-3 py-2 text-sm text-ink-900 file:mr-3 file:rounded file:border-0 file:bg-ink-100 file:px-2 file:py-1 file:text-ink-900" />
             <button type="button" onClick={() => void handleUploadReference()}
               disabled={!selectedReference || uploadingReference}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white disabled:opacity-50">
-              <Upload className="size-4" aria-hidden="true" />{uploadingReference ? 'Mengunggah...' : 'Unggah ke database'}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-3 text-sm font-semibold text-white hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50">
+              <Upload className="size-4" aria-hidden="true" />{uploadingReference ? 'Mengunggah...' : 'Unggah file'}
+            </button>
+            <button type="button" onClick={() => void handleRunAnalysis()} disabled={startingAi}
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-ink-900 px-3 text-sm font-semibold text-white hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50">
+              {startingAi ? 'Memproses...' : 'Perbarui analisis'}
+            </button>
+            <button type="button" onClick={onExport}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-900 hover:bg-ink-50">
+              <Download className="size-4" aria-hidden="true" />Ekspor CSV
             </button>
           </div>
+          {analysisRun ? <output className="mt-3 block text-xs text-ok-fg">Analisis tersimpan. Tinjau hasilnya di AI Insights.</output> : null}
         </div>
-        {rawReferences.isError ? <p className="mt-3 text-sm text-crit-fg">Daftar referensi gagal dimuat.</p> : null}
-        {rawReferences.data ? <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="Filter referensi database">
-          <button type="button" aria-pressed={!showAllReferences} onClick={() => setShowAllReferences(false)}
-            className={`min-h-11 rounded-md px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${!showAllReferences ? 'bg-ink-900 text-white' : 'border border-line bg-white text-ink-700'}`}>
-            Unggahan Admin <span className="tabular-nums">({adminReferenceCount})</span>
-          </button>
-          <button type="button" aria-pressed={showAllReferences} onClick={() => setShowAllReferences(true)}
-            className={`min-h-11 rounded-md px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${showAllReferences ? 'bg-ink-900 text-white' : 'border border-line bg-white text-ink-700'}`}>
-            Semua di database <span className="tabular-nums">({rawReferences.data.files.length})</span>
-          </button>
-        </div> : null}
-        {visibleReferences.length ? <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="Referensi tersimpan di database">
-          {visibleReferences.map((file) => <li key={file.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-line bg-white px-3 py-2 text-sm">
-            <span className="min-w-0 truncate text-ink-900" title={file.file_name}>{file.file_name}</span>
-            <span className="shrink-0 text-xs uppercase text-muted">{showAllReferences && file.origin === 'migration' ? 'Impor · ' : ''}{file.category} · <span className="tabular-nums">{(file.size_bytes / 1024).toFixed(0)} KB</span></span>
-          </li>)}
-        </ul> : rawReferences.data && !rawReferences.isLoading ? <p className="mt-3 text-sm text-muted">Belum ada file pada tampilan ini.</p> : null}
+        <div className="border-t border-line px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-ink-900">File di database</h3>
+            {rawReferences.data ? <select aria-label="Tampilkan referensi" value={showAllReferences ? 'all' : 'admin'}
+              onChange={(event) => setShowAllReferences(event.target.value === 'all')}
+              className="min-h-11 max-w-full rounded-md border border-line bg-white px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-900">
+              <option value="admin">Unggahan Admin ({adminReferenceCount})</option>
+              <option value="all">Semua file ({rawReferences.data.files.length})</option>
+            </select> : null}
+          </div>
+          {rawReferences.isError ? <span className="mt-3 block text-sm text-crit-fg" role="alert">Daftar referensi gagal dimuat.</span> : null}
+          {visibleReferences.length ? <ul className="mt-2 max-h-52 divide-y divide-line overflow-y-auto" aria-label="Referensi tersimpan di database">
+            {visibleReferences.map((file) => <li key={file.id} className="flex min-w-0 items-center justify-between gap-3 py-2 text-sm">
+              <span className="min-w-0 truncate text-ink-900" title={file.file_name}>{file.file_name}</span>
+              <span className="flex shrink-0 items-center gap-1">
+                <span className="text-xs uppercase text-muted">{showAllReferences && file.origin === 'migration' ? 'Impor · ' : ''}{file.category} · <span className="tabular-nums">{(file.size_bytes / 1024).toFixed(0)} KB</span></span>
+                {file.origin === 'admin' ? <button type="button" onClick={() => setDeleteReferenceTarget(file)}
+                  aria-label={`Hapus ${file.file_name}`} title="Hapus file"
+                  className="grid size-11 shrink-0 place-items-center rounded-md text-crit-fg hover:bg-crit-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit">
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </button> : null}
+              </span>
+            </li>)}
+          </ul> : rawReferences.data ? <span className="mt-2 block text-sm text-muted">Belum ada file pada tampilan ini.</span> : null}
+        </div>
       </section>
-
-      <AiPipelineChart status={undefined} pending={startingAi} loading={false} onRun={() => void handleRunAnalysis()} buttonLabel="Perbarui analisis Data Science" />
-      {analysisRun ? <p className="text-xs text-ok-fg" role="status">Run terbaru siap ditinjau di tab AI Insights: {analysisRun}</p> : null}
 
       <PartnerDailyLogChart
         summary={summary}
@@ -565,7 +592,6 @@ function DataSciencePanel({
       <div className="dashboard-surface overflow-hidden">
         <div className="border-b border-line px-4 py-3">
           <h3 className="font-semibold text-ink-900">Log perkembangan per mitra</h3>
-          <p className="mt-1 text-sm text-muted">Klik nama mitra untuk melihat detail log perubahan stok.</p>
         </div>
         {logPartnersError ? <div className="p-4"><ErrorState message={getErrorMessage(logPartnersError)} onRetry={onRetry} /></div> : null}
         {logPartnersLoading ? <LoadingState label="Memuat daftar mitra..." /> : null}
@@ -605,6 +631,27 @@ function DataSciencePanel({
         }}
         query={partnerLogs}
       />
+      <Dialog.Root open={deleteReferenceTarget !== null} onOpenChange={(open) => {
+        if (!open && !deletingReference) setDeleteReferenceTarget(null)
+      }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white p-5 shadow-2xl focus:outline-none sm:p-6">
+            <Dialog.Title className="font-display text-lg font-semibold text-ink-900">Hapus file referensi?</Dialog.Title>
+            <Dialog.Description className="mt-2 break-words text-sm leading-6 text-ink-700">
+              {deleteReferenceTarget?.file_name} akan dihapus dari database. Model yang sudah diterbitkan tetap memakai hasil sebelumnya sampai analisis diperbarui.
+            </Dialog.Description>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" disabled={deletingReference} onClick={() => setDeleteReferenceTarget(null)}
+                className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-900 disabled:opacity-50">Batal</button>
+              <button type="button" disabled={deletingReference} onClick={() => void handleDeleteReference()}
+                className="min-h-11 rounded-md bg-crit px-4 text-sm font-semibold text-white hover:bg-crit-fg disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit">
+                {deletingReference ? 'Menghapus...' : 'Hapus file'}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </section>
   )
 }
@@ -784,9 +831,6 @@ function PartnerDailyLogChart({
               Analisis Perubahan Stok Mingguan per Mitra
             </h2>
           </div>
-          <p className="mt-1 text-xs text-muted leading-relaxed">
-            Rekap agregat 1 minggu: volume mutasi stok per mitra dan tren aktivitas 7 hari terakhir.
-          </p>
         </div>
 
         {/* View Switcher Toggle - Touch-Friendly 44px on Mobile */}
@@ -854,67 +898,21 @@ function PartnerDailyLogChart({
         </div>
       ) : (
         <div className="p-3.5 sm:p-5 space-y-4 sm:space-y-5">
-          {/* Executive Highlight Cards (1 Minggu Penuh) */}
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
-            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <Award className="size-3.5 text-ume shrink-0" aria-hidden="true" />
-                <span>Mitra Terbanyak Update</span>
-              </div>
-              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900 truncate">
-                {topPartner ? topPartner.partner_name : '-'}
-              </p>
-              <p className="mt-0.5 text-xs text-muted tabular-nums">
-                <span className="font-semibold text-ume">{topPartner?.total_logs ?? 0} log</span> ({topPartner?.percentage_of_total ?? 0}% dari seluruh jaringan)
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <TrendingUp className="size-3.5 text-ink-900 shrink-0" aria-hidden="true" />
-                <span>Hari Aktivitas Puncak</span>
-              </div>
-              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900">
-                {peakDayLabel}
-              </p>
-              <p className="mt-0.5 text-xs text-muted tabular-nums">
-                <span className="font-semibold text-ink-900">{peakDayEntry?.log_count ?? 0} log</span> tercatat dari {peakDayEntry?.active_partners ?? 0} cabang
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-line bg-ink-50/40 p-3 sm:p-3.5">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <BarChart3 className="size-3.5 text-teal-700 shrink-0" aria-hidden="true" />
-                <span>Konsentrasi Perubahan</span>
-              </div>
-              <p className="mt-1 font-display text-sm sm:text-base font-semibold text-ink-900 tabular-nums">
-                {summary && summary.total_logs_this_week > 0 && partnerWeeklyStats.length > 0
-                  ? `${Math.round(
-                      (partnerWeeklyStats.slice(0, 3).reduce((sum, p) => sum + p.total_logs, 0) /
-                        summary.total_logs_this_week) *
-                        100,
-                    )}%`
-                  : '0%'}
-              </p>
-              <p className="mt-0.5 text-xs text-muted">
-                Dihasilkan oleh Top 3 mitra paling aktif minggu ini
-              </p>
-            </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 border-b border-line pb-3 text-xs text-muted">
+            <span>Mitra teraktif: <strong className="font-semibold text-ink-900">{topPartner?.partner_name ?? '—'}</strong></span>
+            <span>Hari puncak: <strong className="font-semibold text-ink-900">{peakDayLabel}</strong> <span className="tabular-nums">({peakDayEntry?.log_count ?? 0} log)</span></span>
           </div>
 
           {/* Container Charts (Bisa Both, Hanya Bar, atau Hanya Line) */}
           <div className={`grid gap-4 sm:gap-5 ${viewMode === 'both' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
             {/* 1. BAR CHART: Peringkat Volume Perubahan Stok per Mitra */}
             {(viewMode === 'both' || viewMode === 'bar') && (
-              <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4 shadow-2xs">
+              <div className="min-w-0 p-1">
                 <div className="flex items-center justify-between pb-3 border-b border-line">
                   <div>
                     <h3 className="text-sm font-semibold text-ink-900">
                       Peringkat Perubahan Stok
                     </h3>
-                    <p className="text-[11px] text-muted">
-                      Total frekuensi log perubahan stok per mitra dalam 1 minggu
-                    </p>
                   </div>
                   <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-semibold text-ink-900 tabular-nums">
                     {partnerWeeklyStats.length} Mitra
@@ -1162,19 +1160,13 @@ function PartnerDailyLogChart({
 
             {/* 2. LINE CHART: Tren Waktu Perubahan Stok 7 Hari */}
             {(viewMode === 'both' || viewMode === 'line') && (
-              <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4 shadow-2xs">
+              <div className="min-w-0 p-1">
                 <div className="flex items-center justify-between pb-3 border-b border-line">
                   <div>
                     <h3 className="text-sm font-semibold text-ink-900">
                       Tren Perubahan Stok 7 Hari
                     </h3>
-                    <p className="text-[11px] text-muted">
-                      Dinamika fluktuasi perubahan log per hari sepanjang minggu
-                    </p>
                   </div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-800">
-                    7 Hari Terakhir
-                  </span>
                 </div>
 
                 {/* SVG Line Chart */}
@@ -1409,16 +1401,6 @@ function PartnerDailyLogChart({
         </div>
       )}
     </section>
-  )
-}
-
-function InsightMetric({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
-  return (
-    <article className="dashboard-surface min-w-0 px-4 py-4 sm:px-5 sm:py-5">
-      <p className="text-sm font-medium text-muted">{label}</p>
-      <p className="mt-2 font-display text-2xl font-semibold tabular-nums text-ink-900">{value}</p>
-      {detail ? <p className="mt-1 text-xs text-muted">{detail}</p> : null}
-    </article>
   )
 }
 

@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { db } from "../db/client";
-import { analysisRunArtifacts, analysisRuns, rawReferences } from "../db/schema";
+import { analysisRunArtifacts, analysisRuns, auditLogs, rawReferences } from "../db/schema";
 import { activeArtifact, activeRunId, aiRunDir, dataScienceRunDir } from "./analysis-artifacts";
 
 const allowed = new Set(["pdf", "csv", "json", "md", "txt", "docx"]);
@@ -51,6 +51,18 @@ export async function listRawReferences() {
     uploaded_by: rawReferences.uploaded_by })
     .from(rawReferences).orderBy(desc(rawReferences.created_at)).limit(100);
   return rows.map(({ uploaded_by, ...row }) => ({ ...row, origin: uploaded_by ? "admin" as const : "migration" as const }));
+}
+
+export async function deleteAdminRawReference(id: string, actorId: string) {
+  return db.transaction(async (tx) => {
+    const [deleted] = await tx.delete(rawReferences)
+      .where(and(eq(rawReferences.id, id), isNotNull(rawReferences.uploaded_by)))
+      .returning({ id: rawReferences.id, file_name: rawReferences.file_name });
+    if (!deleted) return null;
+    await tx.insert(auditLogs).values({ actor_id: actorId, action: "raw_reference_deleted",
+      target_type: "raw_reference", target_id: deleted.id });
+    return deleted;
+  });
 }
 
 async function saveArtifact(runId: string, kind: "data_science" | "ai", fileName: string, content: Buffer) {
