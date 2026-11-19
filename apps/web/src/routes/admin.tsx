@@ -3015,11 +3015,31 @@ function AdminDashboard() {
 
         <main className={`mx-auto min-w-0 max-w-7xl px-4 sm:px-6 lg:px-8 ${tab === 'chat' ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pt-4 lg:pb-4' : 'space-y-6 py-6 pb-28 sm:py-8 lg:pb-8'}`}>
           {tab === 'stocks' && finance.data ? (
-            <section aria-label="Estimasi penjualan titip jual" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan hari ini</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">{finance.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini · WIB</p></div>
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan 7 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong><p className="mt-1 text-xs text-muted">Dari {finance.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs keluar di seluruh mitra.</p></div>
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm text-muted">Estimasi penjualan 30 hari</p><strong className="num mt-1 block font-display text-xl tabular-nums text-ink-900">{Number(finance.data.sales_estimate_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></div>
-              <div className="rounded-xl border border-line bg-white p-4"><p className="text-sm font-semibold text-ink-900">Dasar perhitungan</p><p className="mt-1 text-xs text-muted">Log stok keluar mitra. Seblak Rp27.500/pcs, produk lainnya Rp25.000/pcs. Angka ini estimasi sampai stok fisik diverifikasi.</p></div>
+            <section aria-label="Estimasi penjualan titip jual" className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
+                <div className="min-w-0 rounded-xl border border-ume/20 bg-ume/10 p-4 sm:p-5">
+                  <p className="text-xs font-semibold text-ume sm:text-sm">Estimasi penjualan hari ini (WIB)</p>
+                  <strong className="num mt-2 block break-words font-display text-2xl font-semibold leading-tight tabular-nums text-ink-900 sm:text-3xl">
+                    {Number(finance.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
+                  </strong>
+                  <span className="mt-2 block text-xs font-medium tabular-nums text-ink-700">
+                    {finance.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini
+                  </span>
+                </div>
+                <div className="min-w-0 rounded-xl border border-ok/20 bg-ok-bg p-4 sm:p-5">
+                  <p className="text-xs font-semibold text-ok-fg sm:text-sm">Estimasi penjualan 7 hari</p>
+                  <strong className="num mt-2 block break-words font-display text-2xl font-semibold leading-tight tabular-nums text-ink-900 sm:text-3xl">
+                    {Number(finance.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
+                  </strong>
+                  <span className="mt-2 block text-xs font-medium tabular-nums text-ink-700">
+                    {finance.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs keluar di seluruh mitra
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg border border-line bg-white px-4 py-3 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <span>Estimasi 30 hari <strong className="num ml-1 font-semibold tabular-nums text-ink-900">{Number(finance.data.sales_estimate_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></span>
+                <span>Log stok keluar · Seblak Rp27.500/pcs · Produk lain Rp25.000/pcs · Perlu verifikasi stok fisik</span>
+              </div>
             </section>
           ) : null}
           {tab === 'stocks' && finance.isError ? (

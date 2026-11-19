@@ -530,12 +530,26 @@ function MitraPortal() {
 
       <main className={`mx-auto max-w-6xl px-4 sm:px-6 lg:pr-28 ${activeTab === 'chat' ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pt-4 lg:pb-4' : 'py-6 sm:py-8'}`}>
         {activeTab === 'stocks' && financeQuery.data ? (
-          <div className="mb-4 rounded-xl border border-line bg-white p-3 text-sm text-ink-800">
-            <p>Estimasi penjualan hari ini (WIB): <strong className="num tabular-nums">{Number(financeQuery.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
-            <p className="mt-1 text-xs text-muted">{financeQuery.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini.</p>
-            <p className="mt-3 border-t border-line pt-3">Estimasi penjualan 7 hari: <strong className="num tabular-nums">{Number(financeQuery.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></p>
-            <p className="mt-1 text-xs text-muted">Dihitung dari {financeQuery.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs pada log stok keluar Anda.</p>
-          </div>
+          <section aria-label="Ringkasan estimasi penjualan" className="mb-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
+            <div className="min-w-0 rounded-xl border border-ume/20 bg-ume/10 p-4 sm:p-5">
+              <p className="text-xs font-semibold text-ume sm:text-sm">Estimasi penjualan hari ini (WIB)</p>
+              <strong className="num mt-2 block break-words font-display text-2xl font-semibold leading-tight tabular-nums text-ink-900 sm:text-3xl">
+                {Number(financeQuery.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
+              </strong>
+              <span className="mt-2 block text-xs font-medium tabular-nums text-ink-700">
+                {financeQuery.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini
+              </span>
+            </div>
+            <div className="min-w-0 rounded-xl border border-ok/20 bg-ok-bg p-4 sm:p-5">
+              <p className="text-xs font-semibold text-ok-fg sm:text-sm">Estimasi penjualan 7 hari</p>
+              <strong className="num mt-2 block break-words font-display text-2xl font-semibold leading-tight tabular-nums text-ink-900 sm:text-3xl">
+                {Number(financeQuery.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
+              </strong>
+              <span className="mt-2 block text-xs font-medium tabular-nums text-ink-700">
+                {financeQuery.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs keluar dalam 7 hari
+              </span>
+            </div>
+          </section>
         ) : null}
         {activeTab === 'stocks' ? (
           <StocksPanel
