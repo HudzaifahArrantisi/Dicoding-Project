@@ -241,3 +241,40 @@ create table if not exists restock_recommendations (
 4. **Siklus Reservasi & Approval Restock**:
    * Stok gudang pusat (`products.central_stock`) direservasi otomatis sebesar `qty_requested` saat Mitra mengajukan PO restok.
    * Stok fisik cabang hanya bertambah saat pesanan tiba dan dikonfirmasi penerimaannya oleh Mitra (`selesai`), bertambah sebesar `qty_approved` (bukan `qty_requested`).
+
+---
+
+## 7. Kamus Data Output Pemodelan & Segmentasi Cabang
+
+### A. Output Prediksi Risiko Stockout ([stockout_risk_predictions.csv](file:///C:/daisuki-inventory/data-science/data/stockout_risk_predictions.csv))
+Dihasilkan oleh [stockout_model.py](file:///C:/daisuki-inventory/data-science/src/stockout_model.py) dari evaluasi Test Set:
+
+| No | Kolom | Tipe Data | Contoh Nilai | Keterangan & Rumus |
+|---|---|---|---|---|
+| 1 | `partner_id` | UUID | `372ce392-...` | ID unik cabang mitra. |
+| 2 | `product_id` | UUID | `aed53bdf-...` | ID unik salah satu dari 4 produk resmi Daisuki. |
+| 3 | `predicted_risk_level` | String | `Aman`, `Waspada`, `Kritis` | Prediksi tingkat risiko dari Random Forest Classifier (Balanced). |
+| 4 | `predicted_days_to_stockout` | Float | `3.4` (hari) | Estimasi sisa hari menuju habis stok dari Random Forest Regressor. |
+| 5 | `urgency_lead_time_breached` | Boolean | `True` / `False` | Bernilai `True` jika `predicted_days_to_stockout <= 7` (ambang lead time pabrik). |
+| 6 | `risk_confidence` | Float | `0.9850` | Tingkat keyakinan / probabilitas tertinggi model pada kelas prediksi. |
+| 7 | `prob_Aman`, `prob_Waspada`, `prob_Kritis` | Float | `0.0000`, `0.0150`, `0.9850` | Probabilitas posterior per kelas risiko dari ensemble trees. |
+
+### B. Output Segmentasi Mitra ([partner_clusters.csv](file:///C:/daisuki-inventory/data-science/data/partner_clusters.csv))
+Dihasilkan oleh [partner_clustering.py](file:///C:/daisuki-inventory/data-science/src/partner_clustering.py) mencakup 106 cabang mitra unik:
+
+| No | Kolom | Tipe Data | Contoh Nilai | Keterangan & Rumus |
+|---|---|---|---|---|
+| 1 | `partner_id` | UUID | `372ce392-...` | ID unik cabang mitra. |
+| 2 | `partner_name` | String | `kopken cijeruk`, `Hotel Aruna Jakarta` | Nama cabang mitra. |
+| 3 | `cluster_code` | String | `TIPE_A`, `TIPE_B`, `TIPE_C`, `INACTIVE` | Kode profil operasional bisnis Daisuki. |
+| 4 | `segment_name` | String | `Tipe A: Ramai Akhir Pekan (Weekend Peak)` | Label segmen operasional yang mudah dipahami Admin Pusat. |
+| 5 | `recommended_schedule` | String | `Kamis Sore atau Jumat Pagi` | Rekomendasi jadwal pengiriman armada logistik pabrik. |
+| 6 | `actionable_strategy` | String | `Kirim pasokan restock pada Kamis sore...` | Panduan operasional penyesuaian buffer dan replenishment. |
+| 7 | `partner_weekend_share` | Float | `0.3308` | Proporsi konsumsi pada hari Sabtu dan Minggu ($\ge 35\%$ menandakan Tipe A). |
+| 8 | `partner_midweek_share` | Float | `0.2484` | Proporsi konsumsi pada hari Rabu dan Kamis ($\ge 35\%$ menandakan Tipe C). |
+| 9 | `partner_weekday_base_share` | Float | `0.4207` | Proporsi konsumsi pada hari Senin, Selasa, dan Jumat (dominan pada Tipe B). |
+| 10 | `partner_daily_cv` | Float | `1.9118` | Koefisien variasi konsumsi harian ($\sigma / \mu$). |
+| 11 | `partner_stock_utilization_ratio`| Float | `2.1812` | Rasio total sisa stok seluruh produk terhadap total buffer acuan cabang. |
+| 12 | `partner_total_weekly_consumption`| Float | `259.0` | Akumulasi konsumsi 4 produk selama 7 hari observasi (pcs/minggu). |
+| 13 | `is_active_partner` | Boolean | `True` / `False` | `True` jika cabang memiliki riwayat konsumsi, `False` jika cabang inaktif/baru. |
+| 14 | `data_source` | String | `primary_daisuki`, `synthetic_seed` | Klasifikasi sumber data primer vs sintetis. |
