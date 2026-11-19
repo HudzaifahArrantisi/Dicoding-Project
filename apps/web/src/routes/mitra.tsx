@@ -1169,9 +1169,6 @@ function OrderForm({
               >
                 Ajukan restock
               </h1>
-              <p className="mt-0.5 text-xs text-muted sm:text-sm">
-                Pilih barang dan jumlahnya. Jika stok pusat kurang, sisanya menjadi pre-order.
-              </p>
             </div>
           </div>
           {orderItems.length > 0 ? (
