@@ -822,10 +822,6 @@ function StocksPanel({
           <h2 className="mt-1 font-display text-2xl font-bold text-ink-900 sm:text-3xl">
             Laporan stok fisik & stok toko
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
-            Pantau ketersediaan barang di gudang pusat Daisuki dan laporkan sisa
-            stok fisik di toko cabang Anda.
-          </p>
         </div>
         {onOpenLogs ? (
           <button
@@ -861,16 +857,9 @@ function StocksPanel({
               <h2 className="text-sm font-semibold text-ink-900 sm:text-base">
                 Stok gudang pusat Daisuki
               </h2>
-              <p className="text-xs text-muted">
-                Ketersediaan stok siap kirim yang dikelola admin pusat Daisuki
-              </p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted">
-            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-            Stok siap kirim · Diperbarui realtime
-          </span>
-        </div>
+    </div>
 
         {centralProductsQuery.isLoading ? (
           <div className="p-4 sm:p-5">
@@ -945,10 +934,6 @@ function StocksPanel({
               >
                 Stok Saya
               </h1>
-              <p className="mt-0.5 text-xs text-muted sm:text-sm">
-                Sesuaikan jumlah dengan stok yang ada di rak, lalu simpan
-                perubahan di bawah.
-              </p>
             </div>
           </div>
         </div>
