@@ -98,6 +98,10 @@ import {
 import {
   getAdminMetrics,
   getStocks,
+  getStockRecalls,
+  createStockRecall,
+  completeStockRecall,
+  type StockRecall,
   getProducts,
   getOrders,
   getShipmentLogs,
@@ -198,7 +202,6 @@ const adminNavTabs: Array<{
   { id: 'stocks', label: 'Stok cabang', shortLabel: 'Stok', Icon: Boxes },
   { id: 'orders', label: 'Persetujuan pesanan', shortLabel: 'Pesanan', Icon: ClipboardCheck },
   { id: 'shipments', label: 'Log pengiriman', shortLabel: 'Kirim', Icon: Truck },
-  { id: 'partners', label: 'Manajemen mitra', shortLabel: 'Mitra', Icon: Building2 },
   { id: 'data-science', label: 'Log & Data', shortLabel: 'Log', Icon: Database },
   { id: 'ai-insights', label: 'AI Insights', shortLabel: 'AI', Icon: BrainCircuit },
   { id: 'chat', label: 'Chat AI', shortLabel: 'Chat', Icon: MessageSquare },
@@ -3282,7 +3285,7 @@ function AdminFloatingNavbar({
           </div>
         ) : null}
 
-        {adminNavTabs.map(({ id, shortLabel, Icon }, index) => {
+        {adminNavTabs.map(({ id, label, shortLabel, Icon }, index) => {
           const isActive = tab === id
           const badgeCount = id === 'orders' ? pendingOrdersCount : undefined
 
@@ -3296,7 +3299,8 @@ function AdminFloatingNavbar({
                 onSelectTab(id)
               }}
               aria-current={isActive ? 'page' : undefined}
-              className={`group relative z-10 flex h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1 text-[9.5px] font-semibold transition-colors duration-200 ease-out active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:text-[10.5px] ${
+              aria-label={label}
+              className={`group relative z-10 flex h-[52px] min-w-0 w-full flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-1 text-[9.5px] font-semibold transition-colors duration-200 ease-out active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:text-[10.5px] ${
                 isActive
                   ? 'text-white'
                   : 'text-slate-600 hover:text-ink-950'
@@ -4194,6 +4198,41 @@ function StockPanel({
   const finance = financeQuery.data
   const queryClient = useQueryClient()
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null)
+  const [recallTarget, setRecallTarget] = useState<PartnerStockGroup | null>(null)
+  const [recallReason, setRecallReason] = useState('')
+  const [confirmPartnerName, setConfirmPartnerName] = useState('')
+  const recalls = useQuery<StockRecall[]>({ queryKey: ['admin-stock-recalls'], queryFn: getStockRecalls })
+  const pendingRecalls = (recalls.data ?? []).filter((recall) => recall.status === 'pending')
+  const createRecall = useMutation({
+    mutationFn: () => createStockRecall(
+      recallTarget!.partner_id,
+      recallReason.trim(),
+      recallTarget!.items.map((item) => ({ product_id: item.product_id, current_qty: item.current_qty })),
+    ),
+    onSuccess: async (result) => {
+      setRecallTarget(null)
+      setRecallReason('')
+      setConfirmPartnerName('')
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin-stocks'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-stock-recalls'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-metrics'] }),
+      ])
+      toast.success(`${result.total.toLocaleString('id-ID')} pcs dicatat untuk penarikan`)
+    },
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-stocks'] })
+      toast.error(getErrorMessage(error))
+    },
+  })
+  const completeRecall = useMutation({
+    mutationFn: completeStockRecall,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-stock-recalls'] })
+      toast.success('Penjemputan barang telah dicatat selesai')
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  })
   const [visibleBranches, setVisibleBranches] = useState(100)
   const [centralStockDrafts, setCentralStockDrafts] = useState<
     Record<string, string>
@@ -4387,8 +4426,18 @@ function StockPanel({
 
   const selectedGroup = useMemo(() => {
     if (!selectedPartnerId) return null
-    return branchGroups.find((g) => g.partner_id === selectedPartnerId) ?? null
-  }, [branchGroups, selectedPartnerId])
+    const group = branchGroups.find((item) => item.partner_id === selectedPartnerId)
+    if (!group) return null
+    const items = (query.data ?? []).filter((item) => item.partner_id === selectedPartnerId)
+    return {
+      ...group,
+      items,
+      is_stale: items.some((item) => item.is_stale),
+      overall_status: items.some((item) => item.status === 'kritis')
+        ? 'kritis' as const
+        : items.some((item) => item.status === 'waspada') ? 'waspada' as const : 'aman' as const,
+    }
+  }, [branchGroups, query.data, selectedPartnerId])
 
   return (
     <div className="dashboard-panel-enter space-y-6">
@@ -4640,6 +4689,46 @@ function StockPanel({
 
       </section>
 
+      {pendingRecalls.length > 0 ? (
+        <section className="dashboard-surface overflow-hidden" aria-labelledby="pending-recalls-title">
+          <div className="border-b border-line p-4">
+            <h2 id="pending-recalls-title" className="text-lg font-semibold text-ink-900">Menunggu penjemputan barang</h2>
+          </div>
+          <div className="divide-y divide-line">
+            {pendingRecalls.map((recall) => (
+              <div key={recall.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink-900">{recall.partner_name}</p>
+                  <p className="text-xs tabular-nums text-ink-700">
+                    {recall.items.reduce((total, item) => total + item.quantity, 0).toLocaleString('id-ID')} pcs · {new Date(recall.created_at).toLocaleDateString('id-ID')}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">{recall.reason}</p>
+                  <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-700">
+                    {recall.items.filter((item) => item.quantity > 0).map((item) => (
+                      <li key={item.product_id} className="tabular-nums">
+                        {item.product_name} · {item.quantity.toLocaleString('id-ID')} pcs
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <button type="button" onClick={() => {
+                  if (window.confirm(`Barang dari ${recall.partner_name} sudah dijemput sesuai daftar?`)) {
+                    completeRecall.mutate(recall.id)
+                  }
+                }}
+                  disabled={completeRecall.isPending}
+                  className="min-h-11 shrink-0 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-paper disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+                  Tandai sudah dijemput
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {recalls.isError ? (
+        <ErrorState message={getErrorMessage(recalls.error)} onRetry={() => void recalls.refetch()} />
+      ) : null}
+
       <section
         className="dashboard-surface overflow-hidden"
         aria-labelledby="stocks-title"
@@ -4785,7 +4874,51 @@ function StockPanel({
         onOpenChange={(open) => {
           if (!open) setSelectedPartnerId(null)
         }}
+        onRecall={pendingRecalls.some((recall) => recall.partner_id === selectedGroup?.partner_id) ? undefined : () => {
+          setRecallTarget(selectedGroup)
+          setSelectedPartnerId(null)
+        }}
       />
+      <Dialog.Root open={recallTarget !== null} onOpenChange={(open) => {
+        if (!open && !createRecall.isPending) {
+          setRecallTarget(null)
+          setRecallReason('')
+          setConfirmPartnerName('')
+        }
+      }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl bg-white p-5 shadow-2xl focus:outline-none sm:p-6">
+            <Dialog.Title className="font-display text-lg font-semibold text-ink-900">Catat penarikan stok mitra</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm leading-6 text-ink-700">
+              Stok {recallTarget?.partner_name} akan dicatat 0 pcs. Tim Daisuki perlu menjemput barang berikut.
+            </Dialog.Description>
+            <div className="mt-4 divide-y divide-line rounded-md border border-line">
+              {recallTarget?.items.map((item) => (
+                <div key={item.product_id} className="flex justify-between gap-3 px-3 py-2 text-sm">
+                  <span className="text-ink-800">{item.product_name}</span>
+                  <strong className="shrink-0 tabular-nums text-ink-900">{item.current_qty.toLocaleString('id-ID')} pcs</strong>
+                </div>
+              ))}
+            </div>
+            <label className="mt-4 block text-sm font-semibold text-ink-900" htmlFor="stock-recall-reason">Alasan penarikan</label>
+            <textarea id="stock-recall-reason" value={recallReason} onChange={(event) => setRecallReason(event.target.value)}
+              maxLength={500} rows={3} placeholder="Contoh: produk tidak terjual selama satu bulan"
+              className="mt-1 w-full rounded-md border border-line p-3 text-base text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-900" />
+            <label className="mt-3 block text-sm font-semibold text-ink-900" htmlFor="stock-recall-confirm">Ketik nama mitra untuk konfirmasi</label>
+            <input id="stock-recall-confirm" value={confirmPartnerName} onChange={(event) => setConfirmPartnerName(event.target.value)}
+              className="mt-1 min-h-11 w-full rounded-md border border-line px-3 text-base text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-900" />
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Dialog.Close asChild><button type="button" disabled={createRecall.isPending} className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-900">Batal</button></Dialog.Close>
+              <button type="button" onClick={() => createRecall.mutate()}
+                disabled={createRecall.isPending || recallReason.trim().length < 10 || confirmPartnerName.trim() !== recallTarget?.partner_name}
+                className="min-h-11 rounded-md bg-crit px-4 text-sm font-semibold text-white hover:bg-crit-fg disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit">
+                {createRecall.isPending ? 'Menyimpan...' : 'Catat stok 0 dan buat daftar penjemputan'}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

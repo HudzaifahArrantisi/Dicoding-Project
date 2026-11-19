@@ -162,6 +162,18 @@ export const stockLogs = pgTable("stock_logs", {
     .defaultNow(),
 });
 
+export const stockRecalls = pgTable("stock_recalls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partner_id: uuid("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  items: jsonb("items").$type<Array<{ product_id: string; product_name: string; quantity: number }>>().notNull(),
+  status: text("status").$type<"pending" | "completed">().notNull().default("pending"),
+  requested_by: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+  completed_by: uuid("completed_by").references(() => users.id, { onDelete: "set null" }),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  completed_at: timestamp("completed_at", { withTimezone: true }),
+});
+
 export const assistantChatEvents = pgTable("assistant_chat_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   partner_id: uuid("partner_id").references(() => partners.id, { onDelete: "cascade" }),

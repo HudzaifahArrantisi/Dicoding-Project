@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, apiRequest } from './client'
 import type { StockItem } from '@/lib/inventory-types'
 
 export interface RestockRecommendation {
@@ -23,6 +23,38 @@ export async function getStocks(query?: { partner_id?: string }): Promise<StockI
   const qs = query?.partner_id ? `?partner_id=${encodeURIComponent(query.partner_id)}` : ''
   const response = await apiClient.get<{ data: StockItem[]; total: number }>(`/stocks${qs}`)
   return response.data
+}
+
+export interface StockRecall {
+  id: string
+  partner_id: string
+  partner_name: string
+  reason: string
+  items: Array<{ product_id: string; product_name: string; quantity: number }>
+  status: 'pending' | 'completed'
+  created_at: string
+  completed_at: string | null
+}
+
+export async function getStockRecalls(): Promise<StockRecall[]> {
+  const response = await apiRequest<{ data: StockRecall[] }>('/stocks/recalls')
+  return response.data
+}
+
+export async function createStockRecall(
+  partnerId: string,
+  reason: string,
+  expectedItems: Array<{ product_id: string; current_qty: number }>,
+): Promise<{ id: string; total: number }> {
+  const response = await apiRequest<{ data: { id: string; total: number } }>(`/stocks/partners/${partnerId}/recalls`, {
+    method: 'POST',
+    body: JSON.stringify({ reason, expected_items: expectedItems }),
+  })
+  return response.data
+}
+
+export async function completeStockRecall(id: string): Promise<void> {
+  await apiRequest(`/stocks/recalls/${id}/complete`, { method: 'PATCH' })
 }
 
 /**

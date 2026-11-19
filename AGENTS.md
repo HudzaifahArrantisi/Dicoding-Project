@@ -167,6 +167,10 @@ Before starting, ask the user when antislop applies: during the work, or after i
 
 ### Catatan Perubahan Harian (Daily Changelog)
 
+#### 2026-11-19
+- **Navbar bawah Admin responsif**: Menu Mitra dikeluarkan dari navbar mobile karena sudah tersedia di header Admin. Enam menu lainnya tersusun dalam enam kolom, termasuk Chat yang sebelumnya terpotong; kapsul penanda aktif dan hover mengikuti posisi baru. Area sentuh tombol tetap minimal 44 px pada layar 320 px. Typecheck web lulus.
+- **Penarikan seluruh stok cabang oleh Admin**: Admin dapat memilih mitra dari detail Stok Cabang, melihat keempat produk, memberi alasan, dan mengonfirmasi nama mitra sebelum semua stok dicatat 0 dalam satu transaksi. API membandingkan jumlah yang dikonfirmasi dengan stok terbaru agar perubahan bersamaan tidak mengosongkan jumlah yang belum ditinjau. Jumlah awal per produk tersimpan sebagai daftar penjemputan berstatus menunggu; Admin dapat menandai penjemputan selesai setelah barang diambil. Log memakai sumber `adjustment` agar penarikan tidak dihitung sebagai penjualan. Migrasi `stock_recalls` diterapkan pada database API. Typecheck workspace lulus; build web masih tertahan oleh dependensi lokal `prettier/index.js` pada TanStack Router Generator.
+
 #### 2026-11-18
 - **Ringkasan penjualan Admin mengikuti Mitra**: Estimasi hari ini (WIB) dan 7 hari memakai dua kartu berwarna dalam grid responsif. Estimasi 30 hari serta dasar perhitungan dipadatkan menjadi satu baris informasi. Typecheck web lulus.
 - **Ringkasan penjualan Stok Saya Mitra**: Estimasi penjualan hari ini (WIB) dan 7 hari ditampilkan sebagai dua kartu berwarna dalam grid responsif. Nilai rupiah menjadi fokus dan jumlah pcs keluar ditampilkan singkat pada tiap kartu tanpa paragraf tambahan. Typecheck web lulus.

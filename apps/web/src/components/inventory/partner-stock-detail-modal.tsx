@@ -36,10 +36,12 @@ export function PartnerStockDetailModal({
   group,
   open,
   onOpenChange,
+  onRecall,
 }: {
   group: PartnerStockGroup | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onRecall?: () => void
 }) {
   if (!group) return null
 
@@ -215,8 +217,13 @@ export function PartnerStockDetailModal({
           </div>
 
           {/* Footer Simpel */}
-          <div className="sticky bottom-0 flex items-center justify-between border-t border-line bg-paper/90 px-5 py-3 backdrop-blur-sm">
-            <span className="text-xs text-muted">Data sinkron otomatis</span>
+          <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-line bg-paper/90 px-5 py-3 backdrop-blur-sm">
+            {onRecall && group.items.some((stock) => stock.current_qty > 0) ? (
+              <button type="button" onClick={onRecall}
+                className="inline-flex min-h-11 items-center rounded-md border border-crit/40 bg-white px-3 text-xs font-semibold text-crit-fg hover:bg-crit-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit">
+                Ajukan penarikan seluruh stok
+              </button>
+            ) : <span className="text-xs text-muted">Data sinkron otomatis</span>}
             <Dialog.Close asChild>
               <button
                 type="button"

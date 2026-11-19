@@ -9,6 +9,7 @@ import {
   orderItems,
   partners,
   stockLogs,
+  stockRecalls,
   notifications,
   restockRecommendations,
 } from "../../db/schema";
@@ -17,6 +18,111 @@ import { stockPercent, getStockStatus, isStale } from "@daisuki/shared";
 import { publishInventoryChange } from "../../realtime";
 
 export const stocksModule = new Elysia({ prefix: "/stocks" })
+  .get("/recalls", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Hanya admin yang dapat melihat penarikan stok" }; }
+
+    const rows = await db.select({
+      id: stockRecalls.id,
+      partner_id: stockRecalls.partner_id,
+      partner_name: partners.name,
+      reason: stockRecalls.reason,
+      items: stockRecalls.items,
+      status: stockRecalls.status,
+      created_at: stockRecalls.created_at,
+      completed_at: stockRecalls.completed_at,
+    }).from(stockRecalls)
+      .innerJoin(partners, eq(stockRecalls.partner_id, partners.id))
+      .orderBy(desc(stockRecalls.created_at));
+    return { data: rows };
+  })
+  .post("/partners/:partnerId/recalls", async ({ headers, params, body, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Hanya admin yang dapat menarik stok cabang" }; }
+    const reason = body.reason.trim();
+    if (reason.length < 10) { set.status = 422; return { error: "Alasan penarikan minimal 10 karakter" }; }
+
+    const result = await db.transaction(async (tx) => {
+      const [partner] = await tx.select({ id: partners.id, name: partners.name })
+        .from(partners).where(eq(partners.id, params.partnerId)).for("update");
+      if (!partner) return { error: "Mitra tidak ditemukan", status: 404 as const };
+
+      const [pending] = await tx.select({ id: stockRecalls.id }).from(stockRecalls)
+        .where(and(eq(stockRecalls.partner_id, partner.id), eq(stockRecalls.status, "pending"))).limit(1);
+      if (pending) return { error: "Penarikan sebelumnya masih menunggu penjemputan", status: 409 as const };
+
+      const stocks = await tx.select().from(partnerStocks)
+        .where(eq(partnerStocks.partner_id, partner.id)).for("update");
+      const expected = new Map(body.expected_items.map((item) => [item.product_id, item.current_qty]));
+      if (expected.size !== stocks.length || stocks.some((stock) => expected.get(stock.product_id) !== stock.current_qty)) {
+        return { error: "Stok berubah sejak dialog dibuka. Periksa jumlah terbaru sebelum mengulangi penarikan", status: 409 as const };
+      }
+      const total = stocks.reduce((sum, stock) => sum + stock.current_qty, 0);
+      if (total === 0) return { error: "Seluruh stok mitra sudah 0", status: 422 as const };
+
+      const productRows = await tx.select({ id: products.id, name: products.name }).from(products);
+      const names = new Map(productRows.map((product) => [product.id, product.name]));
+      const items = stocks.map((stock) => ({
+        product_id: stock.product_id,
+        product_name: names.get(stock.product_id) ?? "Produk tidak ditemukan",
+        quantity: stock.current_qty,
+      }));
+
+      await tx.update(partnerStocks).set({ current_qty: 0, updated_at: new Date(), updated_by: user.userId })
+        .where(eq(partnerStocks.partner_id, partner.id));
+      await tx.insert(stockLogs).values(stocks.filter((stock) => stock.current_qty > 0).map((stock) => ({
+        partner_id: partner.id,
+        product_id: stock.product_id,
+        qty_before: stock.current_qty,
+        qty_after: 0,
+        source: "adjustment" as const,
+        created_by: user.userId,
+      })));
+      const [recall] = await tx.insert(stockRecalls).values({
+        partner_id: partner.id, reason, items, requested_by: user.userId,
+      }).returning({ id: stockRecalls.id });
+      await tx.insert(auditLogs).values({
+        actor_id: user.userId, action: "stock.recall", target_type: "partner", target_id: partner.id,
+      });
+      return { id: recall.id, total, status: 201 as const };
+    });
+
+    set.status = result.status;
+    if ("error" in result) return { error: result.error };
+    publishInventoryChange({ partnerId: params.partnerId, topics: ["stocks", "logs", "metrics"] });
+    return { data: { id: result.id, total: result.total } };
+  }, {
+    params: t.Object({ partnerId: t.String({ format: "uuid" }) }),
+    body: t.Object({
+      reason: t.String({ minLength: 10, maxLength: 500 }),
+      expected_items: t.Array(t.Object({
+        product_id: t.String({ format: "uuid" }),
+        current_qty: t.Integer({ minimum: 0 }),
+      })),
+    }),
+  })
+  .patch("/recalls/:id/complete", async ({ headers, params, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Hanya admin yang dapat menyelesaikan penarikan" }; }
+
+    const recall = await db.transaction(async (tx) => {
+      const [updated] = await tx.update(stockRecalls)
+        .set({ status: "completed", completed_at: new Date(), completed_by: user.userId })
+        .where(and(eq(stockRecalls.id, params.id), eq(stockRecalls.status, "pending")))
+        .returning({ id: stockRecalls.id, partner_id: stockRecalls.partner_id });
+      if (updated) {
+        await tx.insert(auditLogs).values({
+          actor_id: user.userId, action: "stock.recall_completed", target_type: "partner", target_id: updated.partner_id,
+        });
+      }
+      return updated;
+    });
+    if (!recall) { set.status = 404; return { error: "Penarikan aktif tidak ditemukan" }; }
+    return { status: "ok" };
+  }, { params: t.Object({ id: t.String({ format: "uuid" }) }) })
   .get(
     "/",
     async ({ headers, query, set }) => {

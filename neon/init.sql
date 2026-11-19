@@ -190,6 +190,20 @@ create table if not exists stock_logs (
 create index if not exists stock_logs_partner_product_created_idx
   on stock_logs (partner_id, product_id, created_at desc);
 
+create table if not exists stock_recalls (
+  id uuid primary key default gen_random_uuid(),
+  partner_id uuid not null references partners(id) on delete cascade,
+  reason text not null check (length(trim(reason)) >= 10),
+  items jsonb not null,
+  status text not null default 'pending' check (status in ('pending', 'completed')),
+  requested_by uuid references users(id) on delete set null,
+  completed_by uuid references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+create unique index if not exists stock_recalls_one_pending_per_partner_idx
+  on stock_recalls (partner_id) where status = 'pending';
+
 create table if not exists assistant_chat_events (
   id uuid primary key default gen_random_uuid(),
   partner_id uuid references partners(id) on delete cascade,
