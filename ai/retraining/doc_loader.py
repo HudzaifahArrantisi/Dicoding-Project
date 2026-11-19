@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -18,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Direktori target
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-RAW_DIR = DATA_DIR / "raw_references"
+RAW_DIR = Path(os.environ["DAISUKI_RAW_REFERENCES_DIR"]) if os.getenv("DAISUKI_RAW_REFERENCES_DIR") else DATA_DIR / "raw_references"
 MAINBRAIN_DIR = DATA_DIR / "mainbrain" / "context_embeddings"
 
 

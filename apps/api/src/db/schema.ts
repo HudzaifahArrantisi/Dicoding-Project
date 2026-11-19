@@ -11,7 +11,10 @@ import {
   bigserial,
   primaryKey,
   date,
+  customType,
 } from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "mitra", "data_science", "ai_engineer"]);
 export const partnerTypeEnum = pgEnum("partner_type", [
@@ -92,6 +95,30 @@ export const analysisRuns = pgTable("analysis_runs", {
   steps: jsonb("steps").notNull().default([]),
   is_active: boolean("is_active").notNull().default(false),
 });
+
+export const rawReferences = pgTable("raw_references", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  category: text("category").notNull(),
+  file_name: text("file_name").notNull(),
+  mime_type: text("mime_type").notNull(),
+  size_bytes: integer("size_bytes").notNull(),
+  sha256: text("sha256").notNull(),
+  content: bytea("content").notNull(),
+  uploaded_by: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const analysisRunArtifacts = pgTable("analysis_run_artifacts", {
+  run_id: uuid("run_id").notNull().references(() => analysisRuns.id, { onDelete: "cascade" }),
+  file_name: text("file_name").notNull(),
+  kind: text("kind").notNull(),
+  mime_type: text("mime_type").notNull(),
+  size_bytes: integer("size_bytes").notNull(),
+  sha256: text("sha256").notNull(),
+  content: bytea("content").notNull(),
+  payload: jsonb("payload"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.run_id, table.file_name] })]);
 
 export const authSessions = pgTable("auth_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),

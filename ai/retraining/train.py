@@ -19,7 +19,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from source import build_intent_samples
 from doc_loader import RAW_DIR, MAINBRAIN_DIR, collect_mainbrain_knowledge_snippets, process_single_file, sanitize_filename, scan_and_generate_mainbrain
-from knowledge_index import build_knowledge_index, build_raw_pdf_index, build_raw_reference_index, list_raw_references
+from knowledge_index import build_knowledge_index, build_raw_reference_index, list_raw_references
 from analysis_index import build_analysis_index
 from csv_handoff import INPUT as CSV_HANDOFF, is_fresh_handoff, load_samples, prepare_handoff
 
@@ -290,7 +290,7 @@ def run_retraining_loop() -> bool:
         }
         if run_id():
             bundle["analysis_retrieval"] = build_analysis_index(handoff.parent)
-            bundle["raw_pdf_retrieval"] = build_raw_pdf_index()
+            bundle["raw_pdf_retrieval"] = build_raw_reference_index(list_raw_references())
         if len(set(labels)) >= 2:
             bundle["risk"] = train_pipeline(texts, labels)
             bundle["mainbrain_meta"]["risk_model_source"] = training_source

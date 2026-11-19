@@ -40,7 +40,7 @@ apps/api/uploads/*
 
 ai/data/mainbrain/models/*.pkl
 ai/data/mainbrain/models/*.pkl.tmp
-ai/data/raw_references/csv/*.csv
+ai/data/raw_references/**/*
 ai/data/mainbrain/context_embeddings/cleaned_inventory_summary.md
 ai/data/mainbrain/context_embeddings/ai_analysis_summary.md
 ai/data/mainbrain/context_embeddings/*.md

@@ -54,6 +54,7 @@ import {
   Trash2,
   TrendingUp,
   Truck,
+  Upload,
   X,
   XCircle,
   type LucideIcon,
@@ -133,11 +134,14 @@ import {
   type AIInsights,
   type AiRunStatus,
   getAnalysisRuns,
+  getRawReferences,
+  uploadRawReference,
   getAnalysisArtifacts,
   createAnalysisRun,
   actionAnalysisRun,
   type AnalysisRun,
   type AnalysisArtifacts,
+  type RawReference,
   type ReceiptProofData,
   type StockLogPartner,
   EMPTY_ALERT_ORDERS,
@@ -438,6 +442,13 @@ function DataSciencePanel({
   const [startingAi, setStartingAi] = useState(false)
   const [analysisRun, setAnalysisRun] = useState<string | null>(null)
   const [selectedPartner, setSelectedPartner] = useState<StockLogPartner | null>(null)
+  const [selectedReference, setSelectedReference] = useState<File | null>(null)
+  const [uploadingReference, setUploadingReference] = useState(false)
+  const referenceInputRef = useRef<HTMLInputElement>(null)
+  const rawReferences = useQuery<{ files: RawReference[] }>({
+    queryKey: ['admin-raw-references'],
+    queryFn: getRawReferences,
+  })
   const partnerLogs = useQuery<StockLog[]>({
     queryKey: ['admin-stock-logs-partner', selectedPartner?.partner_id],
     queryFn: () => getPartnerStockLogsById(selectedPartner!.partner_id),
@@ -458,6 +469,22 @@ function DataSciencePanel({
       toast.error(getErrorMessage(error))
     } finally {
       setStartingAi(false)
+    }
+  }
+
+  const handleUploadReference = async () => {
+    if (!selectedReference) return
+    setUploadingReference(true)
+    try {
+      await uploadRawReference(selectedReference)
+      setSelectedReference(null)
+      if (referenceInputRef.current) referenceInputRef.current.value = ''
+      await queryClient.invalidateQueries({ queryKey: ['admin-raw-references'] })
+      toast.success('File referensi tersimpan di database')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setUploadingReference(false)
     }
   }
 
@@ -484,6 +511,33 @@ function DataSciencePanel({
         <InsightMetric label="Mitra Aktif Melapor" value={summaryError ? '—' : summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`} detail="Mitra aktif yang mengirim log dalam 7 hari" />
         <InsightMetric label="Rata-rata Konsumsi Harian" value={summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`} detail="Unit per hari dari seluruh cabang" />
       </div>
+
+      <section className="dashboard-surface p-4 sm:p-5" aria-labelledby="raw-reference-title">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 id="raw-reference-title" className="font-display text-lg font-semibold text-ink-900">Referensi mentah</h2>
+            <p className="mt-1 text-sm text-muted">PDF, CSV, JSON, MD, TXT, atau DOCX · maksimal 10 MB per file.</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input ref={referenceInputRef} type="file" accept=".pdf,.csv,.json,.md,.txt,.docx"
+              onChange={(event) => setSelectedReference(event.target.files?.[0] ?? null)}
+              aria-label="Pilih file referensi mentah"
+              className="min-h-11 max-w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink-900 file:mr-3 file:rounded file:border-0 file:bg-ink-100 file:px-2 file:py-1 file:text-ink-900" />
+            <button type="button" onClick={() => void handleUploadReference()}
+              disabled={!selectedReference || uploadingReference}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white disabled:opacity-50">
+              <Upload className="size-4" aria-hidden="true" />{uploadingReference ? 'Mengunggah...' : 'Unggah ke database'}
+            </button>
+          </div>
+        </div>
+        {rawReferences.isError ? <p className="mt-3 text-sm text-crit-fg">Daftar referensi gagal dimuat.</p> : null}
+        {rawReferences.data?.files.length ? <ul className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Referensi tersimpan">
+          {rawReferences.data.files.map((file) => <li key={file.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-line bg-white px-3 py-2 text-sm">
+            <span className="min-w-0 truncate text-ink-900" title={file.file_name}>{file.file_name}</span>
+            <span className="shrink-0 text-xs uppercase text-muted">{file.category} · <span className="tabular-nums">{(file.size_bytes / 1024).toFixed(0)} KB</span></span>
+          </li>)}
+        </ul> : null}
+      </section>
 
       <AiPipelineChart status={undefined} pending={startingAi} loading={false} onRun={() => void handleRunAnalysis()} buttonLabel="Perbarui analisis Data Science" />
       {analysisRun ? <p className="text-xs text-ok-fg" role="status">Run terbaru siap ditinjau di tab AI Insights: {analysisRun}</p> : null}

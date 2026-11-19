@@ -36,6 +36,25 @@ export async function createAnalysisRun(start_date: string, end_date: string) {
   return apiRequest<{ id: string }>('/analysis/runs', { method: 'POST', body: JSON.stringify({ start_date, end_date }) })
 }
 
+export interface RawReference {
+  id: string
+  category: string
+  file_name: string
+  size_bytes: number
+  sha256: string
+  created_at: string
+}
+
+export async function getRawReferences() {
+  return apiRequest<{ files: RawReference[] }>('/analysis/raw-references')
+}
+
+export async function uploadRawReference(file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return apiRequest<{ file: RawReference }>('/analysis/raw-references', { method: 'POST', body })
+}
+
 export async function actionAnalysisRun(id: string, action: 'approve' | 'process' | 'rollback' | 'reject', reason?: string) {
   return apiRequest(`/analysis/runs/${id}/${action}`, { method: 'POST', body: reason ? JSON.stringify({ reason }) : undefined })
 }

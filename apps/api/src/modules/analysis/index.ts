@@ -4,8 +4,9 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { analysisRuns, auditLogs, users } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
-import { activeRunId, dataScienceRunDir } from "../../lib/analysis-artifacts";
+import { dataScienceRunDir } from "../../lib/analysis-artifacts";
 import { approveAnalysisRun, createAnalysisDraft, listAnalysisRuns, processAnalysisRun, rollbackAnalysisRun } from "../../lib/analysis-runs";
+import { getActiveRunId, listRawReferences, loadArtifact, saveRawReference } from "../../lib/analysis-storage";
 
 function validPeriod(start: string, end: string): boolean {
   const pattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -19,11 +20,44 @@ function validPeriod(start: string, end: string): boolean {
 }
 
 export const analysisModule = new Elysia({ prefix: "/analysis" })
+  .get("/raw-references", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Hanya Admin dapat melihat referensi mentah" }; }
+    return { files: await listRawReferences() };
+  })
+  .post("/raw-references", async ({ headers, request, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Hanya Admin dapat mengunggah referensi mentah" }; }
+    const declaredSize = Number(headers["content-length"] ?? 0);
+    if (declaredSize > 11 * 1024 * 1024) { set.status = 413; return { error: "Ukuran unggahan melebihi 10 MB" }; }
+    if (!headers["content-type"]?.startsWith("multipart/form-data")) {
+      set.status = 415; return { error: "Gunakan unggahan multipart/form-data" };
+    }
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) { set.status = 422; return { error: "Pilih satu file untuk diunggah" }; }
+    try {
+      const saved = await saveRawReference(file, user.userId);
+      await db.insert(auditLogs).values({ actor_id: user.userId, action: "raw_reference_uploaded",
+        target_type: "raw_reference", target_id: saved.id });
+      set.status = 201;
+      return { file: saved };
+    } catch (error) {
+      if (error instanceof SyntaxError || error instanceof TypeError ||
+        (error instanceof Error && /file|PDF|DOCX|JSON|UTF-8|MB/.test(error.message))) {
+        set.status = 422;
+        return { error: error instanceof Error ? error.message : "File tidak valid" };
+      }
+      throw error;
+    }
+  })
   .get("/runs", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
     if (user.role === "mitra") { set.status = 403; return { error: "Forbidden" }; }
-    return { runs: await listAnalysisRuns(), active_run_id: activeRunId() };
+    return { runs: await listAnalysisRuns(), active_run_id: await getActiveRunId() };
   })
   .get("/runs/:id/artifacts", async ({ headers, params, set }) => {
     const user = await getAuthUser(headers);
@@ -34,16 +68,14 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     if (!run) { set.status = 404; return { error: "Run tidak ditemukan" }; }
     const directory = dataScienceRunDir(params.id);
     try {
-      const [json, csv, markdown, manifest, products, partners, regions, reporting] = await Promise.all([
-        readFile(`${directory}/weekly_analytics_summary.json`, "utf8"),
-        readFile(`${directory}/cleaned_inventory_summary.csv`, "utf8"),
-        readFile(`${directory}/weekly_analytics_report.md`, "utf8"),
-        readFile(`${directory}/manifest.json`, "utf8"),
-        readFile(`${directory}/category_products.json`, "utf8"),
-        readFile(`${directory}/category_partners.json`, "utf8"),
-        readFile(`${directory}/category_regions.json`, "utf8"),
-        readFile(`${directory}/category_reporting.json`, "utf8"),
-      ]);
+      const names = ["weekly_analytics_summary.json", "cleaned_inventory_summary.csv", "weekly_analytics_report.md",
+        "manifest.json", "category_products.json", "category_partners.json", "category_regions.json", "category_reporting.json"];
+      const contents = await Promise.all(names.map(async (name) => {
+        const stored = await loadArtifact(params.id, name);
+        if (stored) return stored.toString("utf8");
+        return readFile(`${directory}/${name}`, "utf8");
+      }));
+      const [json, csv, markdown, manifest, products, partners, regions, reporting] = contents;
       return { status: run.status, manifest: JSON.parse(manifest), json: JSON.parse(json),
         csv_preview: csv.split(/\r?\n/).slice(0, 16).join("\n"), markdown,
         categories: { products: JSON.parse(products), partners: JSON.parse(partners),

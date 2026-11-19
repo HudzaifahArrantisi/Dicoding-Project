@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { activeArtifact } from "./analysis-artifacts";
+import { readActiveArtifact } from "./analysis-storage";
 
 
 export interface WeeklyAnalyticsReport {
@@ -16,7 +15,7 @@ export interface WeeklyAnalyticsReport {
 
 export async function loadWeeklyAnalyticsReport(): Promise<WeeklyAnalyticsReport | null> {
   try {
-    const value: unknown = JSON.parse(await readFile(activeArtifact("report"), "utf8"));
+    const value: unknown = JSON.parse(await readActiveArtifact("report"));
     if (!value || typeof value !== "object") throw new Error("Laporan Data Science bukan objek");
     const report = value as WeeklyAnalyticsReport;
     if (!report.metadata?.generated_at || !Number.isFinite(Date.parse(report.metadata.generated_at)) ||

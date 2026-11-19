@@ -1,8 +1,7 @@
 import { getWeeklyPipelineStatus } from "../../lib/weekly-pipeline";
-import { activeArtifact } from "../../lib/analysis-artifacts";
+import { readActiveArtifact } from "../../lib/analysis-storage";
 import { loadWeeklyAnalyticsReport } from "../../lib/weekly-analytics-report";
 import { getModelSyncStatus, loadWeeklyFacts } from "../assistant/facts";
-import { readFile } from "node:fs/promises";
 import { Elysia, t } from "elysia";
 import { desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, sql as postgres } from "../../db/client";
@@ -830,9 +829,8 @@ type RegionalModel = {
 };
 
 async function loadRegionalModel(): Promise<RegionalModel | null> {
-  const path = activeArtifact("regional");
   try {
-    const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+    const parsed: unknown = JSON.parse(await readActiveArtifact("regional"));
     if (!parsed || typeof parsed !== "object" || !("regional_rankings" in parsed) ||
         !Array.isArray(parsed.regional_rankings)) {
       throw new Error("Format hasil model wilayah tidak valid");
@@ -846,7 +844,7 @@ async function loadRegionalModel(): Promise<RegionalModel | null> {
 
 async function loadModelEvaluation(): Promise<{ source_run_id: string; calibrated: boolean; decision: string; evaluation_samples: number; evaluation_events: number } | null> {
   try {
-    return JSON.parse(await readFile(activeArtifact("evaluation"), "utf8"));
+    return JSON.parse(await readActiveArtifact("evaluation"));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;

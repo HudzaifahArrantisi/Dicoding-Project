@@ -38,8 +38,8 @@ def build_knowledge_index(data_dir: Path = DATA_DIR, shared_summaries: list[dict
         raw_source = approved.get("raw_source", "")
         excerpt = approved.get("excerpt", "").strip()
         source_sha256 = approved.get("source_sha256", "")
-        raw_path = (data_dir / "raw_references" / raw_source).resolve()
-        raw_root = (data_dir / "raw_references").resolve()
+        raw_path = (RAW_DIR / raw_source).resolve()
+        raw_root = RAW_DIR.resolve()
         if (not raw_source or not raw_path.is_relative_to(raw_root)
                 or not raw_path.is_file() or len(excerpt) < 40
                 or source_sha256 != hashlib.sha256(raw_path.read_bytes()).hexdigest()

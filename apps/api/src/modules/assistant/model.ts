@@ -34,14 +34,93 @@ export interface ModelResult {
 
 type WorkerReply = ModelResult & { id: string; error?: string };
 type Pending = { resolve: (result: ModelResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
+type Worker = { send: (records: ModelRecord[], message?: string, partnerId?: string, adminAccess?: boolean) => Promise<ModelResult>; stop: () => void; isDead: boolean };
 
-const retrainingDir = resolve(import.meta.dir, "../../../../../ai/retraining");
-const scriptPath = resolve(retrainingDir, "inference_worker.py");
-let currentWorker: { send: (records: ModelRecord[], message?: string, partnerId?: string, adminAccess?: boolean) => Promise<ModelResult>; stop: () => void; isDead: boolean } | null = null;
+const BRIDGE_URL = (process.env.RAG_BRIDGE_URL ?? "").trim().replace(/\/+$/, "");
+const BRIDGE_TOKEN = process.env.RAG_BRIDGE_TOKEN?.trim() ?? "";
+const BRIDGE_TIMEOUT_MS = Number(process.env.RAG_BRIDGE_TIMEOUT_MS) || 8_000;
+const BRIDGE_HEALTH_TIMEOUT_MS = Number(process.env.RAG_BRIDGE_HEALTH_TIMEOUT_MS) || 20_000;
+const hasPythonRuntime = typeof Bun !== "undefined" && typeof Bun.spawn === "function";
+
+let currentWorker: Worker | null = null;
 let lastWorkerFailureTime = 0;
+let bridgeWarningLogged = false;
 const FAILURE_COOLDOWN_MS = 30_000;
 const COLD_WORKER_TIMEOUT_MS = 30_000;
 const READY_WORKER_TIMEOUT_MS = 8_000;
+
+function bridgeHeaders(): Record<string, string> {
+  return BRIDGE_TOKEN ? { Authorization: `Bearer ${BRIDGE_TOKEN}` } : {};
+}
+
+type BridgeHealth = { available?: boolean; retrieval_ready?: boolean; risk_available?: boolean };
+
+/** Cek kesiapan bridge. Batas waktunya longgar karena Space gratis perlu bangun dari tidur. */
+async function pingBridgeHealth(): Promise<BridgeHealth | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BRIDGE_HEALTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${BRIDGE_URL}/health`, { headers: bridgeHeaders(), signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return (await response.json()) as BridgeHealth;
+  } catch (error) {
+    console.warn("[ASSISTANT] Bridge RAG belum siap:", error instanceof Error ? error.message : "Error");
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Worker yang memanggil HF Space lewat HTTP. Tidak menyentuh Python, filestem, atau daisuki.pkl. */
+function createRemoteWorker(): Worker {
+  const client: Worker = {
+    isDead: false,
+    stop() {
+      client.isDead = true;
+      if (currentWorker === client) currentWorker = null;
+    },
+    async send(records: ModelRecord[], message?: string, partnerId?: string, adminAccess = false): Promise<ModelResult> {
+      if (client.isDead) throw new Error("Worker model tidak aktif");
+      const predicting = records.length > 0;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(`${BRIDGE_URL}${predicting ? "/predict" : "/understand"}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...bridgeHeaders() },
+          body: JSON.stringify(
+            predicting ? { records } : { message, partner_id: partnerId, admin_access: adminAccess },
+          ),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        throw new Error(
+          error instanceof Error && error.name === "AbortError"
+            ? "Bridge RAG melewati batas waktu"
+            : "Bridge RAG tidak dapat dihubungi",
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!response.ok) throw new Error(`Bridge RAG menolak permintaan (HTTP ${response.status})`);
+      const result = (await response.json()) as Partial<ModelResult>;
+      return {
+        available: result.available ?? false,
+        predictions: result.predictions ?? [],
+        intent: result.intent ?? null,
+        identity: result.identity ?? null,
+        documents: result.documents,
+        raw_documents: result.raw_documents,
+        analysis_documents: result.analysis_documents,
+        retrieval_ready: result.retrieval_ready,
+        raw_retrieval_ready: result.raw_retrieval_ready,
+        risk_available: result.risk_available,
+      };
+    },
+  };
+  return client;
+}
 
 function resolvePythonBinary(): string {
   if (process.env.DAISUKI_PYTHON_BIN) return process.env.DAISUKI_PYTHON_BIN;
@@ -54,6 +133,8 @@ function resolvePythonBinary(): string {
 }
 
 function createWorker() {
+  const retrainingDir = resolve(import.meta.dir, "../../../../../ai/retraining");
+  const scriptPath = resolve(retrainingDir, "inference_worker.py");
   const python = resolvePythonBinary();
   const modelPath = process.env.DAISUKI_MODEL_PATH?.trim()
     ? resolve(workspaceRoot, process.env.DAISUKI_MODEL_PATH.trim())
@@ -159,7 +240,18 @@ function createWorker() {
   return client;
 }
 
-function getOrStartWorker() {
+function getOrStartWorker(): Worker | null {
+  if (BRIDGE_URL) {
+    if (!currentWorker || currentWorker.isDead) currentWorker = createRemoteWorker();
+    return currentWorker;
+  }
+  if (!hasPythonRuntime) {
+    if (!bridgeWarningLogged) {
+      bridgeWarningLogged = true;
+      console.warn("[ASSISTANT] Tanpa Bun.spawn dan tanpa RAG_BRIDGE_URL: fitur model dimatikan. Isi RAG_BRIDGE_URL ke HF Space.");
+    }
+    return null;
+  }
   if (currentWorker && !currentWorker.isDead) return currentWorker;
   if (Date.now() - lastWorkerFailureTime < FAILURE_COOLDOWN_MS) {
     return null; // Sedang masa cooldown, jangan spawn ulang agar tidak stall
@@ -212,6 +304,19 @@ export async function understandAdminMessage(message: string): Promise<ModelResu
 }
 
 export function warmMitraModelWorker(): void {
+  if (BRIDGE_URL) {
+    console.log(`[ASSISTANT MODEL] Mode Hugging Face: ${BRIDGE_URL}`);
+    void pingBridgeHealth()
+      .then((health) => {
+        if (!health) return;
+        console.log(`[ASSISTANT MODEL] ${health.available ? "Siap" : "Tidak siap"}: intent ${health.available ? "aktif" : "tidak tersedia"}, retrieval biner ${health.retrieval_ready ? "aktif" : "belum dilatih"}`);
+      });
+    return;
+  }
+  if (!hasPythonRuntime) {
+    console.warn("[ASSISTANT] Bun.spawn tidak tersedia di runtime ini. Isi RAG_BRIDGE_URL agar asisten memakai model dari Hugging Face.");
+    return;
+  }
   try {
     const worker = getOrStartWorker();
     if (!worker) return;
@@ -234,5 +339,15 @@ export function stopMitraModelWorker(): void {
 export function reloadMitraModelWorker(): void {
   stopMitraModelWorker();
   lastWorkerFailureTime = 0;
+  if (BRIDGE_URL) {
+    // Space memuat ulang daisuki.pkl terbaru dari Model repo sebelum melayani lagi.
+    void fetch(`${BRIDGE_URL}/reload`, { method: "POST", headers: bridgeHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        console.log("[ASSISTANT MODEL] Bridge RAG memuat ulang model terbaru");
+      })
+      .catch((error) => console.warn("[ASSISTANT] Reload bridge RAG gagal:", error instanceof Error ? error.message : "Error"));
+    return;
+  }
   warmMitraModelWorker();
 }

@@ -7,6 +7,7 @@ import { analysisRuns, auditLogs, notifications, products, restockRecommendation
 import { aiRunDir, clearActiveRun, dataScienceRunDir, activeRunId, publishActiveRun, workspaceRoot } from "./analysis-artifacts";
 import { reloadMitraModelWorker } from "../modules/assistant/model";
 import { publishInventoryChange } from "../realtime";
+import { hydrateDataScienceArtifacts, saveAiArtifacts, saveDataScienceArtifacts, stageRawReferences } from "./analysis-storage";
 
 const python = process.env.DAISUKI_PYTHON_BIN || process.env.PYTHON_EXECUTABLE ||
   (existsSync(resolve(workspaceRoot, "ai/.venv/Scripts/python.exe")) ? resolve(workspaceRoot, "ai/.venv/Scripts/python.exe") :
@@ -26,10 +27,11 @@ type Step = { label: string; status: "running" | "succeeded" | "failed" };
 type PreviewItem = { partner_id: string; partner_name: string; product_id: string; product_name: string;
   forecast_qty: number; days_of_cover: number; suggested_qty: number; priority_rule: boolean; stockout_probability: number };
 
-async function pythonJob(script: string, runId: string, args: string[] = []): Promise<string> {
+async function pythonJob(script: string, runId: string, args: string[] = [], rawDirectory?: string): Promise<string> {
   const child = Bun.spawn([python, resolve(workspaceRoot, script), ...args], {
     cwd: workspaceRoot,
-    env: { ...process.env, DAISUKI_ANALYSIS_RUN_ID: runId },
+    env: { ...process.env, DAISUKI_ANALYSIS_RUN_ID: runId,
+      ...(rawDirectory ? { DAISUKI_RAW_REFERENCES_DIR: rawDirectory } : {}) },
     stdout: "pipe", stderr: "pipe",
   });
   const [code, stdout, stderr] = await Promise.all([
@@ -54,6 +56,7 @@ export async function createAnalysisDraft(startDate: string, endDate: string, ac
     if (manifest.run_id !== id || manifest.start_date !== startDate || manifest.end_date !== endDate) {
       throw new Error("Manifest laporan tidak cocok dengan permintaan");
     }
+    await saveDataScienceArtifacts(id);
     await db.update(analysisRuns).set({ status: "draft", manifest }).where(eq(analysisRuns.id, id));
     if (actorId) await db.insert(auditLogs).values({ actor_id: actorId, action: "analysis_draft_created",
       target_type: "analysis_run", target_id: id });
@@ -161,12 +164,16 @@ export function processAnalysisRun(id: string, actorId: string): void {
       .where(and(eq(analysisRuns.id, id), eq(analysisRuns.status, "approved"))).returning();
     if (!claimed) return;
     const steps: Step[] = [];
+    let cleanupRaw: (() => Promise<void>) | null = null;
     try {
+      await hydrateDataScienceArtifacts(id);
+      const staged = await stageRawReferences();
+      cleanupRaw = staged.cleanup;
       for (const job of jobs) {
         steps.push({ label: job.label, status: "running" });
         await db.update(analysisRuns).set({ current_step: job.label, steps: [...steps] }).where(eq(analysisRuns.id, id));
         try {
-          await pythonJob(job.path, id);
+          await pythonJob(job.path, id, [], staged.directory);
           steps[steps.length - 1].status = "succeeded";
         } catch (error) {
           steps[steps.length - 1].status = "failed";
@@ -174,6 +181,7 @@ export function processAnalysisRun(id: string, actorId: string): void {
         }
         await db.update(analysisRuns).set({ steps: [...steps] }).where(eq(analysisRuns.id, id));
       }
+      await saveAiArtifacts(id);
       const previous = activeRunId();
       await publishActiveRun(id);
       try {
@@ -190,6 +198,8 @@ export function processAnalysisRun(id: string, actorId: string): void {
         error: error instanceof Error ? error.message.slice(0, 600) : "Pipeline AI gagal" })
         .where(eq(analysisRuns.id, id));
       console.error("[ANALYSIS] Run gagal", id, error instanceof Error ? error.message : error);
+    } finally {
+      await cleanupRaw?.();
     }
   })().catch((error) => console.error("[ANALYSIS] Gagal memulai run", id, error)).finally(() => running.delete(id));
 }

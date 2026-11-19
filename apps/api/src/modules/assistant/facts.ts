@@ -1,5 +1,6 @@
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { activeArtifact, activeRunId } from "../../lib/analysis-artifacts";
+import { getStoredModelTimestamp, readActiveArtifact } from "../../lib/analysis-storage";
 
 export interface WeeklyFacts {
   metadata: { generated_at: string; period_days: number; model_version: string; start_date?: string; end_date?: string; source_run_id?: string; source_generated_at?: string; regional_generated_at?: string };
@@ -18,7 +19,7 @@ export interface WeeklyFacts {
 
 export async function loadWeeklyFacts(): Promise<WeeklyFacts | null> {
   try {
-    const value: unknown = JSON.parse(await readFile(activeArtifact("facts"), "utf8"));
+    const value: unknown = JSON.parse(await readActiveArtifact("facts"));
     if (!value || typeof value !== "object") throw new Error("Snapshot fakta bukan objek");
     const facts = value as WeeklyFacts;
     if (!facts.metadata?.generated_at || !Number.isFinite(Date.parse(facts.metadata.generated_at)) ||
@@ -38,7 +39,11 @@ export async function getModelSyncStatus(facts: WeeklyFacts | null) {
     const model = await stat(activeRunId() ? activeArtifact("model") : process.env.DAISUKI_MODEL_PATH || activeArtifact("model"));
     return { trained_at: model.mtime.toISOString(), synchronized: Boolean(facts && model.mtimeMs >= Date.parse(facts.metadata.generated_at)) };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { trained_at: null, synchronized: false };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      const trainedAt = await getStoredModelTimestamp();
+      return { trained_at: trainedAt?.toISOString() ?? null,
+        synchronized: Boolean(facts && trainedAt && trainedAt.getTime() >= Date.parse(facts.metadata.generated_at)) };
+    }
     throw error;
   }
 }
