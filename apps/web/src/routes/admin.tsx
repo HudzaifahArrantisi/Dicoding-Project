@@ -444,11 +444,14 @@ function DataSciencePanel({
   const [selectedPartner, setSelectedPartner] = useState<StockLogPartner | null>(null)
   const [selectedReference, setSelectedReference] = useState<File | null>(null)
   const [uploadingReference, setUploadingReference] = useState(false)
+  const [showAllReferences, setShowAllReferences] = useState(false)
   const referenceInputRef = useRef<HTMLInputElement>(null)
   const rawReferences = useQuery<{ files: RawReference[] }>({
     queryKey: ['admin-raw-references'],
     queryFn: getRawReferences,
   })
+  const visibleReferences = rawReferences.data?.files.filter((file) => showAllReferences || file.origin === 'admin') ?? []
+  const adminReferenceCount = rawReferences.data?.files.filter((file) => file.origin === 'admin').length ?? 0
   const partnerLogs = useQuery<StockLog[]>({
     queryKey: ['admin-stock-logs-partner', selectedPartner?.partner_id],
     queryFn: () => getPartnerStockLogsById(selectedPartner!.partner_id),
@@ -516,7 +519,7 @@ function DataSciencePanel({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 id="raw-reference-title" className="font-display text-lg font-semibold text-ink-900">Referensi mentah</h2>
-            <p className="mt-1 text-sm text-muted">PDF, CSV, JSON, MD, TXT, atau DOCX · maksimal 10 MB per file.</p>
+            <p className="mt-1 text-sm text-muted">File tersimpan di database · PDF, CSV, JSON, MD, TXT, DOCX · maks. 10 MB.</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input ref={referenceInputRef} type="file" accept=".pdf,.csv,.json,.md,.txt,.docx"
@@ -531,12 +534,22 @@ function DataSciencePanel({
           </div>
         </div>
         {rawReferences.isError ? <p className="mt-3 text-sm text-crit-fg">Daftar referensi gagal dimuat.</p> : null}
-        {rawReferences.data?.files.length ? <ul className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Referensi tersimpan">
-          {rawReferences.data.files.map((file) => <li key={file.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-line bg-white px-3 py-2 text-sm">
+        {rawReferences.data ? <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="Filter referensi database">
+          <button type="button" aria-pressed={!showAllReferences} onClick={() => setShowAllReferences(false)}
+            className={`min-h-11 rounded-md px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${!showAllReferences ? 'bg-ink-900 text-white' : 'border border-line bg-white text-ink-700'}`}>
+            Unggahan Admin <span className="tabular-nums">({adminReferenceCount})</span>
+          </button>
+          <button type="button" aria-pressed={showAllReferences} onClick={() => setShowAllReferences(true)}
+            className={`min-h-11 rounded-md px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${showAllReferences ? 'bg-ink-900 text-white' : 'border border-line bg-white text-ink-700'}`}>
+            Semua di database <span className="tabular-nums">({rawReferences.data.files.length})</span>
+          </button>
+        </div> : null}
+        {visibleReferences.length ? <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="Referensi tersimpan di database">
+          {visibleReferences.map((file) => <li key={file.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-line bg-white px-3 py-2 text-sm">
             <span className="min-w-0 truncate text-ink-900" title={file.file_name}>{file.file_name}</span>
-            <span className="shrink-0 text-xs uppercase text-muted">{file.category} · <span className="tabular-nums">{(file.size_bytes / 1024).toFixed(0)} KB</span></span>
+            <span className="shrink-0 text-xs uppercase text-muted">{showAllReferences && file.origin === 'migration' ? 'Impor · ' : ''}{file.category} · <span className="tabular-nums">{(file.size_bytes / 1024).toFixed(0)} KB</span></span>
           </li>)}
-        </ul> : null}
+        </ul> : rawReferences.data && !rawReferences.isLoading ? <p className="mt-3 text-sm text-muted">Belum ada file pada tampilan ini.</p> : null}
       </section>
 
       <AiPipelineChart status={undefined} pending={startingAi} loading={false} onRun={() => void handleRunAnalysis()} buttonLabel="Perbarui analisis Data Science" />

@@ -45,10 +45,12 @@ export async function saveRawReference(file: File, actorId: string) {
   return row;
 }
 
-export function listRawReferences() {
-  return db.select({ id: rawReferences.id, category: rawReferences.category, file_name: rawReferences.file_name,
-    size_bytes: rawReferences.size_bytes, sha256: rawReferences.sha256, created_at: rawReferences.created_at })
+export async function listRawReferences() {
+  const rows = await db.select({ id: rawReferences.id, category: rawReferences.category, file_name: rawReferences.file_name,
+    size_bytes: rawReferences.size_bytes, sha256: rawReferences.sha256, created_at: rawReferences.created_at,
+    uploaded_by: rawReferences.uploaded_by })
     .from(rawReferences).orderBy(desc(rawReferences.created_at)).limit(100);
+  return rows.map(({ uploaded_by, ...row }) => ({ ...row, origin: uploaded_by ? "admin" as const : "migration" as const }));
 }
 
 async function saveArtifact(runId: string, kind: "data_science" | "ai", fileName: string, content: Buffer) {

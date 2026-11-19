@@ -43,6 +43,7 @@ export interface RawReference {
   size_bytes: number
   sha256: string
   created_at: string
+  origin: 'admin' | 'migration'
 }
 
 export async function getRawReferences() {
