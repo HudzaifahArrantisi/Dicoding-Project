@@ -69,3 +69,85 @@ export async function actionAnalysisRun(id: string, action: 'approve' | 'process
 export async function createAnalysisTeamUser(input: { full_name: string; email: string; password: string; role: 'data_science' | 'ai_engineer' }) {
   return apiRequest('/analysis/team-users', { method: 'POST', body: JSON.stringify(input) })
 }
+
+export interface ProductAbsorptionItem {
+  product_id: string
+  product_name: string
+  weekly_consumption: number
+  current_qty: number
+  par_level: number
+  absorption_rate: number
+  predicted_risk_level: 'Aman' | 'Waspada' | 'Kritis'
+  predicted_days_to_stockout: number
+  urgency_lead_time_breached: boolean
+}
+
+export interface PartnerAbsorptionRanking {
+  rank: number
+  partner_id: string
+  partner_name: string
+  city: string
+  province: string
+  cluster_code: 'TIPE_A' | 'TIPE_B' | 'TIPE_C' | 'INACTIVE'
+  segment_name: string
+  recommended_schedule: string
+  actionable_strategy: string
+  is_active_partner: boolean
+  performance_tier: 'top_performer' | 'steady' | 'slow_moving' | 'inactive'
+  tier_label: string
+  tier_score: number
+  avg_absorption_rate: number
+  total_weekly_consumption: number
+  total_current_stock: number
+  dominant_risk_level: 'Aman' | 'Waspada' | 'Kritis'
+  min_days_to_stockout: number
+  has_lead_time_breach: boolean
+  products: ProductAbsorptionItem[]
+}
+
+export interface AbsorptionPeriod {
+  id: string
+  label: string
+  date_range: string
+  start_date: string
+  end_date: string
+  is_current: boolean
+}
+
+export interface WeeklyAbsorptionMatrixResponse {
+  metadata: {
+    version: string
+    pipeline_name: string
+    generated_at: string
+    current_period_id: string
+    current_period_label: string
+    total_partners: number
+    active_partners: number
+    inactive_partners: number
+    official_products: string[]
+    data_sources: string[]
+  }
+  available_periods: AbsorptionPeriod[]
+  available_cities: string[]
+  summary: {
+    network_avg_absorption_rate: number
+    top_performer_count: number
+    steady_count: number
+    slow_moving_count: number
+    inactive_count: number
+    critical_risk_count: number
+    warning_risk_count: number
+    lead_time_breached_count: number
+  }
+  period_data: Record<
+    string,
+    {
+      period_id: string
+      rankings: PartnerAbsorptionRanking[]
+    }
+  >
+}
+
+export async function getWeeklyAbsorptionMatrix(): Promise<WeeklyAbsorptionMatrixResponse> {
+  return apiRequest<WeeklyAbsorptionMatrixResponse>('/analysis/weekly-absorption-matrix')
+}

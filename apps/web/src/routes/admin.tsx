@@ -88,6 +88,7 @@ import {
   type PartnerActivityItem,
 } from '@/components/inventory/ai-insights-modals'
 import { AdminChatRoom } from '@/components/inventory/admin-chat-room'
+import { WeeklyAbsorptionMatrix } from '@/components/inventory/weekly-absorption-matrix'
 import {
   OrderStatusBadge,
   StaleBadge,
@@ -588,6 +589,8 @@ function DataSciencePanel({
         error={summaryError}
         onRetry={onRetry}
       />
+
+      <WeeklyAbsorptionMatrix />
 
       <div className="dashboard-surface overflow-hidden">
         <div className="border-b border-line px-4 py-3">
