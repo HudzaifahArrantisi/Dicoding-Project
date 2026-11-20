@@ -516,16 +516,16 @@ function DataSciencePanel({
 
       <dl className="dashboard-surface grid divide-y divide-line px-4 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:px-0">
         <div className="py-3 sm:px-4">
-          <dt className="text-xs font-medium text-muted">Log minggu ini</dt>
-          <dd className="mt-1 font-display text-xl font-semibold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : summary?.total_logs_this_week ?? 0}</dd>
+          <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Log minggu ini</dt>
+          <dd className="mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : summary?.total_logs_this_week ?? 0}</dd>
         </div>
         <div className="py-3 sm:px-4">
-          <dt className="text-xs font-medium text-muted">Mitra aktif melapor</dt>
-          <dd className="mt-1 font-display text-xl font-semibold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`}</dd>
+          <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Mitra aktif melapor</dt>
+          <dd className="mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${summary?.active_partners_count ?? 0} / ${totalPartners}`}</dd>
         </div>
         <div className="py-3 sm:px-4">
-          <dt className="text-xs font-medium text-muted">Rata-rata konsumsi harian</dt>
-          <dd className="mt-1 font-display text-xl font-semibold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`}</dd>
+          <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Rata-rata konsumsi harian</dt>
+          <dd className="mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`}</dd>
         </div>
       </dl>
 
