@@ -175,6 +175,18 @@ daisuki-inventory/
 - **Navbar bawah Admin responsif**: Menu Mitra dikeluarkan dari navbar mobile karena sudah tersedia di header Admin. Enam menu lainnya tersusun dalam enam kolom, termasuk Chat yang sebelumnya terpotong; kapsul penanda aktif dan hover mengikuti posisi baru. Area sentuh tombol tetap minimal 44 px pada layar 320 px. Typecheck web lulus.
 - **Penarikan seluruh stok cabang oleh Admin**: Admin dapat memilih mitra dari detail Stok Cabang, melihat keempat produk, memberi alasan, dan mengonfirmasi nama mitra sebelum semua stok dicatat 0 dalam satu transaksi. API membandingkan jumlah yang dikonfirmasi dengan stok terbaru agar perubahan bersamaan tidak mengosongkan jumlah yang belum ditinjau. Jumlah awal per produk tersimpan sebagai daftar penjemputan berstatus menunggu; Admin dapat menandai penjemputan selesai setelah barang diambil. Log memakai sumber `adjustment` agar penarikan tidak dihitung sebagai penjualan. Migrasi `stock_recalls` diterapkan pada database API. Typecheck workspace lulus; build web masih tertahan oleh dependensi lokal `prettier/index.js` pada TanStack Router Generator.
 ### 2026-11-20
+- **Tiket #7: [DS-UI] Penyederhanaan Tampilan Analitik & Filter Dasbor untuk PIC Mitra Senior (`weekly-absorption-matrix.tsx`, `admin.tsx`)**:
+  - **Hierarki Angka Utama & Keterbacaan Tinggi (3-Detik Scan)**:
+    - Memperbesar tipografi kartu KPI jaringan menjadi `font-display text-3xl sm:text-4xl font-black tabular-nums` dengan kontras warna tegas untuk 4 metrik operasional kritis: *Laju Penjualan* (`88.1%`), *Wajib Kirim Segera (< 7 Hari)* (`4 cabang`), *Stok Menumpuk di Toko* (`102 cabang`), dan *Sisa Hari Stok Aman* (`3.2 Hari` rata-rata cabang kritis, terendah 1.3 hari).
+  - **Penyederhanaan Bahasa Operasional Bisnis**:
+    - Menghilangkan seluruh jargon statistik teknis dan referensi nomor tiket di antarmuka (seperti *Tiket #6, Tiket #2, Tiket #3, Tiket #5, Urgensi Lead Time Pabrik, Rasio konsumsi terhadap buffer rak*).
+    - Mengganti istilah teknis dengan bahasa operasional yang lugas dan berorientasi tindakan: *Laris Terjual*, *Penjualan Stabil*, *Stok Menumpuk*, *Wajib Kirim Segera (< 7 Hari)*, *Pola Belanja* (*Ramai Akhir Pekan*, *Stabil Harian*, *Tengah Minggu*), serta *Arahan Tindakan PIC*.
+  - **Kontrol Filter & Tombol Reset/Sinkronisasi Responsif**:
+    - Menyederhanakan tata letak filter periode minggu dan lokasi dengan label eksplisit dan target sentuh ramah mobile minimal 44px (`min-h-11`).
+    - Menambahkan tombol **Reset Filter** instan saat ada filter/pencarian aktif agar pengguna dapat kembali ke tampilan lengkap dalam satu klik.
+    - Melengkapi tombol **Segarkan Data** dengan animasi status sinkronisasi dan indikator waktu pembaruan terakhir (*Diperbarui: HH:mm WIB*).
+  - **Preservasi Komponen Tim**:
+    - Bagian *Referensi & analisis* mentah database dipertahankan 100% utuh tanpa perubahan struktur; kartu metrik *Log & Data* di [apps/web/src/routes/admin.tsx](file:///C:/daisuki-inventory/apps/web/src/routes/admin.tsx) diperjelas dengan tipografi lebih tegas. Seluruh typecheck workspace lulus dengan 0 error.
 - **Tiket #6: [DS-Dashboard] Matriks Peringkat Kecepatan Penyerapan Produk Mingguan Antar Mitra (`weekly_absorption_matrix.py`, `WeeklyAbsorptionMatrix` UI & API)**:
   - **Generator Data Matriks Penyerapan (`data-science/src/weekly_absorption_matrix.py`)**:
     - Menggabungkan metrik `absorption_rate` (Tiket #2), proyeksi sisa hari kehabisan stok & status risiko stockout (Tiket #3), serta segmentasi profil mitra Tipe A/B/C (Tiket #5).
