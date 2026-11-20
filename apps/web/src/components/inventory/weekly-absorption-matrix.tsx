@@ -1,17 +1,19 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Layers,
   Calendar,
   MapPin,
   AlertTriangle,
-  Clock,
-  Flame,
   ChevronDown,
   ChevronUp,
-  Sparkles,
   Search,
   RotateCcw,
+  TrendingUp,
+  Package,
+  ShieldAlert,
+  CheckCircle2,
+  X,
+  Truck,
 } from 'lucide-react'
 import {
   getWeeklyAbsorptionMatrix,
@@ -22,12 +24,43 @@ import { FALLBACK_WEEKLY_ABSORPTION_MATRIX } from '@/data/weekly-absorption-matr
 
 type TierFilter = 'all' | 'top_performer' | 'steady' | 'slow_moving' | 'critical'
 
+function getClusterBadge(clusterCode: string) {
+  switch (clusterCode) {
+    case 'TIPE_A':
+      return {
+        label: 'Ramai Akhir Pekan',
+        className: 'bg-amber-100 text-amber-900 border-amber-300',
+      }
+    case 'TIPE_B':
+      return {
+        label: 'Stabil Harian',
+        className: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+      }
+    case 'TIPE_C':
+      return {
+        label: 'Tengah Minggu',
+        className: 'bg-sky-100 text-sky-900 border-sky-300',
+      }
+    default:
+      return {
+        label: 'Belum Ada Penjualan',
+        className: 'bg-slate-100 text-slate-700 border-slate-300',
+      }
+  }
+}
+
 export function WeeklyAbsorptionMatrix() {
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string>(() => {
+    return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
+  })
+
   const { data, isLoading, isError, refetch, isFetching } = useQuery<WeeklyAbsorptionMatrixResponse>({
     queryKey: ['weekly-absorption-matrix'],
     queryFn: async () => {
       try {
-        return await getWeeklyAbsorptionMatrix()
+        const res = await getWeeklyAbsorptionMatrix()
+        setLastRefreshedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB')
+        return res
       } catch (err) {
         console.warn('API matrix unavailable, using offline fallback dataset:', err)
         return FALLBACK_WEEKLY_ABSORPTION_MATRIX as unknown as WeeklyAbsorptionMatrixResponse
@@ -48,6 +81,22 @@ export function WeeklyAbsorptionMatrix() {
   // Ambil list rankings untuk periode terpilih
   const currentPeriodData = matrix.period_data[selectedPeriod] ?? matrix.period_data[matrix.metadata.current_period_id] ?? Object.values(matrix.period_data)[0]
   const rawRankings: PartnerAbsorptionRanking[] = currentPeriodData?.rankings ?? []
+
+  // Hitung sisa hari stok aman untuk cabang-cabang mendesak (< 7 hari)
+  const breachedPartners = useMemo(() => {
+    return rawRankings.filter((p) => p.has_lead_time_breach || p.dominant_risk_level === 'Kritis')
+  }, [rawRankings])
+
+  const minCriticalDays = useMemo(() => {
+    if (!breachedPartners.length) return 7.0
+    return Math.min(...breachedPartners.map((p) => p.min_days_to_stockout))
+  }, [breachedPartners])
+
+  const criticalAvgDays = useMemo(() => {
+    if (!breachedPartners.length) return '7.0'
+    const sum = breachedPartners.reduce((acc, p) => acc + p.min_days_to_stockout, 0)
+    return (sum / breachedPartners.length).toFixed(1)
+  }, [breachedPartners])
 
   // Filter rankings berdasarkan Kota, Tier, dan Keyword pencarian
   const filteredRankings = useMemo(() => {
@@ -83,6 +132,15 @@ export function WeeklyAbsorptionMatrix() {
     })
   }, [rawRankings, selectedCity, selectedTier, searchQuery])
 
+  // Cek apakah ada filter aktif
+  const hasActiveFilter = selectedCity !== 'Semua Lokasi' || selectedTier !== 'all' || searchQuery.trim() !== ''
+
+  const resetFilters = () => {
+    setSelectedCity('Semua Lokasi')
+    setSelectedTier('all')
+    setSearchQuery('')
+  }
+
   // Data untuk visualisasi bar perbandingan kecepatan penyerapan (ambil 8 cabang teratas dalam filter)
   const chartPartners = useMemo(() => {
     return filteredRankings.slice(0, 8)
@@ -97,175 +155,224 @@ export function WeeklyAbsorptionMatrix() {
     setExpandedPartnerId((prev) => (prev === partnerId ? null : partnerId))
   }
 
+  const handleManualRefresh = async () => {
+    await refetch()
+    setLastRefreshedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB')
+  }
+
   return (
     <section className="dashboard-surface min-w-0 overflow-hidden space-y-5 p-4 sm:p-6" aria-labelledby="absorption-matrix-heading">
-      {/* Header & Status */}
+      {/* Header & Status Operasional */}
       <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex size-6 items-center justify-center rounded-md bg-ink-900 text-white">
-              <Layers className="size-3.5" aria-hidden="true" />
+              <Truck className="size-3.5" aria-hidden="true" />
             </span>
-            <p className="text-xs font-semibold uppercase tracking-wider text-ume">
-              Data Science · Tiket #6
+            <p className="text-xs font-bold uppercase tracking-wider text-ume">
+              Distribusi & Pasokan Mitra Cabang
             </p>
             {isError ? (
               <span className="inline-flex items-center gap-1 rounded bg-warn-bg px-2 py-0.5 text-[11px] font-semibold text-warn-fg">
-                Offline Fallback
+                Data Cadangan (Offline)
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 rounded bg-ok-bg px-2 py-0.5 text-[11px] font-semibold text-ok-fg">
-                Terverifikasi
+              <span className="inline-flex items-center gap-1 rounded bg-ok-bg px-2 py-0.5 text-[11px] font-bold text-ok-fg">
+                <CheckCircle2 className="size-3" aria-hidden="true" />
+                Tersinkronisasi Realtime
               </span>
             )}
           </div>
-          <h2 id="absorption-matrix-heading" className="mt-1 font-display text-xl font-semibold text-ink-900 sm:text-2xl">
-            Matriks Peringkat Kecepatan Penyerapan Produk Mingguan Antar Mitra
+          <h2 id="absorption-matrix-heading" className="mt-1 font-display text-xl font-bold text-ink-900 sm:text-2xl">
+            Pantauan Kecepatan Jual & Kebutuhan Pasokan Mitra
           </h2>
           <p className="mt-0.5 text-xs text-muted">
-            Integrasi metrik laju penyerapan (Tiket #2), proyeksi risiko kehabisan stok (Tiket #3), dan persona klaster pengiriman Tipe A/B/C (Tiket #5).
+            Pantau cabang yang laris terjual, toko dengan stok menumpuk, serta toko yang wajib dikirim pasokan segera agar tidak kehabisan barang.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          disabled={isLoading || isFetching}
-          className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 disabled:opacity-50 sm:self-auto"
-        >
-          <RotateCcw className={`size-3.5 ${isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
-          <span>Segarkan Matriks</span>
-        </button>
+        {/* Tombol Segarkan & Waktu Pembaruan Terakhir */}
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          <span className="hidden text-[11px] font-medium text-muted sm:inline tabular-nums">
+            Diperbarui: {lastRefreshedAt}
+          </span>
+          <button
+            type="button"
+            onClick={() => void handleManualRefresh()}
+            disabled={isLoading || isFetching}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3.5 text-xs font-bold text-ink-900 shadow-xs hover:bg-ink-50 disabled:opacity-50"
+            title="Muat ulang data kecepatan jual dan stok terbaru"
+          >
+            <RotateCcw className={`size-3.5 ${isFetching ? 'animate-spin text-ink-900' : 'text-muted'}`} aria-hidden="true" />
+            <span>{isFetching ? 'Menyinkronkan...' : 'Segarkan Data'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Ringkasan Metrik Jaringan (KPI Cards) */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border border-line bg-paper p-3 sm:p-4">
+      {/* 4 KARTU KPI UTAMA (Hierarki Angka Utama & Keterbacaan Tinggi untuk PIC Senior) */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {/* KPI 1: Kecepatan Jual Jaringan */}
+        <div className="rounded-xl border-2 border-line bg-white p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted">
-            <span className="text-xs font-medium">Laju Penyerapan Rata-rata</span>
-            <Sparkles className="size-4 text-ink-700" aria-hidden="true" />
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-700">Laju Penjualan</span>
+            <TrendingUp className="size-5 text-emerald-600" aria-hidden="true" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="font-display text-xl font-bold tabular-nums text-ink-900 sm:text-2xl">
+          <div className="mt-2.5 flex items-baseline gap-1.5">
+            <span className="font-display text-3xl font-black tabular-nums text-ink-900 sm:text-4xl">
               {(matrix.summary.network_avg_absorption_rate * 100).toFixed(1)}%
             </span>
-            <span className="text-xs text-muted">/ buffer</span>
+            <span className="text-xs font-semibold text-muted">/ buffer</span>
           </div>
-          <p className="mt-1 text-[11px] text-muted">Seluruh cabang aktif</p>
+          <p className="mt-1.5 text-xs text-muted">
+            Rata-rata kecepatan barang keluar dari rak toko aktif
+          </p>
         </div>
 
-        <div className="rounded-lg border border-line bg-paper p-3 sm:p-4">
-          <div className="flex items-center justify-between text-muted">
-            <span className="text-xs font-medium">Top Performers</span>
-            <Flame className="size-4 text-emerald-600" aria-hidden="true" />
+        {/* KPI 2: Wajib Kirim Segera (< 7 Hari) */}
+        <div className="rounded-xl border-2 border-crit-fg/30 bg-crit-bg/15 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-crit-fg">
+            <span className="text-xs font-bold uppercase tracking-wider text-crit-fg">Wajib Kirim Segera</span>
+            <AlertTriangle className="size-5 text-crit-fg" aria-hidden="true" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="font-display text-xl font-bold tabular-nums text-emerald-700 sm:text-2xl">
-              {matrix.summary.top_performer_count}
-            </span>
-            <span className="text-xs text-muted">cabang</span>
-          </div>
-          <p className="mt-1 text-[11px] text-emerald-700 font-medium">Fast-moving & penyerapan tinggi</p>
-        </div>
-
-        <div className="rounded-lg border border-line bg-paper p-3 sm:p-4">
-          <div className="flex items-center justify-between text-muted">
-            <span className="text-xs font-medium">Slow-Moving</span>
-            <Clock className="size-4 text-amber-600" aria-hidden="true" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="font-display text-xl font-bold tabular-nums text-amber-700 sm:text-2xl">
-              {matrix.summary.slow_moving_count}
-            </span>
-            <span className="text-xs text-muted">cabang</span>
-          </div>
-          <p className="mt-1 text-[11px] text-amber-700 font-medium">Stok menumpuk / penyerapan rendah</p>
-        </div>
-
-        <div className="rounded-lg border border-line bg-paper p-3 sm:p-4">
-          <div className="flex items-center justify-between text-muted">
-            <span className="text-xs font-medium">Urgensi Lead Time Pabrik</span>
-            <AlertTriangle className="size-4 text-crit-fg" aria-hidden="true" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="font-display text-xl font-bold tabular-nums text-crit-fg sm:text-2xl">
+          <div className="mt-2.5 flex items-baseline gap-1.5">
+            <span className="font-display text-3xl font-black tabular-nums text-crit-fg sm:text-4xl">
               {matrix.summary.lead_time_breached_count}
             </span>
-            <span className="text-xs text-muted">cabang</span>
+            <span className="text-xs font-bold text-crit-fg">cabang</span>
           </div>
-          <p className="mt-1 text-[11px] text-crit-fg font-medium">Sisa stok &lt; 7 hari lead time</p>
+          <p className="mt-1.5 text-xs font-semibold text-crit-fg">
+            Sisa stok &lt; 7 hari mendekati batas kirim armada pabrik
+          </p>
+        </div>
+
+        {/* KPI 3: Stok Menumpuk */}
+        <div className="rounded-xl border-2 border-warn-fg/30 bg-warn-bg/15 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-amber-800">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-800">Stok Menumpuk</span>
+            <Package className="size-5 text-amber-600" aria-hidden="true" />
+          </div>
+          <div className="mt-2.5 flex items-baseline gap-1.5">
+            <span className="font-display text-3xl font-black tabular-nums text-amber-700 sm:text-4xl">
+              {matrix.summary.slow_moving_count}
+            </span>
+            <span className="text-xs font-bold text-amber-700">cabang</span>
+          </div>
+          <p className="mt-1.5 text-xs font-medium text-amber-800">
+            Ada stok di rak tapi tidak ada penjualan, tunda kiriman baru
+          </p>
+        </div>
+
+        {/* KPI 4: Sisa Hari Stok Aman */}
+        <div className="rounded-xl border-2 border-rose-300 bg-rose-50/50 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-rose-800">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-800">Sisa Hari Stok Aman</span>
+            <ShieldAlert className="size-5 text-rose-600" aria-hidden="true" />
+          </div>
+          <div className="mt-2.5 flex items-baseline gap-1.5">
+            <span className="font-display text-3xl font-black tabular-nums text-rose-700 sm:text-4xl">
+              {criticalAvgDays}
+            </span>
+            <span className="text-xs font-bold text-rose-700">Hari</span>
+          </div>
+          <p className="mt-1.5 text-xs font-medium text-rose-800">
+            Ketahanan stok cabang mendesak (terkritis {minCriticalDays.toFixed(1)} hari)
+          </p>
         </div>
       </div>
 
-      {/* Kontrol Filter Interaktif */}
-      <div className="flex flex-col gap-3 rounded-lg border border-line bg-ink-50/50 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Filter Periode Minggu */}
-          <div className="flex items-center gap-1.5">
-            <Calendar className="size-4 text-muted" aria-hidden="true" />
-            <select
-              aria-label="Pilih Periode Minggu"
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="min-h-11 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-semibold text-ink-900 shadow-sm focus-visible:outline-2 focus-visible:outline-ink-900"
-            >
-              {matrix.available_periods.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} ({p.date_range})
-                </option>
-              ))}
-            </select>
+      {/* KONTROL FILTER & RESET FILTER CEPAT */}
+      <div className="flex flex-col gap-3 rounded-xl border border-line bg-paper/60 p-3 sm:p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Filter Periode Minggu */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="period-select" className="text-xs font-bold text-ink-900 whitespace-nowrap flex items-center gap-1.5">
+                <Calendar className="size-3.5 text-muted" aria-hidden="true" />
+                Periode:
+              </label>
+              <select
+                id="period-select"
+                aria-label="Pilih Periode Minggu"
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink-900 shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
+              >
+                {matrix.available_periods.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} ({p.date_range})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter Lokasi / Kota */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="city-select" className="text-xs font-bold text-ink-900 whitespace-nowrap flex items-center gap-1.5">
+                <MapPin className="size-3.5 text-muted" aria-hidden="true" />
+                Lokasi:
+              </label>
+              <select
+                id="city-select"
+                aria-label="Pilih Lokasi Cabang"
+                value={selectedCity}
+                onChange={(e) => setSelectedCity(e.target.value)}
+                className="min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink-900 shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
+              >
+                {matrix.available_cities.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Filter Lokasi / Kota */}
-          <div className="flex items-center gap-1.5">
-            <MapPin className="size-4 text-muted" aria-hidden="true" />
-            <select
-              aria-label="Pilih Lokasi Cabang"
-              value={selectedCity}
-              onChange={(e) => setSelectedCity(e.target.value)}
-              className="min-h-11 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-semibold text-ink-900 shadow-sm focus-visible:outline-2 focus-visible:outline-ink-900"
-            >
-              {matrix.available_cities.map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+          {/* Pencarian Nama Toko & Tombol Reset Filter Cepat */}
+          <div className="flex flex-1 sm:flex-initial items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari nama toko mitra..."
+                aria-label="Cari nama cabang mitra"
+                className="min-h-11 w-full rounded-lg border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
+              />
+            </div>
 
-        {/* Pencarian Nama Mitra */}
-        <div className="relative min-w-0 sm:w-64">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted" aria-hidden="true" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari nama cabang..."
-            aria-label="Cari nama cabang mitra"
-            className="min-h-11 w-full rounded-md border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-ink-900"
-          />
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-ink-300 bg-white px-3 text-xs font-bold text-ink-900 hover:bg-ink-100 hover:border-ink-900 transition-colors shadow-xs"
+                title="Kembalikan semua filter ke tampilan awal"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+                <span>Reset Filter</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Tabs Kategori Performa */}
-      <div className="flex flex-wrap gap-1.5 border-b border-line pb-2 text-xs">
+      {/* TABS KATEGORI OPERASIONAL BISNIS */}
+      <div className="flex flex-wrap gap-1.5 border-b border-line pb-3 text-xs">
         {[
-          { key: 'all', label: `Semua Cabang (${rawRankings.length})` },
-          { key: 'top_performer', label: `Top Performers (${matrix.summary.top_performer_count})` },
-          { key: 'steady', label: `Penyerapan Stabil (${matrix.summary.steady_count})` },
-          { key: 'slow_moving', label: `Slow-Moving (${matrix.summary.slow_moving_count})` },
-          { key: 'critical', label: `Urgensi Kritis (${matrix.summary.critical_risk_count})` },
+          { key: 'all', label: `Semua Toko (${rawRankings.length})` },
+          { key: 'top_performer', label: `Laris Terjual (${matrix.summary.top_performer_count})` },
+          { key: 'steady', label: `Penjualan Stabil (${matrix.summary.steady_count})` },
+          { key: 'slow_moving', label: `Stok Menumpuk (${matrix.summary.slow_moving_count})` },
+          { key: 'critical', label: `Wajib Kirim Segera (${matrix.summary.lead_time_breached_count})` },
         ].map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setSelectedTier(tab.key as TierFilter)}
-            className={`min-h-11 rounded-md px-3 py-1.5 font-semibold transition-colors ${
+            className={`min-h-11 rounded-lg px-3.5 py-2 font-bold transition-all ${
               selectedTier === tab.key
                 ? 'bg-ink-900 text-white shadow-sm'
-                : 'bg-transparent text-ink-700 hover:bg-ink-100 hover:text-ink-900'
+                : 'bg-white border border-line text-ink-700 hover:bg-ink-50 hover:text-ink-900'
             }`}
           >
             {tab.label}
@@ -273,68 +380,61 @@ export function WeeklyAbsorptionMatrix() {
         ))}
       </div>
 
-      {/* Grafik Bar Perbandingan Kecepatan Penyerapan Mingguan Antar Mitra */}
-      <div className="rounded-xl border border-line bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* GRAFIK BAR PERBANDINGAN KECEPATAN JUAL ANTAR TOKO */}
+      <div className="rounded-xl border border-line bg-white p-4 sm:p-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
           <div>
-            <h3 className="font-display text-sm font-semibold text-ink-900">
-              Grafik Komparasi Laju Penyerapan Mingguan (Top Sample)
+            <h3 className="font-display text-sm font-bold text-ink-900">
+              Perbandingan Kecepatan Jual Antar Toko (Cabang Teraktif)
             </h3>
             <p className="text-xs text-muted">
-              Rasio konsumsi mingguan terhadap buffer rak (skor tinggi = perputaran barang cepat)
+              Laju perputaran stok per minggu (bar lebih panjang = barang lebih cepat habis terjual di toko)
             </p>
           </div>
-          <span className="text-xs font-semibold text-ink-700">
+          <span className="text-xs font-bold text-ink-700">
             {chartPartners.length} cabang ditampilkan
           </span>
         </div>
 
         {chartPartners.length > 0 ? (
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 space-y-3.5">
             {chartPartners.map((partner) => {
               const widthPct = Math.min(100, (partner.avg_absorption_rate / maxAbsorptionRate) * 100)
               const isHigh = partner.performance_tier === 'top_performer'
               const isSlow = partner.performance_tier === 'slow_moving'
-              const isCrit = partner.dominant_risk_level === 'Kritis'
+              const isCrit = partner.dominant_risk_level === 'Kritis' || partner.has_lead_time_breach
+              const clusterBadge = getClusterBadge(partner.cluster_code)
 
               return (
-                <div key={partner.partner_id} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-2 font-medium text-ink-900">
+                <div key={partner.partner_id} className="space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between text-xs gap-1">
+                    <span className="flex items-center gap-2 font-semibold text-ink-900">
                       <span className="inline-flex size-5 items-center justify-center rounded bg-ink-100 font-mono text-[11px] font-bold">
                         #{partner.rank}
                       </span>
-                      <strong className="truncate max-w-[200px] sm:max-w-[320px]">{partner.partner_name}</strong>
+                      <strong className="truncate max-w-[180px] sm:max-w-[280px] text-ink-900">{partner.partner_name}</strong>
                       <span className="text-muted">({partner.city})</span>
-                      <span
-                        className={`rounded px-1.5 py-0.2 text-[10px] font-bold uppercase ${
-                          partner.cluster_code === 'TIPE_A'
-                            ? 'bg-amber-100 text-amber-800'
-                            : partner.cluster_code === 'TIPE_B'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : partner.cluster_code === 'TIPE_C'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {partner.cluster_code}
+                      <span className={`rounded-md border px-1.5 py-0.2 text-[10px] font-bold ${clusterBadge.className}`}>
+                        {clusterBadge.label}
                       </span>
                     </span>
                     <span className="flex items-center gap-2 font-mono text-xs tabular-nums">
                       <span className="font-bold text-ink-900">
-                        {partner.avg_absorption_rate.toFixed(2)}x
+                        {partner.avg_absorption_rate.toFixed(2)}x kecepatan
                       </span>
-                      <span className="text-muted">({partner.total_weekly_consumption} pcs)</span>
+                      <span className="text-muted font-normal">
+                        ({partner.total_weekly_consumption.toLocaleString('id-ID')} pcs terjual)
+                      </span>
                       {isCrit && (
-                        <span className="inline-flex items-center rounded bg-crit-bg px-1.5 py-0.5 text-[10px] font-bold text-crit-fg">
-                          Kritis
+                        <span className="inline-flex items-center rounded bg-crit-bg px-2 py-0.5 text-[10px] font-bold text-crit-fg border border-crit-fg/30">
+                          Wajib Kirim Segera (&lt; 7 Hari)
                         </span>
                       )}
                     </span>
                   </div>
 
                   {/* Visual Bar Indicator */}
-                  <div className="h-3 w-full overflow-hidden rounded-full bg-ink-100/70">
+                  <div className="h-3.5 w-full overflow-hidden rounded-full bg-ink-100/80">
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${
                         isHigh
@@ -352,38 +452,38 @@ export function WeeklyAbsorptionMatrix() {
           </div>
         ) : (
           <p className="mt-4 text-center text-xs text-muted py-6">
-            Tidak ada cabang mitra yang cocok dengan filter yang dipilih.
+            Tidak ada toko mitra yang cocok dengan filter yang dipilih.
           </p>
         )}
       </div>
 
-      {/* Tabel Peringkat Lengkap dari Top Performers hingga Slow-Moving */}
-      <div className="rounded-xl border border-line bg-white overflow-hidden">
-        <div className="border-b border-line px-4 py-3 bg-paper/60 flex items-center justify-between">
+      {/* TABEL PERINGKAT OPERASIONAL LENGKAP */}
+      <div className="rounded-xl border border-line bg-white overflow-hidden shadow-xs">
+        <div className="border-b border-line px-4 py-3 bg-paper/60 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h3 className="font-display text-sm font-semibold text-ink-900">
-              Tabel Matriks Peringkat ({filteredRankings.length} Cabang)
+            <h3 className="font-display text-sm font-bold text-ink-900">
+              Daftar Peringkat Cabang ({filteredRankings.length} Toko)
             </h3>
-            <span className="text-xs text-muted">
-              Klik baris untuk melihat rincian 4 produk resmi
+            <span className="text-xs text-muted hidden sm:inline">
+              · Klik baris toko untuk melihat rincian 4 produk resmi Daisuki
             </span>
           </div>
         </div>
 
         {filteredRankings.length > 0 ? (
           <div className="overflow-x-auto max-h-[38rem] overflow-y-auto">
-            <table className="w-full min-w-[850px] border-collapse text-left text-xs">
-              <thead className="sticky top-0 z-10 border-b border-line bg-ink-50 font-semibold text-ink-700">
+            <table className="w-full min-w-[880px] border-collapse text-left text-xs">
+              <thead className="sticky top-0 z-10 border-b border-line bg-ink-50 font-bold text-ink-800">
                 <tr>
-                  <th scope="col" className="px-3 py-2.5 w-12 text-center">Rank</th>
-                  <th scope="col" className="px-3 py-2.5">Mitra & Kota</th>
-                  <th scope="col" className="px-3 py-2.5">Profil Persona</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Laju Penyerapan</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Konsumsi 7d</th>
-                  <th scope="col" className="px-3 py-2.5 text-right">Sisa Stok</th>
-                  <th scope="col" className="px-3 py-2.5 text-center">Status Risiko</th>
-                  <th scope="col" className="px-3 py-2.5">Jadwal Pabrik</th>
-                  <th scope="col" className="px-3 py-2.5 text-center w-10">Aksi</th>
+                  <th scope="col" className="px-3 py-3 w-12 text-center">No</th>
+                  <th scope="col" className="px-3 py-3">Nama Toko & Lokasi</th>
+                  <th scope="col" className="px-3 py-3">Pola Belanja</th>
+                  <th scope="col" className="px-3 py-3 text-right">Kecepatan Jual</th>
+                  <th scope="col" className="px-3 py-3 text-right">Terjual (7 Hari)</th>
+                  <th scope="col" className="px-3 py-3 text-right">Sisa Stok Rak</th>
+                  <th scope="col" className="px-3 py-3 text-center">Status Stok</th>
+                  <th scope="col" className="px-3 py-3">Saran Kirim Armada</th>
+                  <th scope="col" className="px-3 py-3 text-center w-12">Rincian</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line/70">
@@ -391,6 +491,8 @@ export function WeeklyAbsorptionMatrix() {
                   const isExpanded = expandedPartnerId === partner.partner_id
                   const isTop = partner.performance_tier === 'top_performer'
                   const isSlow = partner.performance_tier === 'slow_moving'
+                  const clusterBadge = getClusterBadge(partner.cluster_code)
+                  const isCriticalStock = partner.dominant_risk_level === 'Kritis' || partner.has_lead_time_breach
 
                   return (
                     <tr
@@ -403,102 +505,89 @@ export function WeeklyAbsorptionMatrix() {
                           {/* Rank */}
                           <div className="w-12 text-center shrink-0">
                             <span
-                              className={`inline-flex size-6 items-center justify-center rounded-full font-mono text-xs font-bold ${
+                              className={`inline-flex size-6 items-center justify-center rounded-full font-mono text-xs font-black ${
                                 partner.rank <= 3
-                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                  : 'bg-ink-100 text-ink-700'
+                                    ? 'bg-amber-100 text-amber-950 border border-amber-400'
+                                    : 'bg-ink-100 text-ink-700'
                               }`}
                             >
                               {partner.rank}
                             </span>
                           </div>
 
-                          {/* Mitra & Lokasi */}
+                          {/* Toko & Lokasi */}
                           <div className="flex-1 min-w-[180px] px-3">
-                            <strong className="block text-ink-900 group-hover:text-ink-700 truncate font-semibold">
+                            <strong className="block text-ink-900 group-hover:text-ink-700 truncate font-bold">
                               {partner.partner_name}
                             </strong>
-                            <span className="text-[11px] text-muted flex items-center gap-1">
-                              <MapPin className="size-3" aria-hidden="true" />
+                            <span className="text-[11px] text-muted flex items-center gap-1 font-medium">
+                              <MapPin className="size-3 text-muted" aria-hidden="true" />
                               {partner.city}, {partner.province}
                             </span>
                           </div>
 
-                          {/* Profil Persona Badge */}
+                          {/* Pola Belanja Toko */}
                           <div className="w-36 px-3 shrink-0">
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                                partner.cluster_code === 'TIPE_A'
-                                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                  : partner.cluster_code === 'TIPE_B'
-                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                  : partner.cluster_code === 'TIPE_C'
-                                  ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                                  : 'bg-slate-100 text-slate-700 border border-slate-200'
-                              }`}
-                            >
-                              {partner.cluster_code}
-                              <span className="font-normal text-[10px] text-muted hidden sm:inline">
-                                · {partner.segment_name.split(':')[1]?.split('(')[0]?.trim() || partner.cluster_code}
-                              </span>
+                            <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold ${clusterBadge.className}`}>
+                              {clusterBadge.label}
                             </span>
                           </div>
 
-                          {/* Laju Penyerapan */}
+                          {/* Kecepatan Jual */}
                           <div className="w-28 px-3 text-right shrink-0">
                             <span
-                              className={`font-mono text-xs font-bold tabular-nums ${
+                              className={`font-mono text-xs font-black tabular-nums ${
                                 isTop ? 'text-emerald-700' : isSlow ? 'text-amber-700' : 'text-ink-900'
                               }`}
                             >
                               {partner.avg_absorption_rate.toFixed(2)}x
                             </span>
-                            <span className="block text-[10px] text-muted">
-                              {(partner.avg_absorption_rate * 100).toFixed(0)}% rasio
+                            <span className="block text-[10px] text-muted font-medium">
+                              {(partner.avg_absorption_rate * 100).toFixed(0)}% perputaran
                             </span>
                           </div>
 
-                          {/* Konsumsi 7d */}
-                          <div className="w-24 px-3 text-right font-mono tabular-nums text-ink-900 shrink-0 font-medium">
+                          {/* Terjual 7 Hari */}
+                          <div className="w-24 px-3 text-right font-mono tabular-nums text-ink-900 shrink-0 font-bold">
                             {partner.total_weekly_consumption.toLocaleString('id-ID')} pcs
                           </div>
 
-                          {/* Sisa Stok */}
-                          <div className="w-24 px-3 text-right font-mono tabular-nums text-ink-900 shrink-0">
+                          {/* Sisa Stok Rak */}
+                          <div className="w-24 px-3 text-right font-mono tabular-nums text-ink-900 shrink-0 font-medium">
                             {partner.total_current_stock.toLocaleString('id-ID')} pcs
                           </div>
 
-                          {/* Status Risiko */}
-                          <div className="w-28 px-3 text-center shrink-0">
+                          {/* Status Stok */}
+                          <div className="w-32 px-3 text-center shrink-0">
                             <span
-                              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-bold ${
-                                partner.dominant_risk_level === 'Kritis'
-                                  ? 'bg-crit-bg text-crit-fg'
+                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                                isCriticalStock
+                                  ? 'bg-crit-bg text-crit-fg border border-crit-fg/30'
                                   : partner.dominant_risk_level === 'Waspada'
-                                  ? 'bg-warn-bg text-warn-fg'
-                                  : 'bg-ok-bg text-ok-fg'
+                                  ? 'bg-warn-bg text-warn-fg border border-warn-fg/30'
+                                  : 'bg-ok-bg text-ok-fg border border-ok-fg/30'
                               }`}
                             >
-                              {partner.dominant_risk_level}
+                              {isCriticalStock ? 'Wajib Kirim Segera' : partner.dominant_risk_level === 'Waspada' ? 'Perlu Dipantau' : 'Stok Aman'}
                             </span>
                             {partner.has_lead_time_breach && (
-                              <span className="block text-[10px] text-crit-fg font-semibold mt-0.5">
-                                &lt;7h Lead Time
+                              <span className="block text-[10px] text-crit-fg font-bold mt-0.5">
+                                &lt; 7 Hari Pasokan
                               </span>
                             )}
                           </div>
 
-                          {/* Jadwal Pabrik */}
-                          <div className="w-44 px-3 text-xs text-muted truncate shrink-0">
+                          {/* Saran Kirim Armada */}
+                          <div className="w-44 px-3 text-xs text-muted truncate shrink-0 font-medium">
                             {partner.recommended_schedule}
                           </div>
 
                           {/* Expand Icon */}
-                          <div className="w-10 text-center shrink-0">
+                          <div className="w-12 text-center shrink-0">
                             <button
                               type="button"
                               aria-label={isExpanded ? 'Tutup rincian produk' : 'Buka rincian produk'}
-                              className="size-8 grid place-items-center rounded hover:bg-ink-100 text-muted"
+                              className="size-9 grid place-items-center rounded-lg hover:bg-ink-100 text-muted"
                             >
                               {isExpanded ? (
                                 <ChevronUp className="size-4 text-ink-900" aria-hidden="true" />
@@ -512,72 +601,75 @@ export function WeeklyAbsorptionMatrix() {
                         {/* Rincian Expandable 4 Produk Resmi Daisuki */}
                         {isExpanded && (
                           <div className="bg-paper/70 border-t border-line px-6 py-4 space-y-3">
-                            <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-ink-900">
-                              <span>Rincian 4 Produk Resmi di Cabang Ini:</span>
+                            <div className="flex flex-wrap items-center justify-between text-xs font-bold text-ink-900">
+                              <span>Kondisi 4 Produk Resmi di Toko Ini:</span>
                               <span className="text-muted font-normal">
-                                Proyeksi sisa hari kehabisan & status lead time
+                                Sisa stok di rak dan estimasi hari sebelum produk habis terjual
                               </span>
                             </div>
 
                             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                              {partner.products.map((p) => (
-                                <div
-                                  key={p.product_id}
-                                  className="rounded-lg border border-line bg-white p-3 space-y-1.5 shadow-sm"
-                                >
-                                  <div className="flex items-start justify-between gap-1">
-                                    <strong className="text-xs font-semibold text-ink-900 truncate">
-                                      {p.product_name}
-                                    </strong>
-                                    <span
-                                      className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${
-                                        p.predicted_risk_level === 'Kritis'
-                                          ? 'bg-crit-bg text-crit-fg'
-                                          : p.predicted_risk_level === 'Waspada'
-                                          ? 'bg-warn-bg text-warn-fg'
-                                          : 'bg-ok-bg text-ok-fg'
-                                      }`}
-                                    >
-                                      {p.predicted_risk_level}
-                                    </span>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-1 text-[11px] pt-1 border-t border-line/60">
-                                    <div>
-                                      <span className="text-muted block text-[10px]">Konsumsi:</span>
-                                      <strong className="font-mono tabular-nums text-ink-900">
-                                        {p.weekly_consumption} pcs
+                              {partner.products.map((p) => {
+                                const isProductCritical = p.predicted_risk_level === 'Kritis' || p.urgency_lead_time_breached
+                                return (
+                                  <div
+                                    key={p.product_id}
+                                    className="rounded-lg border border-line bg-white p-3 space-y-2 shadow-xs"
+                                  >
+                                    <div className="flex items-start justify-between gap-1">
+                                      <strong className="text-xs font-bold text-ink-900 truncate">
+                                        {p.product_name}
                                       </strong>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted block text-[10px]">Sisa Stok:</span>
-                                      <strong className="font-mono tabular-nums text-ink-900">
-                                        {p.current_qty} pcs
-                                      </strong>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted block text-[10px]">Laju Absorpsi:</span>
-                                      <span className="font-mono font-bold text-ink-900">
-                                        {p.absorption_rate.toFixed(2)}x
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted block text-[10px]">Sisa Hari:</span>
                                       <span
-                                        className={`font-mono font-bold ${
-                                          p.urgency_lead_time_breached ? 'text-crit-fg' : 'text-ink-900'
+                                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                                          isProductCritical
+                                            ? 'bg-crit-bg text-crit-fg border border-crit-fg/30'
+                                            : p.predicted_risk_level === 'Waspada'
+                                            ? 'bg-warn-bg text-warn-fg border border-warn-fg/30'
+                                            : 'bg-ok-bg text-ok-fg border border-ok-fg/30'
                                         }`}
                                       >
-                                        {p.predicted_days_to_stockout} hari
+                                        {isProductCritical ? 'Wajib Kirim' : p.predicted_risk_level}
                                       </span>
                                     </div>
+
+                                    <div className="grid grid-cols-2 gap-1.5 text-[11px] pt-1.5 border-t border-line/60">
+                                      <div>
+                                        <span className="text-muted block text-[10px]">Terjual 7 Hari:</span>
+                                        <strong className="font-mono tabular-nums text-ink-900 font-bold">
+                                          {p.weekly_consumption} pcs
+                                        </strong>
+                                      </div>
+                                      <div>
+                                        <span className="text-muted block text-[10px]">Sisa Stok Rak:</span>
+                                        <strong className="font-mono tabular-nums text-ink-900 font-bold">
+                                          {p.current_qty} pcs
+                                        </strong>
+                                      </div>
+                                      <div>
+                                        <span className="text-muted block text-[10px]">Kecepatan Jual:</span>
+                                        <span className="font-mono font-black text-ink-900">
+                                          {p.absorption_rate.toFixed(2)}x
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-muted block text-[10px]">Ketahanan Stok:</span>
+                                        <span
+                                          className={`font-mono font-black ${
+                                            p.urgency_lead_time_breached ? 'text-crit-fg' : 'text-ink-900'
+                                          }`}
+                                        >
+                                          {p.predicted_days_to_stockout} Hari
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                )
+                              })}
                             </div>
 
-                            <p className="text-[11px] text-muted italic">
-                              Strategi Tindakan: {partner.actionable_strategy}
+                            <p className="text-xs text-ink-700 bg-white border border-line rounded-md p-2.5">
+                              <strong className="text-ink-900">Arahan Tindakan PIC:</strong> {partner.actionable_strategy}
                             </p>
                           </div>
                         )}
@@ -590,7 +682,7 @@ export function WeeklyAbsorptionMatrix() {
           </div>
         ) : (
           <div className="p-8 text-center text-xs text-muted">
-            Tidak ada cabang yang memenuhi kriteria pencarian & filter.
+            Tidak ada cabang toko yang memenuhi kriteria pencarian & filter.
           </div>
         )}
       </div>
