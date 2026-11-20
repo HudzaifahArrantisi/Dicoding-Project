@@ -151,3 +151,14 @@ export interface WeeklyAbsorptionMatrixResponse {
 export async function getWeeklyAbsorptionMatrix(): Promise<WeeklyAbsorptionMatrixResponse> {
   return apiRequest<WeeklyAbsorptionMatrixResponse>('/analysis/weekly-absorption-matrix')
 }
+
+export type {
+  PriorityActionItem,
+  CityInsightItem,
+  PeriodInsightItem,
+  OperationalInsightResponse,
+} from '@/data/operational-insight-fallback'
+
+export async function getOperationalInsight() {
+  return apiRequest<import('@/data/operational-insight-fallback').OperationalInsightResponse>('/analysis/operational-insight')
+}

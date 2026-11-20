@@ -78,6 +78,22 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
       throw error;
     }
   })
+  .get("/operational-insight", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role === "mitra") { set.status = 403; return { error: "Forbidden" }; }
+    try {
+      const filePath = resolve(workspaceRoot, "data-science/data/operational_insight.json");
+      const content = await readFile(filePath, "utf8");
+      return JSON.parse(content);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        set.status = 404;
+        return { error: "Ringkasan operational insight belum tersedia" };
+      }
+      throw error;
+    }
+  })
   .get("/runs", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }

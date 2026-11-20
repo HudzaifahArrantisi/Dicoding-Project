@@ -14,13 +14,20 @@ import {
   CheckCircle2,
   X,
   Truck,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react'
 import {
   getWeeklyAbsorptionMatrix,
+  getOperationalInsight,
   type WeeklyAbsorptionMatrixResponse,
   type PartnerAbsorptionRanking,
 } from '@/lib/api/analysis'
 import { FALLBACK_WEEKLY_ABSORPTION_MATRIX } from '@/data/weekly-absorption-matrix-fallback'
+import {
+  FALLBACK_OPERATIONAL_INSIGHT,
+  type OperationalInsightResponse,
+} from '@/data/operational-insight-fallback'
 
 type TierFilter = 'all' | 'top_performer' | 'steady' | 'slow_moving' | 'critical'
 
@@ -54,6 +61,7 @@ export function WeeklyAbsorptionMatrix() {
     return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
   })
 
+  // 1. Query Matriks Penyerapan
   const { data, isLoading, isError, refetch, isFetching } = useQuery<WeeklyAbsorptionMatrixResponse>({
     queryKey: ['weekly-absorption-matrix'],
     queryFn: async () => {
@@ -69,8 +77,23 @@ export function WeeklyAbsorptionMatrix() {
     staleTime: 60_000,
   })
 
+  // 2. Query AI Operational Insight
+  const { data: insightData, refetch: refetchInsight } = useQuery<OperationalInsightResponse>({
+    queryKey: ['operational-insight'],
+    queryFn: async () => {
+      try {
+        return await getOperationalInsight()
+      } catch (err) {
+        console.warn('API insight unavailable, using offline fallback dataset:', err)
+        return FALLBACK_OPERATIONAL_INSIGHT
+      }
+    },
+    staleTime: 60_000,
+  })
+
   // Pastikan data selalu ada dengan fallback
   const matrix: WeeklyAbsorptionMatrixResponse = data ?? (FALLBACK_WEEKLY_ABSORPTION_MATRIX as unknown as WeeklyAbsorptionMatrixResponse)
+  const insights: OperationalInsightResponse = insightData ?? FALLBACK_OPERATIONAL_INSIGHT
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => matrix.metadata.current_period_id || '2026-W46')
   const [selectedCity, setSelectedCity] = useState<string>('Semua Lokasi')
@@ -156,9 +179,56 @@ export function WeeklyAbsorptionMatrix() {
   }
 
   const handleManualRefresh = async () => {
-    await refetch()
+    await Promise.all([refetch(), refetchInsight()])
     setLastRefreshedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB')
   }
+
+  // Dapatkan ringkasan AI Operational Insight dinamis sesuai filter Periode & Lokasi
+  const currentInsightView = useMemo(() => {
+    const periodData = insights.period_insights[selectedPeriod] ?? insights.network_overview
+    const currentPeriodObj = matrix.available_periods.find((p) => p.id === selectedPeriod)
+    const periodLabel = currentPeriodObj ? `${currentPeriodObj.label} (${currentPeriodObj.date_range})` : selectedPeriod
+
+    if (selectedCity !== 'Semua Lokasi') {
+      const cityData = periodData.city_insights?.[selectedCity] ?? insights.city_insights?.[selectedCity]
+      if (cityData) {
+        return {
+          scopeTitle: `Wilayah ${selectedCity}`,
+          headline: cityData.headline,
+          summary: cityData.summary,
+          status: cityData.status,
+          recommendedAction: cityData.recommended_action,
+          priorityActions: [],
+          periodLabel,
+        }
+      }
+
+      // Jika kota tidak ada dalam kamus kota (fallback dinamis)
+      const cityActiveCount = filteredRankings.filter((p) => p.is_active_partner).length
+      const cityCritCount = filteredRankings.filter((p) => p.has_lead_time_breach || p.dominant_risk_level === 'Kritis').length
+      const totalPcs = filteredRankings.reduce((sum, p) => sum + p.total_weekly_consumption, 0)
+      return {
+        scopeTitle: `Wilayah ${selectedCity}`,
+        headline: cityCritCount > 0 ? `Perhatian Kritis di ${selectedCity}: Butuh Pasokan Segera` : `Aktivitas Distribusi di ${selectedCity}`,
+        summary: `Wilayah ${selectedCity} memiliki ${filteredRankings.length} cabang (${cityActiveCount} aktif melapor) dengan total penjualan ${totalPcs.toLocaleString('id-ID')} pcs. ${cityCritCount > 0 ? `${cityCritCount} cabang butuh restock sebelum batas lead time 5–7 hari.` : 'Pasokan berjalan stabil.'}`,
+        status: cityCritCount > 0 ? ('Kritis' as const) : ('Aman' as const),
+        recommendedAction: cityCritCount > 0 ? `Segera alokasikan pengiriman armada ke cabang di ${selectedCity}.` : `Pantau jadwal pengiriman rutin armada di ${selectedCity}.`,
+        priorityActions: [],
+        periodLabel,
+      }
+    }
+
+    // Default: Seluruh Jaringan
+    return {
+      scopeTitle: 'Seluruh Jaringan Mitra',
+      headline: periodData.headline,
+      summary: periodData.executive_summary,
+      status: (periodData.total_critical_branches > 0 ? 'Kritis' : 'Aman') as 'Kritis' | 'Aman',
+      recommendedAction: null,
+      priorityActions: periodData.priority_actions ?? [],
+      periodLabel,
+    }
+  }, [insights, selectedPeriod, selectedCity, matrix.available_periods, filteredRankings])
 
   return (
     <section className="dashboard-surface min-w-0 overflow-hidden space-y-5 p-4 sm:p-6" aria-labelledby="absorption-matrix-heading">
@@ -207,6 +277,90 @@ export function WeeklyAbsorptionMatrix() {
             <span>{isFetching ? 'Menyinkronkan...' : 'Segarkan Data'}</span>
           </button>
         </div>
+      </div>
+
+      {/* KARTU RINGKASAN EKSEKUTIF OPERASIONAL (AI INSIGHT BANNER - TIKET #8) */}
+      <div className="rounded-xl border-2 border-ink-900/15 bg-gradient-to-br from-ink-50/90 via-white to-amber-50/30 p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-2.5">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex size-6 items-center justify-center rounded-md bg-ink-900 text-amber-300">
+              <Sparkles className="size-3.5" aria-hidden="true" />
+            </span>
+            <span className="text-xs font-extrabold uppercase tracking-wider text-ink-900">
+              AI Operational Insight · Ringkasan Eksekutif
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-muted bg-white border border-line rounded px-2 py-0.5">
+              {currentInsightView.scopeTitle} · {currentInsightView.periodLabel}
+            </span>
+            <span
+              className={`rounded px-2 py-0.5 text-[11px] font-bold ${
+                currentInsightView.status === 'Kritis'
+                  ? 'bg-crit-bg text-crit-fg border border-crit-fg/30'
+                  : currentInsightView.status === 'Waspada'
+                  ? 'bg-warn-bg text-warn-fg border border-warn-fg/30'
+                  : 'bg-ok-bg text-ok-fg border border-ok-fg/30'
+              }`}
+            >
+              {currentInsightView.status}
+            </span>
+          </div>
+        </div>
+
+        {/* Narasi Eksekutif (2-3 Kalimat Komunikatif & Lugas) */}
+        <div className="space-y-1.5">
+          <h3 className="font-display text-base font-black text-ink-900 sm:text-lg leading-snug">
+            {currentInsightView.headline}
+          </h3>
+          <p className="text-xs sm:text-sm text-ink-800 leading-relaxed">
+            {currentInsightView.summary}
+          </p>
+        </div>
+
+        {/* Prioritas Tindakan Cepat (Menyesuaikan Filter Scope) */}
+        {currentInsightView.recommendedAction ? (
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50/80 p-2.5 text-xs text-amber-950 font-medium">
+            <ArrowRight className="size-4 shrink-0 text-amber-800" aria-hidden="true" />
+            <span>
+              <strong>Arahan Tindakan PIC:</strong> {currentInsightView.recommendedAction}
+            </span>
+          </div>
+        ) : (
+          currentInsightView.priorityActions.length > 0 && (
+            <div className="mt-2 grid grid-cols-1 gap-2 pt-1 sm:grid-cols-3">
+              {currentInsightView.priorityActions.map((act, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-lg border border-line bg-white p-2.5 text-xs space-y-1 shadow-xs"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold text-ink-900 text-[11px] truncate">
+                      {act.priority}
+                    </span>
+                    <span
+                      className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${
+                        act.risk_level === 'Kritis'
+                          ? 'bg-crit-bg text-crit-fg'
+                          : act.risk_level === 'Waspada'
+                          ? 'bg-warn-bg text-warn-fg'
+                          : 'bg-ink-100 text-ink-700'
+                      }`}
+                    >
+                      {act.risk_level}
+                    </span>
+                  </div>
+                  <strong className="block text-ink-900 text-xs truncate">
+                    {act.target}
+                  </strong>
+                  <p className="text-[11px] text-muted line-clamp-2">
+                    {act.action}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )
+        )}
       </div>
 
       {/* 4 KARTU KPI UTAMA (Hierarki Angka Utama & Keterbacaan Tinggi untuk PIC Senior) */}
