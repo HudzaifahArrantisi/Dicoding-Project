@@ -353,57 +353,35 @@ export const stocksModule = new Elysia({ prefix: "/stocks" })
         };
       }
 
-      for (const item of updateItems) {
-        const [stock] = await db
+      const result = await db.transaction(async (tx) => {
+        const stocks = await tx
           .select({
-            product_name: products.name,
+            product_id: partnerStocks.product_id,
+            current_qty: partnerStocks.current_qty,
             par_level: partnerStocks.par_level,
+            product_name: products.name,
           })
           .from(partnerStocks)
           .innerJoin(products, eq(partnerStocks.product_id, products.id))
-          .where(
-            and(
-              eq(partnerStocks.partner_id, targetPartnerId),
-              eq(partnerStocks.product_id, item.product_id),
-            ),
-          )
-          .limit(1);
+          .where(eq(partnerStocks.partner_id, targetPartnerId))
+          .orderBy(partnerStocks.product_id)
+          .for("update");
+        const stockByProduct = new Map(stocks.map((stock) => [stock.product_id, stock]));
+        const checkedItems: Array<{ item: (typeof updateItems)[number]; existing: (typeof stocks)[number] }> = [];
 
-        if (!stock) {
-          set.status = 404;
-          return { error: "Produk stok cabang tidak ditemukan" };
+        for (const item of updateItems) {
+          const existing = stockByProduct.get(item.product_id);
+          if (!existing) return { error: "Produk stok cabang tidak ditemukan", status: 404 as const };
+          if (user.role === "mitra" && item.current_qty > existing.current_qty) {
+            return {
+              error: `Laporan ${existing.product_name} tidak boleh melebihi stok sebelumnya (${existing.current_qty} pcs). Barang masuk melalui konfirmasi penerimaan.`,
+              status: 422 as const,
+            };
+          }
+          checkedItems.push({ item, existing });
         }
 
-      }
-
-      const results = [];
-
-      for (const item of updateItems) {
-        const updatedRow = await db.transaction(async (tx) => {
-          const [existing] = await tx
-            .select({
-              partner_id: partnerStocks.partner_id,
-              product_id: partnerStocks.product_id,
-              current_qty: partnerStocks.current_qty,
-              par_level: partnerStocks.par_level,
-              product_name: products.name,
-            })
-            .from(partnerStocks)
-            .innerJoin(products, eq(partnerStocks.product_id, products.id))
-            .where(
-              and(
-                eq(partnerStocks.partner_id, targetPartnerId),
-                eq(partnerStocks.product_id, item.product_id),
-              ),
-            )
-            .for("update");
-
-          if (!existing) {
-            throw new Error(
-              `Stok produk ID ${item.product_id} tidak ditemukan di cabang ini`,
-            );
-          }
-
+        for (const { item, existing } of checkedItems) {
           const qtyBefore = existing.current_qty;
           const qtyAfter = item.current_qty;
           const oldStatus = getStockStatus(qtyBefore, existing.par_level);
@@ -443,19 +421,13 @@ export const stocksModule = new Elysia({ prefix: "/stocks" })
               body: `Stok ${existing.product_name} di ${partner.name} tersisa ${qtyAfter}/${existing.par_level} pcs (${pct.toFixed(1)}%). Periksa kebutuhan restock cabang.`,
             });
           }
+        }
+        return { status: 200 as const };
+      });
 
-          return {
-            product_id: item.product_id,
-            product_name: existing.product_name,
-            qty_before: qtyBefore,
-            qty_after: qtyAfter,
-            par_level: existing.par_level,
-            percentage: Number(pct.toFixed(1)),
-            status: newStatus,
-          };
-        });
-
-        results.push(updatedRow);
+      if ("error" in result) {
+        set.status = result.status;
+        return { error: result.error };
       }
 
       publishInventoryChange({

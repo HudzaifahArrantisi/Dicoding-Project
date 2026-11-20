@@ -39,7 +39,7 @@ export function publishInventoryChange(event: InventoryEvent): void {
 export const realtimeModule = new Elysia().get(
   "/events",
   async ({ headers, request, server }) => {
-    const user = await getAuthUser(headers);
+    const user = await getAuthUser(headers, false);
     if (!user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -89,7 +89,7 @@ export const realtimeModule = new Elysia().get(
           } catch {
             // The browser may already have closed the connection.
           }
-        }, 60 * 60_000);
+        }, Math.max(1, Math.min(60 * 60_000, user.validUntil - Date.now())));
         request.signal.addEventListener("abort", close, { once: true });
       },
       cancel: close,

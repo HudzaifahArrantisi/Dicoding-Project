@@ -52,7 +52,7 @@ function getClusterBadge(clusterCode: string) {
   }
 }
 
-export function WeeklyAbsorptionMatrix() {
+export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview' | 'comparison' | 'branches' }) {
   const [usingFallback, setUsingFallback] = useState(false)
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string>(() => {
     return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
@@ -258,7 +258,7 @@ export function WeeklyAbsorptionMatrix() {
         </div>
       </div>
 
-      <details className="group rounded-lg border border-line bg-ink-50/60 px-4 py-3">
+      {view === 'overview' && <details className="group rounded-lg border border-line bg-ink-50/60 px-4 py-3">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-900 [&::-webkit-details-marker]:hidden">
           <span className="min-w-0"><span className="text-crit-fg tabular-nums">{breachedPartners.length} cabang</span> perlu perhatian · {currentInsightView.scopeTitle}</span>
           <span className="shrink-0 text-xs text-ink-700 group-open:hidden">Lihat analisis</span>
@@ -276,10 +276,10 @@ export function WeeklyAbsorptionMatrix() {
             </ul>
           )}
         </div>
-      </details>
+      </details>}
 
       {/* 4 KARTU KPI UTAMA (Hierarki Angka Utama & Keterbacaan Tinggi untuk PIC Senior) */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      {view === 'overview' && <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {/* KPI 1: Kecepatan Jual Jaringan */}
         <div className="rounded-xl border-2 border-line bg-white p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted">
@@ -335,7 +335,7 @@ export function WeeklyAbsorptionMatrix() {
           </div>
           <p className="mt-1 text-xs text-rose-800">Terendah {minCriticalDays.toFixed(1)} hari</p>
         </div>
-      </div>
+      </div>}
 
       {/* KONTROL FILTER & RESET FILTER CEPAT */}
       <div className="flex flex-col gap-3 rounded-xl border border-line bg-paper/60 p-3 sm:p-4">
@@ -414,7 +414,7 @@ export function WeeklyAbsorptionMatrix() {
       </div>
 
       {/* TABS KATEGORI OPERASIONAL BISNIS */}
-      <div className="flex flex-wrap gap-1.5 border-b border-line pb-3 text-xs">
+      {view !== 'overview' && <div className="flex flex-wrap gap-1.5 border-b border-line pb-3 text-xs">
         {[
           { key: 'all', label: `Semua (${rawRankings.length})` },
           { key: 'top_performer', label: `Laris (${matrix.summary.top_performer_count})` },
@@ -435,15 +435,11 @@ export function WeeklyAbsorptionMatrix() {
             {tab.label}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* GRAFIK BAR PERBANDINGAN KECEPATAN JUAL ANTAR TOKO */}
-      <details className="group rounded-lg border border-line bg-white p-4 sm:p-5">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-900 [&::-webkit-details-marker]:hidden">
-          <span>Perbandingan penjualan · {chartPartners.length} cabang</span>
-          <span className="text-xs text-muted group-open:hidden">Lihat grafik</span>
-          <span className="hidden text-xs text-muted group-open:inline">Tutup</span>
-        </summary>
+      {view === 'comparison' && <div className="rounded-lg border border-line bg-white p-4 sm:p-5">
+        <h3 className="text-sm font-semibold text-ink-900">Perbandingan penjualan · {chartPartners.length} cabang</h3>
 
         {chartPartners.length > 0 ? (
           <div className="mt-4 space-y-3.5">
@@ -491,10 +487,10 @@ export function WeeklyAbsorptionMatrix() {
             Tidak ada toko mitra yang cocok dengan filter yang dipilih.
           </p>
         )}
-      </details>
+      </div>}
 
       {/* TABEL PERINGKAT OPERASIONAL LENGKAP */}
-      <div className="rounded-xl border border-line bg-white overflow-hidden shadow-xs">
+      {view === 'branches' && <div className="rounded-xl border border-line bg-white overflow-hidden shadow-xs">
         <div className="border-b border-line px-4 py-3 bg-paper/60 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="font-display text-sm font-bold text-ink-900">
@@ -686,7 +682,7 @@ export function WeeklyAbsorptionMatrix() {
             Tidak ada cabang toko yang memenuhi kriteria pencarian & filter.
           </div>
         )}
-      </div>
+      </div>}
     </section>
   )
 }

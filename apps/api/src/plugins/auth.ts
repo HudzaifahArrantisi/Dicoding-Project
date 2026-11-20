@@ -36,6 +36,7 @@ export interface AuthUser {
   fullName: string;
   sessionId: string;
   csrfToken: string;
+  validUntil: number;
 }
 
 export async function createSession(userId: string, role: AuthUser["role"]): Promise<string> {
@@ -53,7 +54,7 @@ export async function revokeSession(sessionId: string): Promise<void> {
   await db.update(authSessions).set({ revoked_at: new Date() }).where(eq(authSessions.id, sessionId));
 }
 
-export async function getAuthUser(headers: Record<string, string | undefined>): Promise<AuthUser | null> {
+export async function getAuthUser(headers: Record<string, string | undefined>, touch = true): Promise<AuthUser | null> {
   const token = cookieToken(headers);
   if (!token) return null;
   const [account] = await retryTransientRead(async () => db
@@ -78,7 +79,7 @@ export async function getAuthUser(headers: Record<string, string | undefined>): 
   const now = Date.now();
   if (account.expiresAt.getTime() <= now || now - account.lastSeenAt.getTime() > idleMs[account.role]) return null;
   if (account.role === "mitra" && (!account.partnerId || !account.partnerActive)) return null;
-  if (now - account.lastSeenAt.getTime() > 60_000) {
+  if (touch && now - account.lastSeenAt.getTime() > 60_000) {
     const lastAttempt = recentSessionTouches.get(account.sessionId) ?? 0;
     if (now - lastAttempt > 60_000) {
       if (recentSessionTouches.size >= 1_000) {
@@ -102,6 +103,7 @@ export async function getAuthUser(headers: Record<string, string | undefined>): 
     fullName: account.fullName,
     sessionId: account.sessionId,
     csrfToken: account.csrfToken,
+    validUntil: Math.min(account.expiresAt.getTime(), account.lastSeenAt.getTime() + idleMs[account.role]),
   };
 }
 

@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { SESSION_EXPIRED_EVENT } from './api/client'
 import {
   getCurrentUser,
   login as apiLogin,
@@ -31,9 +33,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient()
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const userRef = useRef<User | null>(null)
+
+  const clearSession = useCallback(() => {
+    userRef.current = null
+    setCsrfToken(null)
+    setUser(null)
+    queryClient.clear()
+  }, [queryClient])
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      if (!userRef.current) return
+      clearSession()
+      toast.error('Sesi login telah berakhir. Silakan login kembali.')
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+  }, [clearSession])
 
   const refreshUser = async (): Promise<User> => {
     const data = await getCurrentUser()
+    userRef.current = data.user
     setUser(data.user)
     return data.user
   }
@@ -44,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const data = await getCurrentUser()
         if (!status.cancelled) {
+          userRef.current = data.user
           setUser(data.user)
         }
       } finally {
@@ -69,12 +91,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error: error instanceof Error && error.message.trim() ? error.message : 'Email atau password salah',
       }
     }
-  }
-
-  const clearSession = () => {
-    setCsrfToken(null)
-    setUser(null)
-    queryClient.clear()
   }
 
   const logout = async (): Promise<void> => {

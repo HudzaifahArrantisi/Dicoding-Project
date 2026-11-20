@@ -140,7 +140,6 @@ function MitraPortal() {
     user,
     logout,
     refreshUser,
-    clearSession,
     isLoading: authLoading,
   } = useAuth()
   const refreshUserRef = useRef(refreshUser)
@@ -233,26 +232,6 @@ function MitraPortal() {
     enabled: user?.role === 'mitra',
   })
 
-  useEffect(() => {
-    const isUnauthorized =
-      (stocksQuery.error as { status?: number } | null)?.status === 401 ||
-      (ordersQuery.error as { status?: number } | null)?.status === 401 ||
-      stocksQuery.error?.message.includes('Unauthorized') ||
-      ordersQuery.error?.message.includes('Unauthorized')
-
-    if (isUnauthorized) {
-      toast.error('Sesi login telah berakhir')
-      clearSession()
-      queryClient.clear()
-      void navigate({ to: '/login' })
-    }
-  }, [
-    stocksQuery.error,
-    ordersQuery.error,
-    navigate,
-    clearSession,
-    queryClient,
-  ])
 
   const trackingNotificationCount = useMemo(
     () =>
@@ -283,7 +262,7 @@ function MitraPortal() {
             previousQty !== undefined &&
             editedQty !== undefined &&
             editedQty !== previousQty
-              ? editedQty
+              ? Math.min(editedQty, stock.current_qty)
               : stock.current_qty,
           ]
         }),
@@ -321,7 +300,10 @@ function MitraPortal() {
       ])
       toast.success('Stok tersimpan')
     },
-    onError: (error: unknown) => toast.error(errorMessage(error)),
+    onError: (error: unknown) => {
+      toast.error(errorMessage(error))
+      void queryClient.invalidateQueries({ queryKey: ['mitra-stocks'] })
+    },
   })
 
   const createOrder = useMutation({
@@ -430,7 +412,7 @@ function MitraPortal() {
   function setStockQty(stock: StockItem, qty: number) {
     setEditedStocks((current) => ({
       ...current,
-      [stock.product_id]: Math.max(0, qty),
+      [stock.product_id]: Math.min(stock.current_qty, Math.max(0, qty)),
     }))
   }
 
@@ -778,13 +760,14 @@ function NumericStockInput({
       onChange={(e) => {
         const raw = e.target.value.replace(/\D/g, '')
         const stripped = raw.replace(/^0+(?=\d)/, '')
-        setLocalVal(stripped)
         if (stripped === '') {
+          setLocalVal('')
           onChange(min)
         } else {
           let parsed = Number.parseInt(stripped, 10)
           if (parsed < min) parsed = min
           if (max !== undefined && parsed > max) parsed = max
+          setLocalVal(String(parsed))
           onChange(parsed)
         }
       }}
@@ -1026,7 +1009,7 @@ function StocksPanel({
                         htmlFor={`stock-${stock.product_id}`}
                         className="text-xs font-semibold text-muted"
                       >
-                        Stok di toko:
+                        Stok di toko · maks. <span className="tabular-nums">{stock.current_qty} pcs</span>
                       </label>
                       <div
                         data-tour="daily-report-counter"
@@ -1043,6 +1026,7 @@ function StocksPanel({
                         <NumericStockInput
                           id={`stock-${stock.product_id}`}
                           value={qty}
+                          max={stock.current_qty}
                           onChange={(val) => onQtyChange(stock, val)}
                           className="h-11 w-20 sm:w-24 rounded-lg border border-line bg-white text-center text-lg font-bold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-emerald-600"
                           aria-label={`Jumlah stok ${stock.product_name}`}
@@ -1050,8 +1034,10 @@ function StocksPanel({
                         <button
                           type="button"
                           onClick={() => onQtyChange(stock, qty + 1)}
-                          className="grid size-11 place-items-center rounded-lg border border-line bg-paper text-ink-900 transition-all hover:bg-ink-100 active:scale-95 cursor-pointer"
+                          disabled={qty >= stock.current_qty}
+                          className="grid size-11 place-items-center rounded-lg border border-line bg-paper text-ink-900 transition-all hover:bg-ink-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                           aria-label={`Tambah ${stock.product_name}`}
+                          title={`Maksimal ${stock.current_qty} pcs sesuai stok tercatat`}
                         >
                           <Plus className="size-4" aria-hidden="true" />
                         </button>

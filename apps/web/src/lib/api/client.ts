@@ -5,9 +5,18 @@ import { env } from '@/env'
 export const API_BASE_PATH = '/api'
 
 let csrfToken: string | null = null
+let sessionVersion = 0
+
+export const SESSION_EXPIRED_EVENT = 'daisuki:session-expired'
 
 export function setCsrfToken(value: string | null): void {
+  if (csrfToken !== value) sessionVersion += 1
   csrfToken = value
+}
+
+export function beginNewSession(): void {
+  sessionVersion += 1
+  csrfToken = null
 }
 
 export function getCsrfToken(): string | null {
@@ -145,7 +154,17 @@ export async function apiFetch(
   init: RequestInit = {}
 ): Promise<Response> {
   const targetUrl = resolveApiPath(typeof input === 'string' ? input : input.toString())
-  return fetch(targetUrl, sessionRequest(init))
+  const requestVersion = sessionVersion
+  const response = await fetch(targetUrl, sessionRequest(init))
+  if (
+    response.status === 401 &&
+    requestVersion === sessionVersion &&
+    typeof window !== 'undefined' &&
+    !targetUrl.endsWith('/auth/login')
+  ) {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+  }
+  return response
 }
 
 /**
@@ -173,9 +192,6 @@ export async function apiRequest<T = unknown>(
   })
 
   if (!response.ok) {
-    if (response.status === 401 && typeof window !== 'undefined') {
-      // Sesi kedaluwarsa
-    }
     const errorBody = (await response.json().catch(() => null)) as { error?: string; message?: string } | null
     const msg = errorBody?.error || errorBody?.message || `Permintaan gagal (${response.status})`
     const error = new Error(msg) as Error & { status?: number }

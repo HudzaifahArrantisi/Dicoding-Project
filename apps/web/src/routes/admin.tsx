@@ -446,6 +446,7 @@ function DataSciencePanel({
   const [deleteReferenceTarget, setDeleteReferenceTarget] = useState<RawReference | null>(null)
   const [deletingReference, setDeletingReference] = useState(false)
   const [showAllReferences, setShowAllReferences] = useState(false)
+  const [activeSection, setActiveSection] = useState<'reference' | 'weekly' | 'supply' | 'comparison' | 'branches' | 'logs' | null>(null)
   const referenceInputRef = useRef<HTMLInputElement>(null)
   const rawReferences = useQuery<{ files: RawReference[] }>({
     queryKey: ['admin-raw-references'],
@@ -467,7 +468,7 @@ function DataSciencePanel({
       const created = await createAnalysisRun(start, end)
       setAnalysisRun(created.id)
       await queryClient.invalidateQueries({ queryKey: ['analysis-runs'] })
-      toast.success('Laporan Data Science selesai dibuat. Buka AI Insights untuk meninjau dan Muaizzzzng.')
+      toast.success('Laporan Data Science selesai dibuat. Buka AI Insights untuk meninjau hasilnya.')
       onAnalysisCreated()
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -514,6 +515,46 @@ function DataSciencePanel({
     <section className="dashboard-panel-enter space-y-4" aria-labelledby="data-science-title">
       <h1 id="data-science-title" className="font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log & Data</h1>
 
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Kategori Log & Data">
+        {([
+          { id: 'reference', title: 'Referensi & analisis', metric: rawReferences.isLoading ? 'Memuat...' : `${adminReferenceCount} file Admin`, Icon: Database },
+          { id: 'weekly', title: 'Analisis Perubahan Stok Mingguan per Mitra', metric: summaryLoading ? 'Memuat...' : `${summary?.total_logs_this_week ?? 0} log minggu ini`, Icon: BarChart3 },
+          { id: 'supply', title: 'Penjualan & pasokan mitra', metric: 'Ringkasan pasokan', Icon: Truck },
+          { id: 'comparison', title: 'Perbandingan penjualan', metric: 'Grafik cabang', Icon: BarChart3 },
+          { id: 'branches', title: 'Cabang', metric: `${totalPartners} cabang`, Icon: Store },
+          { id: 'logs', title: 'Log perkembangan per mitra', metric: logPartnersLoading ? 'Memuat...' : `${logPartners.length} mitra`, Icon: History },
+        ] as const).map(({ id, title, metric, Icon }) => (
+          <button key={id} type="button" onClick={() => setActiveSection(id)}
+            className="group flex min-h-36 min-w-0 flex-col justify-between rounded-xl border border-line bg-white p-4 text-left transition-colors hover:border-ink-500/50 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
+            aria-label={`Buka ${title}`}>
+            <span className="flex w-full items-start justify-between gap-3">
+              <span className="font-display text-base font-semibold leading-snug text-ink-900 sm:text-lg">{title}</span>
+              <Icon className="size-5 shrink-0 text-ink-700" aria-hidden="true" />
+            </span>
+            <span className="flex w-full items-end justify-between gap-2 border-t border-line pt-3 text-sm">
+              <span className="tabular-nums text-ink-700">{metric}</span>
+              <ChevronRight className="size-4 shrink-0 text-ink-700 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <Dialog.Root open={activeSection !== null} onOpenChange={(open) => { if (!open) setActiveSection(null) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60" />
+          <Dialog.Content className="fixed inset-x-2 top-1/2 z-50 mx-auto flex max-h-[calc(100dvh-1rem)] w-auto max-w-6xl -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-paper shadow-2xl focus:outline-none sm:inset-x-6 sm:max-h-[calc(100dvh-3rem)]">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-white px-4 py-3 sm:px-6">
+              <Dialog.Title className="min-w-0 font-display text-base font-semibold text-ink-900 sm:text-lg">
+                {{ reference: 'Referensi & analisis', weekly: 'Analisis Perubahan Stok Mingguan per Mitra', supply: 'Penjualan & pasokan mitra', comparison: 'Perbandingan penjualan', branches: 'Cabang', logs: 'Log perkembangan per mitra' }[activeSection ?? 'reference']}
+              </Dialog.Title>
+              <Dialog.Description className="sr-only">Detail fitur Log & Data</Dialog.Description>
+              <Dialog.Close className="grid size-11 shrink-0 place-items-center rounded-md text-ink-700 hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-ink-900" aria-label="Tutup modal">
+                <X className="size-5" aria-hidden="true" />
+              </Dialog.Close>
+            </div>
+            <div className="min-h-0 min-w-0 overflow-y-auto p-3 sm:p-5">
+              {activeSection === 'weekly' && <div className="mb-4">
+
       <dl className="dashboard-surface grid divide-y divide-line px-4 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:px-0">
         <div className="py-3 sm:px-4">
           <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Log minggu ini</dt>
@@ -527,9 +568,9 @@ function DataSciencePanel({
           <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Rata-rata konsumsi harian</dt>
           <dd className="mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`}</dd>
         </div>
-      </dl>
+      </dl></div>}
 
-      <section className="dashboard-surface min-w-0 overflow-hidden" aria-labelledby="raw-reference-title">
+      {activeSection === 'reference' && <section className="dashboard-surface min-w-0 overflow-hidden" aria-labelledby="raw-reference-title">
         <div className="p-4 sm:p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 id="raw-reference-title" className="font-display text-base font-semibold text-ink-900">Referensi & analisis</h2>
@@ -581,18 +622,20 @@ function DataSciencePanel({
             </li>)}
           </ul> : rawReferences.data ? <span className="mt-2 block text-sm text-muted">Belum ada file pada tampilan ini.</span> : null}
         </div>
-      </section>
+      </section>}
 
-      <PartnerDailyLogChart
+      {activeSection === 'weekly' && <PartnerDailyLogChart
         summary={summary}
         loading={summaryLoading}
         error={summaryError}
         onRetry={onRetry}
-      />
+      />}
 
-      <WeeklyAbsorptionMatrix />
+      {activeSection === 'supply' && <WeeklyAbsorptionMatrix view="overview" />}
+      {activeSection === 'comparison' && <WeeklyAbsorptionMatrix view="comparison" />}
+      {activeSection === 'branches' && <WeeklyAbsorptionMatrix view="branches" />}
 
-      <div className="dashboard-surface overflow-hidden">
+      {activeSection === 'logs' && <div className="dashboard-surface overflow-hidden">
         <div className="border-b border-line px-4 py-3">
           <h3 className="font-semibold text-ink-900">Log perkembangan per mitra</h3>
         </div>
@@ -604,7 +647,7 @@ function DataSciencePanel({
             <button
               key={partner.partner_id}
               type="button"
-              onClick={() => setSelectedPartner(partner)}
+              onClick={() => { setActiveSection(null); setSelectedPartner(partner) }}
               className="group flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-700"
             >
               <span className="min-w-0">
@@ -624,7 +667,11 @@ function DataSciencePanel({
             </button>
           ))}
         </div>
-      </div>
+      </div>}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <PartnerStockLogDialog
         partner={selectedPartner}
@@ -2685,7 +2732,7 @@ function PartnerAnalysisTable({ analysis }: { analysis?: AIInsights['partner_ana
 }
 
 function AdminDashboard() {
-  const { user, logout, clearSession, isLoading: authLoading } = useAuth()
+  const { user, logout, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
   const { chat } = Route.useSearch()
   const queryClient = useQueryClient()
@@ -2805,24 +2852,6 @@ function AdminDashboard() {
     staleTime: Infinity,
   })
 
-  useEffect(() => {
-    const isUnauthorized =
-      (metrics.error as { status?: number } | null)?.status === 401 ||
-      (stocks.error as { status?: number } | null)?.status === 401 ||
-      (orders.error as { status?: number } | null)?.status === 401 ||
-      (notifications.error as { status?: number } | null)?.status === 401 ||
-      metrics.error?.message.includes('Unauthorized') ||
-      stocks.error?.message.includes('Unauthorized') ||
-      orders.error?.message.includes('Unauthorized') ||
-      notifications.error?.message.includes('Unauthorized')
-
-    if (isUnauthorized) {
-      toast.error('Sesi login telah berakhir. Silakan login kembali.')
-      clearSession()
-      queryClient.clear()
-      void navigate({ to: '/login' })
-    }
-  }, [metrics.error, stocks.error, orders.error, notifications.error, navigate, clearSession, queryClient])
   const weeklySummary = useQuery<WeeklySummary>({
     queryKey: ['admin-weekly-summary'],
     queryFn: () => getWeeklySummary(),

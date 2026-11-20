@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { resolveApiPath } from './api'
+import { apiFetch, resolveApiPath } from './api'
 
 type Role = 'admin' | 'mitra'
 type Topic = 'orders' | 'stocks' | 'logs' | 'products' | 'notifications' | 'metrics' | 'partners' | 'ai'
@@ -130,16 +130,19 @@ export function useInventoryEvents(enabled: boolean, role: Role): void {
           es.close()
           eventSource = null
 
-          // Exponential backoff to avoid rapid reconnection loops
-          const delay = retryDelay
-          retryDelay = Math.min(retryDelay * 2, 30_000)
-
-          if (!reconnectTimer) {
+          const reconnect = () => {
+            if (stopped || reconnectTimer) return
+            const delay = retryDelay
+            retryDelay = Math.min(retryDelay * 2, 30_000)
             reconnectTimer = setTimeout(() => {
               reconnectTimer = null
               connect()
             }, delay)
           }
+
+          void apiFetch('/me')
+            .then((response) => { if (response.status !== 401) reconnect() })
+            .catch(reconnect)
         }
       } catch {
         if (!reconnectTimer) {

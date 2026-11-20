@@ -1,4 +1,4 @@
-import { apiClient, setCsrfToken } from './client'
+import { apiClient, beginNewSession, setCsrfToken } from './client'
 import type { RegionCodes } from '@/components/inventory/region-picker'
 
 export interface User {
@@ -41,7 +41,9 @@ export interface UpdateProfilePayload {
  * Melakukan otentikasi login ke backend.
  */
 export async function login(payload: LoginPayload): Promise<{ status: string }> {
-  return apiClient.post<{ status: string }>('/auth/login', payload)
+  const result = await apiClient.post<{ status: string }>('/auth/login', payload)
+  beginNewSession()
+  return result
 }
 
 /**
