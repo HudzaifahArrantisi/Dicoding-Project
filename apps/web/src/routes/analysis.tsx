@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { actionAnalysisRun, createAnalysisRun, createAnalysisTeamUser, getAnalysisRuns, type AnalysisRun } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { WeeklyAbsorptionMatrix } from '@/components/inventory/weekly-absorption-matrix'
 
 export const Route = createFileRoute('/analysis')({ component: AnalysisPage })
 
@@ -86,6 +87,8 @@ function AnalysisPage() {
           </div>
         </article>)}
       </section>
+
+      <WeeklyAbsorptionMatrix />
 
       {user.role === 'admin' && <form className="rounded-xl border border-line bg-white p-5" onSubmit={(event) => {
         event.preventDefault()

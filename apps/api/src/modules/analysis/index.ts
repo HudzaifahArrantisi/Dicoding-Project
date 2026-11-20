@@ -1,10 +1,11 @@
 import { Elysia, t } from "elysia";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { analysisRuns, auditLogs, users } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
-import { dataScienceRunDir } from "../../lib/analysis-artifacts";
+import { dataScienceRunDir, workspaceRoot } from "../../lib/analysis-artifacts";
 import { approveAnalysisRun, createAnalysisDraft, listAnalysisRuns, processAnalysisRun, rollbackAnalysisRun } from "../../lib/analysis-runs";
 import { deleteAdminRawReference, getActiveRunId, listRawReferences, loadArtifact, saveRawReference } from "../../lib/analysis-storage";
 
@@ -61,6 +62,38 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     if (!deleted) { set.status = 404; return { error: "Unggahan Admin tidak ditemukan" }; }
     return { deleted: true, id: deleted.id };
   }, { params: t.Object({ id: t.String({ format: "uuid" }) }) })
+  .get("/weekly-absorption-matrix", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role === "mitra") { set.status = 403; return { error: "Forbidden" }; }
+    try {
+      const filePath = resolve(workspaceRoot, "data-science/data/weekly_absorption_matrix.json");
+      const content = await readFile(filePath, "utf8");
+      return JSON.parse(content);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        set.status = 404;
+        return { error: "Matriks penyerapan produk mingguan belum tersedia" };
+      }
+      throw error;
+    }
+  })
+  .get("/operational-insight", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role === "mitra") { set.status = 403; return { error: "Forbidden" }; }
+    try {
+      const filePath = resolve(workspaceRoot, "data-science/data/operational_insight.json");
+      const content = await readFile(filePath, "utf8");
+      return JSON.parse(content);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        set.status = 404;
+        return { error: "Ringkasan operational insight belum tersedia" };
+      }
+      throw error;
+    }
+  })
   .get("/runs", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
