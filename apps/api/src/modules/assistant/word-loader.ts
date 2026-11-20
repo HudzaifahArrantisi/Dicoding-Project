@@ -1,9 +1,28 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+/**
+ * Pencocokan frasa, pola, dan intent.
+ *
+ * Seluruh kamus dibundel saat build (apps/api/src/generated/data.ts), bukan
+ * dibaca dari disk. `readdirSync` dan `readFileSync` tidak tersedia di
+ * Cloudflare Workers, dan memanggilnya di level modul akan menggagalkan impor
+ * sebelum satu permintaan pun dilayani.
+ *
+ * Sumber data tetap di ai/data/mega_data_word/. Setelah mengubahnya, jalankan:
+ *   bun apps/api/scripts/bundle-data.mjs
+ * lalu build ulang.
+ */
 
-const root = resolve(import.meta.dir, "../../../../../ai/data/mega_data_word");
-type WordFile = { category: string; name: string; version: string; exact_phrases?: string[]; regex_patterns?: string[]; [key: string]: unknown };
-type Matcher = { exact: Set<string>; pattern: RegExp | null; raw: WordFile };
+import { bundled, type BundledWordFile } from "../../generated/data";
+
+type Matcher = { exact: Set<string>; pattern: RegExp | null; raw: BundledWordFile };
+
+/**
+ * Folder di ai/data/mega_data_word/.
+ *
+ * Kunci pack diambil dari field `category` di dalam tiap berkas, bukan dari
+ * nama folder — keduanya memang sama, dan cara ini menjaga perilaku tetap
+ * identik dengan versi yang membaca disk.
+ */
+const FOLDERS = ["intent", "intent/tours", "guardrail", "dictionary"] as const;
 
 function normalize(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}.]+/gu, " ").trim();
@@ -15,12 +34,14 @@ function compile(patterns: string[]): RegExp | null {
 
 function load(): Map<string, Matcher> {
   const packs = new Map<string, Matcher>();
-  for (const folder of ["intent", "intent/tours", "guardrails", "dictionary"]) {
-    const directory = resolve(root, folder);
-    for (const name of readdirSync(directory).filter((file) => file.endsWith(".json"))) {
-      const raw = JSON.parse(readFileSync(resolve(directory, name), "utf8")) as WordFile;
-      if (!raw.category || !raw.name || !raw.version) throw new Error(`Kamus tidak valid: ${name}`);
-      const exact = new Set((raw.exact_phrases ?? []).map(normalize));
+  for (const folder of FOLDERS) {
+    const files = bundled.words[folder];
+    if (!files) continue;
+    for (const raw of Object.values(files)) {
+      if (!raw.category || !raw.name || !raw.version) {
+        throw new Error(`Kamus tidak valid: ${folder}/${raw.name ?? "tanpa nama"}`);
+      }
+      const exact = new Set<string>((raw.exact_phrases ?? []).map((phrase) => normalize(String(phrase))));
       packs.set(`${raw.category}/${raw.name}`, { exact, pattern: compile(raw.regex_patterns ?? []), raw });
     }
   }
@@ -28,6 +49,7 @@ function load(): Map<string, Matcher> {
 }
 
 const packs = load();
+
 function loadTrainingPhrases(): Map<string, string> {
   const phrases = new Map<string, string>();
   const add = (intent: string, values: string[]) => {
@@ -38,24 +60,36 @@ function loadTrainingPhrases(): Map<string, string> {
       phrases.set(key, intent);
     }
   };
-  const base = packs.get("training/training_examples")?.raw.intents as Record<string, string[]>;
-  for (const [intent, values] of Object.entries(base)) add(intent, values);
-  const directory = resolve(root, "intent/training");
-  for (const name of readdirSync(directory).filter((file) => file.endsWith(".json"))) {
-    const data = JSON.parse(readFileSync(resolve(directory, name), "utf8")) as { intent: string; phrases: string[] };
-    add(data.intent, data.phrases);
+
+  // training_examples.json memakai bentuk { intents: { nama: [frasa] } }.
+  const base = packs.get("training/training_examples")?.raw.intents as Record<string, string[]> | undefined;
+  if (base) for (const [intent, values] of Object.entries(base)) add(intent, values);
+
+  // Berkas di intent/training/ memakai bentuk { intent, phrases }.
+  // training_examples.json ikut terbaca di folder ini, jadi disaring berdasarkan bentuknya.
+  const supplements = Object.values(bundled.words["intent/training"] ?? {});
+  for (const data of supplements) {
+    if (typeof data.intent === "string" && Array.isArray(data.phrases)) {
+      add(data.intent, data.phrases as string[]);
+    }
   }
   return phrases;
 }
+
 const trainingPhrases = loadTrainingPhrases();
+
 const compiled = new Map<string, RegExp | null>();
 for (const [name, entry] of packs) {
   for (const [field, value] of Object.entries(entry.raw)) {
     if (field.endsWith("_patterns") && Array.isArray(value)) compiled.set(`${name}/${field}`, compile(value));
   }
 }
-const productAliases = new Map(Object.entries(packs.get("dictionary/product_aliases")?.raw.aliases as Record<string, string[]>));
-const stopwords = new Set(readFileSync(resolve(root, "dictionary/stopwords_id.txt"), "utf8").split(/\r?\n/).map(normalize).filter(Boolean));
+
+const productAliases = new Map(
+  Object.entries((packs.get("dictionary/product_aliases")?.raw.aliases as Record<string, string[]>) ?? {}),
+);
+
+const stopwords = new Set(bundled.stopwords.split(/\r?\n/).map(normalize).filter(Boolean));
 
 function pack(name: string): Matcher {
   const value = packs.get(name);
@@ -70,7 +104,7 @@ function matches(name: string, text: string): boolean {
 
 function extra(name: string, field: string): RegExp | null {
   const key = `${name}/${field}`;
-  if (!compiled.has(key)) compiled.set(key, compile(pack(name).raw[field] as string[] ?? []));
+  if (!compiled.has(key)) compiled.set(key, compile((pack(name).raw[field] as string[]) ?? []));
   return compiled.get(key) ?? null;
 }
 

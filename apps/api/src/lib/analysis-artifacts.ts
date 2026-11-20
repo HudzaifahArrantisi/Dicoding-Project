@@ -2,7 +2,22 @@ import { readFileSync } from "node:fs";
 import { readFile, rename, writeFile, mkdir, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 
-export const workspaceRoot = resolve(import.meta.dir, "../../../..");
+/**
+ * Direktori modul ini.
+ *
+ * import.meta.dir tidak ada di Cloudflare Workers. Mengevaluasinya langsung di
+ * resolve() membuat seluruh aplikasi gagal diimpor dengan
+ * "The paths[0] argument must be of type string. Received undefined".
+ *
+ * Nilai cadangan hanya agar modul bisa dimuat. Jalur berkas di bawah ini tidak
+ * pernah dipakai di Workers karena runtime itu tidak punya filesystem — fungsi
+ * yang benar-benar membacanya akan gagal saat dipanggil, bukan saat impor.
+ */
+function moduleDir(): string {
+  return typeof import.meta.dir === "string" ? import.meta.dir : "/app/apps/api/src/lib";
+}
+
+export const workspaceRoot = resolve(moduleDir(), "../../../..");
 export const privateRoot = resolve(workspaceRoot, "ai/data/private");
 const activePath = resolve(privateRoot, "active_run.json");
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

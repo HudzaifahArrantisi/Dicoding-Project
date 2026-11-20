@@ -1,22 +1,73 @@
+/**
+ * Penyimpanan berkas unggahan: resi pengiriman dan foto profil.
+ *
+ * Dua runtime dilayani berkas ini:
+ *   - Bun   — menulis ke disk di apps/api/uploads/
+ *   - Workers — TIDAK punya disk; perlu R2 (belum terpasang)
+ *
+ * Penulisan disk sengaja ditunda sampai fungsi dipanggil, bukan saat modul
+ * dimuat. `mkdirSync` di level modul membuat impor gagal di Workers sebelum
+ * satu permintaan pun dilayani.
+ */
+
 import { join, resolve } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
-import { randomBytes } from "node:crypto";
-
-// Resolve upload directories relative to apps/api directory
-const API_ROOT = resolve(import.meta.dir, "../..");
-export const UPLOADS_DIR = resolve(API_ROOT, "uploads");
-export const RECEIPTS_DIR = resolve(UPLOADS_DIR, "receipts");
-export const PROFILES_DIR = resolve(UPLOADS_DIR, "profiles");
-
-// Ensure target directories exist on startup
-if (!existsSync(RECEIPTS_DIR)) {
-  mkdirSync(RECEIPTS_DIR, { recursive: true });
-}
-if (!existsSync(PROFILES_DIR)) {
-  mkdirSync(PROFILES_DIR, { recursive: true });
-}
+import { mkdirSync } from "node:fs";
 
 export type UploadFolder = "receipts" | "profiles";
+
+/** Runtime tanpa filesystem. Diisi saat R2 dipasang. */
+const hasFileSystem = typeof Bun !== "undefined" && typeof Bun.write === "function";
+
+/**
+ * Ditelusuri saat dipanggil, bukan saat modul dimuat.
+ *
+ * import.meta.dir tidak ada di Cloudflare Workers, dan mengevaluasinya di
+ * tingkat modul membuat seluruh aplikasi gagal diimpor — bukan hanya fitur
+ * unggahan.
+ */
+function uploadsRoot(): string {
+  if (typeof import.meta.dir !== "string") return "/uploads";
+  return resolve(import.meta.dir, "../../uploads");
+}
+
+export function uploadsDir(): string {
+  return uploadsRoot();
+}
+
+export function receiptsDir(): string {
+  return join(uploadsRoot(), "receipts");
+}
+
+export function profilesDir(): string {
+  return join(uploadsRoot(), "profiles");
+}
+
+function targetDir(folder: UploadFolder): string {
+  return folder === "receipts" ? receiptsDir() : profilesDir();
+}
+
+/** Membuat folder tujuan saat dibutuhkan, bukan saat modul dimuat. */
+function ensureDir(folder: UploadFolder): string {
+  const dir = targetDir(folder);
+  if (!hasFileSystem) {
+    throw new Error(
+      "Runtime ini tidak punya filesystem. Unggahan berkas memerlukan binding R2.",
+    );
+  }
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function extensionFor(mimeType: string): string {
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/webp") return "webp";
+  return "jpg";
+}
+
+function buildFilename(prefix: string, ext: string, suffix: string): string {
+  const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `${safePrefix}-${Date.now()}-${suffix}.${ext}`;
+}
 
 /**
  * Saves a File or Blob instance (from FormData) directly to the server's uploads folder.
@@ -26,20 +77,11 @@ export async function saveUploadedFile(
   folder: UploadFolder,
   prefix: string,
 ): Promise<{ path: string; filename: string }> {
-  const targetDir = folder === "receipts" ? RECEIPTS_DIR : PROFILES_DIR;
-
-  let ext = "jpg";
-  if (file.type === "image/png") ext = "png";
-  else if (file.type === "image/webp") ext = "webp";
-  else if (file.type === "image/jpeg") ext = "jpg";
-
-  const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const randomSuffix = randomBytes(16).toString("hex");
-  const filename = `${safePrefix}-${Date.now()}-${randomSuffix}.${ext}`;
-  const filePath = join(targetDir, filename);
-
+  const dir = ensureDir(folder);
+  const ext = extensionFor(file.type);
+  const filename = buildFilename(prefix, ext, randomHex());
   const arrayBuffer = await file.arrayBuffer();
-  await Bun.write(filePath, arrayBuffer);
+  await Bun.write(join(dir, filename), arrayBuffer);
 
   return {
     path: `/uploads/${folder}/${filename}`,
@@ -61,24 +103,19 @@ export async function saveBase64Image(
     throw new Error("Format base64 gambar tidak valid");
   }
 
-  const mimeType = match[1];
-  const base64Data = match[2];
-  const buffer = Buffer.from(base64Data, "base64");
-
-  let ext = "jpg";
-  if (mimeType === "image/png") ext = "png";
-  else if (mimeType === "image/webp") ext = "webp";
-
-  const targetDir = folder === "receipts" ? RECEIPTS_DIR : PROFILES_DIR;
-  const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const randomSuffix = randomBytes(16).toString("hex");
-  const filename = `${safePrefix}-${Date.now()}-${randomSuffix}.${ext}`;
-  const filePath = join(targetDir, filename);
-
-  await Bun.write(filePath, buffer);
+  const dir = ensureDir(folder);
+  const filename = buildFilename(prefix, extensionFor(match[1]), randomHex());
+  await Bun.write(join(dir, filename), Buffer.from(match[2], "base64"));
 
   return {
     path: `/uploads/${folder}/${filename}`,
     filename,
   };
+}
+
+/** Byte acak dalam heksadesimal, lewat crypto global agar tidak butuh node:crypto. */
+function randomHex(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

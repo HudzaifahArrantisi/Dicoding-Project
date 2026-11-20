@@ -1,12 +1,17 @@
-import { readFile, readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+/**
+ * Indeks pengetahuan untuk Chat AI Admin.
+ *
+ * Seluruh dokumen dibundel saat build lewat apps/api/scripts/bundle-data.mjs.
+ * Versi lama memakai readdir dan readFile, yang tidak tersedia di Cloudflare
+ * Workers.
+ *
+ * Sumber tetap di ai/data/mainbrain/context_embeddings/. Setelah mengubahnya:
+ *   bun apps/api/scripts/bundle-data.mjs
+ */
+
 import { createHash } from "node:crypto";
 import { getStopwords } from "./word-loader";
-
-const dataDir = resolve(import.meta.dir, "../../../../../ai/data/mainbrain");
-const mainbrainDir = resolve(dataDir, "context_embeddings");
-const companyFile = resolve(dataDir, "corporate_knowledge/company_knowledge.json");
+import { bundled } from "../../generated/data";
 
 export interface AdminIndexedExcerpt {
   source: string;
@@ -21,8 +26,6 @@ interface AdminKnowledgeIndex {
 }
 
 let cachedIndex: AdminKnowledgeIndex | null = null;
-let lastIndexLoad = 0;
-const INDEX_TTL_MS = 60_000;
 
 function tokenize(text: string): string[] {
   const stopwords = getStopwords();
@@ -47,104 +50,88 @@ const SCIENTIFIC_ALIASES: Record<string, string[]> = {
   "sop": ["panduan", "prosedur", "langkah", "tata", "cara"],
 };
 
-async function buildAdminKnowledgeIndex(): Promise<AdminKnowledgeIndex> {
+/** Dokumen Markdown di ai/data/mainbrain/context_embeddings, terbundel saat build. */
+function markdownFiles(): Array<{ name: string; content: string }> {
+  return Object.entries(bundled.publicMarkdown)
+    .filter(([name]) => name.toLowerCase().endsWith(".md") && !name.toLowerCase().startsWith("readme"))
+    .map(([name, content]) => ({ name, content }));
+}
+
+function buildAdminKnowledgeIndex(): AdminKnowledgeIndex {
   const excerpts: AdminIndexedExcerpt[] = [];
   const terms = new Map<string, Map<number, number>>();
 
-  if (!existsSync(mainbrainDir)) {
-    return { excerpts, terms };
-  }
+  for (const { name, content } of markdownFiles()) {
+    const version = createHash("sha256").update(content).digest("hex").slice(0, 12);
 
-  const fileNames = await readdir(mainbrainDir);
-  const mdFiles = fileNames.filter((name) => name.endsWith(".md") && !name.toLowerCase().startsWith("readme"));
+    // Pisahkan per bagian (## atau ### atau \n---\n)
+    const rawSections = content.split(/(?=\n#{1,3}\s+)|\n\s*---\s*\n/);
+    for (const section of rawSections) {
+      const trimmed = section.trim();
+      if (trimmed.length < 50) continue;
 
-  for (const name of mdFiles) {
-    try {
-      const content = await readFile(resolve(mainbrainDir, name), "utf8");
-      const version = createHash("sha256").update(content).digest("hex").slice(0, 12);
+      const titleMatch = trimmed.match(/^#{1,3}\s+([^\n]+)/);
+      const title = titleMatch ? titleMatch[1].trim() : name;
 
-      // Split file by sections (## or ### or \n---\n)
-      const rawSections = content.split(/(?=\n#{1,3}\s+)|\n\s*---\s*\n/);
-      for (const section of rawSections) {
-        const trimmed = section.trim();
-        if (trimmed.length < 50) continue;
+      // Sampai 2500 karakter per bagian agar tabel dan daftar utuh.
+      const excerptText = trimmed.slice(0, 2500);
+      const id = excerpts.push({ source: name, version, title, excerpt: excerptText }) - 1;
 
-        // Extract title if present
-        const titleMatch = trimmed.match(/^#{1,3}\s+([^\n]+)/);
-        const title = titleMatch ? titleMatch[1].trim() : name;
-
-        // Take up to 2500 characters per section to preserve tables and complete lists
-        const excerptText = trimmed.slice(0, 2500);
-        const index = excerpts.push({
-          source: name,
-          version,
-          title,
-          excerpt: excerptText,
-        }) - 1;
-
-        const words = tokenize(excerptText);
-        for (const word of words) {
-          const postings = terms.get(word) ?? new Map<number, number>();
-          postings.set(index, (postings.get(index) ?? 0) + 1);
-          terms.set(word, postings);
-        }
+      for (const term of tokenize(`${title} ${excerptText}`)) {
+        const postings = terms.get(term) ?? new Map<number, number>();
+        postings.set(id, (postings.get(id) ?? 0) + 1);
+        terms.set(term, postings);
       }
-    } catch (err) {
-      console.warn(`[ADMIN KNOWLEDGE] Gagal membaca ${name}:`, err);
     }
   }
 
   return { excerpts, terms };
 }
 
-export async function getAdminKnowledgeIndex(): Promise<AdminKnowledgeIndex> {
-  const now = Date.now();
-  if (!cachedIndex || now - lastIndexLoad > INDEX_TTL_MS) {
-    cachedIndex = await buildAdminKnowledgeIndex();
-    lastIndexLoad = now;
-  }
+function getIndex(): AdminKnowledgeIndex {
+  cachedIndex ??= buildAdminKnowledgeIndex();
   return cachedIndex;
 }
 
-export async function searchAdminKnowledge(query: string, maxExcerpts = 5): Promise<AdminIndexedExcerpt[]> {
-  const index = await getAdminKnowledgeIndex();
-  const queryWords = tokenize(query);
-  const searchTerms = new Set<string>(queryWords);
-
-  // Expand with aliases
-  for (const word of queryWords) {
-    const expansions = SCIENTIFIC_ALIASES[word];
-    if (expansions) {
-      for (const exp of expansions) searchTerms.add(exp);
-    }
+/** Perluas istilah pencarian dengan alias domain agar istilah ilmiah ikut cocok. */
+function expandTerms(words: string[]): string[] {
+  const expanded = new Set(words);
+  for (const word of words) {
+    for (const alias of SCIENTIFIC_ALIASES[word] ?? []) expanded.add(alias);
   }
+  return [...expanded];
+}
+
+/**
+ * Bentuk async dipertahankan agar pemanggil tidak perlu berubah.
+ * Sebelumnya menunggu I/O disk; sekarang hanya membaca indeks yang sudah siap.
+ */
+export async function getAdminKnowledgeIndex(): Promise<AdminKnowledgeIndex> {
+  return getIndex();
+}
+
+export async function searchAdminKnowledge(query: string, maxExcerpts = 5): Promise<AdminIndexedExcerpt[]> {
+  const index = getIndex();
+  const words = expandTerms(tokenize(query));
 
   const scores = new Map<number, number>();
-  for (const term of searchTerms) {
+  for (const term of words) {
     const postings = index.terms.get(term);
     if (!postings) continue;
     for (const [docId, count] of postings) {
-      // Boost if term appears in title
-      const doc = index.excerpts[docId];
-      const titleBoost = doc.title.toLowerCase().includes(term) ? 3 : 1;
-      scores.set(docId, (scores.get(docId) ?? 0) + (count * titleBoost));
+      // Judul yang memuat istilah pencarian diberi bobot tiga kali.
+      const titleBoost = index.excerpts[docId].title.toLowerCase().includes(term) ? 3 : 1;
+      scores.set(docId, (scores.get(docId) ?? 0) + count * titleBoost);
     }
   }
 
-  const sorted = [...scores.entries()]
+  return [...scores.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, maxExcerpts)
     .map(([docId]) => index.excerpts[docId]);
-
-  return sorted;
 }
 
-export async function loadCompanyProfileAndSop() {
-  try {
-    if (existsSync(companyFile)) {
-      const raw = JSON.parse(await readFile(companyFile, "utf8")) as { company_profile?: unknown; sop_procedures?: unknown; business_rules?: unknown };
-      return raw;
-    }
-  } catch {}
-  return null;
+/** Mengembalikan seluruh isi berkas agar pemanggil memilih bagiannya sendiri. */
+export async function loadCompanyProfileAndSop(): Promise<unknown> {
+  return bundled.corporateKnowledge["company_knowledge.json"] ?? null;
 }

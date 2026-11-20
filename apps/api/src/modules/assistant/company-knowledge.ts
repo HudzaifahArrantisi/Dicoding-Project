@@ -1,48 +1,61 @@
-import { readFile, readdir } from "node:fs/promises";
-import { readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
-import { createHash } from "node:crypto";
 import { getStopwords, matchSopSelection, matchesWordPack, matchesWordPattern } from "./word-loader";
 import { assistantCopy } from "./assistant-copy";
 import { isStaleCatalogExcerpt } from "./retail-price-reply";
+import { bundled } from "../../generated/data";
 
-const dataDir = resolve(import.meta.dir, "../../../../../ai/data/mainbrain");
-const mainbrainDir = resolve(dataDir, "context_embeddings");
-const companyFile = resolve(dataDir, "corporate_knowledge/company_knowledge.json");
+/**
+ * Seluruh pengetahuan dibundel saat build lewat apps/api/scripts/bundle-data.mjs.
+ *
+ * Versi lama membaca disk dengan readFileSync, readdir, dan statSync. Ketiganya
+ * tidak tersedia di Cloudflare Workers, dan import.meta.dir juga tidak ada —
+ * mengevaluasinya di level modul menggagalkan impor seluruh aplikasi.
+ *
+ * Sumber tetap di ai/data/mainbrain/. Setelah mengubahnya, jalankan:
+ *   bun apps/api/scripts/bundle-data.mjs
+ */
+
 type RagPolicy = { version: string; approved_sources: string[]; max_documents: number; max_chars_per_document: number; max_excerpts: number; blocked_content_patterns: string[] };
-const ragPolicyFile = resolve(dataDir, "corporate_knowledge/rag_policy.json");
-let policyCache: { mtimeMs: number; policy: RagPolicy; approvedSources: Set<string>; blockedContent: RegExp[] } | null = null;
-let publicIndex: Promise<MainbrainIndex> | null = null;
 
-function currentPolicy() {
-  const mtimeMs = statSync(ragPolicyFile).mtimeMs;
-  if (!policyCache || policyCache.mtimeMs !== mtimeMs) {
-    const policy = JSON.parse(readFileSync(ragPolicyFile, "utf8")) as RagPolicy;
-    policyCache = {
-      mtimeMs, policy,
-      approvedSources: new Set(policy.approved_sources.filter((name) => name.endsWith(".public.md"))),
-      blockedContent: policy.blocked_content_patterns.map((pattern) => new RegExp(pattern, "i")),
-    };
-    publicIndex = null;
-  }
-  return policyCache;
+const policySource = bundled.corporateKnowledge["rag_policy.json"] as RagPolicy | undefined;
+if (!policySource) {
+  throw new Error("rag_policy.json tidak ada di data terbundel. Jalankan: bun apps/api/scripts/bundle-data.mjs");
 }
-const retrievalAliases = JSON.parse(readFileSync(resolve(dataDir, "../mega_data_word/dictionary/retrieval_aliases.json"), "utf8")) as {
+
+const policy: RagPolicy = policySource;
+const approvedSources = new Set(policy.approved_sources.filter((name) => name.endsWith(".public.md")));
+const blockedContent = policy.blocked_content_patterns.map((pattern) => new RegExp(pattern, "i"));
+
+/** Isi kebijakan tidak berubah selama proses hidup, jadi dihitung sekali. */
+function currentPolicy() {
+  return { policy, approvedSources, blockedContent };
+}
+
+const retrievalAliases = bundled.words.dictionary["retrieval_aliases.json"] as {
   version: string; aliases: Record<string, string[]>;
-};
+} | undefined;
+
+if (!retrievalAliases) {
+  throw new Error("retrieval_aliases.json tidak ada di data terbundel. Jalankan: bun apps/api/scripts/bundle-data.mjs");
+}
+
 export function filterRagDocuments(files: Array<{ name: string; content: string }>): Array<{ name: string; content: string }> {
-  const { approvedSources, blockedContent } = currentPolicy();
   return files.filter((file) => approvedSources.has(file.name) && !blockedContent.some((pattern) => pattern.test(file.content)));
 }
-const companyData: Promise<{ company_profile?: unknown; sop_procedures?: unknown }> = readFile(companyFile, "utf8")
-  .then((text) => JSON.parse(text)).catch(() => ({}));
+
+const companyData: Promise<{ company_profile?: unknown; sop_procedures?: unknown }> = Promise.resolve(
+  (bundled.corporateKnowledge["company_knowledge.json"] ?? {}) as { company_profile?: unknown; sop_procedures?: unknown },
+);
+
+let publicIndex: Promise<MainbrainIndex> | null = null;
+
 function getPublicIndex(): Promise<MainbrainIndex> {
-  const { policy, approvedSources } = currentPolicy();
-  publicIndex ??= readdir(mainbrainDir)
-    .then(async (names) => Promise.all(names.filter((name) => approvedSources.has(name)).slice(0, policy.max_documents)
-      .map(async (name) => ({ name, content: (await readFile(resolve(mainbrainDir, name), "utf8")).slice(0, policy.max_chars_per_document) }))))
+  publicIndex ??= Promise.resolve(
+    Object.entries(bundled.publicMarkdown)
+      .filter(([name]) => approvedSources.has(name))
+      .slice(0, policy.max_documents)
+      .map(([name, content]) => ({ name, content: content.slice(0, policy.max_chars_per_document) })),
+  )
     .then(filterRagDocuments)
-    .catch(() => [] as Array<{ name: string; content: string }>)
     .then(indexMainbrain);
   return publicIndex;
 }
