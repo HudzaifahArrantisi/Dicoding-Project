@@ -163,6 +163,7 @@ daisuki-inventory/
 ## Catatan Perubahan Harian (Daily Changelog)
 
 ### 2026-11-21
+- **URL API production web**: Menambahkan `apps/web/.env.production` berisi origin publik `https://api.daisuki.my.id` dan pengecualian `.gitignore` agar build Vite di Cloudflare memuatnya dari GitHub tanpa pengaturan dashboard tambahan. Berkas ini hanya berisi URL publik, bukan secret.
 - **Koneksi web ke API terpisah**: Klien API web kini mengarahkan fetch, Eden, event, dan URL gambar ke origin `VITE_API_URL` tanpa prefiks `/api` saat URL publik diisi; proxy `/api` lokal tetap dipakai untuk pengembangan. Panduan deploy diperbaiki dengan perintah Workers Builds yang benar dan kebutuhan host Bun untuk API. Typecheck web masih terhalang lima error yang sudah ada pada modul assistant API; `git diff --check` lulus.
 
 ### 2026-11-19
