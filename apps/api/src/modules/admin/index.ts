@@ -81,26 +81,29 @@ export const adminModule = new Elysia({ prefix: "/admin" })
 
       const page = Math.max(1, Math.min(10_000, Math.floor(Number(query.page) || 1)));
       const pageSize = Math.max(1, Math.min(100, Math.floor(Number(query.page_size) || 20)));
-      const [totalRow] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(orders)
-        .where(isNotNull(orders.shipped_at));
-      const rows = await db
-        .select({
-          id: orders.id,
-          order_no: orders.order_no,
-          partner_name: partners.name,
-          status: orders.status,
-          shipped_at: orders.shipped_at,
-          receipt_photo_data_url: orders.receipt_photo_data_url,
-          receipt_photo_present: sql<boolean>`${orders.receipt_photo_data_url} is not null`,
-        })
-        .from(orders)
-        .innerJoin(partners, eq(orders.partner_id, partners.id))
-        .where(isNotNull(orders.shipped_at))
-        .orderBy(desc(orders.shipped_at), desc(orders.id))
-        .limit(pageSize)
-        .offset((page - 1) * pageSize);
+      const [totalRows, rows] = await Promise.all([
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(orders)
+          .where(isNotNull(orders.shipped_at)),
+        db
+          .select({
+            id: orders.id,
+            order_no: orders.order_no,
+            partner_name: partners.name,
+            status: orders.status,
+            shipped_at: orders.shipped_at,
+            receipt_photo_data_url: orders.receipt_photo_data_url,
+            receipt_photo_present: sql<boolean>`${orders.receipt_photo_data_url} is not null`,
+          })
+          .from(orders)
+          .innerJoin(partners, eq(orders.partner_id, partners.id))
+          .where(isNotNull(orders.shipped_at))
+          .orderBy(desc(orders.shipped_at), desc(orders.id))
+          .limit(pageSize)
+          .offset((page - 1) * pageSize),
+      ]);
+      const totalRow = totalRows[0];
 
       const items = rows.length
         ? await db

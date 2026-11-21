@@ -105,7 +105,7 @@ function isAllowedOrigin(origin?: string | null): boolean {
   }
 }
 
-export const app = new Elysia({ aot: false })
+const routes = new Elysia({ aot: false })
   .onRequest(({ request, set }) => {
     (request as unknown as { _startTime?: number })._startTime = performance.now();
     set.headers["X-Content-Type-Options"] = "nosniff";
@@ -165,7 +165,7 @@ export const app = new Elysia({ aot: false })
       return { error: "Origin tidak diizinkan" };
     }
     const requestPath = new URL(request.url).pathname;
-    if (requestPath === "/auth/login" || requestPath === "/api/auth/login") return;
+    if (requestPath === "/auth/login" || requestPath === "/api/auth/login" || requestPath === "/v1/auth/login") return;
     const user = await getAuthUser(headers);
     if (!user) {
       set.status = 401;
@@ -238,5 +238,9 @@ export const app = new Elysia({ aot: false })
   .use(analysisModule)
   .use(regionModule)
   .use(assistantModule);
+
+export const app = new Elysia({ aot: false })
+  .use(routes)
+  .use(new Elysia({ prefix: "/v1" }).use(routes));
 
 export type App = typeof app;

@@ -1,23 +1,57 @@
 # Deploy Daisuki: Cloudflare Workers + Hugging Face
 
-Panduan ini memisahkan aplikasi menjadi tiga lapisan yang berdiri sendiri.
+Panduan ini memisahkan web, API, database, dan layanan model.
 
 ```mermaid
 flowchart LR
-    U["Pengguna"] --> CF["Cloudflare Workers<br/>apps/web"]
-    CF -->|"VITE_API_URL"| API["Kontainer<br/>apps/api"]
+    U["Browser pengguna"] -->|"HTML, JS, CSS"| WEB["Cloudflare Worker<br/>apps/web"]
+    U -->|"HTTPS /v1/*"| EDGE["Cloudflare edge<br/>api.daisuki.my.id"]
+    EDGE --> TUN["Cloudflare Tunnel<br/>cloudflared"]
+    TUN -->|"HTTP localhost:3001/v1/*"| API["Bun + Elysia<br/>apps/api di PC"]
     API --> DB[("Neon PostgreSQL")]
-    API -->|"RAG_BRIDGE_URL"| SP["HF Space<br/>model"]
-    API --> LLM["9Router LLM"]
-    JOB["HF Jobs<br/>training"] --> DB
+    API -->|"RAG_BRIDGE_URL bila diisi"| SP["HF Space<br/>model RAG"]
+    API -->|"Bila bridge kosong"| PY["Python worker lokal<br/>daisuki.pkl"]
+    API -->|"LLM_BASE_URL"| LLM["Layanan LLM"]
+    JOB["HF Jobs<br/>training terpisah"] --> DB
     JOB --> MR["Repo model"]
-    MR -.->|"/reload"| SP
+    MR -.->|"reload model"| SP
 ```
 
 **Mengapa dipisah:** Cloudflare Workers adalah runtime V8 tanpa Python, tanpa
 filesystem, dan tanpa proses panjang. Model `daisuki.pkl` memerlukan
 scikit-learn, dan pipeline training memerlukan filesystem. Keduanya tidak dapat
 berjalan di Workers.
+
+Browser memanggil API langsung pada `https://api.daisuki.my.id/v1/<path>`.
+Tunnel meneruskan path lengkap ke Bun; ia tidak menghapus `/v1`. API menerima
+rute `/v1` dan rute lama selama transisi. Saat ini `RAG_BRIDGE_URL` belum
+diisi, sehingga permintaan asisten memakai Python lokal, bukan HF Space.
+HF Jobs adalah pekerjaan training terpisah, bukan bagian dari setiap request.
+
+### Jika dashboard production terasa lambat
+
+Pada pemeriksaan 2026-11-21, satu permintaan publik `GET /admin/shipment-logs`
+memakan sekitar 6 detik dan `GET /orders` sekitar 2 detik. Angka ini hanya
+sampel, sehingga perlu dibandingkan dengan waktu query database dan waktu
+respons API lokal sebelum menetapkan penyebab. Di tab Network, matikan
+**Preserve log**, muat ulang halaman sekali, lalu urutkan menurut **Duration**.
+
+1. Bandingkan `http://localhost:3001/v1/health` dengan
+   `https://api.daisuki.my.id/v1/health`. Selisih yang besar menunjukkan bagian
+   jaringan, tunnel, atau koneksi PC yang perlu diperiksa.
+2. Untuk endpoint yang lambat, catat waktu tiap query SQL dan jalankan
+   `EXPLAIN (ANALYZE, BUFFERS)` pada query tersebut. Periksa lokasi region Neon
+   terhadap PC yang menjalankan Bun serta waktu sambungan setelah idle.
+3. Pada halaman Log pengiriman, query total dan halaman berjalan bersamaan.
+   Langkah berikutnya adalah meninjau indeks `orders.shipped_at` berdasarkan
+   hasil `EXPLAIN` dan memuat foto bukti hanya saat pengguna membuka detail.
+4. Query utama per tab sudah memakai syarat `enabled`. Periksa request global
+   dan invalidasi cache pada event `/events`; ukur apakah perubahan stok
+   memuat ulang endpoint yang tidak sedang terlihat. Sesuaikan masa segar
+   cache berdasarkan data yang memang perlu langsung diperbarui.
+5. Bila kelak model memakai HF Space, ukur waktu respons `/understand` dan
+   `/predict` secara terpisah dari dashboard biasa. Space gratis dapat tidur
+   ketika tidak dipakai, sehingga permintaan pertama bisa lebih lambat.
 
 ---
 
@@ -215,7 +249,9 @@ dashboard Cloudflare harus sama.
 
 Ini **build-time**, bukan runtime. Nilainya adalah origin API tanpa `/api` di
 akhir. API Elysia menyediakan `/auth/login` dan endpoint lain langsung pada
-root origin. Bila nilainya localhost, frontend memakai proxy Vite lokal `/api`.
+root origin serta `/v1/auth/login` dan endpoint lain pada prefix `/v1`.
+Frontend menambahkan `/v1` untuk API publik. Bila nilainya localhost, frontend
+memakai proxy Vite lokal `/api`.
 
 ```
 VITE_API_URL=https://api.daisuki.my.id

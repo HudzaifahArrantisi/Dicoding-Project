@@ -3,6 +3,7 @@ import type { App } from '../../../../api/src/index'
 import { env } from '@/env'
 
 export const API_BASE_PATH = '/api'
+const API_VERSION_PATH = '/v1'
 const PRODUCTION_API_ORIGIN = 'https://api.daisuki.my.id'
 
 function remoteApiOrigin(): string | null {
@@ -13,6 +14,11 @@ function remoteApiOrigin(): string | null {
     return import.meta.env.PROD ? PRODUCTION_API_ORIGIN : null
   }
   return url.origin
+}
+
+function remoteApiBase(): string | null {
+  const origin = remoteApiOrigin()
+  return origin ? `${origin}${API_VERSION_PATH}` : null
 }
 
 let csrfToken: string | null = null
@@ -35,18 +41,22 @@ export function getCsrfToken(): string | null {
 }
 
 /**
- * Normalizes any backend resource path, endpoint, or URL to use the single /api prefix,
- * preventing double prefixes (e.g. /api/api/orders -> /api/orders).
+ * Uses the local /api proxy in development and /v1 on the public API.
+ * Existing /api-prefixed callers keep working during the migration.
  */
 export function resolveApiPath(path: string): string {
   const remoteOrigin = remoteApiOrigin()
-  if (!path || path === '/') return remoteOrigin ?? API_BASE_PATH
+  const remoteBase = remoteApiBase()
+  if (!path || path === '/') return remoteBase ?? API_BASE_PATH
 
   if (path.startsWith('http://') || path.startsWith('https://')) {
     try {
       const url = new URL(path)
       if (remoteOrigin && url.origin === remoteOrigin) {
-        url.pathname = url.pathname.replace(/^(\/api)+(?=\/|$)/, '') || '/'
+        const pathname = url.pathname.replace(/^(\/api)+(?=\/|$)/, '') || '/'
+        url.pathname = pathname === API_VERSION_PATH || pathname.startsWith(`${API_VERSION_PATH}/`)
+          ? pathname
+          : `${API_VERSION_PATH}${pathname}`
         return url.toString()
       }
       const cleanPath = url.pathname.replace(/^(\/api)+/, API_BASE_PATH)
@@ -66,14 +76,15 @@ export function resolveApiPath(path: string): string {
     clean = `/${clean}`
   }
 
+  clean = clean.replace(/^\/v1(?=\/|$)/, '') || '/'
   // Prevent double/multiple prefix: /api/api/orders -> /api/orders
   clean = clean.replace(/^(\/api)+/, API_BASE_PATH)
 
   const localPath = clean === API_BASE_PATH || clean.startsWith(`${API_BASE_PATH}/`)
     ? clean
     : `${API_BASE_PATH}${clean}`
-  return remoteOrigin
-    ? `${remoteOrigin}${localPath.slice(API_BASE_PATH.length) || '/'}`
+  return remoteBase
+    ? `${remoteBase}${localPath.slice(API_BASE_PATH.length) || '/'}`
     : localPath
 }
 
@@ -85,7 +96,7 @@ export function resolveApiUrl(path?: string): string {
   if (path) {
     return resolveApiPath(path)
   }
-  return remoteApiOrigin() ?? API_BASE_PATH
+  return remoteApiBase() ?? API_BASE_PATH
 }
 
 /**
