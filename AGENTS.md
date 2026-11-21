@@ -168,6 +168,8 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-21
+- **Fallback origin API pada build production**: Klien web memakai `https://api.daisuki.my.id` bila bundel production menerima URL API localhost dari env build. Bundel yang aktif sebelumnya masih memuat `localhost:3001`, sehingga login publik mengarah ke `/api/auth/login` dan gagal 404.
+- **Validasi log pengiriman Admin**: Endpoint `GET /admin/shipment-logs` menerima `page_size` yang dikirim web dan membatasi nilainya ke 1–100, sehingga permintaan daftar pengiriman tidak lagi gagal 422.
 - **URL API production web**: Menambahkan `apps/web/.env.production` berisi origin publik `https://api.daisuki.my.id` dan pengecualian `.gitignore` agar build Vite di Cloudflare memuatnya dari GitHub tanpa pengaturan dashboard tambahan. Berkas ini hanya berisi URL publik, bukan secret.
 - **Koneksi web ke API terpisah**: Klien API web kini mengarahkan fetch, Eden, event, dan URL gambar ke origin `VITE_API_URL` tanpa prefiks `/api` saat URL publik diisi; proxy `/api` lokal tetap dipakai untuk pengembangan. Panduan deploy diperbaiki dengan perintah Workers Builds yang benar dan kebutuhan host Bun untuk API. Typecheck web masih terhalang lima error yang sudah ada pada modul assistant API; `git diff --check` lulus.
 

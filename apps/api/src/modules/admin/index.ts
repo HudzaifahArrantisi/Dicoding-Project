@@ -80,7 +80,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
       }
 
       const page = Math.max(1, Math.min(10_000, Math.floor(Number(query.page) || 1)));
-      const pageSize = 20;
+      const pageSize = Math.max(1, Math.min(100, Math.floor(Number(query.page_size) || 20)));
       const [totalRow] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(orders)
@@ -128,7 +128,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         page_size: pageSize,
       };
     },
-    { query: t.Object({ page: t.Optional(t.String()) }) },
+    { query: t.Object({ page: t.Optional(t.String()), page_size: t.Optional(t.String()) }) },
   )
   .get(
     "/partners",

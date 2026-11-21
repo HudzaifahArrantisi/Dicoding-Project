@@ -3,12 +3,15 @@ import type { App } from '../../../../api/src/index'
 import { env } from '@/env'
 
 export const API_BASE_PATH = '/api'
+const PRODUCTION_API_ORIGIN = 'https://api.daisuki.my.id'
 
 function remoteApiOrigin(): string | null {
   const configured = env.VITE_API_URL
   if (!configured) return null
   const url = new URL(configured)
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return null
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return import.meta.env.PROD ? PRODUCTION_API_ORIGIN : null
+  }
   return url.origin
 }
 
