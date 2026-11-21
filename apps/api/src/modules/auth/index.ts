@@ -81,7 +81,7 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
       isValid = false;
     }
 
-    if (!isValid || (process.env.NODE_ENV === "production" && user.email.endsWith("@daisuki.test"))) {
+    if (!isValid) {
       failedLogin([attemptKey, ipKey]);
       set.status = 401;
       return { error: "Email atau password salah" };

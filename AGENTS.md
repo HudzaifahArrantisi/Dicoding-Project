@@ -168,6 +168,7 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-21
+- **Login akun terdaftar dan demo**: Menghapus penolakan khusus `@daisuki.test` pada API mode production; autentikasi tetap memverifikasi hash password dan status mitra. Tombol Admin Pusat memakai email demo lengkap yang ada di database. Login admin demo diuji melalui API lokal serta `api.daisuki.my.id` dan keduanya menghasilkan HTTP 200; password salah tetap HTTP 401. Akun demo memakai kredensial yang tercantum di halaman login, sehingga deployment dengan data nyata harus memakai database terpisah tanpa akun demo.
 - **Fallback origin API pada build production**: Klien web memakai `https://api.daisuki.my.id` bila bundel production menerima URL API localhost dari env build. Bundel yang aktif sebelumnya masih memuat `localhost:3001`, sehingga login publik mengarah ke `/api/auth/login` dan gagal 404.
 - **Validasi log pengiriman Admin**: Endpoint `GET /admin/shipment-logs` menerima `page_size` yang dikirim web dan membatasi nilainya ke 1–100, sehingga permintaan daftar pengiriman tidak lagi gagal 422.
 - **URL API production web**: Menambahkan `apps/web/.env.production` berisi origin publik `https://api.daisuki.my.id` dan pengecualian `.gitignore` agar build Vite di Cloudflare memuatnya dari GitHub tanpa pengaturan dashboard tambahan. Berkas ini hanya berisi URL publik, bukan secret.

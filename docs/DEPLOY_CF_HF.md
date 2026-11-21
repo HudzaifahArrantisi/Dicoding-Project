@@ -245,6 +245,10 @@ Pasang `WEB_ORIGIN=https://daisuki.my.id` pada host API dan uji
 
 ## FASE 4 — Verifikasi end-to-end
 
+Akun demo dari `neon/init.sql` dapat digunakan untuk uji login jika database
+khusus demo dipakai. Kredensial demo tersedia di halaman login; jangan arahkan
+API publik yang mengaktifkannya ke database berisi data nyata.
+
 | Uji | Harapan |
 |---|---|
 | Buka web | Halaman login tampil |
