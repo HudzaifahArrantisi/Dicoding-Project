@@ -206,27 +206,40 @@ Tidak boleh ada proses Python yang berjalan di dalam kontainer.
 
 ## FASE 3 — Web ke Cloudflare Workers
 
-### 3.1 Ganti nama Worker
+### 3.1 Nama Worker
 
-Ubah `name` di `apps/web/wrangler.jsonc` dari `tanstack-start-app` menjadi nama
-yang sebenarnya.
+`apps/web/wrangler.jsonc` memakai nama `daisuki-inventory`. Nama Worker di
+dashboard Cloudflare harus sama.
 
 ### 3.2 Set `VITE_API_URL` di dashboard Cloudflare
 
-Ini **build-time**, bukan runtime. Di `apps/web/src/lib/api/client.ts`, bila
-nilai mengandung `localhost`, frontend jatuh ke path relatif `/api` yang tidak
-punya backend di Workers.
+Ini **build-time**, bukan runtime. Nilainya adalah origin API tanpa `/api` di
+akhir. API Elysia menyediakan `/auth/login` dan endpoint lain langsung pada
+root origin. Bila nilainya localhost, frontend memakai proxy Vite lokal `/api`.
 
 ```
-VITE_API_URL=https://api.domainanda.com
+VITE_API_URL=https://api.daisuki.my.id
 ```
 
 ### 3.3 Build dan deploy
 
+Untuk Cloudflare Workers Builds yang tersambung ke root monorepo, kosongkan
+Build command dan isi Deploy command dengan:
+
 ```bash
-bun --cwd apps/web run build
-bun --cwd apps/web run deploy
+cd apps/web && bun run deploy
 ```
+
+Perintah ini membangun web dan langsung menjalankan Wrangler dari direktori
+yang memuat `wrangler.jsonc`. Jangan gunakan `bun --cwd apps/web run deploy` pada
+Workers Builds; pada lingkungan build tersebut perintah itu hanya mencetak
+bantuan Bun tanpa menjalankan script.
+
+API tetap harus berjalan terpisah pada host yang mendukung Bun dan volume
+persisten untuk unggahan. `apps/api/src/modules/auth/index.ts` memakai
+`Bun.password.verify`, sehingga Worker V8 biasa belum dapat melayani login.
+Pasang `WEB_ORIGIN=https://daisuki.my.id` pada host API dan uji
+`https://api.daisuki.my.id/health` sebelum membangun ulang web.
 
 ---
 

@@ -4,6 +4,14 @@ import { env } from '@/env'
 
 export const API_BASE_PATH = '/api'
 
+function remoteApiOrigin(): string | null {
+  const configured = env.VITE_API_URL
+  if (!configured) return null
+  const url = new URL(configured)
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return null
+  return url.origin
+}
+
 let csrfToken: string | null = null
 let sessionVersion = 0
 
@@ -28,11 +36,16 @@ export function getCsrfToken(): string | null {
  * preventing double prefixes (e.g. /api/api/orders -> /api/orders).
  */
 export function resolveApiPath(path: string): string {
-  if (!path || path === '/') return API_BASE_PATH
+  const remoteOrigin = remoteApiOrigin()
+  if (!path || path === '/') return remoteOrigin ?? API_BASE_PATH
 
   if (path.startsWith('http://') || path.startsWith('https://')) {
     try {
       const url = new URL(path)
+      if (remoteOrigin && url.origin === remoteOrigin) {
+        url.pathname = url.pathname.replace(/^(\/api)+(?=\/|$)/, '') || '/'
+        return url.toString()
+      }
       const cleanPath = url.pathname.replace(/^(\/api)+/, API_BASE_PATH)
       if (!cleanPath.startsWith(API_BASE_PATH)) {
         url.pathname = `${API_BASE_PATH}${cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`}`
@@ -53,32 +66,23 @@ export function resolveApiPath(path: string): string {
   // Prevent double/multiple prefix: /api/api/orders -> /api/orders
   clean = clean.replace(/^(\/api)+/, API_BASE_PATH)
 
-  if (clean === API_BASE_PATH || clean.startsWith(`${API_BASE_PATH}/`)) {
-    return clean
-  }
-
-  return `${API_BASE_PATH}${clean}`
+  const localPath = clean === API_BASE_PATH || clean.startsWith(`${API_BASE_PATH}/`)
+    ? clean
+    : `${API_BASE_PATH}${clean}`
+  return remoteOrigin
+    ? `${remoteOrigin}${localPath.slice(API_BASE_PATH.length) || '/'}`
+    : localPath
 }
 
 /**
  * Resolves the base URL or resource path for API requests.
- * In the browser, returns relative `/api` to route through the single origin base path.
+ * Uses the public API origin when configured, and the local Vite proxy otherwise.
  */
 export function resolveApiUrl(path?: string): string {
   if (path) {
     return resolveApiPath(path)
   }
-
-  if (
-    env.VITE_API_URL &&
-    !env.VITE_API_URL.includes('localhost') &&
-    !env.VITE_API_URL.includes('127.0.0.1')
-  ) {
-    const base = env.VITE_API_URL.replace(/\/+$/, '')
-    return base.endsWith(API_BASE_PATH) ? base : `${base}${API_BASE_PATH}`
-  }
-
-  return API_BASE_PATH
+  return remoteApiOrigin() ?? API_BASE_PATH
 }
 
 /**

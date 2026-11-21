@@ -162,6 +162,9 @@ daisuki-inventory/
 
 ## Catatan Perubahan Harian (Daily Changelog)
 
+### 2026-11-21
+- **Koneksi web ke API terpisah**: Klien API web kini mengarahkan fetch, Eden, event, dan URL gambar ke origin `VITE_API_URL` tanpa prefiks `/api` saat URL publik diisi; proxy `/api` lokal tetap dipakai untuk pengembangan. Panduan deploy diperbaiki dengan perintah Workers Builds yang benar dan kebutuhan host Bun untuk API. Typecheck web masih terhalang lima error yang sudah ada pada modul assistant API; `git diff --check` lulus.
+
 ### 2026-11-19
 - **Berkas setup deploy Cloudflare Workers dan Hugging Face**: Menambahkan folder `deploy/` berisi empat berkas Space (`app.py`, `Dockerfile`, `requirements.txt`, `README.md`), tiga berkas HF Jobs (`Dockerfile`, `requirements.txt`, `run-pipeline.sh`), dan `prepare.mjs` yang menyalin modul Python dari `ai/` ke folder staging sehingga `ai/` tetap menjadi satu-satunya sumber kebenaran. Bridge Space menyediakan `GET /health`, `POST /predict`, `POST /understand`, dan `POST /reload` dengan autentikasi Bearer opsional; `/reload` mengunduh `daisuki.pkl` terbaru dari repo model sebelum memuat ulang. `run-pipeline.sh` menjalankan tujuh job secara berurutan memakai `DAISUKI_ANALYSIS_RUN_ID`, memvalidasi bahwa model benar-benar terbentuk, lalu mengunggahnya ke repo model lengkap dengan arsip per versi. `scikit-learn==1.7.2` dan `numpy==2.2.6` di-pin sesuai `ai/.venv` agar unpickle tidak gagal. Panduan langkah demi langkah ditulis di [docs/DEPLOY_CF_HF.md](docs/DEPLOY_CF_HF.md); `deploy/.staging/` diabaikan Git karena memuat salinan model dan PDF. Runtime belum diuji karena eksekusi perintah diblokir pada sesi ini.
 - **Perbaikan POST /analysis/runs gagal pada agregator mingguan**: Mengoreksi typo kolom `ps.poar_level` menjadi `ps.par_level` pada query stok mitra di `weekly_analytics_aggregator.py`. Error PostgreSQL `UndefinedColumn` terjadi sebelum laporan dan training dibuat.
