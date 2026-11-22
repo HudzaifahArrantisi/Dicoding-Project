@@ -163,6 +163,7 @@ daisuki-inventory/
 ## Catatan Perubahan Harian (Daily Changelog)
 
 ### 2026-11-22
+- **Pesan fallback chat produksi**: Chat Mitra tidak lagi menyebut AI lokal timeout atau seluruh server terganggu ketika penyedia LLM menolak permintaan; data cabang tetap ditampilkan dengan keterangan bahwa jawaban generatif belum tersedia. Log backend memakai label endpoint LLM umum. Uji produksi sebelumnya menunjukkan Command Code mengembalikan HTTP 403 sementara model KV dan chat tetap berfungsi.
 - **Migrasi API dan inferensi model ke Cloudflare Worker**: API memakai koneksi PostgreSQL per permintaan Worker, bcrypt via PostgreSQL, unggahan di Neon, dan model classifier/retrieval JSON privat di Workers KV. Sebanyak 103 akun demo dimigrasikan dari Argon2 tanpa mengganti kata sandi. Staging dan Worker produksi diuji untuk health, login, data dashboard, unggahan, dan chat. Route `api.daisuki.my.id/*` telah aktif; health, login, sesi, metrik, dan logout diuji melalui domain publik dengan HTTP 200. Alur baru dijelaskan di `docs/DEPLOY_CF_FREE.md`; training Python dan endpoint analisis yang bergantung proses lokal masih memerlukan komputasi terpisah.
 
 ### 2026-11-21

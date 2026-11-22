@@ -293,7 +293,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
         ? { ...answerMitraQuestion(message), reply: knowledge.documents.map((doc) => doc.excerpt).join("\n\n---\n\n") }
         : { ...answerMitraQuestion(message), reply: /\b(?:hi|hai|halo|selamat\s+(?:pagi|siang|sore|malam)|apa\s*kabar|apaokabar|tes|test|ping)\b/i.test(message)
           ? `Halo${context.partner?.name ? `, ${context.partner.name}` : ""}! Kabar saya baik dan siap membantu. Ada yang ingin kamu tanyakan atau bahas hari ini?`
-          : "Maaf, server sedang gangguan. Silakan coba lagi beberapa saat." };
+          : "Maaf, saya belum dapat menjawab pertanyaan itu saat ini." };
     const visualization = wantsStockChart && !refused
       ? {
           type: "bar" as const,
@@ -342,21 +342,21 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
           (!identityQuestion || relaxedChat || /\bDaisuki\b/i.test(llmReply)),
         );
       } catch (error) {
-        console.warn("[ASSISTANT] Jawaban 9Router tidak dapat digunakan", error instanceof Error ? error.message : "Error");
+        console.warn("[ASSISTANT] Jawaban LLM tidak dapat digunakan", error instanceof Error ? error.message : "Error");
       }
     }
     const llmStatus = getLastLlmStatus();
-    const timeoutReply = visualization
+    const unavailableReply = visualization
       ? chartFallback.reply
       : hasLocalTopic
-      ? `Maaf, server sedang gangguan (koneksi AI lokal sedang timeout). Berikut data langsung dari sistem cabang Anda:\n\n${fallback.reply}`
-      : "Maaf, server sedang gangguan (koneksi ke server AI sedang timeout). Silakan coba lagi beberapa saat.";
+      ? `Jawaban AI generatif belum tersedia. Berikut data dari sistem cabang Anda:\n\n${fallback.reply}`
+      : "Maaf, jawaban AI generatif belum tersedia saat ini. Coba lagi nanti.";
     const response = refused
       ? fallback
       : grounded && llmReply
         ? { ...fallback, reply: llmReply }
         : llmStatus === "timeout" || llmStatus === "error"
-          ? { ...chartFallback, reply: timeoutReply }
+          ? { ...chartFallback, reply: unavailableReply }
           : chartFallback;
     const source = grounded ? "llm" : "fallback";
     const ranked = [...model.predictions].sort((a, b) => {

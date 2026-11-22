@@ -99,7 +99,7 @@ export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }:
       lastLlmStatus = "ok";
       return content;
     } catch (error) {
-      console.warn(`[ASSISTANT] 9Router ${index === 0 ? "lokal" : "tunnel"} gagal:`, error instanceof Error ? error.message : "Error");
+      console.warn(`[ASSISTANT] LLM endpoint ${index + 1} gagal:`, error instanceof Error ? error.message : "Error");
       if (error instanceof Error && error.message === "LLM timeout") {
         lastLlmStatus = "timeout";
         continue;
