@@ -6,6 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "kv_namespaces": [{ "binding": "DAISUKI_MODEL", "id": "b935acaac9e34d93b1aa23f479e624db" }],
   "vars": {
+    "LLM_BASE_URL": "https://api.commandcode.ai/provider/v1",
+    "LLM_ENABLED": "true",
+    "LLM_MODEL": "recursive/flint-v1.0:free",
     "NODE_ENV": "production",
     "WEB_ORIGIN": "https://daisuki.my.id"
   },
