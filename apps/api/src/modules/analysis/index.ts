@@ -5,6 +5,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { analysisRuns, auditLogs, users } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
+import { hashPassword } from "../../lib/password";
 import { dataScienceRunDir, workspaceRoot } from "../../lib/analysis-artifacts";
 import { approveAnalysisRun, createAnalysisDraft, listAnalysisRuns, processAnalysisRun, rollbackAnalysisRun } from "../../lib/analysis-runs";
 import { deleteAdminRawReference, getActiveRunId, listRawReferences, loadArtifact, saveRawReference } from "../../lib/analysis-storage";
@@ -182,7 +183,7 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
     if (user.role !== "admin") { set.status = 403; return { error: "Hanya Admin dapat membuat akun tim" }; }
-    const hash = await Bun.password.hash(body.password);
+    const hash = await hashPassword(body.password);
     const [created] = await db.insert(users).values({
       email: body.email.toLowerCase().trim(), full_name: body.full_name.trim(),
       password_hash: hash, role: body.role, partner_id: null,

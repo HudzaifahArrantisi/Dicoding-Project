@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ModelRecord } from "./context";
 import { activeArtifact, workspaceRoot } from "../../lib/analysis-artifacts";
+import { currentModelKv, sql } from "../../db/client";
+import { predictWorkerClassifier, searchWorkerAnalysisRetrieval, searchWorkerRawRetrieval, searchWorkerRetrieval, stockRiskText, type WorkerClassifierBundle } from "./worker-classifier";
 
 export interface ModelPrediction {
   product_id: string;
@@ -44,7 +46,8 @@ const hasPythonRuntime = typeof Bun !== "undefined" && typeof Bun.spawn === "fun
 
 let currentWorker: Worker | null = null;
 let lastWorkerFailureTime = 0;
-let bridgeWarningLogged = false;
+let cachedWorkerBundle: WorkerClassifierBundle | null = null;
+let lastBundleCheck = 0;
 const FAILURE_COOLDOWN_MS = 30_000;
 const COLD_WORKER_TIMEOUT_MS = 30_000;
 const READY_WORKER_TIMEOUT_MS = 8_000;
@@ -116,6 +119,51 @@ function createRemoteWorker(): Worker {
         retrieval_ready: result.retrieval_ready,
         raw_retrieval_ready: result.raw_retrieval_ready,
         risk_available: result.risk_available,
+      };
+    },
+  };
+  return client;
+}
+
+async function loadWorkerBundle(): Promise<WorkerClassifierBundle | null> {
+  if (Date.now() - lastBundleCheck < 60_000) return cachedWorkerBundle;
+  const kv = currentModelKv();
+  if (kv) {
+    const payload = await kv.get("daisuki", "json") as WorkerClassifierBundle | null;
+    cachedWorkerBundle = payload?.format_version === 1 ? payload : null;
+  } else {
+    const [row] = await sql<{ payload: WorkerClassifierBundle }[]>`
+      select payload from worker_model_artifacts where name = 'daisuki' limit 1
+    `;
+    cachedWorkerBundle = row?.payload?.format_version === 1 ? row.payload : null;
+  }
+  lastBundleCheck = Date.now();
+  return cachedWorkerBundle;
+}
+
+export function createInlineWorker(): Worker {
+  const client: Worker = {
+    isDead: false,
+    stop() { client.isDead = true; },
+    async send(records, message, partnerId, adminAccess = false) {
+      if (client.isDead) throw new Error("Model Worker tidak aktif");
+      const bundle = await loadWorkerBundle();
+      if (!bundle) return { available: false, predictions: [] };
+      const predictions = bundle.risk ? records.map((record) => {
+        const prediction = predictWorkerClassifier(bundle.risk!, stockRiskText(record));
+        return { product_id: record.product_id, label: prediction.label as ModelPrediction["label"], confidence: prediction.confidence };
+      }) : [];
+      return {
+        available: true,
+        predictions,
+        intent: message ? predictWorkerClassifier(bundle.intent, message) : null,
+        identity: bundle.metadata as ModelIdentity,
+        documents: message ? searchWorkerRetrieval(bundle.retrieval, message) as ModelResult["documents"] : [],
+        raw_documents: adminAccess && message ? searchWorkerRawRetrieval(bundle.raw_retrieval, message) as ModelResult["raw_documents"] : [],
+        analysis_documents: partnerId && message ? searchWorkerAnalysisRetrieval(bundle.analysis_retrieval, partnerId, message) as ModelResult["analysis_documents"] : [],
+        retrieval_ready: !!bundle.retrieval?.documents.length,
+        raw_retrieval_ready: adminAccess && !!bundle.raw_retrieval?.documents.length,
+        risk_available: !!bundle.risk,
       };
     },
   };
@@ -246,11 +294,8 @@ function getOrStartWorker(): Worker | null {
     return currentWorker;
   }
   if (!hasPythonRuntime) {
-    if (!bridgeWarningLogged) {
-      bridgeWarningLogged = true;
-      console.warn("[ASSISTANT] Tanpa Bun.spawn dan tanpa RAG_BRIDGE_URL: fitur model dimatikan. Isi RAG_BRIDGE_URL ke HF Space.");
-    }
-    return null;
+    if (!currentWorker || currentWorker.isDead) currentWorker = createInlineWorker();
+    return currentWorker;
   }
   if (currentWorker && !currentWorker.isDead) return currentWorker;
   if (Date.now() - lastWorkerFailureTime < FAILURE_COOLDOWN_MS) {
@@ -314,7 +359,9 @@ export function warmMitraModelWorker(): void {
     return;
   }
   if (!hasPythonRuntime) {
-    console.warn("[ASSISTANT] Bun.spawn tidak tersedia di runtime ini. Isi RAG_BRIDGE_URL agar asisten memakai model dari Hugging Face.");
+    void loadWorkerBundle().then((bundle) => {
+      console.log(`[ASSISTANT MODEL] ${bundle ? "Siap dari Neon" : "Belum ada artefak Worker di Neon"}`);
+    }).catch((error) => console.warn("[ASSISTANT] Gagal memuat model Worker:", error instanceof Error ? error.message : "Error"));
     return;
   }
   try {
@@ -339,6 +386,8 @@ export function stopMitraModelWorker(): void {
 export function reloadMitraModelWorker(): void {
   stopMitraModelWorker();
   lastWorkerFailureTime = 0;
+  cachedWorkerBundle = null;
+  lastBundleCheck = 0;
   if (BRIDGE_URL) {
     // Space memuat ulang daisuki.pkl terbaru dari Model repo sebelum melayani lagi.
     void fetch(`${BRIDGE_URL}/reload`, { method: "POST", headers: bridgeHeaders() })

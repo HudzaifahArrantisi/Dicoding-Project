@@ -162,6 +162,9 @@ daisuki-inventory/
 
 ## Catatan Perubahan Harian (Daily Changelog)
 
+### 2026-11-22
+- **Migrasi API dan inferensi model ke Cloudflare Worker**: API memakai koneksi PostgreSQL per permintaan Worker, bcrypt via PostgreSQL, unggahan di Neon, dan model classifier/retrieval JSON privat di Workers KV. Sebanyak 103 akun demo dimigrasikan dari Argon2 tanpa mengganti kata sandi. Staging dan Worker produksi diuji untuk health, login, data dashboard, unggahan, dan chat. Alur baru dijelaskan di `docs/DEPLOY_CF_FREE.md`; training Python dan endpoint analisis yang bergantung proses lokal masih memerlukan komputasi terpisah. Route domain masih menunggu autentikasi ulang Wrangler.
+
 ### 2026-11-21
 - **Rute API publik `/v1` dan respons dashboard**: API Elysia menyediakan semua endpoint di `/v1` sambil mempertahankan rute lama selama transisi; klien web production mengarahkan permintaan ke `https://api.daisuki.my.id/v1`, sedangkan proxy lokal tetap `/api`. Query total dan halaman log pengiriman Admin kini berjalan bersamaan. Panduan deploy menjelaskan alur Cloudflare Tunnel, Bun, Neon, dan Hugging Face serta langkah mengukur kelambatan dashboard. Endpoint publik `/v1/health`, `/v1/auth/login`, `/v1/me`, dan `/v1/admin/shipment-logs` diuji berhasil; bundel web production perlu diterbitkan ulang agar browser memakai `/v1`.
 - **Login akun terdaftar dan demo**: Menghapus penolakan khusus `@daisuki.test` pada API mode production; autentikasi tetap memverifikasi hash password dan status mitra. Tombol Admin Pusat memakai email demo lengkap yang ada di database. Login admin demo diuji melalui API lokal serta `api.daisuki.my.id` dan keduanya menghasilkan HTTP 200; password salah tetap HTTP 401. Akun demo memakai kredensial yang tercantum di halaman login, sehingga deployment dengan data nyata harus memakai database terpisah tanpa akun demo.

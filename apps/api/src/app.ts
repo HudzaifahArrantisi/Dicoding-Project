@@ -21,7 +21,7 @@ import { db } from "./db/client";
 import { orders, partners } from "./db/schema";
 import { getAuthUser, validCsrf } from "./plugins/auth";
 import { isTransientDatabaseError } from "./lib/db-retry";
-import { uploadsDir } from "./lib/storage";
+import { getUploadedFile, uploadsDir } from "./lib/storage";
 import { authModule, meModule } from "./modules/auth";
 import { stocksModule, productsModule } from "./modules/stocks";
 import { ordersModule } from "./modules/orders";
@@ -139,11 +139,10 @@ const routes = new Elysia({ aot: false })
       set.status = code === "VALIDATION" ? 422 : 400;
       return { error: "Data permintaan tidak valid" };
     }
-    if (code === "UNKNOWN" || code === "INTERNAL_SERVER_ERROR") {
-      const temporaryDatabaseFailure = isTransientDatabaseError(error);
-      set.status = temporaryDatabaseFailure ? 503 : 500;
-      return { error: temporaryDatabaseFailure ? "Koneksi database sedang terganggu. Coba lagi sebentar." : "Terjadi gangguan server" };
-    }
+    if (code === "NOT_FOUND") return;
+    const temporaryDatabaseFailure = isTransientDatabaseError(error);
+    set.status = temporaryDatabaseFailure ? 503 : 500;
+    return { error: temporaryDatabaseFailure ? "Koneksi database sedang terganggu. Coba lagi sebentar." : "Terjadi gangguan server" };
   })
   .use(
     cors({
@@ -216,15 +215,20 @@ const routes = new Elysia({ aot: false })
       set.status = 404;
       return "File tidak ditemukan";
     }
-    const file = Bun.file(safePath);
-    const exists = await file.exists();
-    if (!exists) {
+    set.headers["Cache-Control"] = "private, no-store";
+    set.headers["X-Content-Type-Options"] = "nosniff";
+    if (typeof Bun !== "undefined" && typeof Bun.file === "function") {
+      const file = Bun.file(safePath);
+      if (await file.exists()) return file;
+    }
+    const stored = await getUploadedFile(storedPath);
+    if (!stored) {
       set.status = 404;
       return "File tidak ditemukan";
     }
-    set.headers["Cache-Control"] = "private, no-store";
-    set.headers["X-Content-Type-Options"] = "nosniff";
-    return file;
+    return new Response(new Uint8Array(stored.content), {
+      headers: { "Content-Type": stored.mimeType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
+    });
   })
   .use(authModule)
   .use(meModule)

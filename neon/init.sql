@@ -138,6 +138,22 @@ create table if not exists raw_references (
 );
 create index if not exists raw_references_created_idx on raw_references (created_at desc);
 
+create table if not exists uploaded_files (
+  path text primary key,
+  mime_type text not null check (mime_type in ('image/jpeg', 'image/png', 'image/webp')),
+  size_bytes integer not null check (size_bytes > 0 and size_bytes <= 700000),
+  content bytea not null,
+  created_at timestamptz not null default now(),
+  constraint uploaded_files_path check (path ~ '^/uploads/(receipts|profiles)/[A-Za-z0-9_-]+[.](jpg|png|webp)$')
+);
+
+create table if not exists worker_model_artifacts (
+  name text primary key,
+  payload jsonb not null,
+  updated_at timestamptz not null default now(),
+  constraint worker_model_name check (name = 'daisuki')
+);
+
 create table if not exists analysis_run_artifacts (
   run_id uuid not null references analysis_runs(id) on delete cascade,
   file_name text not null,

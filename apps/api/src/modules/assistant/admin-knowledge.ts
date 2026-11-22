@@ -132,6 +132,7 @@ export async function searchAdminKnowledge(query: string, maxExcerpts = 5): Prom
 }
 
 /** Mengembalikan seluruh isi berkas agar pemanggil memilih bagiannya sendiri. */
-export async function loadCompanyProfileAndSop(): Promise<unknown> {
-  return bundled.corporateKnowledge["company_knowledge.json"] ?? null;
+export async function loadCompanyProfileAndSop(): Promise<{ company_profile?: unknown; sop_procedures?: unknown; business_rules?: unknown } | null> {
+  const data = bundled.corporateKnowledge["company_knowledge.json"];
+  return data && typeof data === "object" ? data : null;
 }

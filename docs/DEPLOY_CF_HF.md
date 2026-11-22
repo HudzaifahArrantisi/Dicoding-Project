@@ -1,5 +1,7 @@
 # Deploy Daisuki: Cloudflare Workers + Hugging Face
 
+> Panduan ini menggambarkan rancangan lama yang memakai Cloudflare Tunnel dan Bun di PC. Untuk jalur produksi API Worker tanpa laptop, lihat [DEPLOY_CF_FREE.md](DEPLOY_CF_FREE.md). Rute domain produksi baru aktif setelah konfigurasi Worker diterbitkan.
+
 Panduan ini memisahkan web, API, database, dan layanan model.
 
 ```mermaid

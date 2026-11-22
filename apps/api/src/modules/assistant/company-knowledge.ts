@@ -2,6 +2,7 @@ import { getStopwords, matchSopSelection, matchesWordPack, matchesWordPattern } 
 import { assistantCopy } from "./assistant-copy";
 import { isStaleCatalogExcerpt } from "./retail-price-reply";
 import { bundled } from "../../generated/data";
+import { createHash } from "node:crypto";
 
 /**
  * Seluruh pengetahuan dibundel saat build lewat apps/api/scripts/bundle-data.mjs.
@@ -30,13 +31,14 @@ function currentPolicy() {
   return { policy, approvedSources, blockedContent };
 }
 
-const retrievalAliases = bundled.words.dictionary["retrieval_aliases.json"] as {
+const retrievalAliases = bundled.words.dictionary["retrieval_aliases.json"] as unknown as {
   version: string; aliases: Record<string, string[]>;
 } | undefined;
 
-if (!retrievalAliases) {
+if (!retrievalAliases || !retrievalAliases.aliases) {
   throw new Error("retrieval_aliases.json tidak ada di data terbundel. Jalankan: bun apps/api/scripts/bundle-data.mjs");
 }
+const aliases = retrievalAliases.aliases;
 
 export function filterRagDocuments(files: Array<{ name: string; content: string }>): Array<{ name: string; content: string }> {
   return files.filter((file) => approvedSources.has(file.name) && !blockedContent.some((pattern) => pattern.test(file.content)));
@@ -162,7 +164,7 @@ function indexMainbrain(files: Array<{ name: string; content: string }>): Mainbr
 function searchMainbrain(query: string, index: MainbrainIndex): IndexedExcerpt[] {
   const scores = new Map<number, number>();
   const terms = new Set(words(query));
-  for (const term of [...terms]) for (const alias of retrievalAliases.aliases[term] ?? []) terms.add(alias);
+  for (const term of [...terms]) for (const alias of aliases[term] ?? []) terms.add(alias);
   for (const word of terms) {
     for (const [id, weight] of index.terms.get(word) ?? []) scores.set(id, (scores.get(id) ?? 0) + weight);
   }

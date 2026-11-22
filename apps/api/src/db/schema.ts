@@ -108,6 +108,14 @@ export const rawReferences = pgTable("raw_references", {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const uploadedFiles = pgTable("uploaded_files", {
+  path: text("path").primaryKey(),
+  mime_type: text("mime_type").notNull(),
+  size_bytes: integer("size_bytes").notNull(),
+  content: bytea("content").notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const analysisRunArtifacts = pgTable("analysis_run_artifacts", {
   run_id: uuid("run_id").notNull().references(() => analysisRuns.id, { onDelete: "cascade" }),
   file_name: text("file_name").notNull(),

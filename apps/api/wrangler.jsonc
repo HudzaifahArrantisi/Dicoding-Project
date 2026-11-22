@@ -4,6 +4,13 @@
   "main": "src/worker.ts",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [{ "binding": "DAISUKI_MODEL", "id": "b935acaac9e34d93b1aa23f479e624db" }],
+  "vars": {
+    "NODE_ENV": "production",
+    "WEB_ORIGIN": "https://daisuki.my.id"
+  },
+  "workers_dev": true,
+  "routes": [{ "pattern": "api.daisuki.my.id/*", "zone_name": "daisuki.my.id" }],
   "observability": {
     "enabled": true
   },
@@ -12,6 +19,6 @@
   //   05.00 WIB Senin  -> 22.00 UTC Minggu
   //   09.00 WIB harian -> 02.00 UTC
   "triggers": {
-    "crons": ["0 22 * * 0", "0 2 * * *"]
+    "crons": ["0 22 * * SUN", "0 2 * * *"]
   }
 }

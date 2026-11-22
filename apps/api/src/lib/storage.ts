@@ -3,7 +3,7 @@
  *
  * Dua runtime dilayani berkas ini:
  *   - Bun   — menulis ke disk di apps/api/uploads/
- *   - Workers — TIDAK punya disk; perlu R2 (belum terpasang)
+ *   - Workers — menyimpan berkas kecil di Neon
  *
  * Penulisan disk sengaja ditunda sampai fungsi dipanggil, bukan saat modul
  * dimuat. `mkdirSync` di level modul membuat impor gagal di Workers sebelum
@@ -12,10 +12,13 @@
 
 import { join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
+import { eq } from "drizzle-orm";
+import { db } from "../db/client";
+import { uploadedFiles } from "../db/schema";
 
 export type UploadFolder = "receipts" | "profiles";
 
-/** Runtime tanpa filesystem. Diisi saat R2 dipasang. */
+/** Bun memakai disk lokal; Workers menyimpan ke database. */
 const hasFileSystem = typeof Bun !== "undefined" && typeof Bun.write === "function";
 
 /**
@@ -51,7 +54,7 @@ function ensureDir(folder: UploadFolder): string {
   const dir = targetDir(folder);
   if (!hasFileSystem) {
     throw new Error(
-      "Runtime ini tidak punya filesystem. Unggahan berkas memerlukan binding R2.",
+      "Runtime ini tidak punya filesystem lokal.",
     );
   }
   mkdirSync(dir, { recursive: true });
@@ -77,16 +80,10 @@ export async function saveUploadedFile(
   folder: UploadFolder,
   prefix: string,
 ): Promise<{ path: string; filename: string }> {
-  const dir = ensureDir(folder);
   const ext = extensionFor(file.type);
   const filename = buildFilename(prefix, ext, randomHex());
-  const arrayBuffer = await file.arrayBuffer();
-  await Bun.write(join(dir, filename), arrayBuffer);
-
-  return {
-    path: `/uploads/${folder}/${filename}`,
-    filename,
-  };
+  const content = Buffer.from(await file.arrayBuffer());
+  return saveImage(content, folder, filename, ext);
 }
 
 /**
@@ -103,14 +100,32 @@ export async function saveBase64Image(
     throw new Error("Format base64 gambar tidak valid");
   }
 
-  const dir = ensureDir(folder);
-  const filename = buildFilename(prefix, extensionFor(match[1]), randomHex());
-  await Bun.write(join(dir, filename), Buffer.from(match[2], "base64"));
+  const ext = extensionFor(match[1]);
+  const filename = buildFilename(prefix, ext, randomHex());
+  return saveImage(Buffer.from(match[2], "base64"), folder, filename, ext);
+}
 
-  return {
-    path: `/uploads/${folder}/${filename}`,
-    filename,
-  };
+async function saveImage(
+  content: Buffer,
+  folder: UploadFolder,
+  filename: string,
+  extension: string,
+): Promise<{ path: string; filename: string }> {
+  if (content.length < 1 || content.length > 700_000) throw new Error("Ukuran gambar tidak valid");
+  const path = `/uploads/${folder}/${filename}`;
+  if (hasFileSystem) {
+    await Bun.write(join(ensureDir(folder), filename), content);
+  } else {
+    const mimeType = extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : "image/jpeg";
+    await db.insert(uploadedFiles).values({ path, mime_type: mimeType, size_bytes: content.length, content });
+  }
+  return { path, filename };
+}
+
+export async function getUploadedFile(path: string): Promise<{ content: Buffer; mimeType: string } | null> {
+  const [row] = await db.select({ content: uploadedFiles.content, mimeType: uploadedFiles.mime_type })
+    .from(uploadedFiles).where(eq(uploadedFiles.path, path)).limit(1);
+  return row ? { content: Buffer.from(row.content), mimeType: row.mimeType } : null;
 }
 
 /** Byte acak dalam heksadesimal, lewat crypto global agar tidak butuh node:crypto. */

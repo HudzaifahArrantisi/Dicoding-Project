@@ -1,10 +1,11 @@
 import { Elysia, t } from "elysia";
-import { eq, or, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { users, partners } from "../../db/schema";
 import { createSession, getAuthUser, revokeSession, sessionCookie } from "../../plugins/auth";
 import { resolveRegion, RegionError, type RegionCodes } from "../regions";
 import { saveBase64Image } from "../../lib/storage";
+import { hashPassword, verifyPassword } from "../../lib/password";
 
 const loginAttempts = new Map<string, { count: number; until: number }>();
 const loginWindowMs = 15 * 60_000;
@@ -76,7 +77,7 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
 
     let isValid = false;
     try {
-      isValid = await Bun.password.verify(password, user.password_hash);
+      isValid = await verifyPassword(password, user.password_hash);
     } catch {
       isValid = false;
     }
@@ -85,6 +86,11 @@ export const authModule = new Elysia({ prefix: "/auth" }).post(
       failedLogin([attemptKey, ipKey]);
       set.status = 401;
       return { error: "Email atau password salah" };
+    }
+    if (typeof Bun !== "undefined" && user.password_hash.startsWith("$argon2") && new TextEncoder().encode(password).length <= 72) {
+      const replacement = await hashPassword(password);
+      await db.update(users).set({ password_hash: replacement })
+        .where(and(eq(users.id, user.id), eq(users.password_hash, user.password_hash)));
     }
     loginAttempts.delete(attemptKey);
     loginAttempts.delete(ipKey);

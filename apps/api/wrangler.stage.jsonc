@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "daisuki-api-stage",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [{ "binding": "DAISUKI_MODEL", "id": "b935acaac9e34d93b1aa23f479e624db" }],
+  "vars": {
+    "NODE_ENV": "production",
+    "WEB_ORIGIN": "https://daisuki.my.id"
+  }
+}

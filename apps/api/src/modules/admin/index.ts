@@ -16,6 +16,7 @@ import {
   users,
 } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
+import { hashPassword } from "../../lib/password";
 import { retryTransientRead } from "../../lib/db-retry";
 import { resolveRegion, RegionError } from "../regions";
 import { publishInventoryChange } from "../../realtime";
@@ -341,7 +342,7 @@ export const adminModule = new Elysia({ prefix: "/admin" })
         return { error: "Lengkapi wilayah mitra" };
       }
 
-      const passwordHash = await Bun.password.hash(body.password);
+      const passwordHash = await hashPassword(body.password);
       try {
         const partner = await db.transaction(async (tx) => {
           const [created] = await tx.insert(partners).values({
