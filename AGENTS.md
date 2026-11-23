@@ -167,6 +167,9 @@ Before starting, ask the user when antislop applies: during the work, or after i
 
 ### Catatan Perubahan Harian (Daily Changelog)
 
+#### 2026-11-23
+- **Tombol Perbarui analisis dipindah ke luar grid Log & Data**: Aksi pembuatan laporan empat kategori kini menjadi aksi level-halaman di header bersama judul, bukan lagi tersembunyi di dalam modal Referensi & analisis. Header mendapat keterangan singkat bahwa tombol memakai data stok seminggu terakhir, tombol memuat spinner selama proses, dan pesan berhasil muncul di bawah header alih-alih di dalam modal. Blok unggah referensi menyusut dari empat kolom menjadi tiga. Typecheck belum dijalankan karena eksekusi perintah diblokir pada sesi ini.
+
 #### 2026-11-22
 - **Pipeline analisis dan training GitHub Actions**: Tombol Perbarui analisis dan Training model pada API Worker kini memicu workflow `analysis-pipeline.yml` sesuai status run. Runner GitHub menjalankan agregator Data Science serta tujuh job AI, menyimpan artefak per run di Neon, mengekspor `.pkl` menjadi JSON, dan menerbitkannya ke KV `DAISUKI_MODEL`. Jalur Python lokal pada runtime Bun tetap tersedia. Setup secret, uji pertama, batas 25 MiB KV, serta keterbatasan konsistensi publikasi dijelaskan di `docs/DEPLOY_GITHUB_ACTIONS.md`. Typecheck API dan dry-run bundle Worker lulus; job GitHub dan produksi belum diuji karena secret belum dipasang.
 - **Pesan fallback chat produksi**: Chat Mitra tidak lagi menyebut AI lokal timeout atau seluruh server terganggu ketika penyedia LLM menolak permintaan; data cabang tetap ditampilkan dengan keterangan bahwa jawaban generatif belum tersedia. Log backend memakai label endpoint LLM umum. Uji produksi sebelumnya menunjukkan Command Code mengembalikan HTTP 403 sementara model KV dan chat tetap berfungsi.

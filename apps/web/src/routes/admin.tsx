@@ -47,6 +47,7 @@ import {
   PanelLeftClose,
   Pencil,
   Plus,
+  RefreshCw,
   RotateCcw,
   Search,
   Store,
@@ -513,7 +514,18 @@ function DataSciencePanel({
 
   return (
     <section className="dashboard-panel-enter space-y-4" aria-labelledby="data-science-title">
-      <h1 id="data-science-title" className="font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log & Data</h1>
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          <h1 id="data-science-title" className="font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log & Data</h1>
+          <p className="mt-1 text-sm text-muted">Membuat laporan analisis empat kategori dari data stok seminggu terakhir.</p>
+        </div>
+        <button type="button" onClick={() => void handleRunAnalysis()} disabled={startingAi}
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:cursor-not-allowed disabled:opacity-50">
+          {startingAi ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="size-4" aria-hidden="true" />}
+          {startingAi ? 'Memproses...' : 'Perbarui analisis'}
+        </button>
+      </header>
+      {analysisRun ? <output className="block text-xs text-ok-fg">Laporan minggu terakhir tersimpan. Tinjau hasilnya di AI Insights.</output> : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Kategori Log & Data">
         {([
@@ -576,7 +588,7 @@ function DataSciencePanel({
             <h2 id="raw-reference-title" className="font-display text-base font-semibold text-ink-900">Referensi & analisis</h2>
             <span className="text-xs text-muted">PDF, CSV, JSON, MD, TXT, DOCX · maks. 10 MB</span>
           </div>
-          <div className="mt-4 grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+          <div className="mt-4 grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
             <input ref={referenceInputRef} type="file" accept=".pdf,.csv,.json,.md,.txt,.docx"
               onChange={(event) => setSelectedReference(event.target.files?.[0] ?? null)}
               aria-label="Pilih file referensi mentah"
@@ -586,16 +598,11 @@ function DataSciencePanel({
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-3 text-sm font-semibold text-white hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50">
               <Upload className="size-4" aria-hidden="true" />{uploadingReference ? 'Mengunggah...' : 'Unggah file'}
             </button>
-            <button type="button" onClick={() => void handleRunAnalysis()} disabled={startingAi}
-              className="inline-flex min-h-11 items-center justify-center rounded-md bg-ink-900 px-3 text-sm font-semibold text-white hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50">
-              {startingAi ? 'Memproses...' : 'Perbarui analisis'}
-            </button>
             <button type="button" onClick={onExport}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-900 hover:bg-ink-50">
               <Download className="size-4" aria-hidden="true" />Ekspor CSV
             </button>
           </div>
-          {analysisRun ? <output className="mt-3 block text-xs text-ok-fg">Analisis tersimpan. Tinjau hasilnya di AI Insights.</output> : null}
         </div>
         <div className="border-t border-line px-4 py-3 sm:px-5">
           <div className="flex flex-wrap items-center justify-between gap-2">

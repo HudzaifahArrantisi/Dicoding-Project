@@ -25,7 +25,7 @@ def database_url() -> str:
                     os.environ.setdefault("DATABASE_URL", value.strip().strip("'\""))
     url = os.environ.get("DATABASE_URL")
     if not url:
-        raise RuntimeError("DATABASE_URL diperlukan untuk analisis mingguan")
+        raise RuntimeError ("DATABASE_URL diperlukan untuk analisis mingguan")
     return url
 
 
