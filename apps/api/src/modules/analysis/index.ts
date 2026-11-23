@@ -135,8 +135,8 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
       set.status = 422; return { error: "Periode harus tanggal valid, maksimal 31 hari, dan tidak boleh di masa depan" };
     }
     const id = await createAnalysisDraft(body.start_date, body.end_date, user.userId);
-    set.status = 201;
-    return { id, status: "draft" };
+    set.status = typeof Bun === "undefined" ? 202 : 201;
+    return { id, status: typeof Bun === "undefined" ? "creating" : "draft" };
   }, { body: t.Object({ start_date: t.String(), end_date: t.String() }) })
   .post("/runs/:id/approve", async ({ headers, params, set }) => {
     const user = await getAuthUser(headers);
@@ -165,7 +165,7 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     if (run?.status === "draft" && user.role === "admin") {
       await approveAnalysisRun(params.id, user.userId);
     } else if (run?.status !== "approved") { set.status = 409; return { error: "Run belum disetujui Admin" }; }
-    processAnalysisRun(params.id, user.userId, body?.training_source);
+    await processAnalysisRun(params.id, user.userId, body?.training_source);
     set.status = 202;
     return { id: params.id, status: "processing" };
   }, { params: t.Object({ id: t.String({ format: "uuid" }) }),

@@ -1,0 +1,51 @@
+name: Daisuki analysis and model training
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Pipeline stage
+        required: true
+        type: choice
+        options:
+          - draft
+          - train
+      run_id:
+        description: Existing analysis run UUID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daisuki-analysis-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production-analysis
+    env:
+      DATABASE_URL: ${{ secrets.ANALYSIS_DATABASE_URL }}
+      WEB_ORIGIN: https://daisuki.my.id
+      CLOUDFLARE_KV_TOKEN: ${{ secrets.CLOUDFLARE_KV_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_KV_NAMESPACE_ID: ${{ vars.CLOUDFLARE_KV_NAMESPACE_ID }}
+      DAISUKI_STAGE: ${{ inputs.stage }}
+      DAISUKI_RUN_ID: ${{ inputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: deploy/hf-train/requirements.txt
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          python -m pip install -r deploy/hf-train/requirements.txt
+      - name: Run requested stage
+        run: bun apps/api/scripts/analysis-actions-runner.ts "$DAISUKI_STAGE" "$DAISUKI_RUN_ID"

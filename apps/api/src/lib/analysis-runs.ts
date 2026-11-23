@@ -8,6 +8,7 @@ import { aiRunDir, clearActiveRun, dataScienceRunDir, activeRunId, publishActive
 import { reloadMitraModelWorker } from "../modules/assistant/model";
 import { publishInventoryChange } from "../realtime";
 import { hydrateDataScienceArtifacts, saveAiArtifacts, saveDataScienceArtifacts, stageRawReferences } from "./analysis-storage";
+import { dispatchAnalysisAction } from "./analysis-actions";
 
 const python = process.env.DAISUKI_PYTHON_BIN || process.env.PYTHON_EXECUTABLE ||
   (existsSync(resolve(workspaceRoot, "ai/.venv/Scripts/python.exe")) ? resolve(workspaceRoot, "ai/.venv/Scripts/python.exe") :
@@ -50,6 +51,10 @@ export async function createAnalysisDraft(startDate: string, endDate: string, ac
   await db.insert(analysisRuns).values({ id, start_date: startDate, end_date: endDate,
     status: "creating", created_by: actorId });
   try {
+    if (typeof Bun === "undefined") {
+      await dispatchAnalysisAction("draft", id);
+      return id;
+    }
     await pythonJob("data-science/src/weekly_analytics_aggregator.py", id,
       ["--start-date", startDate, "--end-date", endDate, "--run-id", id]);
     const manifest = JSON.parse(await readFile(resolve(dataScienceRunDir(id), "manifest.json"), "utf8")) as Record<string, unknown>;
@@ -108,7 +113,7 @@ export async function approveAnalysisRun(id: string, actorId: string) {
   return run ?? null;
 }
 
-async function publishRecommendations(runId: string, actorId: string, action: "analysis_published" | "analysis_rollback", notify: boolean): Promise<void> {
+export async function publishRecommendations(runId: string, actorId: string | null, action: "analysis_published" | "analysis_rollback", notify: boolean): Promise<void> {
   const preview = JSON.parse(await readFile(resolve(aiRunDir(runId), "allocation_preview.json"), "utf8")) as {
     source_run_id: string; items: PreviewItem[] };
   if (preview.source_run_id !== runId || !Array.isArray(preview.items)) throw new Error("Pratinjau alokasi tidak valid");
@@ -156,7 +161,26 @@ async function publishRecommendations(runId: string, actorId: string, action: "a
   });
 }
 
-export function processAnalysisRun(id: string, actorId: string, requestedTrainingSource?: "analysis" | "raw_references"): void {
+export async function processAnalysisRun(id: string, actorId: string, requestedTrainingSource?: "analysis" | "raw_references"): Promise<void> {
+  if (typeof Bun === "undefined") {
+    const [claimed] = await db.update(analysisRuns).set({ status: "processing", processed_by: actorId, error: null, steps: [] })
+      .where(and(eq(analysisRuns.id, id), eq(analysisRuns.status, "approved"))).returning();
+    if (!claimed) return;
+    const manifest = claimed.manifest as Record<string, unknown> | null;
+    const trainingSource = requestedTrainingSource ?? (manifest?.training_source === "raw_references" ? "raw_references" : "analysis");
+    if (requestedTrainingSource) {
+      await db.update(analysisRuns).set({ manifest: { ...(manifest ?? {}), training_source: trainingSource } })
+        .where(eq(analysisRuns.id, id));
+    }
+    try {
+      await dispatchAnalysisAction("train", id);
+    } catch (error) {
+      await db.update(analysisRuns).set({ status: "failed", error: error instanceof Error ? error.message : "Gagal memulai GitHub Actions" })
+        .where(eq(analysisRuns.id, id));
+      throw error;
+    }
+    return;
+  }
   if (running.has(id)) return;
   running.add(id);
   void (async () => {
