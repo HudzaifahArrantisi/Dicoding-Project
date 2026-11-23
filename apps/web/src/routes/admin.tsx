@@ -2167,10 +2167,17 @@ function AIInsightsPanel({
   const analysisRuns = useQuery<{ runs: AnalysisRun[]; active_run_id: string | null }>({
     queryKey: ['analysis-runs'],
     queryFn: getAnalysisRuns,
-    refetchInterval: (query) => query.state.data?.runs.some((run) => run.status === 'processing' || run.status === 'creating') ? 1500 : false,
+    refetchInterval: (query) => {
+      const runs = query.state.data?.runs ?? []
+      const trackedRun = requestedRunId
+        ? runs.find((run) => run.id === requestedRunId)
+        : runs[0]
+      return trackedRun && ['processing', 'creating'].includes(trackedRun.status) ? 5000 : false
+    },
   })
-  const selectedAnalysisRun = analysisRuns.data?.runs.find((run) => run.id === requestedRunId) ??
-    analysisRuns.data?.runs.find((run) => ['creating', 'draft', 'approved', 'processing'].includes(run.status)) ?? null
+  const selectedAnalysisRun = requestedRunId
+    ? analysisRuns.data?.runs.find((run) => run.id === requestedRunId) ?? null
+    : analysisRuns.data?.runs[0] ?? null
   const rawReferences = useQuery<{ files: RawReference[] }>({
     queryKey: ['admin-raw-references'],
     queryFn: getRawReferences,
