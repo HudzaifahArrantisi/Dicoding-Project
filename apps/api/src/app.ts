@@ -153,7 +153,7 @@ const routes = new Elysia({ aot: false })
       },
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "X-CSRF-Token"],
+      allowedHeaders: ["Content-Type", "X-CSRF-Token", "X-Session-Id"],
     }),
   )
   .onBeforeHandle(async ({ request, headers, set }) => {

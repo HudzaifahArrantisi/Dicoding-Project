@@ -258,150 +258,82 @@ function ShipmentLogPanel({
   const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / (result?.page_size ?? 20)))
 
   return (
-    <section className="dashboard-panel-enter space-y-5" aria-labelledby="shipment-log-title">
-      <div>
-        <p className="dashboard-eyebrow">Operasional</p>
-        <h1 id="shipment-log-title" className="mt-1 font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log pengiriman</h1>
-        <p className="mt-1 text-sm text-muted">Pesanan yang sudah dikirim dari gudang pusat, diurutkan dari pengiriman terbaru.</p>
+    <section className="dashboard-panel-enter space-y-4" aria-labelledby="shipment-log-title">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex items-baseline gap-3">
+          <h1 id="shipment-log-title" className="font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log pengiriman</h1>
+          {result?.total ? <span className="text-sm tabular-nums text-muted">{result.total} kiriman</span> : null}
+        </div>
+        <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}
+          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-50">
+          <RotateCcw className={`size-4 ${query.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
+          Segarkan
+        </button>
       </div>
 
       {query.isError ? <ErrorState message={getErrorMessage(query.error)} onRetry={() => void query.refetch()} /> : null}
       {query.isLoading ? <LoadingState label="Memuat log pengiriman..." /> : null}
       {!query.isLoading && !query.isError && result?.data.length === 0 ? (
-        <EmptyState title="Belum ada pengiriman" description="Log akan muncul ketika Admin menandai pesanan sebagai dalam pengiriman." />
+        <EmptyState title="Belum ada pengiriman" description="Log muncul setelah pesanan ditandai dalam pengiriman." />
       ) : null}
 
       {result?.data.length ? (
-        <div>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 className="text-sm font-semibold text-ink-900">Riwayat Pengiriman</h2>
-            <span className="text-xs tabular-nums text-muted">{result.total} pengiriman tercatat</span>
-          </div>
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {result.data.map((entry) => {
+            const sentAt = new Intl.DateTimeFormat('id-ID', {
+              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta',
+            }).format(new Date(entry.shipped_at))
+            const totalQty = entry.items.reduce((sum, item) => sum + (item.qty_approved ?? 0), 0)
+            const received = entry.status === 'selesai'
+            const proofUrl = received && entry.receipt_photo_data_url ? resolveImageUrl(entry.receipt_photo_data_url) : null
 
-          <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
-            {result.data.map((entry) => {
-              const dateObj = new Date(entry.shipped_at)
-              const sentAtFull = new Intl.DateTimeFormat('id-ID', {
-                weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-                hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta',
-              }).format(dateObj)
-              const sentAtShort = new Intl.DateTimeFormat('id-ID', {
-                day: 'numeric', month: 'short',
-                hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta',
-              }).format(dateObj)
-              const totalQty = entry.items.reduce((sum, item) => sum + (item.qty_approved ?? 0), 0)
-
-              return (
-                <article
-                  key={entry.id}
-                  className="rounded-xl border border-line bg-white p-3.5 shadow-2xs transition-all hover:border-ink-400 hover:shadow-xs sm:p-4 flex flex-col justify-between"
-                >
-                  <div>
-                    {/* Header: Nama Mitra, Waktu Kirim & Status Badge */}
-                    <div className="flex items-start justify-between gap-2 border-b border-line/60 pb-2.5">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate font-display text-sm sm:text-base font-bold text-ink-900">
-                          {entry.partner_name}
-                        </h3>
-                        <p className="mt-0.5 text-xs text-muted flex items-center gap-1.5">
-                          <Clock className="size-3 text-muted shrink-0" aria-hidden="true" />
-                          <span className="sm:hidden">{sentAtShort} WIB</span>
-                          <span className="hidden sm:inline">Dikirim {sentAtFull} WIB</span>
-                        </p>
-                      </div>
-
-                      <span
-                        className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                          entry.status === 'selesai'
-                            ? 'bg-ok-bg text-ok-fg border border-ok/25'
-                            : 'bg-order-pengiriman-bg text-order-pengiriman border border-order-pengiriman/30'
-                        }`}
-                      >
-                        <Truck className="size-3 shrink-0" aria-hidden="true" />
-                        <span>{entry.status === 'selesai' ? 'Diterima' : 'Dikirim'}</span>
-                      </span>
-                    </div>
-
-                    {/* Ringkasan Barang: Bersih di Mobile & Lengkap di Desktop */}
-                    <div className="mt-2.5">
-                      {/* Tampilan Mobile: Ringkas dan hemat teks */}
-                      <div className="flex sm:hidden items-center justify-between text-xs py-1">
-                        <span className="text-muted">
-                          Muatan: <strong className="font-semibold text-ink-800">{entry.items.length} macam produk</strong>
-                        </span>
-                        <span className="font-semibold tabular-nums text-ink-900">
-                          Total <strong className="font-bold text-order-pengiriman">{totalQty}</strong> pcs
-                        </span>
-                      </div>
-
-                      {/* Tampilan Tablet/Desktop: Chip Rincian Semua Produk */}
-                      <div className="hidden sm:flex flex-wrap gap-1.5 text-xs">
-                        {entry.items.map((item) => (
-                          <span
-                            key={item.product_name}
-                            className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-800 border border-line/70"
-                          >
-                            <span className="truncate max-w-[130px]">{item.product_name}</span>
-                            <strong className="font-bold tabular-nums text-ink-900">
-                              ({item.qty_approved ?? 0})
-                            </strong>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
+            return (
+              <li key={entry.id} className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-white p-4">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="truncate font-display text-base font-semibold text-ink-900">{entry.partner_name}</h2>
+                    <p className="mt-0.5 text-xs tabular-nums text-muted">{sentAt} WIB · {entry.order_no}</p>
                   </div>
+                  <span className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+                    received ? 'border-ok/25 bg-ok-bg text-ok-fg' : 'border-order-pengiriman/30 bg-order-pengiriman-bg text-order-pengiriman'
+                  }`}>
+                    <Truck className="size-3 shrink-0" aria-hidden="true" />
+                    {received ? 'Diterima' : 'Dikirim'}
+                  </span>
+                </div>
 
-                  {/* Footer: Nomor PO, Foto Bukti & Tombol Lihat Pesanan */}
-                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-line/60 pt-2.5 text-xs">
-                    <span className="font-mono text-[11px] text-muted truncate max-w-[130px] sm:max-w-none">
-                      {entry.order_no}
-                    </span>
+                <p className="text-sm text-ink-700">
+                  <span className="font-semibold tabular-nums text-ink-900">{totalQty} pcs</span>
+                  <span className="text-muted"> · {entry.items.length} produk</span>
+                </p>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      {entry.status === 'selesai' && entry.receipt_photo_data_url ? (() => {
-                        const resolvedProofUrl = resolveImageUrl(entry.receipt_photo_data_url) ?? ''
-                        if (!resolvedProofUrl) return null
-                        return (
-                          <a
-                            href={resolvedProofUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => {
-                              if (resolvedProofUrl.startsWith('data:')) {
-                                e.preventDefault()
-                                const win = window.open('')
-                                if (win) {
-                                  win.document.write(
-                                    `<!DOCTYPE html><html><head><title>Bukti Foto Penerimaan Pesanan ${entry.order_no}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body{margin:0;background:#0f172a;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.5);}</style></head><body><img src="${resolvedProofUrl}" alt="Bukti Penerimaan" /></body></html>`
-                                  )
-                                  win.document.close()
-                                }
-                              }
-                            }}
-                            className="inline-flex min-h-8 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
-                            title={`Buka foto bukti penerimaan ${entry.order_no}`}
-                          >
-                            <ExternalLink className="size-3 text-blue-600" aria-hidden="true" />
-                            <span>Bukti</span>
-                          </a>
+                <div className="mt-auto flex items-center gap-2 border-t border-line pt-3">
+                  {proofUrl ? (
+                    <a href={proofUrl} target="_blank" rel="noopener noreferrer"
+                      onClick={(event) => {
+                        if (!proofUrl.startsWith('data:')) return
+                        event.preventDefault()
+                        const win = window.open('')
+                        if (!win) return
+                        win.document.write(
+                          `<!DOCTYPE html><html><head><title>Bukti ${entry.order_no}</title><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body{margin:0;background:#0f172a;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;}</style></head><body><img src="${proofUrl}" alt="Bukti penerimaan" /></body></html>`
                         )
-                      })() : null}
-
-                      <button
-                        type="button"
-                        onClick={() => onViewOrder(entry.id)}
-                        className="inline-flex min-h-8 items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-semibold text-ink-900 hover:bg-paper cursor-pointer transition-colors"
-                      >
-                        <span>Lihat pesanan</span>
-                        <ChevronRight className="size-3.5 opacity-60" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        </div>
+                        win.document.close()
+                      }}
+                      className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-line px-3 text-xs font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+                      <ExternalLink className="size-3.5" aria-hidden="true" />Bukti foto
+                    </a>
+                  ) : null}
+                  <button type="button" onClick={() => onViewOrder(entry.id)}
+                    className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-line px-3 text-xs font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+                    Lihat pesanan
+                    <ChevronRight className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       ) : null}
 
       {(result?.total ?? 0) > (result?.page_size ?? 20) ? (
@@ -2218,13 +2150,11 @@ function AIInsightsPanel({
   loading,
   error,
   onRetry,
-  onReviewOrders,
 }: {
   data?: AIInsights
   loading: boolean
   error: Error | null
   onRetry: () => void
-  onReviewOrders: () => void
 }) {
   const [startingAi, setStartingAi] = useState(false)
   const [trainingSource, setTrainingSource] = useState<'analysis' | 'raw_references'>('analysis')
@@ -3295,7 +3225,6 @@ function AdminDashboard() {
               loading={aiInsights.isLoading}
               error={aiInsights.error}
               onRetry={() => void aiInsights.refetch()}
-              onReviewOrders={() => setTab('orders')}
             />
           ) : null}
           {tab === 'chat' ? (
