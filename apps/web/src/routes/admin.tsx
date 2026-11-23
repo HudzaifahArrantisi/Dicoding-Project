@@ -368,7 +368,7 @@ function DataSciencePanel({
   totalPartners: number
   onRetry: () => void
   onExport: () => void
-  onAnalysisCreated: () => void
+  onAnalysisCreated: (runId: string) => void
 }) {
   const queryClient = useQueryClient()
   const [startingAi, setStartingAi] = useState(false)
@@ -401,8 +401,8 @@ function DataSciencePanel({
       const created = await createAnalysisRun(start, end)
       setAnalysisRun(created.id)
       await queryClient.invalidateQueries({ queryKey: ['analysis-runs'] })
-      toast.success('Laporan Data Science selesai dibuat. Buka AI Insights untuk meninjau hasilnya.')
-      onAnalysisCreated()
+      toast.success('Run analisis dibuat. Run ini dipilih di AI Insights; hasil aktif tetap sama sampai Anda memproses dan menerbitkannya.')
+      onAnalysisCreated(created.id)
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -2150,22 +2150,27 @@ function AIInsightsPanel({
   loading,
   error,
   onRetry,
+  requestedRunId,
 }: {
   data?: AIInsights
   loading: boolean
   error: Error | null
   onRetry: () => void
+  requestedRunId: string | null
 }) {
+  const queryClient = useQueryClient()
   const [startingAi, setStartingAi] = useState(false)
   const [trainingSource, setTrainingSource] = useState<'analysis' | 'raw_references'>('analysis')
   const activeRun = useRef<string | null>(null)
+  const processingRunId = useRef<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const analysisRuns = useQuery<{ runs: AnalysisRun[]; active_run_id: string | null }>({
     queryKey: ['analysis-runs'],
     queryFn: getAnalysisRuns,
     refetchInterval: (query) => query.state.data?.runs.some((run) => run.status === 'processing' || run.status === 'creating') ? 1500 : false,
   })
-  const selectedAnalysisRun = analysisRuns.data?.runs.find((run) => ['draft', 'approved', 'processing'].includes(run.status)) ?? analysisRuns.data?.runs[0] ?? null
+  const selectedAnalysisRun = analysisRuns.data?.runs.find((run) => run.id === requestedRunId) ??
+    analysisRuns.data?.runs.find((run) => ['creating', 'draft', 'approved', 'processing'].includes(run.status)) ?? null
   const rawReferences = useQuery<{ files: RawReference[] }>({
     queryKey: ['admin-raw-references'],
     queryFn: getRawReferences,
@@ -2179,6 +2184,22 @@ function AIInsightsPanel({
   useEffect(() => {
     setTrainingSource(selectedAnalysisRun?.manifest?.training_source === 'raw_references' ? 'raw_references' : 'analysis')
   }, [selectedAnalysisRun?.id, selectedAnalysisRun?.manifest?.training_source])
+  useEffect(() => {
+    const runId = processingRunId.current
+    const completedRun = analysisRuns.data?.runs.find((run) => run.id === runId)
+    if (!runId || !completedRun || !['published', 'failed'].includes(completedRun.status)) return
+    processingRunId.current = null
+    if (completedRun.status === 'published') {
+      void queryClient.invalidateQueries({ queryKey: ['admin-ai-insights'] })
+      void queryClient.invalidateQueries({ queryKey: ['admin-weekly-summary'] })
+      void queryClient.invalidateQueries({ queryKey: ['admin-stock-log-partners'] })
+      void queryClient.invalidateQueries({ queryKey: ['analysis-artifacts', runId] })
+      onRetry()
+      toast.success('Hasil terbaru sudah diterbitkan dan grafik diperbarui.')
+    } else {
+      toast.error(completedRun.error ?? 'Training gagal. Hasil aktif sebelumnya tetap digunakan.')
+    }
+  }, [analysisRuns.data, onRetry, queryClient])
   const runStatus = useQuery<AiRunStatus>({
     queryKey: ['admin-ai-run'],
     queryFn: getAiRunStatus,
@@ -2429,6 +2450,14 @@ function AIInsightsPanel({
   }, [runStatus.data, onRetry])
 
   const handleRunAiAnalysis = async () => {
+    if (!selectedAnalysisRun || !['draft', 'approved'].includes(selectedAnalysisRun.status)) {
+      toast.info(selectedAnalysisRun?.status === 'creating'
+        ? 'Laporan terbaru masih dibuat. Tunggu sampai statusnya siap ditinjau.'
+        : selectedAnalysisRun?.status === 'processing'
+          ? 'Laporan ini sedang diproses.'
+          : 'Belum ada laporan baru yang siap diproses. Klik Perbarui analisis di Log & Data.')
+      return
+    }
     setStartingAi(true)
     try {
       await analysisRuns.refetch()
@@ -2441,14 +2470,16 @@ function AIInsightsPanel({
   }
 
   const handleContinueWithArtifacts = async () => {
-    if (!selectedAnalysisRun) return
+    if (!selectedAnalysisRun || !['draft', 'approved'].includes(selectedAnalysisRun.status)) return
     setStartingAi(true)
+    processingRunId.current = selectedAnalysisRun.id
     try {
       await actionAnalysisRun(selectedAnalysisRun.id, 'process', undefined, trainingSource)
       await analysisRuns.refetch()
       await artifacts.refetch()
-      toast.success(`Training model dimulai dengan sumber ${trainingSource === 'analysis' ? 'hasil analisis' : 'data mentah unggahan'}.`)
+      toast.success(`Training run ${selectedAnalysisRun.id.slice(0, 8)} dimulai. Hasil aktif tidak berubah sampai proses berhasil.`)
     } catch (err) {
+      processingRunId.current = null
       toast.error(getErrorMessage(err))
     } finally {
       setStartingAi(false)
@@ -2471,6 +2502,7 @@ function AIInsightsPanel({
             {data?.weekly_facts?.metadata.start_date ? ` · Periode ${data.weekly_facts.metadata.start_date} sampai ${data.weekly_facts.metadata.end_date} · Model ${data.weekly_facts.metadata.model_version} · Run ${data.weekly_facts.metadata.source_run_id?.slice(0, 8) ?? 'lama'}` : ''}
             <span className="mx-1.5" aria-hidden="true">·</span>
          </p>
+          {selectedAnalysisRun && selectedAnalysisRun.id !== analysisRuns.data?.active_run_id ? <p className="mt-1 text-xs text-muted">Run yang dipilih: {selectedAnalysisRun.start_date}–{selectedAnalysisRun.end_date} · {selectedAnalysisRun.status === 'creating' ? 'laporan sedang dibuat' : selectedAnalysisRun.status === 'draft' || selectedAnalysisRun.status === 'approved' ? 'siap ditinjau' : selectedAnalysisRun.status === 'processing' ? 'training berjalan' : 'belum terbit'}. Grafik final tetap memakai hasil aktif sampai run ini berhasil diterbitkan.</p> : null}
           {data?.model_evaluation && <p className="mt-1 text-xs text-muted">Evaluasi historis: {data.model_evaluation.evaluation_samples} sampel uji, {data.model_evaluation.evaluation_events} kejadian. {data.model_evaluation.calibrated ? 'Model terkalibrasi.' : 'Skor model belum terkalibrasi; prioritas pasokan mengikuti aturan stok.'}</p>}
         </div>
 
@@ -2478,7 +2510,7 @@ function AIInsightsPanel({
           <button
             type="button"
             onClick={() => void handleRunAiAnalysis()}
-            disabled={startingAi || runStatus.data?.status === 'running' || loading}
+            disabled={startingAi || runStatus.data?.status === 'running' || loading || !selectedAnalysisRun || !['draft', 'approved'].includes(selectedAnalysisRun.status)}
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {startingAi || runStatus.data?.status === 'running' ? (
@@ -2671,6 +2703,7 @@ function AdminDashboard() {
   const { chat } = Route.useSearch()
   const queryClient = useQueryClient()
   const [tab, setTabState] = useState<AdminTab>(chat ? 'chat' : 'stocks')
+  const [requestedAnalysisRunId, setRequestedAnalysisRunId] = useState<string | null>(null)
   const [lastChatId, setLastChatId] = useState<string | null>(chat ?? null)
 
   useEffect(() => {
@@ -3216,7 +3249,10 @@ function AdminDashboard() {
                 void logPartners.refetch()
               }}
               onExport={() => void exportRawLogs()}
-              onAnalysisCreated={() => setTab('ai-insights')}
+              onAnalysisCreated={(runId) => {
+                setRequestedAnalysisRunId(runId)
+                setTab('ai-insights')
+              }}
             />
           ) : null}
           {tab === 'ai-insights' ? (
@@ -3224,7 +3260,11 @@ function AdminDashboard() {
               data={aiInsights.data}
               loading={aiInsights.isLoading}
               error={aiInsights.error}
-              onRetry={() => void aiInsights.refetch()}
+              requestedRunId={requestedAnalysisRunId}
+              onRetry={() => {
+                void aiInsights.refetch()
+                void weeklySummary.refetch()
+              }}
             />
           ) : null}
           {tab === 'chat' ? (
