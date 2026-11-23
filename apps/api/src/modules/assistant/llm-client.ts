@@ -50,6 +50,7 @@ export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }:
   }
   const configuredTimeout = Math.min(120_000, Math.max(1, Number(process.env.LLM_TIMEOUT_MS) || 35_000));
   const timeout = timeoutMs === undefined ? configuredTimeout : Math.min(configuredTimeout, Math.max(1, timeoutMs));
+  const detailedRequest = /\b(?:rincian|rincikan|rinci|detail|lengkap|semua|daftar|tabel|grafik|diagram|pdf|uraikan|langkah demi langkah)\b/i.test(userMessage);
   const deadline = Date.now() + timeout;
   const endpoints = configuredEndpoints();
   if (!endpoints.length) {
@@ -82,7 +83,7 @@ export async function generateLlmReply({ systemPrompt, userMessage, timeoutMs }:
             model: process.env.LLM_MODEL || "opn",
             messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }],
             temperature: 0.2,
-            max_tokens: 2048,
+            max_tokens: detailedRequest ? 1800 : 700,
             stream: true,
           }),
           signal: controller.signal,
