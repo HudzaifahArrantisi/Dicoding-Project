@@ -2545,9 +2545,6 @@ function AIInsightsPanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
-          <button type="button" onClick={onReviewOrders} className="inline-flex min-h-11 items-center rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-700 hover:border-ink-500/40 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">
-            Tinjau pesanan
-          </button>
           <button
             type="button"
             onClick={() => void handleRunAiAnalysis()}
