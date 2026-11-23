@@ -74,7 +74,7 @@ def profile(rows: list[dict]) -> tuple[list[dict], list[dict]]:
         result.append({**row, "awc": round(awc, 2), "coefficient_variation": round(cv, 3), "safety_stock": safety, "reorder_point": rop, "current_qty": current, "critical": current <= 10 or current < par * .2, "fast_moving": awc >= 10})
     groups: dict[tuple[str, str, str, str, str], list[dict]] = defaultdict(list)
     for row in result:
-        for level, place in (("province", row["province"]), ("regency", row["regency"]), ("district", row["district"])):
+        for level, place in (("provice", row["province"]), ("regency", row["regency"]), ("district", row["district"])):
             groups[(level, row["province"], row["regency"] if level != "province" else "", place, row["partner_type"])].append(row)
     hotspots = []
     for (level, province, regency, place, partner_type), items in groups.items():

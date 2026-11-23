@@ -26,7 +26,7 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    environment: production-analysis
+    environment: Configure model-LLM
     env:
       DATABASE_URL: ${{ secrets.ANALYSIS_DATABASE_URL }}
       WEB_ORIGIN: https://daisuki.my.id

@@ -168,6 +168,7 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-23
+- **Environment GitHub Actions mengikuti pengaturan yang sudah dibuat**: Workflow analisis/training memakai environment `Configure model-LLM`, sesuai secret dan variable GitHub yang sudah disiapkan pengguna. Panduan setup diperbarui agar nama environment sama. Validasi workflow belum dijalankan.
 - **Tombol Perbarui analisis dipindah ke luar grid Log & Data**: Aksi pembuatan laporan empat kategori kini menjadi aksi level-halaman di header bersama judul, bukan lagi tersembunyi di dalam modal Referensi & analisis. Header mendapat keterangan singkat bahwa tombol memakai data stok seminggu terakhir, tombol memuat spinner selama proses, dan pesan berhasil muncul di bawah header alih-alih di dalam modal. Blok unggah referensi menyusut dari empat kolom menjadi tiga. Typecheck belum dijalankan karena eksekusi perintah diblokir pada sesi ini.
 
 #### 2026-11-22
