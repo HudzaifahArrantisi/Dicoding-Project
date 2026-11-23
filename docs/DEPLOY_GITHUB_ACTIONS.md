@@ -9,8 +9,8 @@ dibutuhkan untuk analisis dan training setelah alur ini dipasang.
 1. Push workflow dan kode API terbaru ke branch `main` pada repo
    `HudzaifahArrantisi/Dicoding-Project`. Workflow dispatch tidak bisa dipakai
    sebelum berkas workflow ada di branch tersebut.
-2. Gunakan GitHub Environment bernama `Configure model-LLM`; workflow sudah
-   memakai environment ini. Tambahkan **secrets** `ANALYSIS_DATABASE_URL`
+2. Gunakan GitHub Environment bernama `model-LLM`; workflow memakai environment
+   ini. Tambahkan **secrets** `ANALYSIS_DATABASE_URL`
    (koneksi Neon khusus pipeline, dengan izin membaca
    sumber data dan menulis tabel hasil run) serta `CLOUDFLARE_KV_TOKEN`
    (Cloudflare API Token berizin **Workers KV Storage Write**). Tambahkan
