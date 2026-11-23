@@ -35,6 +35,11 @@ export async function loadWeeklyFacts(): Promise<WeeklyFacts | null> {
 }
 
 export async function getModelSyncStatus(facts: WeeklyFacts | null) {
+  if (typeof Bun === "undefined") {
+    const trainedAt = await getStoredModelTimestamp();
+    return { trained_at: trainedAt?.toISOString() ?? null,
+      synchronized: Boolean(facts && trainedAt && trainedAt.getTime() >= Date.parse(facts.metadata.generated_at)) };
+  }
   try {
     const model = await stat(activeRunId() ? activeArtifact("model") : process.env.DAISUKI_MODEL_PATH || activeArtifact("model"));
     return { trained_at: model.mtime.toISOString(), synchronized: Boolean(facts && model.mtimeMs >= Date.parse(facts.metadata.generated_at)) };

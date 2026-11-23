@@ -116,6 +116,11 @@ export async function readActiveArtifact(kind: "facts" | "report" | "regional" |
     const stored = await loadArtifact(runId, fileName);
     if (stored) return stored.toString("utf8");
   }
+  if (typeof Bun === "undefined") {
+    const error = new Error(`Artefak ${fileName} belum tersimpan di Neon`) as NodeJS.ErrnoException;
+    error.code = "ENOENT";
+    throw error;
+  }
   return readFile(activeArtifact(kind), "utf8");
 }
 

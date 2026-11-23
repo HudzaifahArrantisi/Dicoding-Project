@@ -23,6 +23,8 @@ const activePath = resolve(privateRoot, "active_run.json");
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function activeRunId(): string | null {
+  // Cloudflare Workers menyimpan run aktif di Neon, bukan file lokal.
+  if (typeof Bun === "undefined") return null;
   try {
     const value = JSON.parse(readFileSync(activePath, "utf8")) as { run_id?: string };
     return value.run_id && uuidPattern.test(value.run_id) ? value.run_id : null;
