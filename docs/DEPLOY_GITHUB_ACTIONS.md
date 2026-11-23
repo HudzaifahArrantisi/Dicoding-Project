@@ -17,6 +17,9 @@ dibutuhkan untuk analisis dan training setelah alur ini dipasang.
    **variables** `CLOUDFLARE_ACCOUNT_ID` dan `CLOUDFLARE_KV_NAMESPACE_ID`.
    Namespace ID harus sama dengan binding `DAISUKI_MODEL` pada
    `apps/api/wrangler.jsonc`.
+   Jika koneksi memakai role `ai_job`, jalankan migrasi
+   `neon/migrations/20261123_analysis_pipeline_permissions.sql` di Neon SQL
+   Editor memakai role owner sebelum menjalankan workflow.
 3. Buat GitHub fine-grained token atau GitHub App untuk repo ini, dengan izin
    repository **Actions: write**. Simpan token itu sebagai **secret runtime**
    `GITHUB_ACTIONS_TOKEN` pada Worker `daisuki-api`. Jangan taruh token di

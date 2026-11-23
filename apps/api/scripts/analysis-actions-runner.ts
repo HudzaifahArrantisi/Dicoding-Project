@@ -53,6 +53,13 @@ async function publishKv(source: string) {
 let cleanup: (() => Promise<void>) | undefined;
 let started = false;
 try {
+  const connectionRows = await sql`
+    SELECT current_database() AS database,
+      current_user AS role,
+      has_table_privilege(current_user, 'public.analysis_runs', 'SELECT') AS can_read_run
+  `;
+  const connection = connectionRows[0] as { database: string; role: string; can_read_run: boolean };
+  console.log(`[DB] database=${connection.database} role=${connection.role} analysis_runs_select=${connection.can_read_run}`);
   const [run] = await db.select().from(analysisRuns).where(eq(analysisRuns.id, id)).limit(1);
   if (!run) throw new Error("Run tidak ditemukan");
   if (stage === "draft") {
@@ -114,6 +121,11 @@ try {
       .where(eq(analysisRuns.id, id));
   }
   console.error(message);
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (cause instanceof Error) {
+    const code = "code" in cause && typeof cause.code === "string" ? ` code=${cause.code}` : "";
+    console.error(`Database cause:${code} ${cause.message}`);
+  }
   process.exitCode = 1;
 } finally {
   await cleanup?.();

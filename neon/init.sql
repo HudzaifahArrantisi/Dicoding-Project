@@ -384,6 +384,9 @@ grant select, insert on notifications, stock_logs to ai_job;
 grant select, update on partner_stocks to ai_job;
 grant select on partners, products, partner_stocks, stock_logs, orders, order_items to ai_job;
 grant select, insert, update, delete on restock_recommendations to ai_job;
+grant select, update on analysis_runs to ai_job;
+grant select, insert, update, delete on analysis_run_artifacts to ai_job;
+grant select on raw_references to ai_job;
 
 -- 5. ROW LEVEL SECURITY (RLS)
 alter table partners enable row level security;
