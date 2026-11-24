@@ -160,7 +160,7 @@ export function createInlineWorker(): Worker {
         identity: bundle.metadata as ModelIdentity,
         documents: message ? searchWorkerRetrieval(bundle.retrieval, message) as ModelResult["documents"] : [],
         raw_documents: adminAccess && message ? searchWorkerRawRetrieval(bundle.raw_retrieval, message) as ModelResult["raw_documents"] : [],
-        analysis_documents: partnerId && message ? searchWorkerAnalysisRetrieval(bundle.analysis_retrieval, partnerId, message) as ModelResult["analysis_documents"] : [],
+        analysis_documents: (partnerId || adminAccess) && message ? searchWorkerAnalysisRetrieval(bundle.analysis_retrieval, partnerId, message, adminAccess) as ModelResult["analysis_documents"] : [],
         retrieval_ready: !!bundle.retrieval?.documents.length,
         raw_retrieval_ready: adminAccess && !!bundle.raw_retrieval?.documents.length,
         risk_available: !!bundle.risk,

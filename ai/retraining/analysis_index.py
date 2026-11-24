@@ -9,7 +9,7 @@ from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 
-def build_analysis_index(folder: Path) -> dict:
+def build_analysis_index(folder: Path, previous_index: dict | None = None) -> dict:
     categories = {name: json.loads((folder / f"category_{name}.json").read_text(encoding="utf-8"))
                   for name in ("products", "partners", "regions", "reporting")}
     period = f"{categories['partners']['start_date']} sampai {categories['partners']['end_date']}"
@@ -36,6 +36,11 @@ def build_analysis_index(folder: Path) -> dict:
             facts = {key: row[key] for key in allowed if key in row}
             docs.append({"partner_id": row["partner_id"], "source": "cleaned_inventory_summary.csv", "period": period,
                          "excerpt": f"Analisis produk cabang sendiri periode {period}: {json.dumps(facts, ensure_ascii=False)}"})
+    previous_documents = (previous_index or {}).get("documents") or []
+    current_week = categories["partners"]["start_date"]
+    docs.extend(item for item in previous_documents if isinstance(item, dict) and
+                str(item.get("period", "")).split(" sampai ")[0] != current_week and
+                isinstance(item.get("excerpt"), str))
     if not docs:
         return {"documents": []}
     vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), max_features=30000)
@@ -43,14 +48,15 @@ def build_analysis_index(folder: Path) -> dict:
     return {"documents": docs, "vectorizer": vectorizer, "vectors": vectors}
 
 
-def search_partner_analysis(index: dict, partner_id: str, query: str, limit: int = 6) -> list[dict]:
-    if not partner_id or not index.get("documents") or "vectorizer" not in index:
+def search_partner_analysis(index: dict, partner_id: str | None, query: str, limit: int = 6,
+                            admin_access: bool = False) -> list[dict]:
+    if (not partner_id and not admin_access) or not index.get("documents") or "vectorizer" not in index:
         return []
     query_vector = index["vectorizer"].transform([query])
     scores = (index["vectors"] @ query_vector.T).toarray().ravel()
-    own = [i for i, item in enumerate(index["documents"]) if item["partner_id"] == partner_id]
+    own = [i for i, item in enumerate(index["documents"]) if admin_access or item["partner_id"] == partner_id]
     ranked = sorted(own, key=lambda i: float(scores[i]), reverse=True)
-    overview = next((i for i in own if index["documents"][i]["source"] == "category_partners.json"), None)
+    overview = next((i for i in own if index["documents"][i]["source"] == "category_partners.json"), None) if not admin_access else None
     selected = [i for i in ranked if scores[i] >= 0.03][:limit]
     if not selected and any(word in query.lower() for word in ("minggu", "rangkum", "ringkas", "analisis", "kegiatan")):
         selected = ranked[:limit]

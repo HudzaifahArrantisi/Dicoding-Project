@@ -9,22 +9,16 @@ export function AnalysisRunPreviewModal({
   loading,
   open,
   continuing,
-  trainingSource,
-  rawReferenceCount,
   onOpenChange,
   onContinue,
-  onTrainingSourceChange,
 }: {
   run: AnalysisRun | null
   artifacts?: AnalysisArtifacts
   loading: boolean
   open: boolean
   continuing: boolean
-  trainingSource: 'analysis' | 'raw_references'
-  rawReferenceCount: number
   onOpenChange: (open: boolean) => void
   onContinue: () => void
-  onTrainingSourceChange: (source: 'analysis' | 'raw_references') => void
 }) {
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
@@ -33,7 +27,7 @@ export function AnalysisRunPreviewModal({
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div className="min-w-0">
             <Dialog.Title className="font-display text-xl font-semibold text-ink-900">Pratinjau hasil Data Science</Dialog.Title>
-            <Dialog.Description className="mt-1 text-sm text-muted">Tinjau laporan, pilih sumber training model, lalu jalankan analisis AI.</Dialog.Description>
+            <Dialog.Description className="mt-1 text-sm text-muted">Tinjau laporan Data Science untuk run ini, lalu jalankan analisis AI.</Dialog.Description>
             {run && <p className="mt-2 font-mono text-xs text-muted">{run.start_date} sampai {run.end_date} · Run {run.id}</p>}
           </div>
           <Dialog.Close asChild><button type="button" className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700" aria-label="Tutup pratinjau"><X className="size-5" /></button></Dialog.Close>
@@ -51,24 +45,13 @@ export function AnalysisRunPreviewModal({
               <Preview title="weekly_analytics_report.md"><pre className="max-h-72 overflow-auto whitespace-pre-wrap text-xs leading-5 text-ink-700">{artifacts.markdown}</pre></Preview>
             </div>
             <Preview title="cleaned_inventory_summary.csv"><pre className="max-h-56 overflow-auto whitespace-pre text-[11px] leading-5 text-ink-700">{artifacts.csv_preview}</pre></Preview>
-            <section className="grid gap-3 rounded-lg border border-line p-4 sm:grid-cols-[minmax(0,1fr)_minmax(220px,300px)] sm:items-center" aria-labelledby="training-source-title">
-              <div className="min-w-0">
+            <section className="rounded-lg border border-line p-4" aria-labelledby="training-source-title">
+              <div>
                 <h3 id="training-source-title" className="text-sm font-semibold text-ink-900">Sumber training model</h3>
                 <p className="mt-1 text-xs leading-5 text-muted" aria-live="polite">
-                  {trainingSource === 'analysis'
-                    ? 'Hasil analisis melatih model risiko stok.'
-                    : 'File unggahan Admin memperbarui indeks pengetahuan; model risiko stok dipertahankan.'}
+                  Hasil analisis melatih model risiko stok dan memperbarui konteks chatbot.
                 </p>
               </div>
-              <label className="block min-w-0">
-                <span className="sr-only">Pilih sumber training model</span>
-                <select value={trainingSource} onChange={(event) => onTrainingSourceChange(event.target.value as 'analysis' | 'raw_references')}
-                  disabled={continuing || !['draft', 'approved'].includes(run?.status ?? '')}
-                  className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-not-allowed disabled:opacity-60">
-                  <option value="analysis">Hasil analisis Data Science</option>
-                  <option value="raw_references" disabled={rawReferenceCount === 0}>Data mentah unggahan Admin ({rawReferenceCount})</option>
-                </select>
-              </label>
             </section>
             {run?.steps.length ? <section className="rounded-lg border border-line p-4" aria-label="Progres analisis AI"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-ink-900">Progres AI Engineer</h3><span className="text-xs text-muted">{run.steps.filter((step) => step.status === 'succeeded').length}/{run.steps.length} selesai</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full bg-ink-900 transition-all" style={{ width: `${Math.round(run.steps.filter((step) => step.status === 'succeeded').length / Math.max(1, run.steps.length) * 100)}%` }} /></div><ol className="mt-3 grid gap-1 text-xs sm:grid-cols-2">{run.steps.map((step, index) => <li key={step.label} className={step.status === 'failed' ? 'text-crit-fg' : step.status === 'succeeded' ? 'text-ok-fg' : 'text-muted'}>{index + 1}. {step.label} · {step.status === 'succeeded' ? 'Selesai' : step.status === 'failed' ? 'Gagal' : 'Berjalan'}</li>)}</ol></section> : null}
           </div> : <p className="py-12 text-sm text-muted">File hasil analisis belum tersedia.</p>}

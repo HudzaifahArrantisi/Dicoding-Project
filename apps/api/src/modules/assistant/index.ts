@@ -627,7 +627,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
 
     // 2. Machine Learning model daisuki.pkl
     const model = await withinModelBudget(understandAdminMessage(message), 5000, emptyModel);
-    const binaryReady = model.retrieval_ready === true || model.raw_retrieval_ready === true;
+    const binaryReady = model.retrieval_ready === true || model.raw_retrieval_ready === true || !!model.analysis_documents?.length;
     const [markdownExcerpts, companyData] = await Promise.all([
       binaryReady ? Promise.resolve([]) : searchAdminKnowledge(message, 5),
       loadCompanyProfileAndSop(),
@@ -636,6 +636,12 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       source: doc.source,
       version: "daisuki.pkl",
       title: doc.source.split("/").pop() ?? doc.source,
+      excerpt: doc.excerpt.slice(0, 1800),
+    }));
+    const analysisExcerpts = (model.analysis_documents ?? []).map((doc) => ({
+      source: doc.source,
+      version: doc.period,
+      title: `Analisis ${doc.period}`,
       excerpt: doc.excerpt.slice(0, 1800),
     }));
     const publicExcerpts = (model.documents ?? []).map((doc) => ({
@@ -647,7 +653,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       kind: doc.kind,
       aliases: doc.aliases,
     }));
-    const knowledgeExcerpts = (binaryReady ? [...rawExcerpts, ...publicExcerpts] : markdownExcerpts)
+    const knowledgeExcerpts = (binaryReady ? [...analysisExcerpts, ...rawExcerpts, ...publicExcerpts] : markdownExcerpts)
       .filter((doc) => !isStaleCatalogExcerpt(doc.source, doc.excerpt))
       .slice(0, 5);
 

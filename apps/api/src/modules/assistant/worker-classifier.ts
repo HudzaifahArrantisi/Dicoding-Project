@@ -109,11 +109,11 @@ export function searchWorkerRawRetrieval(index: WorkerRetrieval | null, query: s
     .map(({ position, score }) => result(index, position, score));
 }
 
-export function searchWorkerAnalysisRetrieval(index: WorkerRetrieval | null, partnerId: string | undefined, query: string): Array<Record<string, unknown>> {
-  if (!index || !partnerId) return [];
-  const own = scoreWorkerRetrieval(index, query).filter(({ position }) => index.documents[position].partner_id === partnerId)
+export function searchWorkerAnalysisRetrieval(index: WorkerRetrieval | null, partnerId: string | undefined, query: string, adminAccess = false): Array<Record<string, unknown>> {
+  if (!index || (!partnerId && !adminAccess)) return [];
+  const own = scoreWorkerRetrieval(index, query).filter(({ position }) => adminAccess || index.documents[position].partner_id === partnerId)
     .sort((a, b) => b.score - a.score || a.position - b.position);
-  const overview = own.find(({ position }) => index.documents[position].source === "category_partners.json");
+  const overview = adminAccess ? undefined : own.find(({ position }) => index.documents[position].source === "category_partners.json");
   const lower = query.toLowerCase();
   let selected = own.filter(({ score }) => score >= 0.03).slice(0, 6);
   if (!selected.length && ["minggu", "rangkum", "ringkas", "analisis", "kegiatan"].some((word) => lower.includes(word))) selected = own.slice(0, 6);

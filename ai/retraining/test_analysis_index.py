@@ -32,6 +32,27 @@ class PartnerAnalysisIndexTests(unittest.TestCase):
             self.assertTrue(all(item["partner_id"] == "a" for item in own))
             self.assertFalse(any("999" in item["excerpt"] or "Seblak" in item["excerpt"] for item in own))
             self.assertEqual(search_partner_analysis(index, "c", "rangkum minggu saya"), [])
+            old_count = len(index["documents"])
+            for name in ("products", "partners", "regions", "reporting"):
+                path = folder / f"category_{name}.json"
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["start_date"] = "2026-11-09"
+                payload["end_date"] = "2026-11-11"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+            updated = build_analysis_index(folder, index)
+            self.assertEqual(len(updated["documents"]), old_count * 2)
+            self.assertEqual(len(build_analysis_index(folder, updated)["documents"]), old_count * 2)
+            self.assertEqual(len({item["period"] for item in updated["documents"]}), 2)
+            self.assertTrue(all(item["partner_id"] == "a" for item in search_partner_analysis(updated, "a", "minggu lalu")))
+            for name in ("products", "partners", "regions", "reporting"):
+                path = folder / f"category_{name}.json"
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["end_date"] = "2026-11-13"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+            self.assertEqual(len(build_analysis_index(folder, updated)["documents"]), old_count * 2)
+            admin_results = search_partner_analysis(updated, None, "analisis mingguan", admin_access=True)
+            self.assertTrue(admin_results)
+            self.assertEqual(search_partner_analysis(updated, None, "analisis mingguan"), [])
 
 
 if __name__ == "__main__":

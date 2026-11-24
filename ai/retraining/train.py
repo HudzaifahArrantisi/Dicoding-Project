@@ -202,7 +202,7 @@ def train_manual(mode: int, selected_run_id: str | None, public_sources: list[st
             raise ValueError("Laporan hanya memiliki satu kelas risiko dan belum ada model risiko lama")
         bundle["mainbrain_meta"] = {**dict(bundle.get("mainbrain_meta") or {}),
                                     "source_run_id": folder.name, "training_input_source": "data_science_run"}
-        bundle["analysis_retrieval"] = build_analysis_index(folder)
+        bundle["analysis_retrieval"] = build_analysis_index(folder, bundle.get("analysis_retrieval"))
         print(f"Analisis privat: {folder.name}; empat kategori tervalidasi; {len(samples)} pasangan mitra-produk")
     if mode in (2, 3):
         available = list_raw_references()
@@ -303,7 +303,14 @@ def run_retraining_loop(training_source: str = "analysis") -> bool:
         }
         if run_id():
             if training_source == "analysis":
-                bundle["analysis_retrieval"] = build_analysis_index(handoff.parent)
+                previous_index = None
+                if MODEL_OUTPUT_FILE.is_file():
+                    with MODEL_OUTPUT_FILE.open("rb") as previous_file:
+                        previous_bundle = pickle.load(previous_file)
+                    if not isinstance(previous_bundle, dict):
+                        raise ValueError("Format model sebelumnya tidak didukung")
+                    previous_index = previous_bundle.get("analysis_retrieval")
+                bundle["analysis_retrieval"] = build_analysis_index(handoff.parent, previous_index)
             else:
                 bundle["raw_pdf_retrieval"] = build_raw_reference_index(raw_paths)
         if len(set(labels)) >= 2:

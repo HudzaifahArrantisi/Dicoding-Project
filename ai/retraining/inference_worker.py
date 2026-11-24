@@ -57,8 +57,10 @@ def main() -> None:
                 if request.get("admin_access") is True:
                     result["raw_documents"] = search_raw_reference(intent_classifier.raw_retrieval, message)
                 partner_id = request.get("partner_id")
+                admin_access = request.get("admin_access") is True
                 result["analysis_documents"] = search_partner_analysis(
-                    intent_classifier.analysis_retrieval, partner_id, message) if isinstance(partner_id, str) else []
+                    intent_classifier.analysis_retrieval, partner_id if isinstance(partner_id, str) else None,
+                    message, admin_access=admin_access) if isinstance(partner_id, str) or admin_access else []
             identity_meta = intent_classifier.metadata or risk_classifier.metadata
             if identity_meta:
                 result["identity"] = identity_meta

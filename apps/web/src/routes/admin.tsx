@@ -2224,7 +2224,6 @@ function AIInsightsPanel({
 }) {
   const queryClient = useQueryClient()
   const [startingAi, setStartingAi] = useState(false)
-  const [trainingSource, setTrainingSource] = useState<'analysis' | 'raw_references'>('analysis')
   const activeRun = useRef<string | null>(null)
   const processingRunId = useRef<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -2242,18 +2241,11 @@ function AIInsightsPanel({
   const selectedAnalysisRun = requestedRunId
     ? analysisRuns.data?.runs.find((run) => run.id === requestedRunId) ?? null
     : analysisRuns.data?.runs[0] ?? null
-  const rawReferences = useQuery<{ files: RawReference[] }>({
-    queryKey: ['admin-raw-references'],
-    queryFn: getRawReferences,
-  })
-  const adminReferenceCount = rawReferences.data?.files.filter((file) => file.origin === 'admin').length ?? 0
   const artifacts = useQuery<AnalysisArtifacts>({
     queryKey: ['analysis-artifacts', selectedAnalysisRun?.id],
     queryFn: () => getAnalysisArtifacts(selectedAnalysisRun!.id),
     enabled: previewOpen && selectedAnalysisRun !== null,
   })
-  useEffect(() => {
-  }, [selectedAnalysisRun?.id, selectedAnalysisRun?.manifest?.training_source])
   useEffect(() => {
     const runId = processingRunId.current
     const completedRun = analysisRuns.data?.runs.find((run) => run.id === runId)
@@ -2532,7 +2524,7 @@ function AIInsightsPanel({
     setStartingAi(true)
     processingRunId.current = selectedAnalysisRun.id
     try {
-      await actionAnalysisRun(selectedAnalysisRun.id, 'process', undefined, trainingSource)
+      await actionAnalysisRun(selectedAnalysisRun.id, 'process', undefined, 'analysis')
       await analysisRuns.refetch()
       await artifacts.refetch()
       toast.success(`Training run ${selectedAnalysisRun.id.slice(0, 8)} dimulai. Hasil aktif tidak berubah sampai proses berhasil.`)
@@ -2685,9 +2677,6 @@ function AIInsightsPanel({
             artifacts={artifacts.data}
             loading={artifacts.isLoading || analysisRuns.isLoading}
             continuing={startingAi || selectedAnalysisRun?.status === 'processing'}
-            trainingSource={trainingSource}
-            onTrainingSourceChange={setTrainingSource}
-            rawReferenceCount={adminReferenceCount}
             onContinue={() => void handleContinueWithArtifacts()}
           />
         </>
@@ -3567,7 +3556,7 @@ function WeeklySalesHistoryModal({
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-sm font-semibold text-ink-900">
                           Minggu {week.week}
-                          <span className="font-normal text-muted"> · {Number(week.start_date.slice(8))}–{Number(week.end_date.slice(8))}</span>
+                          <span className="font-normal text-muted"> ·Tanggal {Number(week.start_date.slice(8))}–{Number(week.end_date.slice(8))}</span>
                         </span>
                         {week.is_current ? (
                           <span className="rounded-full bg-ink-900 px-2 py-0.5 text-[10px] font-semibold text-white">Minggu ini</span>
