@@ -50,9 +50,9 @@ export function PartnerDetailModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
           {/* Header */}
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-5 py-4 backdrop-blur-sm">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface/95 px-5 py-4 backdrop-blur-sm">
             <div className="flex items-center gap-3 min-w-0">
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-700">
                 <Building2 className="size-5" aria-hidden="true" />
@@ -76,7 +76,7 @@ export function PartnerDetailModal({
               <button
                 type="button"
                 aria-label="Tutup detail mitra"
-                className="grid size-8 shrink-0 place-items-center rounded-md border border-line bg-white text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
+                className="grid size-8 shrink-0 place-items-center rounded-md border border-line bg-surface text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
@@ -85,12 +85,12 @@ export function PartnerDetailModal({
 
           {/* Body Content */}
           <div className="space-y-4 p-5">
-            <div className="rounded-lg border border-line bg-white p-4 text-sm text-ink-800">
+            <div className="rounded-lg border border-line bg-surface shadow-xs p-4 text-sm text-ink-800">
               <p className="font-semibold text-ink-900">Titip jual</p>
               <p className="mt-1 text-xs text-muted">Penjualan diestimasi dari log stok keluar yang dicatat mitra.</p>
             </div>
             {/* PIC Information */}
-            <div className="rounded-lg border border-line bg-white p-4 shadow-2xs">
+            <div className="rounded-lg border border-line bg-surface shadow-xs p-4 shadow-2xs">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted mb-3">
                 <User className="size-3.5 text-ink-700" aria-hidden="true" />
                 <span>Penanggung Jawab (PIC)</span>
@@ -134,7 +134,7 @@ export function PartnerDetailModal({
             </div>
 
             {/* Login Account Information */}
-            <div className="rounded-lg border border-line bg-white p-4 shadow-2xs">
+            <div className="rounded-lg border border-line bg-surface shadow-xs p-4 shadow-2xs">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted mb-3">
                 <Shield className="size-3.5 text-ink-700" aria-hidden="true" />
                 <span>Akun Masuk Portal Mitra</span>
@@ -156,7 +156,7 @@ export function PartnerDetailModal({
             </div>
 
             {/* Address & Region Information */}
-            <div className="rounded-lg border border-line bg-white p-4 shadow-2xs">
+            <div className="rounded-lg border border-line bg-surface shadow-xs p-4 shadow-2xs">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted mb-3">
                 <MapPin className="size-3.5 text-ink-700" aria-hidden="true" />
                 <span>Alamat & Wilayah Operasional</span>
@@ -210,7 +210,7 @@ export function PartnerDetailModal({
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-line bg-white px-3.5 text-xs font-semibold text-ink-900 shadow-2xs transition hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
+                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-line bg-surface px-3.5 text-xs font-semibold text-ink-900 shadow-2xs transition hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700"
                 >
                   Tutup
                 </button>

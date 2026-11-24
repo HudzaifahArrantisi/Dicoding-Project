@@ -233,7 +233,7 @@ export function AssistantMessageText({ text }: { text: string }) {
         const [header, ...body] = rows
         return (
           <div key={index} className="my-3 max-w-full">
-            <div role="region" aria-label="Tabel jawaban" tabIndex={0} className="max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-line bg-white shadow-2xs focus-visible:outline-2 focus-visible:outline-ink-900">
+            <div role="region" aria-label="Tabel jawaban" tabIndex={0} className="max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-line bg-surface shadow-xs shadow-2xs focus-visible:outline-2 focus-visible:outline-ink-900">
               <table className={`w-full border-collapse text-left text-xs tabular-nums ${header.length >= 3 ? 'min-w-[440px]' : ''}`}>
               <thead>
                 <tr className="border-b border-line bg-surface/90 text-ink-950">
@@ -431,10 +431,10 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
         <section
           id="mitra-ai-chat"
           aria-label="Percakapan dengan asisten Daisuki"
-          className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] top-16 z-50 flex flex-col overflow-hidden rounded-2xl border border-line/80 bg-white shadow-2xl transition-all sm:inset-x-auto sm:top-auto sm:bottom-6 sm:right-6 sm:h-[min(82dvh,680px)] sm:w-[440px] md:bottom-6 md:right-6 animate-in zoom-in-95 duration-200"
+          className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] top-16 z-50 flex flex-col overflow-hidden rounded-2xl border border-line/80 bg-surface shadow-2xl transition-all sm:inset-x-auto sm:top-auto sm:bottom-6 sm:right-6 sm:h-[min(82dvh,680px)] sm:w-[440px] md:bottom-6 md:right-6 animate-in zoom-in-95 duration-200"
         >
           {/* Header Chatbot Bersih */}
-          <header className="flex items-center justify-between border-b border-line/70 bg-white/95 px-4 py-3 backdrop-blur-md">
+          <header className="flex items-center justify-between border-b border-line/70 bg-surface/95 px-4 py-3 backdrop-blur-md">
             <div className="flex items-center gap-3 min-w-0">
               <div className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-white shadow-2xs">
                 <img src="/icons/logo.jpg" alt="Logo" className="size-full rounded-xl object-cover" />
@@ -498,7 +498,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                       type="button"
                       disabled={clearing}
                       onClick={() => setShowConfirmClear(false)}
-                      className="inline-flex min-h-8 items-center rounded-md border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-900 hover:bg-rose-100/60 transition-colors"
+                      className="inline-flex min-h-8 items-center rounded-md border border-rose-200 bg-surface px-2.5 text-xs font-semibold text-rose-900 hover:bg-rose-100/60 transition-colors"
                     >
                       Batal
                     </button>
@@ -542,7 +542,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                     className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-2xs ${
                       isMitra
                         ? 'bg-ink-900 text-white rounded-tr-xs'
-                        : 'border border-line/80 bg-white text-ink-900 rounded-tl-xs'
+                        : 'border border-line/80 bg-surface text-ink-900 rounded-tl-xs'
                     }`}
                   >
                     {isMitra ? (
@@ -626,7 +626,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
           </div>
 
           {/* Footer Input & Quick Suggestions */}
-          <div className="border-t border-line/70 bg-white p-3 sm:p-3.5">
+          <div className="border-t border-line/70 bg-surface p-3 sm:p-3.5">
             {/* Quick Reply Pills */}
             <div
               className="mb-2.5 flex flex-wrap gap-1.5"
@@ -638,7 +638,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                   type="button"
                   onClick={() => void send(reply)}
                   disabled={busy}
-                  className="rounded-full border border-line bg-slate-50/80 px-2.5 py-1 text-left text-xs font-medium text-ink-800 shadow-2xs transition-all hover:border-ink-400 hover:bg-white disabled:opacity-50 cursor-pointer"
+                  className="rounded-full border border-line bg-slate-50/80 px-2.5 py-1 text-left text-xs font-medium text-ink-800 shadow-2xs transition-all hover:border-ink-400 hover:bg-surface disabled:opacity-50 cursor-pointer"
                 >
                   {reply}
                 </button>
@@ -669,7 +669,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                 onChange={(event) => setDraft(event.target.value)}
                 maxLength={500}
                 placeholder="Tanya stok, restock, resi..."
-                className="w-full rounded-full border border-line bg-slate-50/70 py-2.5 pl-4 pr-12 text-sm text-ink-900 placeholder:text-muted transition-all focus:bg-white focus:border-ink-700 focus:outline-none focus:ring-2 focus:ring-ink-700/20"
+                className="w-full rounded-full border border-line bg-slate-50/70 py-2.5 pl-4 pr-12 text-sm text-ink-900 placeholder:text-muted transition-all focus:bg-surface focus:border-ink-700 focus:outline-none focus:ring-2 focus:ring-ink-700/20"
               />
               <button
                 type="submit"

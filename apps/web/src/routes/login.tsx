@@ -65,7 +65,7 @@ function LoginPage() {
 
   return (
     <main className="min-h-dvh bg-paper sm:grid sm:place-items-center sm:px-6 sm:py-10 animate-in fade-in duration-500">
-      <section className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col bg-paper sm:block sm:min-h-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:bg-white sm:shadow-[0_20px_55px_-45px_rgba(20,27,61,0.35)] lg:grid lg:grid-cols-[0.9fr_1.1fr] animate-in fade-in zoom-in-[0.98] duration-500">
+      <section className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col bg-paper sm:block sm:min-h-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-line sm:bg-surface sm:shadow-[0_20px_55px_-45px_rgba(20,27,61,0.35)] lg:grid lg:grid-cols-[0.9fr_1.1fr] animate-in fade-in zoom-in-[0.98] duration-500">
         <div className="relative isolate flex flex-col overflow-hidden bg-[#a9000c] px-6 pb-7 pt-8 text-white sm:px-10 sm:pb-9 sm:pt-10 lg:justify-between lg:px-12 lg:py-12">
           <img
             src="/icons/logo.jpg"
@@ -84,7 +84,7 @@ function LoginPage() {
 
           <div className="mt-10 max-w-sm lg:mb-2 lg:mt-24">
             <div
-              className="mb-5 h-1 w-10 rounded-full bg-white/80"
+              className="mb-5 h-1 w-10 rounded-full bg-surface/80"
               aria-hidden="true"
             />
             <h1 className="font-display text-[clamp(1.8rem,3.3vw,2.55rem)] font-semibold leading-[1.15] text-white">
@@ -93,7 +93,7 @@ function LoginPage() {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col justify-center px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-8 sm:block sm:bg-white sm:px-10 sm:pb-10 sm:pt-10 lg:px-12 lg:py-12">
+        <div className="flex flex-1 flex-col justify-center px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-8 sm:block sm:bg-surface sm:px-10 sm:pb-10 sm:pt-10 lg:px-12 lg:py-12">
           <div className="mx-auto max-w-sm">
             <h2 className="font-display text-2xl font-semibold text-ink-900">
               Masuk
@@ -114,7 +114,7 @@ function LoginPage() {
                         setPassword(account.password)
                         setError(null)
                       }}
-                      className="min-h-11 rounded-lg border border-[#858e9d] bg-white px-3 text-sm font-medium text-ink-900 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                      className="min-h-11 rounded-lg border border-[#858e9d] bg-surface px-3 text-sm font-medium text-ink-900 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
                     >
                       {account.label}
                     </button>
@@ -136,7 +136,7 @@ function LoginPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="Email"
-                  className="min-h-12 w-full rounded-lg border border-[#858e9d] bg-white px-4 text-base text-text placeholder:text-[#687080] focus-visible:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                  className="min-h-12 w-full rounded-lg border border-[#858e9d] bg-surface px-4 text-base text-text placeholder:text-[#687080] focus-visible:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
                   required
                   aria-describedby={error ? 'login-error' : undefined}
                 />
@@ -157,7 +157,7 @@ function LoginPage() {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Masukkan kata sandi"
-                    className="min-h-12 w-full rounded-lg border border-[#858e9d] bg-white py-2 pl-4 pr-14 text-base text-text placeholder:text-[#687080] focus-visible:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                    className="min-h-12 w-full rounded-lg border border-[#858e9d] bg-surface py-2 pl-4 pr-14 text-base text-text placeholder:text-[#687080] focus-visible:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
                     required
                     aria-describedby={error ? 'login-error' : undefined}
                   />

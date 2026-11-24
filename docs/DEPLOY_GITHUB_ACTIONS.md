@@ -1,5 +1,23 @@
 # Analisis dan training di GitHub Actions
 
+## Periode dan penerbitan
+
+- **Log & Data** membaca log minggu berjalan langsung dari Neon. Ringkasan
+  dan panel pasokan, perbandingan produk, serta cabang diperbarui lewat event
+  stok dan pemeriksaan berkala 30 detik.
+- Saat Admin menekan **Perbarui analisis**, aplikasi memilih Senin minggu
+  berjalan sampai tanggal hari itu menurut WIB. Waktu klik disimpan pada run;
+  agregator hanya mengambil log dan pesanan yang tercatat sampai waktu tersebut.
+  Data minggu lalu tidak dipakai sebagai masukan perbandingan run baru.
+- Hasil empat kategori disimpan sebagai draft per run. **AI Insights** tetap
+  menampilkan hasil terbit sebelumnya sampai Admin memulai training dan pipeline
+  berhasil menerbitkan run baru.
+- Pipeline melatih `daisuki.pkl` dan mengekspor JSON inferensi ke key KV aktif
+  `daisuki`. Artefak run lama, termasuk model `.pkl`, tetap tersimpan di Neon
+  untuk riwayat; key KV aktif diganti dengan versi terbaru setelah training.
+  Jika data minggu berjalan hanya memiliki satu kelas risiko, model risiko
+  sebelumnya dapat dipertahankan dari artefak run aktif.
+
 Workflow `.github/workflows/analysis-pipeline.yml` menjalankan Python di runner GitHub.
 API `daisuki-api` tetap menangani login, stok, pesanan, dan chat. Laptop tidak
 dibutuhkan untuk analisis dan training setelah alur ini dipasang.

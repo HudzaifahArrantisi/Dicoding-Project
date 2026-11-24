@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
@@ -7,7 +7,7 @@ import { analysisRuns, auditLogs, notifications, products, restockRecommendation
 import { aiRunDir, clearActiveRun, dataScienceRunDir, activeRunId, publishActiveRun, workspaceRoot } from "./analysis-artifacts";
 import { reloadMitraModelWorker } from "../modules/assistant/model";
 import { publishInventoryChange } from "../realtime";
-import { hydrateDataScienceArtifacts, saveAiArtifacts, saveDataScienceArtifacts, stageRawReferences } from "./analysis-storage";
+import { hydrateDataScienceArtifacts, loadArtifact, saveAiArtifacts, saveDataScienceArtifacts, stageRawReferences } from "./analysis-storage";
 import { dispatchAnalysisAction } from "./analysis-actions";
 
 const python = process.env.DAISUKI_PYTHON_BIN || process.env.PYTHON_EXECUTABLE ||
@@ -48,7 +48,8 @@ export async function listAnalysisRuns() {
 
 export async function createAnalysisDraft(startDate: string, endDate: string, actorId: string | null) {
   const id = crypto.randomUUID();
-  await db.insert(analysisRuns).values({ id, start_date: startDate, end_date: endDate,
+  const snapshotAt = new Date();
+  await db.insert(analysisRuns).values({ id, start_date: startDate, end_date: endDate, created_at: snapshotAt,
     status: "creating", created_by: actorId });
   try {
     if (typeof Bun === "undefined") {
@@ -56,7 +57,7 @@ export async function createAnalysisDraft(startDate: string, endDate: string, ac
       return id;
     }
     await pythonJob("data-science/src/weekly_analytics_aggregator.py", id,
-      ["--start-date", startDate, "--end-date", endDate, "--run-id", id]);
+      ["--start-date", startDate, "--end-date", endDate, "--run-id", id, "--as-of", snapshotAt.toISOString()]);
     const manifest = JSON.parse(await readFile(resolve(dataScienceRunDir(id), "manifest.json"), "utf8")) as Record<string, unknown>;
     if (manifest.run_id !== id || manifest.start_date !== startDate || manifest.end_date !== endDate) {
       throw new Error("Manifest laporan tidak cocok dengan permintaan");
@@ -198,6 +199,14 @@ export async function processAnalysisRun(id: string, actorId: string, requestedT
           .where(eq(analysisRuns.id, id));
       }
       await hydrateDataScienceArtifacts(id);
+      const previousModelId = activeRunId();
+      if (previousModelId) {
+        const previousModel = await loadArtifact(previousModelId, "daisuki.pkl");
+        if (previousModel) {
+          await mkdir(aiRunDir(id), { recursive: true });
+          await writeFile(resolve(aiRunDir(id), "daisuki.pkl"), previousModel);
+        }
+      }
       const staged = await stageRawReferences(trainingSource === "raw_references");
       cleanupRaw = staged.cleanup;
       for (const job of jobs) {

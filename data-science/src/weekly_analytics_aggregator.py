@@ -48,8 +48,8 @@ def database_url() -> str:
     return value
 
 
-def fetch_rows(start: datetime, end: datetime) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
-    previous = start - (end - start)
+def fetch_rows(start: datetime, end: datetime, as_of: datetime | None = None) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+    upper_bound = min(end, as_of) if as_of else end
     with psycopg.connect(database_url(), row_factory=dict_row, connect_timeout=10) as connection:
         with connection.cursor() as cursor:
             cursor.execute("SET TRANSACTION READ ONLY")
@@ -67,14 +67,14 @@ def fetch_rows(start: datetime, end: datetime) -> tuple[list[dict], list[dict], 
             cursor.execute("""SELECT sl.partner_id::text AS partner_id, sl.product_id::text AS product_id,
                 sl.qty_before, sl.qty_after, sl.created_at
                 FROM stock_logs sl WHERE sl.source='manual_update' AND sl.created_at >= %s AND sl.created_at < %s""",
-                (previous, end))
+                (start, upper_bound))
             logs = cursor.fetchall()
             cursor.execute("""SELECT o.id::text AS order_id, o.partner_id::text AS partner_id,
                 oi.product_id::text AS product_id, o.status::text AS status,
                 oi.qty_requested, oi.qty_approved, o.created_at
                 FROM orders o JOIN order_items oi ON oi.order_id=o.id
-                WHERE o.created_at >= %s AND o.created_at < %s OR o.status IN ('diproses','disetujui','dalam_pengiriman')""",
-                (start, end))
+                WHERE o.created_at < %s AND (o.created_at >= %s OR o.status IN ('diproses','disetujui','dalam_pengiriman'))""",
+                (upper_bound, start))
             orders = cursor.fetchall()
     return products, stocks, logs, orders
 
@@ -94,7 +94,7 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
     products = [p for p in products if p["name"] in official]
     product_ids = {p["id"] for p in products}
     stocks = [s for s in stocks if s["product_id"] in product_ids]
-    logs = [row for row in logs if row["product_id"] in product_ids]
+    logs = [row for row in logs if row["product_id"] in product_ids and start <= row["created_at"] < end]
     orders = [row for row in orders if row["product_id"] in product_ids]
     days = (end - start).days
     if days < 1:
@@ -131,11 +131,9 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
         key = (stock["partner_id"], stock["product_id"])
         history = logs_by_pair[key]
         current_logs = [row for row in history if start <= row["created_at"] < end]
-        previous_logs = [row for row in history if row["created_at"] < start]
         consumed = sum(max(0, row["qty_before"] - row["qty_after"]) for row in current_logs)
-        previous_units = sum(max(0, row["qty_before"] - row["qty_after"]) for row in previous_logs)
         velocity = consumed / days
-        previous_velocity = previous_units / days
+        previous_velocity = velocity
         qty, buffer = int(stock["current_qty"]), int(stock["par_level"])
         cover = round(qty / velocity, 2) if velocity else (999.0 if qty else 0.0)
         critical = sum(row["qty_after"] <= buffer * .2 for row in current_logs)
@@ -237,16 +235,16 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
                           "requested_restock_units": product_requested, "demand_basis_units": max(units, product_requested),
                           "estimated_runout_days": round(stock / daily_demand, 1) if daily_demand else None,
                           "suggested_factory_batch_order": max(0, math.ceil(daily_demand * (7 + 14)) - stock)})
-    previous_units = sum(max(0, row["qty_before"] - row["qty_after"]) for row in logs if row["created_at"] < start)
+    previous_units = 0
     daily_consumption_totals: dict[str, int] = defaultdict(int)
     for row in logs:
         if row["partner_id"] in partner_names:
             day = row["created_at"].astimezone(JAKARTA).date().isoformat()
             daily_consumption_totals[day] += max(0, row["qty_before"] - row["qty_after"])
-    first_day = (start - (end - start)).astimezone(JAKARTA).date()
+    first_day = start.astimezone(JAKARTA).date()
     daily_consumption = [{"day": (first_day + timedelta(days=i)).isoformat(),
                           "units": daily_consumption_totals.get((first_day + timedelta(days=i)).isoformat(), 0)}
-                         for i in range(days * 2)]
+                         for i in range(days)]
     report = {"metadata": {"schema_version": 1, "generated_at": datetime.now(timezone.utc).isoformat(),
                             "start_date": start.astimezone(JAKARTA).date().isoformat(),
                             "end_date": (end - timedelta(days=1)).astimezone(JAKARTA).date().isoformat(),
@@ -367,6 +365,7 @@ def run() -> dict:
     parser.add_argument("--start-date", type=date.fromisoformat)
     parser.add_argument("--end-date", type=date.fromisoformat)
     parser.add_argument("--run-id", type=str)
+    parser.add_argument("--as-of", type=datetime.fromisoformat)
     args = parser.parse_args()
     today = datetime.now(JAKARTA).date()
     end_day = args.end_date or today
@@ -375,7 +374,11 @@ def run() -> dict:
         parser.error("start-date tidak boleh setelah end-date")
     start = datetime.combine(start_day, time.min, JAKARTA)
     end = datetime.combine(end_day + timedelta(days=1), time.min, JAKARTA)
-    report, cleaned = analyze(start, end, *fetch_rows(start, end))
+    if args.as_of and (args.as_of.tzinfo is None or args.as_of < start):
+        parser.error("as-of harus berzona waktu dan berada setelah start-date")
+    report, cleaned = analyze(start, end, *fetch_rows(start, end, args.as_of))
+    if args.as_of:
+        report["metadata"]["snapshot_at"] = args.as_of.astimezone(timezone.utc).isoformat()
     if args.run_id:
         report["metadata"]["source_run_id"] = str(uuid.UUID(args.run_id))
         destination = write_immutable_run(report, cleaned, args.run_id)

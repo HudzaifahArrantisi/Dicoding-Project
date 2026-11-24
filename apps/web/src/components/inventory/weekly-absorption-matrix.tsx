@@ -249,7 +249,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
             type="button"
             onClick={() => void handleManualRefresh()}
             disabled={isLoading || isFetching}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3.5 text-xs font-bold text-ink-900 shadow-xs hover:bg-ink-50 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-line bg-surface shadow-xs px-3.5 text-xs font-bold text-ink-900 shadow-xs hover:bg-ink-50 disabled:opacity-50"
             title="Muat ulang data kecepatan jual dan stok terbaru"
           >
             <RotateCcw className={`size-3.5 ${isFetching ? 'animate-spin text-ink-900' : 'text-muted'}`} aria-hidden="true" />
@@ -281,7 +281,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
       {/* 4 KARTU KPI UTAMA (Hierarki Angka Utama & Keterbacaan Tinggi untuk PIC Senior) */}
       {view === 'overview' && <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {/* KPI 1: Kecepatan Jual Jaringan */}
-        <div className="rounded-xl border-2 border-line bg-white p-4 shadow-xs">
+        <div className="rounded-xl border-2 border-line bg-surface p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted">
             <span className="text-xs font-bold uppercase tracking-wider text-ink-700">Laju Penjualan</span>
             <TrendingUp className="size-5 text-emerald-600" aria-hidden="true" />
@@ -352,7 +352,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
                 aria-label="Pilih Periode Minggu"
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink-900 shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
+                className="min-h-11 rounded-lg border border-line bg-surface shadow-xs px-3 py-2 text-xs font-semibold text-ink-900 shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
               >
                 {matrix.available_periods.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -373,7 +373,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
                 aria-label="Pilih Lokasi Cabang"
                 value={selectedCity}
                 onChange={(e) => setSelectedCity(e.target.value)}
-                className="min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-ink-900 shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
+                className="min-h-11 rounded-lg border border-line bg-surface shadow-xs px-3 py-2 text-xs font-semibold text-ink-900 shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
               >
                 {matrix.available_cities.map((city) => (
                   <option key={city} value={city}>
@@ -394,7 +394,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari nama toko mitra..."
                 aria-label="Cari nama cabang mitra"
-                className="min-h-11 w-full rounded-lg border border-line bg-white pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
+                className="min-h-11 w-full rounded-lg border border-line bg-surface shadow-xs pl-9 pr-3 text-xs text-ink-900 placeholder:text-muted shadow-xs focus-visible:outline-2 focus-visible:outline-ink-900"
               />
             </div>
 
@@ -402,7 +402,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
               <button
                 type="button"
                 onClick={resetFilters}
-                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-ink-300 bg-white px-3 text-xs font-bold text-ink-900 hover:bg-ink-100 hover:border-ink-900 transition-colors shadow-xs"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-ink-300 bg-surface px-3 text-xs font-bold text-ink-900 hover:bg-ink-100 hover:border-ink-900 transition-colors shadow-xs"
                 title="Kembalikan semua filter ke tampilan awal"
               >
                 <X className="size-3.5" aria-hidden="true" />
@@ -429,7 +429,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
             className={`min-h-11 rounded-lg px-3.5 py-2 font-bold transition-all ${
               selectedTier === tab.key
                 ? 'bg-ink-900 text-white shadow-sm'
-                : 'bg-white border border-line text-ink-700 hover:bg-ink-50 hover:text-ink-900'
+                : 'bg-surface border border-line text-ink-700 hover:bg-ink-50 hover:text-ink-900'
             }`}
           >
             {tab.label}
@@ -438,7 +438,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
       </div>}
 
       {/* GRAFIK BAR PERBANDINGAN KECEPATAN JUAL ANTAR TOKO */}
-      {view === 'comparison' && <div className="rounded-lg border border-line bg-white p-4 sm:p-5">
+      {view === 'comparison' && <div className="rounded-lg border border-line bg-surface shadow-xs p-4 sm:p-5">
         <h3 className="text-sm font-semibold text-ink-900">Perbandingan penjualan · {chartPartners.length} cabang</h3>
 
         {chartPartners.length > 0 ? (
@@ -490,7 +490,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
       </div>}
 
       {/* TABEL PERINGKAT OPERASIONAL LENGKAP */}
-      {view === 'branches' && <div className="rounded-xl border border-line bg-white overflow-hidden shadow-xs">
+      {view === 'branches' && <div className="rounded-xl border border-line bg-surface shadow-xs overflow-hidden shadow-xs">
         <div className="border-b border-line px-4 py-3 bg-paper/60 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="font-display text-sm font-bold text-ink-900">
@@ -611,7 +611,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
                                 return (
                                   <div
                                     key={p.product_id}
-                                    className="rounded-lg border border-line bg-white p-3 space-y-2 shadow-xs"
+                                    className="rounded-lg border border-line bg-surface shadow-xs p-3 space-y-2 shadow-xs"
                                   >
                                     <div className="flex items-start justify-between gap-1">
                                       <strong className="text-xs font-bold text-ink-900 truncate">
@@ -665,7 +665,7 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
                               })}
                             </div>
 
-                            <p className="text-xs text-ink-700 bg-white border border-line rounded-md p-2.5">
+                            <p className="text-xs text-ink-700 bg-surface border border-line rounded-md p-2.5">
                               <strong className="text-ink-900">Arahan Tindakan PIC:</strong> {partner.actionable_strategy}
                             </p>
                           </div>

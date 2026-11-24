@@ -37,7 +37,7 @@ export function ErrorState({
           <button
             type="button"
             onClick={onRetry}
-            className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md border border-crit/40 bg-white px-3 text-sm font-semibold text-crit-fg hover:bg-crit-bg"
+            className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md border border-crit/40 bg-surface px-3 text-sm font-semibold text-crit-fg hover:bg-crit-bg"
           >
             <RotateCw className="size-4" aria-hidden="true" />
             Muat ulang data

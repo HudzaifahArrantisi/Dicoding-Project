@@ -379,7 +379,7 @@ export function RegionalAnalysis({
 
         {/* Naive Bayes Multi-Factor Intelligence Panel */}
         {naiveBayesAnalysis ? (
-          <div className="order-4 rounded-xl border border-line bg-white p-3.5 sm:p-5 shadow-2xs">
+          <div className="order-4 rounded-xl border border-line bg-surface shadow-xs p-3.5 sm:p-5 shadow-2xs">
             <div className="flex flex-col gap-3.5 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-800 ring-1 ring-line">
@@ -429,7 +429,7 @@ export function RegionalAnalysis({
           <label className="min-w-[10rem] flex-1 text-xs font-semibold text-ink-800">
             <span className="sr-only">Kategori Zona</span>
             <select
-              className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
+              className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
               value={zone}
               onChange={(e) => {
                 setZone(e.target.value as Zone | 'semua')
@@ -450,7 +450,7 @@ export function RegionalAnalysis({
           <label className="min-w-[10rem] flex-1 text-xs font-semibold text-ink-800">
             <span className="sr-only">Daerah</span>
             <select
-              className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
+              className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
               value={regionKey}
               onChange={(e) => {
                 setRegionKey(e.target.value)
@@ -473,7 +473,7 @@ export function RegionalAnalysis({
           <label className="min-w-[10rem] flex-1 text-xs font-semibold text-ink-800">
             <span className="sr-only">Mitra Cabang</span>
             <select
-              className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
+              className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-sm font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
               value={partnerId}
               onChange={(e) => setPartnerId(e.target.value)}
             >
@@ -499,9 +499,9 @@ export function RegionalAnalysis({
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60" />
             {selectedRegion ? (
-              <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[92dvh] w-[calc(100%-1.25rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-2xl focus:outline-none">
+              <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[92dvh] w-[calc(100%-1.25rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none">
                 {/* Pinned Modal Header */}
-                <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-white px-5 py-4 sm:px-6">
+                <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-surface px-5 py-4 sm:px-6">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
                       <span
@@ -530,7 +530,7 @@ export function RegionalAnalysis({
                     <button
                       type="button"
                       aria-label="Tutup detail wilayah"
-                      className="grid size-11 shrink-0 place-items-center rounded-lg border border-line bg-white text-ink-700 transition hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+                      className="grid size-11 shrink-0 place-items-center rounded-lg border border-line bg-surface shadow-xs text-ink-700 transition hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
                     >
                       <X className="size-5" aria-hidden="true" />
                     </button>
@@ -541,26 +541,26 @@ export function RegionalAnalysis({
                 <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
                   {/* Clean 4-Tile Summary Metric Bar (Calm Executive Overview) */}
                   <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 rounded-xl border border-line bg-ink-50/40 p-3 sm:p-4">
-                    <div className="rounded-lg border border-line/60 bg-white p-3">
+                    <div className="rounded-lg border border-line/60 bg-surface p-3">
                       <span className="block text-[11px] font-medium text-muted">Pemakaian 7 Hari</span>
                       <strong className="num font-display text-lg font-bold text-ink-900 tabular-nums">
                         {number(regionWeeklyUnits)} <span className="text-xs font-normal text-muted">pcs</span>
                       </strong>
                     </div>
-                    <div className="rounded-lg border border-line/60 bg-white p-3">
+                    <div className="rounded-lg border border-line/60 bg-surface p-3">
                       <span className="block text-[11px] font-medium text-muted">Jumlah Cabang</span>
                       <strong className="num font-display text-lg font-bold text-ink-900 tabular-nums">
                         {selectedRegion.partners.length} <span className="text-xs font-normal text-muted">mitra</span>
                       </strong>
                     </div>
-                    <div className="rounded-lg border border-line/60 bg-white p-3">
+                    <div className="rounded-lg border border-line/60 bg-surface p-3">
                       <span className="block text-[11px] font-medium text-muted">Aktivitas Log</span>
                       <strong className="num font-display text-base font-bold text-ink-900 tabular-nums">
                         {selectedRegion.critical_logs + selectedRegion.stockout_logs + selectedRegion.restock_requests}{' '}
                         <span className="text-xs font-normal text-muted">kejadian</span>
                       </strong>
                     </div>
-                    <div className="rounded-lg border border-line/60 bg-white p-3">
+                    <div className="rounded-lg border border-line/60 bg-surface p-3">
                       <span className="block text-[11px] font-medium text-muted">Risiko Kehabisan (AI)</span>
                       <strong
                         className={`num font-display text-lg font-bold tabular-nums ${
@@ -678,7 +678,7 @@ export function RegionalAnalysis({
 
                     {/* TAB DETAIL 1: DIAGRAM 3D PIE PER MITRA DENGAN FILTER METRIK KELAS SATU */}
                     {detailChartTab === '3d_pie' && (
-                      <div className="space-y-4 rounded-xl border border-line bg-white p-4 sm:p-5">
+                      <div className="space-y-4 rounded-xl border border-line bg-surface shadow-xs p-4 sm:p-5">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-line/70 pb-3">
                           <div>
                             <h4 className="font-semibold text-ink-900 text-sm sm:text-base">
@@ -696,7 +696,7 @@ export function RegionalAnalysis({
                               onClick={() => setPieMetric('critical')}
                               aria-pressed={pieMetric === 'critical'}
                               className={`min-h-9 px-3 py-1 rounded-md font-semibold transition ${
-                                pieMetric === 'critical' ? 'bg-white text-ink-900 shadow-2xs font-bold' : 'text-muted hover:text-ink-900'
+                                pieMetric === 'critical' ? 'bg-surface text-ink-900 shadow-2xs font-bold' : 'text-muted hover:text-ink-900'
                               }`}
                             >
                               Log Kritis
@@ -706,7 +706,7 @@ export function RegionalAnalysis({
                               onClick={() => setPieMetric('stockout')}
                               aria-pressed={pieMetric === 'stockout'}
                               className={`min-h-9 px-3 py-1 rounded-md font-semibold transition ${
-                                pieMetric === 'stockout' ? 'bg-white text-ink-900 shadow-2xs font-bold' : 'text-muted hover:text-ink-900'
+                                pieMetric === 'stockout' ? 'bg-surface text-ink-900 shadow-2xs font-bold' : 'text-muted hover:text-ink-900'
                               }`}
                             >
                               Stok Habis
@@ -716,7 +716,7 @@ export function RegionalAnalysis({
                               onClick={() => setPieMetric('restock')}
                               aria-pressed={pieMetric === 'restock'}
                               className={`min-h-9 px-3 py-1 rounded-md font-semibold transition ${
-                                pieMetric === 'restock' ? 'bg-white text-ink-900 shadow-2xs font-bold' : 'text-muted hover:text-ink-900'
+                                pieMetric === 'restock' ? 'bg-surface text-ink-900 shadow-2xs font-bold' : 'text-muted hover:text-ink-900'
                               }`}
                             >
                               Restok
@@ -738,7 +738,7 @@ export function RegionalAnalysis({
             {/* TAB DETAIL 2: PREDIKSI RISIKO NAIVE BAYES (CLEAN EXECUTIVE UI) */}
             {detailChartTab === 'naive_bayes' && (
               <div className="space-y-4">
-                <div className="rounded-xl border border-line bg-white p-4 sm:p-5">
+                <div className="rounded-xl border border-line bg-surface shadow-xs p-4 sm:p-5">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b border-line pb-4">
                     <div>
                       <div className="flex items-center gap-2">
@@ -858,7 +858,7 @@ export function RegionalAnalysis({
 
             {/* TAB DETAIL 3: RIWAYAT CABANG */}
             {detailChartTab === 'events' && (
-              <div className="rounded-xl border border-line bg-white p-4 sm:p-5">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 sm:p-5">
                 <div className="border-b border-line pb-3">
                   <h4 className="font-semibold text-ink-900 text-sm sm:text-base">
                     Distribusi Riwayat Stok per Cabang
@@ -956,7 +956,7 @@ export function RegionalAnalysis({
 
             {/* TAB DETAIL 4: SARAN PASOKAN AI */}
             {detailChartTab === 'par_capacity' && (
-              <div className="rounded-xl border border-line bg-white p-4 sm:p-5">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 sm:p-5">
                 <div className="border-b border-line pb-3">
                   <h4 className="font-semibold text-ink-900 text-sm sm:text-base">
                     Rekomendasi Penyesuaian Buffer Minimal
@@ -1064,7 +1064,7 @@ export function RegionalAnalysis({
                   onClick={() => setPieMetric('critical')}
                   aria-pressed={pieMetric === 'critical'}
                   className={`min-h-10 shrink-0 px-3 py-1.5 rounded-md font-semibold transition ${
-                    pieMetric === 'critical' ? 'bg-white text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
+                    pieMetric === 'critical' ? 'bg-surface text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
                   }`}
                 >
                   Log Kritis
@@ -1074,7 +1074,7 @@ export function RegionalAnalysis({
                   onClick={() => setPieMetric('stockout')}
                   aria-pressed={pieMetric === 'stockout'}
                   className={`min-h-10 shrink-0 px-3 py-1.5 rounded-md font-semibold transition ${
-                    pieMetric === 'stockout' ? 'bg-white text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
+                    pieMetric === 'stockout' ? 'bg-surface text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
                   }`}
                 >
                   Stok Habis
@@ -1084,7 +1084,7 @@ export function RegionalAnalysis({
                   onClick={() => setPieMetric('restock')}
                   aria-pressed={pieMetric === 'restock'}
                   className={`min-h-10 shrink-0 px-3 py-1.5 rounded-md font-semibold transition ${
-                    pieMetric === 'restock' ? 'bg-white text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
+                    pieMetric === 'restock' ? 'bg-surface text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
                   }`}
                 >
                   Restok
@@ -1094,7 +1094,7 @@ export function RegionalAnalysis({
                   onClick={() => setPieMetric('total')}
                   aria-pressed={pieMetric === 'total'}
                   className={`min-h-10 shrink-0 px-3 py-1.5 rounded-md font-semibold transition ${
-                    pieMetric === 'total' ? 'bg-white text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
+                    pieMetric === 'total' ? 'bg-surface text-ink-900 shadow-2xs' : 'text-muted hover:text-ink-900'
                   }`}
                 >
                   Total
@@ -1136,7 +1136,7 @@ export function RegionalAnalysis({
           </div>
 
           {visiblePartners.length > 0 ? (
-            <div className="overflow-hidden rounded-xl border border-line bg-white shadow-2xs">
+            <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-xs shadow-2xs">
               {/* TAMPILAN MOBILE: Kartu Responsif Tanpa Terpotong */}
               <div className="divide-y divide-line lg:hidden">
                 {visiblePartners.map((partner) => {
@@ -1183,7 +1183,7 @@ export function RegionalAnalysis({
                             {partner.urgent_items.map((item) => (
                               <span
                                 key={item.product_name}
-                                className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 text-[10px] font-medium text-rose-900 border border-rose-200/80 shadow-2xs"
+                                className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] font-medium text-rose-900 border border-rose-200/80 shadow-2xs"
                               >
                                 <span className="break-words">{item.product_name}</span>
                                 <span className="font-bold tabular-nums text-rose-600">({item.stockout_probability}%)</span>
@@ -1341,7 +1341,7 @@ export function RegionalAnalysis({
               </div>
             </div>
           ) : (
-            <div className="rounded-xl border border-line bg-white p-8 text-center text-xs text-muted">
+            <div className="rounded-xl border border-line bg-surface shadow-xs p-8 text-center text-xs text-muted">
               Tidak ada mitra cabang yang memerlukan perhatian khusus pada pilihan ini.
             </div>
           )}

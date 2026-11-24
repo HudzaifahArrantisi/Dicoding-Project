@@ -98,7 +98,7 @@ export function InstallApp() {
         aria-describedby="install-app-description"
         aria-expanded={showIosGuide ? true : undefined}
         aria-controls={showIosGuide ? 'install-ios-guide' : undefined}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 transition-colors hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-wait disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-700 transition-colors hover:border-ink-700 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-wait disabled:opacity-60"
       >
         {pending ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />

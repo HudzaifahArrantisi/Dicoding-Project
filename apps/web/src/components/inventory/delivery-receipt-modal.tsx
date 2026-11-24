@@ -683,9 +683,9 @@ export function DeliveryReceiptModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[70] bg-ink-900/45 backdrop-blur-xs" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[71] max-h-[94vh] w-[calc(100%-1.5rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-white shadow-2xl focus:outline-none">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[71] max-h-[94vh] w-[calc(100%-1.5rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none">
           {/* Header Dialog */}
-          <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-line bg-white/95 px-5 py-4 backdrop-blur-md sm:px-6">
+          <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-line bg-surface/95 px-5 py-4 backdrop-blur-md sm:px-6">
             <div>
               <Dialog.Title className="font-display text-xl font-bold text-ink-900">
                 {afterShipment ? 'Barang Dikirim · Cetak Dokumen' : 'Cetak Resi / Surat Jalan'}
@@ -723,7 +723,7 @@ export function DeliveryReceiptModal({
                     type="button"
                     onClick={handleCopyCode}
                     title="Klik untuk menyalin kode surat jalan"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink-900 shadow-2xs transition hover:bg-ink-50 hover:border-ink-400 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-bold text-ink-900 shadow-2xs transition hover:bg-ink-50 hover:border-ink-400 cursor-pointer"
                   >
                     {copiedCode ? (
                       <Check className="size-3.5 text-ok" />
@@ -740,7 +740,7 @@ export function DeliveryReceiptModal({
                 )}
               </div>
 
-              <div className="inline-flex rounded-lg border border-line bg-white p-1 shadow-2xs">
+              <div className="inline-flex rounded-lg border border-line bg-surface shadow-xs p-1 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setPrintFormat('surat_jalan')}
@@ -772,7 +772,7 @@ export function DeliveryReceiptModal({
             <div className="rounded-xl border border-line bg-ink-100/60 p-4 sm:p-6 overflow-hidden">
               {/* Tampilan Preview: A4 Surat Jalan */}
               {printFormat === 'surat_jalan' ? (
-                <div className="mx-auto w-full max-w-2xl rounded-lg border border-line/80 bg-white p-6 sm:p-8 text-xs text-ink-900 shadow-md">
+                <div className="mx-auto w-full max-w-2xl rounded-lg border border-line/80 bg-surface p-6 sm:p-8 text-xs text-ink-900 shadow-md">
                   {/* Kop Resmi Surat Jalan */}
                   <div className="flex items-start justify-between border-b-2 border-ink-900 pb-3.5">
                     <div>
@@ -899,7 +899,7 @@ export function DeliveryReceiptModal({
                         <img
                           src={qr}
                           alt="QR Code Verifikasi"
-                          className="size-20 shrink-0 rounded-md bg-white p-1 border border-line shadow-2xs"
+                          className="size-20 shrink-0 rounded-md bg-surface p-1 border border-line shadow-2xs"
                         />
                       ) : (
                         <div className="size-20 shrink-0 rounded-md bg-ink-100 flex items-center justify-center text-[10px] text-muted">
@@ -964,7 +964,7 @@ export function DeliveryReceiptModal({
                 </div>
               ) : (
                 /* Tampilan Preview: Thermal Struk 80mm */
-                <article className="mx-auto w-full max-w-[80mm] rounded-lg border border-line bg-white p-4 text-xs text-ink-900 shadow-xs">
+                <article className="mx-auto w-full max-w-[80mm] rounded-lg border border-line bg-surface shadow-xs p-4 text-xs text-ink-900 shadow-xs">
                   <header className="border-b border-ink-900 pb-2.5 text-center">
                     <p className="font-display text-lg font-bold">DAISUKI</p>
                     <p className="text-[10px] font-bold tracking-wider text-muted">RESI PENGIRIMAN</p>
@@ -1040,11 +1040,11 @@ export function DeliveryReceiptModal({
           </div>
 
           {/* Footer Actions */}
-          <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-white p-4 sm:flex-row sm:justify-end sm:p-5">
+          <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-surface p-4 sm:flex-row sm:justify-end sm:p-5">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="min-h-11 rounded-md border border-line bg-white px-5 text-sm font-semibold text-ink-800 hover:bg-paper cursor-pointer"
+              className="min-h-11 rounded-md border border-line bg-surface px-5 text-sm font-semibold text-ink-800 hover:bg-paper cursor-pointer"
             >
               Tutup
             </button>

@@ -44,7 +44,7 @@ export function CopyButton({
       title={copied ? 'Tersalin ke clipboard!' : 'Salin teks'}
       className={
         className ??
-        'inline-flex min-h-[32px] items-center gap-1.5 rounded-lg border border-line/80 bg-white/90 px-2.5 py-1 text-[11px] font-medium text-ink-700 shadow-2xs backdrop-blur-xs transition-colors hover:border-ink-400 hover:bg-white hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-ink-900 active:scale-95'
+        'inline-flex min-h-[32px] items-center gap-1.5 rounded-lg border border-line/80 bg-surface/90 px-2.5 py-1 text-[11px] font-medium text-ink-700 shadow-2xs backdrop-blur-xs transition-colors hover:border-ink-400 hover:bg-surface hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-ink-900 active:scale-95'
       }
     >
       {copied ? (
@@ -205,7 +205,7 @@ export function ChatToolFlowDiagram({ data }: { data: FlowDiagramData }) {
       </figcaption>
       <div className="space-y-2" role="list" aria-label="Hubungan antar langkah">
         {data.edges.map((edge, index) => (
-          <div key={`${edge.from}-${edge.to}-${index}`} role="listitem" className={`flex flex-wrap ${vertical ? 'flex-col' : ''} items-center gap-2 rounded-lg bg-white p-2.5 text-xs`}>
+          <div key={`${edge.from}-${edge.to}-${index}`} role="listitem" className={`flex flex-wrap ${vertical ? 'flex-col' : ''} items-center gap-2 rounded-lg bg-surface p-2.5 text-xs`}>
             <span className="rounded-lg border border-line bg-paper px-3 py-2 text-center font-semibold text-ink-900">{reverse ? edge.to : edge.from}</span>
             <span className="flex min-w-6 flex-col items-center text-accent-600" aria-label={`menuju ${edge.to}`}>
               {edge.label ? <span className="mb-0.5 text-[10px] text-muted">{edge.label}</span> : null}
@@ -246,10 +246,10 @@ export function ChatToolPdfExport({ data }: { data: PdfExportData }) {
       : undefined)
 
   return (
-    <div className="my-3.5 overflow-hidden rounded-xl border border-line bg-white p-4 shadow-xs">
+    <div className="my-3.5 overflow-hidden rounded-xl border border-line bg-surface shadow-xs p-4 shadow-xs">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-lg border border-line bg-surface text-ink-700">
+          <div className="flex size-9 items-center justify-center rounded-lg border border-line bg-surface shadow-xs text-ink-700">
             <FileText className="size-5" />
           </div>
           <div>

@@ -59,7 +59,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { getFinanceSummary, getOperationalInsights, type FinanceSummary, type OperationalInsights } from '@/lib/api/orders'
+import { getFinanceSummary, getFinanceWeeklyHistory, getOperationalInsights, type FinanceSummary, type FinanceWeeklyHistory, type OperationalInsights } from '@/lib/api/orders'
 import {
   EmptyState,
   ErrorState,
@@ -89,7 +89,6 @@ import {
   type PartnerActivityItem,
 } from '@/components/inventory/ai-insights-modals'
 import { AdminChatRoom } from '@/components/inventory/admin-chat-room'
-import { WeeklyAbsorptionMatrix } from '@/components/inventory/weekly-absorption-matrix'
 import {
   OrderStatusBadge,
   StaleBadge,
@@ -113,6 +112,8 @@ import {
   getOrderReceiptProof,
   requestReceiptProof as apiRequestReceiptProof,
   getWeeklySummary,
+  getLiveWeeklySummary,
+  getLiveWeeklyDetails,
   getPartnerStockLogs,
   getPartnerStockLogsById,
   exportStockLogs,
@@ -130,6 +131,7 @@ import {
   type NotificationFeed,
   type ShipmentLogPage,
   type WeeklySummary,
+  type LiveWeeklyDetail,
   type AIInsights,
   type AiRunStatus,
   getAnalysisRuns,
@@ -265,7 +267,7 @@ function ShipmentLogPanel({
           {result?.total ? <span className="text-sm tabular-nums text-muted">{result.total} kiriman</span> : null}
         </div>
         <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}
-          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-50">
+          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:opacity-50">
           <RotateCcw className={`size-4 ${query.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
           Segarkan
         </button>
@@ -288,7 +290,7 @@ function ShipmentLogPanel({
             const proofUrl = received && entry.receipt_photo_data_url ? resolveImageUrl(entry.receipt_photo_data_url) : null
 
             return (
-              <li key={entry.id} className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-white p-4">
+              <li key={entry.id} className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-surface shadow-xs p-4">
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="truncate font-display text-base font-semibold text-ink-900">{entry.partner_name}</h2>
@@ -338,12 +340,65 @@ function ShipmentLogPanel({
 
       {(result?.total ?? 0) > (result?.page_size ?? 20) ? (
         <nav className="flex items-center justify-between gap-3" aria-label="Halaman log pengiriman">
-          <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 disabled:opacity-40">Sebelumnya</button>
+          <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="min-h-11 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-900 disabled:opacity-40">Sebelumnya</button>
           <span className="text-xs tabular-nums text-muted">Halaman {page} dari {totalPages}</span>
-          <button type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 disabled:opacity-40">Berikutnya</button>
+          <button type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className="min-h-11 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-900 disabled:opacity-40">Berikutnya</button>
         </nav>
       ) : null}
     </section>
+  )
+}
+
+function LiveWeeklyAnalysis({
+  view, rows, loading, error, onRetry,
+}: {
+  view: 'supply' | 'comparison' | 'branches'
+  rows: LiveWeeklyDetail[]
+  loading: boolean
+  error: Error | null
+  onRetry: () => void
+}) {
+  const entries = new Map<string, { name: string; detail: string; consumed: number; stock: number }>()
+  for (const row of rows) {
+    const key = view === 'comparison' ? row.product_id : view === 'branches' ? row.partner_id : `${row.partner_id}:${row.product_id}`
+    const current = entries.get(key) ?? {
+      name: view === 'comparison' ? row.product_name : row.partner_name,
+      detail: view === 'comparison' ? 'Seluruh cabang' : view === 'branches' ? row.city : row.product_name,
+      consumed: 0,
+      stock: 0,
+    }
+    current.consumed += row.consumed
+    current.stock += row.current_qty
+    entries.set(key, current)
+  }
+  const ranked = [...entries.values()].sort((a, b) => view === 'supply'
+    ? a.stock - b.stock || b.consumed - a.consumed
+    : b.consumed - a.consumed || a.name.localeCompare(b.name, 'id-ID'))
+  if (loading) return <LoadingState label="Memuat stok dan konsumsi minggu ini..." />
+  if (error) return <ErrorState message={getErrorMessage(error)} onRetry={onRetry} />
+  return (
+    <div className="min-w-0">
+      <p className="mb-3 text-sm text-muted">Data langsung dari log mitra sejak Senin minggu ini. Diperbarui saat ada perubahan stok.</p>
+      {ranked.length === 0 ? <EmptyState title="Belum ada data mitra" description="Data akan muncul setelah mitra dan produk tersedia." /> : (
+        <div className="max-h-[65vh] overflow-auto rounded-lg border border-line">
+          <table className="w-full min-w-[460px] border-collapse text-left text-sm">
+            <thead className="sticky top-0 bg-paper text-xs font-semibold text-ink-800">
+              <tr><th scope="col" className="px-3 py-3">{view === 'comparison' ? 'Produk' : 'Mitra'}</th><th scope="col" className="px-3 py-3">{view === 'branches' ? 'Wilayah' : view === 'supply' ? 'Produk' : 'Cakupan'}</th><th scope="col" className="px-3 py-3 text-right">Berkurang minggu ini</th><th scope="col" className="px-3 py-3 text-right">Sisa stok</th></tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {ranked.map((row, index) => (
+                <tr key={`${row.name}:${row.detail}:${index}`} className="odd:bg-surface even:bg-paper/60">
+                  <th scope="row" className="px-3 py-3 font-semibold text-ink-900">{row.name}</th>
+                  <td className="px-3 py-3 text-muted">{row.detail}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{row.consumed.toLocaleString('id-ID')} pcs</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{row.stock.toLocaleString('id-ID')} pcs</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -392,12 +447,20 @@ function DataSciencePanel({
     queryFn: () => getPartnerStockLogsById(selectedPartner!.partner_id),
     enabled: selectedPartner !== null,
   })
+  const liveDetails = useQuery<LiveWeeklyDetail[]>({
+    queryKey: ['admin-live-weekly-details'],
+    queryFn: getLiveWeeklyDetails,
+    enabled: activeSection === 'supply' || activeSection === 'comparison' || activeSection === 'branches',
+    refetchInterval: 30_000,
+  })
 
   const handleRunAnalysis = async () => {
     setStartingAi(true)
     try {
-      const end = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
-      const start = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10)
+      const todayJakarta = new Date(Date.now() + 7 * 60 * 60_000)
+      const end = todayJakarta.toISOString().slice(0, 10)
+      const daysSinceMonday = (todayJakarta.getUTCDay() + 6) % 7
+      const start = new Date(todayJakarta.getTime() - daysSinceMonday * 86_400_000).toISOString().slice(0, 10)
       const created = await createAnalysisRun(start, end)
       setAnalysisRun(created.id)
       await queryClient.invalidateQueries({ queryKey: ['analysis-runs'] })
@@ -449,7 +512,7 @@ function DataSciencePanel({
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <h1 id="data-science-title" className="font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log & Data</h1>
-          <p className="mt-1 text-sm text-muted">Membuat laporan analisis empat kategori dari data stok seminggu terakhir.</p>
+          <p className="mt-1 text-sm text-muted">Membuat laporan empat kategori dari Senin minggu ini sampai hari ini (WIB).</p>
         </div>
         <button type="button" onClick={() => void handleRunAnalysis()} disabled={startingAi}
           className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:cursor-not-allowed disabled:opacity-50">
@@ -469,7 +532,7 @@ function DataSciencePanel({
           { id: 'logs', title: 'Log perkembangan per mitra', metric: logPartnersLoading ? 'Memuat...' : `${logPartners.length} mitra`, Icon: History },
         ] as const).map(({ id, title, metric, Icon }) => (
           <button key={id} type="button" onClick={() => setActiveSection(id)}
-            className="group flex min-h-36 min-w-0 flex-col justify-between rounded-xl border border-line bg-white p-4 text-left transition-colors hover:border-ink-500/50 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
+            className="group flex min-h-36 min-w-0 flex-col justify-between rounded-xl border border-line bg-surface shadow-xs p-4 text-left transition-colors hover:border-ink-500/50 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
             aria-label={`Buka ${title}`}>
             <span className="flex w-full items-start justify-between gap-3">
               <span className="font-display text-base font-semibold leading-snug text-ink-900 sm:text-lg">{title}</span>
@@ -487,7 +550,7 @@ function DataSciencePanel({
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60" />
           <Dialog.Content className="fixed inset-x-2 top-1/2 z-50 mx-auto flex max-h-[calc(100dvh-1rem)] w-auto max-w-6xl -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-paper shadow-2xl focus:outline-none sm:inset-x-6 sm:max-h-[calc(100dvh-3rem)]">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-white px-4 py-3 sm:px-6">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 sm:px-6">
               <Dialog.Title className="min-w-0 font-display text-base font-semibold text-ink-900 sm:text-lg">
                 {{ reference: 'Referensi & analisis', weekly: 'Analisis Perubahan Stok Mingguan per Mitra', supply: 'Penjualan & pasokan mitra', comparison: 'Perbandingan penjualan', branches: 'Cabang', logs: 'Log perkembangan per mitra' }[activeSection ?? 'reference']}
               </Dialog.Title>
@@ -510,7 +573,7 @@ function DataSciencePanel({
         </div>
         <div className="py-3 sm:px-4">
           <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Rata-rata konsumsi harian</dt>
-          <dd className="mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / 7).toFixed(1)} pcs`}</dd>
+          <dd className="mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / Math.max(1, summary?.daily_update_breakdown.length ?? 0)).toFixed(1)} pcs`}</dd>
         </div>
       </dl></div>}
 
@@ -524,14 +587,14 @@ function DataSciencePanel({
             <input ref={referenceInputRef} type="file" accept=".pdf,.csv,.json,.md,.txt,.docx"
               onChange={(event) => setSelectedReference(event.target.files?.[0] ?? null)}
               aria-label="Pilih file referensi mentah"
-              className="block min-h-11 w-full min-w-0 overflow-hidden rounded-md border border-line bg-white px-3 py-2 text-sm text-ink-900 file:mr-3 file:rounded file:border-0 file:bg-ink-100 file:px-2 file:py-1 file:text-ink-900" />
+              className="block min-h-11 w-full min-w-0 overflow-hidden rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink-900 file:mr-3 file:rounded file:border-0 file:bg-ink-100 file:px-2 file:py-1 file:text-ink-900" />
             <button type="button" onClick={() => void handleUploadReference()}
               disabled={!selectedReference || uploadingReference}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-3 text-sm font-semibold text-white hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50">
               <Upload className="size-4" aria-hidden="true" />{uploadingReference ? 'Mengunggah...' : 'Unggah file'}
             </button>
             <button type="button" onClick={onExport}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-semibold text-ink-900 hover:bg-ink-50">
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-surface px-3 text-sm font-semibold text-ink-900 hover:bg-ink-50">
               <Download className="size-4" aria-hidden="true" />Ekspor CSV
             </button>
           </div>
@@ -541,7 +604,7 @@ function DataSciencePanel({
             <h3 className="text-sm font-semibold text-ink-900">File di database</h3>
             {rawReferences.data ? <select aria-label="Tampilkan referensi" value={showAllReferences ? 'all' : 'admin'}
               onChange={(event) => setShowAllReferences(event.target.value === 'all')}
-              className="min-h-11 max-w-full rounded-md border border-line bg-white px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-900">
+              className="min-h-11 max-w-full rounded-md border border-line bg-surface px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-900">
               <option value="admin">Unggahan Admin ({adminReferenceCount})</option>
               <option value="all">Semua file ({rawReferences.data.files.length})</option>
             </select> : null}
@@ -570,9 +633,10 @@ function DataSciencePanel({
         onRetry={onRetry}
       />}
 
-      {activeSection === 'supply' && <WeeklyAbsorptionMatrix view="overview" />}
-      {activeSection === 'comparison' && <WeeklyAbsorptionMatrix view="comparison" />}
-      {activeSection === 'branches' && <WeeklyAbsorptionMatrix view="branches" />}
+      {(activeSection === 'supply' || activeSection === 'comparison' || activeSection === 'branches') && (
+        <LiveWeeklyAnalysis view={activeSection} rows={liveDetails.data ?? []} loading={liveDetails.isLoading}
+          error={liveDetails.error} onRetry={() => void liveDetails.refetch()} />
+      )}
 
       {activeSection === 'logs' && <div className="dashboard-surface overflow-hidden">
         <div className="border-b border-line px-4 py-3">
@@ -625,7 +689,7 @@ function DataSciencePanel({
       }}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white p-5 shadow-2xl focus:outline-none sm:p-6">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-surface p-5 shadow-2xl focus:outline-none sm:p-6">
             <Dialog.Title className="font-display text-lg font-semibold text-ink-900">Hapus file referensi?</Dialog.Title>
             <Dialog.Description className="mt-2 break-words text-sm leading-6 text-ink-700">
               {deleteReferenceTarget?.file_name} akan dihapus dari database. Model yang sudah diterbitkan tetap memakai hasil sebelumnya sampai analisis diperbarui.
@@ -835,7 +899,7 @@ function PartnerDailyLogChart({
             onClick={() => setViewMode('both')}
             className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
               viewMode === 'both'
-                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                ? 'bg-surface font-semibold text-ink-900 shadow-xs'
                 : 'text-muted hover:text-ink-900'
             }`}
           >
@@ -848,7 +912,7 @@ function PartnerDailyLogChart({
             onClick={() => setViewMode('bar')}
             className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
               viewMode === 'bar'
-                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                ? 'bg-surface font-semibold text-ink-900 shadow-xs'
                 : 'text-muted hover:text-ink-900'
             }`}
           >
@@ -861,7 +925,7 @@ function PartnerDailyLogChart({
             onClick={() => setViewMode('line')}
             className={`inline-flex min-h-11 sm:min-h-8 items-center justify-center rounded-md px-3 py-1.5 text-center font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-ink-900 ${
               viewMode === 'line'
-                ? 'bg-white font-semibold text-ink-900 shadow-xs'
+                ? 'bg-surface font-semibold text-ink-900 shadow-xs'
                 : 'text-muted hover:text-ink-900'
             }`}
           >
@@ -1136,7 +1200,7 @@ function PartnerDailyLogChart({
                               />
                             </div>
                             <span className="shrink-0 text-[10px] text-muted tabular-nums">
-                              Aktif {p.active_days}/7 hari
+                              Aktif {p.active_days}/{days.length} hari
                             </span>
                           </div>
                         </button>
@@ -1618,8 +1682,8 @@ function PartnerStockLogDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[94vh] sm:max-h-[90vh] w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-white px-4 py-3 sm:px-6 sm:py-4">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[94vh] sm:max-h-[90vh] w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-surface px-4 py-3 sm:px-6 sm:py-4">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <Dialog.Title className="truncate font-display text-base font-bold text-ink-900 sm:text-xl">
@@ -1701,7 +1765,7 @@ function PartnerStockLogDialog({
               </div>
 
               {/* View Mode Toggle */}
-              <div className="grid grid-cols-2 w-full sm:flex sm:w-auto items-center rounded-md border border-line bg-white p-0.5 font-semibold shadow-2xs">
+              <div className="grid grid-cols-2 w-full sm:flex sm:w-auto items-center rounded-md border border-line bg-surface p-0.5 font-semibold shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setViewMode('calendar')}
@@ -1745,7 +1809,7 @@ function PartnerStockLogDialog({
               />
             ) : viewMode === 'list' ? (
               /* Flat list of all logs */
-              <div className="overflow-hidden rounded-lg border border-line bg-white">
+              <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-xs">
                 <div className="divide-y divide-line">
                   {allLogs.map((log) => {
                     const isConsumption = log.delta > 0
@@ -1778,7 +1842,7 @@ function PartnerStockLogDialog({
                         </div>
 
                         <div className="flex items-center justify-between sm:justify-end gap-3 pt-1 sm:pt-0 border-t border-line/40 sm:border-t-0">
-                          <div className="flex items-center gap-1.5 rounded-md border border-line bg-white px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs sm:text-sm tabular-nums">
+                          <div className="flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs sm:text-sm tabular-nums">
                             <span className="text-muted">{log.qty_before}</span>
                             <span className="text-xs text-muted" aria-hidden="true">
                               →
@@ -1812,7 +1876,7 @@ function PartnerStockLogDialog({
               /* ALUR UTAMA: Navigasi Minggu + 7 Hari (Senin - Minggu) + Jam Perubahan */
               <div className="space-y-3.5">
                 {/* 1. Bar Navigasi Minggu (< dan >) */}
-                <div className="relative flex flex-col gap-2 rounded-lg border border-line bg-white p-2.5 sm:flex-row sm:items-center sm:justify-between sm:p-3 shadow-2xs">
+                <div className="relative flex flex-col gap-2 rounded-lg border border-line bg-surface shadow-xs p-2.5 sm:flex-row sm:items-center sm:justify-between sm:p-3 shadow-2xs">
                   <div className="flex items-center justify-between sm:justify-center gap-2 w-full sm:w-auto sm:mx-auto">
                     <button
                       type="button"
@@ -1820,7 +1884,7 @@ function PartnerStockLogDialog({
                         setWeekOffset((w) => w - 1)
                         setSelectedBatch(null)
                       }}
-                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
+                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-surface text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
                       title="Lihat minggu kemarin (<)"
                       aria-label="Minggu kemarin"
                     >
@@ -1841,7 +1905,7 @@ function PartnerStockLogDialog({
                         setSelectedBatch(null)
                       }}
                       disabled={weekOffset >= 0}
-                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-white text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
+                      className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-surface text-ink-900 shadow-xs hover:border-ink-400 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
                       title="Lihat minggu berikutnya (>)"
                       aria-label="Minggu berikutnya"
                     >
@@ -1886,7 +1950,7 @@ function PartnerStockLogDialog({
                           isSelected
                             ? 'border-ink-900 bg-ink-900 text-white shadow-sm ring-2 ring-ink-900/20'
                             : count > 0
-                              ? 'border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50/80 active:bg-ink-100'
+                              ? 'border-line bg-surface text-ink-900 hover:border-ink-400 hover:bg-ink-50/80 active:bg-ink-100'
                               : 'border-line/70 bg-ink-50/40 text-muted hover:border-line hover:bg-ink-50'
                         }`}
                       >
@@ -1912,13 +1976,13 @@ function PartnerStockLogDialog({
                             <span
                               className={`inline-flex items-center justify-center gap-0.5 sm:gap-1 rounded-full px-1 py-0.2 sm:px-1.5 sm:py-0.5 text-[9px] sm:text-[10px] font-bold tabular-nums leading-none ${
                                 isSelected
-                                  ? 'bg-white/20 text-white'
+                                  ? 'bg-surface/20 text-white'
                                   : 'bg-ok-bg text-ok-fg'
                               }`}
                             >
                               <span
                                 className={`size-1 sm:size-1.5 rounded-full shrink-0 ${
-                                  isSelected ? 'bg-white' : 'bg-ok'
+                                  isSelected ? 'bg-surface' : 'bg-ok'
                                 }`}
                               />
                               <span>{count}</span>
@@ -1939,7 +2003,7 @@ function PartnerStockLogDialog({
                           <span
                             className={`absolute -top-1.5 left-1/2 -translate-x-1/2 rounded-full px-1 text-[7px] sm:text-[8px] font-bold uppercase tracking-wider whitespace-nowrap shadow-2xs ${
                               isSelected
-                                ? 'bg-white text-ink-900'
+                                ? 'bg-surface text-ink-900'
                                 : 'bg-ink-900 text-white'
                             }`}
                           >
@@ -1953,7 +2017,7 @@ function PartnerStockLogDialog({
                 </div>
 
                 {/* 3. Panel Detail Hari Terpilih & Jam-Jam Perubahan */}
-                <div className="rounded-lg border border-line bg-white p-3.5 sm:p-5 shadow-xs">
+                <div className="rounded-lg border border-line bg-surface shadow-xs p-3.5 sm:p-5 shadow-xs">
                   <div className="flex flex-col gap-2 border-b border-line pb-3 sm:flex-row sm:items-center sm:justify-between sm:pb-4">
                     <div>
                       <div className="flex items-center gap-2">
@@ -2010,7 +2074,7 @@ function PartnerStockLogDialog({
                               key={batch.key}
                               type="button"
                               onClick={() => setSelectedBatch(batch)}
-                              className="group flex flex-col justify-between rounded-lg border border-line bg-white p-3 sm:p-3.5 text-left shadow-2xs transition-all hover:border-ink-500 hover:bg-ink-50/40 hover:shadow-xs active:scale-[0.99] active:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
+                              className="group flex flex-col justify-between rounded-lg border border-line bg-surface shadow-xs p-3 sm:p-3.5 text-left shadow-2xs transition-all hover:border-ink-500 hover:bg-ink-50/40 hover:shadow-xs active:scale-[0.99] active:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div className="flex items-center gap-2">
@@ -2072,7 +2136,7 @@ function PartnerStockLogDialog({
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="min-h-11 rounded-md border border-line bg-white px-5 text-sm font-semibold text-ink-900 hover:bg-ink-50 active:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer shadow-2xs"
+                className="min-h-11 rounded-md border border-line bg-surface px-5 text-sm font-semibold text-ink-900 hover:bg-ink-50 active:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer shadow-2xs"
               >
                 Tutup
               </button>
@@ -2119,7 +2183,7 @@ function AiOverviewCard({
       type="button"
       onClick={onClick}
       aria-label={`${title}: ${value}. ${metric}. Lihat rincian`}
-      className="group flex min-w-0 flex-col rounded-xl border border-line bg-white p-4 text-left shadow-2xs transition-[border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-ink-500/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 motion-reduce:transform-none sm:p-5"
+      className="group flex min-w-0 flex-col rounded-xl border border-line bg-surface shadow-xs p-4 text-left shadow-2xs transition-[border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-ink-500/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 motion-reduce:transform-none sm:p-5"
     >
       <div className="flex w-full items-start justify-between gap-3">
         <div className="min-w-0">
@@ -2189,7 +2253,6 @@ function AIInsightsPanel({
     enabled: previewOpen && selectedAnalysisRun !== null,
   })
   useEffect(() => {
-    setTrainingSource(selectedAnalysisRun?.manifest?.training_source === 'raw_references' ? 'raw_references' : 'analysis')
   }, [selectedAnalysisRun?.id, selectedAnalysisRun?.manifest?.training_source])
   useEffect(() => {
     const runId = processingRunId.current
@@ -2266,6 +2329,7 @@ function AIInsightsPanel({
 
   const topProduct = productSalesList[0]
   const totalSoldUnits = productSalesList.reduce((sum, p) => sum + p.weekly_units, 0)
+  const analyzedDays = data?.weekly_facts?.metadata.period_days ?? 7
 
   // 2. Data Mitra Paling Laku
   const partnerFastMovingGroups = useMemo<PartnerFastMovingGroup[]>(() => {
@@ -2320,7 +2384,7 @@ function AIInsightsPanel({
           region: p.region,
           partner_type: groupMatch?.partner_type,
           weekly_consumption: p.weekly_units,
-          daily_velocity: groupMatch?.total_daily_velocity ?? Math.round(p.weekly_units / 7),
+          daily_velocity: groupMatch?.total_daily_velocity ?? Math.round(p.weekly_units / analyzedDays),
           turnover_rate: groupMatch?.avg_turnover_rate,
           top_product: groupMatch?.top_product.product_name,
           percentage: p.percentage,
@@ -2344,33 +2408,20 @@ function AIInsightsPanel({
   // 3. Data Wilayah Paling Laku
   const topRegionsList = useMemo<RegionRestockItem[]>(() => {
     const regActivity = data?.regional_activity?.regions ?? []
-    const hotspots = data?.market_hotspots?.regions ?? []
     const weeklyHotspots = data?.weekly_facts?.regional_hotspots ?? []
     const hasLocation = (value: string) => value.trim() !== '' && !/^(tidak diketahui|unknown)$/i.test(value.trim())
     const locatedRegions = regActivity.filter((region) => hasLocation(region.regency_name) || hasLocation(region.province_name))
 
-    if (locatedRegions.some((region) => region.restock_requests > 0)) {
-      const totalRequests = locatedRegions.reduce((sum, region) => sum + region.restock_requests, 0)
+    if (locatedRegions.length > 0) {
+      const totalUnits = locatedRegions.reduce((sum, region) =>
+        sum + region.partners.reduce((partnerSum, partner) => partnerSum + partner.weekly_units, 0), 0)
       return locatedRegions.map((region) => ({
         region: [region.regency_name, region.province_name].filter(hasLocation).join(', '),
         province: region.province_name,
-        restock_units: region.restock_requests,
+        restock_units: region.partners.reduce((sum, partner) => sum + partner.weekly_units, 0),
         partner_count: region.partners.length,
-        percentage: totalRequests > 0 ? Math.round(region.restock_requests / totalRequests * 100) : undefined,
-        metric_label: 'Pengajuan restock',
-        unit_label: 'pengajuan',
-      })).sort((a, b) => b.restock_units - a.restock_units)
-    }
-
-    const locatedHotspots = hotspots.filter((hotspot) => hasLocation(hotspot.region))
-    if (locatedHotspots.some((hotspot) => hotspot.deficit_units > 0)) {
-      const totalDeficit = locatedHotspots.reduce((sum, hotspot) => sum + hotspot.deficit_units, 0)
-      return locatedHotspots.map((h) => ({
-        region: h.region,
-        restock_units: h.deficit_units,
-        partner_count: h.partner_count,
-        percentage: totalDeficit > 0 ? Math.round((h.deficit_units / totalDeficit) * 100) : undefined,
-        metric_label: 'Defisit stok',
+        percentage: totalUnits > 0 ? Math.round(region.partners.reduce((sum, partner) => sum + partner.weekly_units, 0) / totalUnits * 100) : undefined,
+        metric_label: 'Konsumsi produk',
         unit_label: 'pcs',
       })).sort((a, b) => b.restock_units - a.restock_units)
     }
@@ -2502,7 +2553,7 @@ function AIInsightsPanel({
             AI Insights
           </h1>
           <p className="mt-1 max-w-xl text-sm leading-5 text-muted">
-            Konsumsi produk, aktivitas mitra, wilayah, dan laporan stok dalam 7 hari terakhir.
+            Hasil analisis periode terbit terakhir: konsumsi, aktivitas mitra, wilayah, dan laporan stok.
           </p>
           <p className="mt-2 text-xs text-muted">
             {lastAnalysis ? `Analisis ${formatDetailedDateTime(lastAnalysis)}` : 'Analisis belum tersedia'}
@@ -2549,7 +2600,7 @@ function AIInsightsPanel({
               title="Konsumsi produk tertinggi"
               value={totalSoldUnits > 0 ? topProduct.product_name : 'Belum ada data konsumsi'}
               metric={totalSoldUnits > 0 ? topProduct.weekly_units.toLocaleString('id-ID') + ' pcs berkurang · ' + topProduct.share_pct + '% pangsa' : 'Buat laporan untuk melihat hasil'}
-              detail={'4 produk resmi · ' + totalSoldUnits.toLocaleString('id-ID') + ' pcs dalam 7 hari'}
+              detail={'4 produk resmi · ' + totalSoldUnits.toLocaleString('id-ID') + ' pcs dalam ' + analyzedDays + ' hari'}
               Icon={Package}
               onClick={() => setActiveModal('products')}
               visual={totalSoldUnits > 0 ? (
@@ -2569,7 +2620,7 @@ function AIInsightsPanel({
               eyebrow="Performa cabang"
               title="Mitra konsumsi tertinggi"
               value={topPartner?.partner_name ?? 'Belum ada data mitra'}
-              metric={topPartner ? topPartner.weekly_consumption.toLocaleString('id-ID') + ' pcs dalam 7 hari' : 'Belum ada konsumsi tercatat'}
+              metric={topPartner ? topPartner.weekly_consumption.toLocaleString('id-ID') + ' pcs dalam ' + analyzedDays + ' hari' : 'Belum ada konsumsi tercatat'}
               detail={topPartner?.region || 'Lihat peringkat seluruh mitra'}
               Icon={Store}
               onClick={() => setActiveModal('partners')}
@@ -2587,8 +2638,8 @@ function AIInsightsPanel({
               eyebrow="Laporan stok"
               title="Mitra paling aktif melapor"
               value={topActivePartner?.partner_name ?? 'Belum ada laporan stok'}
-              metric={topActivePartner ? topActivePartner.total_logs.toLocaleString('id-ID') + ' laporan · ' + topActivePartner.active_days + ' dari 7 hari' : 'Belum ada laporan minggu ini'}
-              detail={partnerActivityList.filter((partner) => partner.active_days >= 5).length.toLocaleString('id-ID') + ' mitra aktif minimal 5 hari'}
+              metric={topActivePartner ? topActivePartner.total_logs.toLocaleString('id-ID') + ' laporan · ' + topActivePartner.active_days + ' dari ' + analyzedDays + ' hari' : 'Belum ada laporan minggu ini'}
+              detail={partnerActivityList.filter((partner) => partner.active_days >= Math.min(5, analyzedDays)).length.toLocaleString('id-ID') + ' mitra aktif minimal ' + Math.min(5, analyzedDays) + ' hari'}
               Icon={History}
               onClick={() => setActiveModal('reporting')}
             />
@@ -2635,8 +2686,8 @@ function AIInsightsPanel({
             loading={artifacts.isLoading || analysisRuns.isLoading}
             continuing={startingAi || selectedAnalysisRun?.status === 'processing'}
             trainingSource={trainingSource}
-            rawReferenceCount={adminReferenceCount}
             onTrainingSourceChange={setTrainingSource}
+            rawReferenceCount={adminReferenceCount}
             onContinue={() => void handleContinueWithArtifacts()}
           />
         </>
@@ -2693,7 +2744,7 @@ function PartnerAnalysisTable({ analysis }: { analysis?: AIInsights['partner_ana
         <label className="block sm:w-64">
           <span className="sr-only">Cari mitra atau wilayah</span>
           <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
-            placeholder="Cari mitra atau wilayah" className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-base text-ink-900 sm:text-sm" />
+            placeholder="Cari mitra atau wilayah" className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-base text-ink-900 sm:text-sm" />
         </label>
       </div>
       {!analysis || analysis.rows.length === 0 ? (
@@ -2707,7 +2758,7 @@ function PartnerAnalysisTable({ analysis }: { analysis?: AIInsights['partner_ana
           </p>
           <div className="max-h-[70vh] overflow-auto overscroll-x-contain" role="region"
             aria-label="Tabel analisis mitra" aria-describedby="partner-analysis-scroll-hint" tabIndex={0}>
-            <table className="w-full min-w-[880px] border-separate border-spacing-0 bg-white text-left text-sm">
+            <table className="w-full min-w-[880px] border-separate border-spacing-0 bg-surface text-left text-sm">
               <caption className="sr-only">
                 Analisis mingguan setiap mitra: konsumsi, hari pelaporan, log stok, kejadian kritis, stok habis, dan permintaan restock.
               </caption>
@@ -2777,6 +2828,8 @@ function AdminDashboard() {
   const [tab, setTabState] = useState<AdminTab>(chat ? 'chat' : 'stocks')
   const [requestedAnalysisRunId, setRequestedAnalysisRunId] = useState<string | null>(null)
   const [lastChatId, setLastChatId] = useState<string | null>(chat ?? null)
+  const [weeklyHistoryOpen, setWeeklyHistoryOpen] = useState(false)
+  const [weeklyHistoryMonth, setWeeklyHistoryMonth] = useState<string | null>(null)
 
   useEffect(() => {
     if (chat) {
@@ -2854,6 +2907,12 @@ function AdminDashboard() {
     staleTime: 60_000,
     refetchInterval: 60_000,
   })
+  const weeklyHistory = useQuery<FinanceWeeklyHistory>({
+    queryKey: ['admin-finance-weekly-history', weeklyHistoryMonth],
+    queryFn: () => getFinanceWeeklyHistory(weeklyHistoryMonth ?? undefined),
+    enabled: user?.role === 'admin' && weeklyHistoryOpen,
+    staleTime: 60_000,
+  })
   const operationalInsights = useQuery<OperationalInsights>({
     queryKey: ['admin-operational-insights'],
     queryFn: getOperationalInsights,
@@ -2892,14 +2951,16 @@ function AdminDashboard() {
   })
 
   const weeklySummary = useQuery<WeeklySummary>({
-    queryKey: ['admin-weekly-summary'],
-    queryFn: () => getWeeklySummary(),
+    queryKey: ['admin-live-weekly-summary'],
+    queryFn: () => getLiveWeeklySummary(),
     enabled: user?.role === 'admin' && tab === 'data-science',
+    refetchInterval: 30_000,
   })
   const logPartners = useQuery<StockLogPartner[]>({
     queryKey: ['admin-stock-log-partners'],
     queryFn: () => getPartnerStockLogs(),
     enabled: user?.role === 'admin' && tab === 'data-science',
+    refetchInterval: 30_000,
   })
   const aiInsights = useQuery<AIInsights>({
     queryKey: ['admin-ai-insights'],
@@ -3088,7 +3149,7 @@ function AdminDashboard() {
       />
 
       <div className={tab === 'chat' ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'min-w-0 flex-1'}>
-        <header className="admin-topbar sticky top-0 z-30 border-b border-line bg-white">
+        <header className="admin-topbar sticky top-0 z-30 border-b border-line bg-surface">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
               <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ume/10 text-ume lg:hidden">
@@ -3152,51 +3213,75 @@ function AdminDashboard() {
           {tab === 'stocks' && finance.data ? (
             <section aria-label="Estimasi penjualan titip jual" className="space-y-3">
               <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
-                <div className="min-w-0 rounded-xl border border-ume/20 bg-ume/10 p-4 sm:p-5">
-                  <p className="text-xs font-semibold text-ume sm:text-sm">Estimasi penjualan hari ini (WIB)</p>
-                  <strong className="num mt-2 block break-words font-display text-2xl font-semibold leading-tight tabular-nums text-ink-900 sm:text-3xl">
+                <button
+                  type="button"
+                  onClick={() => setWeeklyHistoryOpen(true)}
+                  className="group min-w-0 cursor-pointer rounded-xl border border-line bg-surface shadow-xs p-4 text-left shadow-xs transition-colors hover:border-[#E04F33]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">Estimasi penjualan hari ini (WIB)</p>
+                  <strong className="num mt-3 block break-words font-display text-3xl font-bold leading-tight tabular-nums text-ink-900 sm:text-4xl">
                     {Number(finance.data.sales_estimate_today).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
                   </strong>
-                  <span className="mt-2 block text-xs font-medium tabular-nums text-ink-700">
+                  <span className="mt-2 block text-xs font-medium tabular-nums text-muted">
                     {finance.data.stock_outflow_units_today.toLocaleString('id-ID')} pcs keluar hari ini
                   </span>
-                </div>
-                <div className="min-w-0 rounded-xl border border-ok/20 bg-ok-bg p-4 sm:p-5">
-                  <p className="text-xs font-semibold text-ok-fg sm:text-sm">Estimasi penjualan 7 hari</p>
-                  <strong className="num mt-2 block break-words font-display text-2xl font-semibold leading-tight tabular-nums text-ink-900 sm:text-3xl">
+                  <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[#E04F33]">
+                    Lihat riwayat mingguan <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeeklyHistoryOpen(true)}
+                  className="group min-w-0 cursor-pointer rounded-xl border border-line bg-surface shadow-xs p-4 text-left shadow-xs transition-colors hover:border-[#E04F33]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">Estimasi penjualan 7 hari</p>
+                  <strong className="num mt-3 block break-words font-display text-3xl font-bold leading-tight tabular-nums text-ink-900 sm:text-4xl">
                     {Number(finance.data.sales_estimate_7d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}
                   </strong>
-                  <span className="mt-2 block text-xs font-medium tabular-nums text-ink-700">
+                  <span className="mt-2 block text-xs font-medium tabular-nums text-muted">
                     {finance.data.stock_outflow_units_7d.toLocaleString('id-ID')} pcs keluar di seluruh mitra
                   </span>
-                </div>
+                  <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[#E04F33]">
+                    Lihat riwayat mingguan <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  </span>
+                </button>
               </div>
-              <div className="flex flex-col gap-1 rounded-lg border border-line bg-white px-4 py-3 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex flex-col gap-1 rounded-xl border border-line bg-surface shadow-xs px-4 py-3 text-xs text-muted shadow-xs sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <span>Estimasi 30 hari <strong className="num ml-1 font-semibold tabular-nums text-ink-900">{Number(finance.data.sales_estimate_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></span>
                 <span>Log stok keluar · Seblak Rp27.500/pcs · Produk lain Rp25.000/pcs · Perlu verifikasi stok fisik</span>
               </div>
             </section>
           ) : null}
+          <WeeklySalesHistoryModal
+            open={weeklyHistoryOpen}
+            onOpenChange={(open) => { setWeeklyHistoryOpen(open); if (!open) setWeeklyHistoryMonth(null) }}
+            data={weeklyHistory.data}
+            loading={weeklyHistory.isLoading}
+            error={weeklyHistory.error}
+            month={weeklyHistoryMonth}
+            onMonthChange={setWeeklyHistoryMonth}
+            onRetry={() => void weeklyHistory.refetch()}
+          />
           {tab === 'stocks' && finance.isError ? (
             <ErrorState message={getErrorMessage(finance.error)} onRetry={() => void finance.refetch()} />
           ) : null}
           {tab === 'stocks' && operationalInsights.data ? (
             <section aria-label="Prioritas operasional" className="grid gap-3 lg:grid-cols-3">
-              <div className="rounded-xl border border-line bg-white p-4">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 shadow-xs">
                 <h2 className="font-display text-base font-semibold text-ink-900">Potensi deadstock</h2>
                 <p className="mt-1 text-xs text-muted">Stok tersisa tanpa perubahan fisik lebih dari 30 hari. Verifikasi sebelum penarikan.</p>
                 {operationalInsights.data.deadstock.length ? operationalInsights.data.deadstock.slice(0, 3).map((item) => (
                   <p key={`${item.partner_id}-${item.product_name}`} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong> · {item.product_name}<br /><span className="tabular-nums text-crit-fg">{item.current_qty} pcs · {item.inactive_days} hari</span></p>
                 )) : <p className="mt-3 text-sm text-muted">Tidak ada stok yang memenuhi kriteria.</p>}
               </div>
-              <div className="rounded-xl border border-line bg-white p-4">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 shadow-xs">
                 <h2 className="font-display text-base font-semibold text-ink-900">Prioritas pemeriksaan</h2>
                 <p className="mt-1 text-xs text-muted">Urutan dari keterlambatan laporan dan perubahan stok besar.</p>
                 {operationalInsights.data.audit.length ? operationalInsights.data.audit.slice(0, 3).map((item) => (
                   <p key={item.partner_id} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong><br /><span className="tabular-nums text-warn-fg">{item.stale_days} hari tanpa laporan · {item.large_changes} perubahan besar</span></p>
                 )) : <p className="mt-3 text-sm text-muted">Tidak ada cabang yang memenuhi kriteria.</p>}
               </div>
-              <div className="rounded-xl border border-line bg-white p-4">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 shadow-xs">
                 <h2 className="font-display text-base font-semibold text-ink-900">Estimasi kebutuhan pabrik</h2>
                 <p className="mt-1 text-xs text-muted">Kebutuhan 14 hari berdasarkan penurunan stok fisik 30 hari.</p>
                 {operationalInsights.data.factory.map((item) => (
@@ -3377,6 +3462,140 @@ function AdminDashboard() {
   )
 }
 
+function wibMonthKey(): string {
+  const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function shiftMonthKey(key: string, delta: number): string {
+  const [year, month] = key.split('-').map(Number)
+  const shifted = new Date(Date.UTC(year, month - 1 + delta, 1))
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function WeeklySalesHistoryModal({
+  open,
+  onOpenChange,
+  data,
+  loading,
+  error,
+  month,
+  onMonthChange,
+  onRetry,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  data?: FinanceWeeklyHistory
+  loading: boolean
+  error: Error | null
+  month: string | null
+  onMonthChange: (month: string | null) => void
+  onRetry: () => void
+}) {
+  const baseMonth = data?.month ?? month ?? wibMonthKey()
+  const currency = (value: string | number) =>
+    Number(value).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45 backdrop-blur-xs" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-1.5rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none">
+          <div className="sticky top-0 z-10 border-b border-line bg-surface/95 px-5 py-4 backdrop-blur-md">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Dialog.Title className="font-display text-lg font-bold text-ink-900 sm:text-xl">
+                  Riwayat penjualan mingguan
+                </Dialog.Title>
+                <Dialog.Description className="mt-1 text-xs text-muted">
+                  Estimasi dari log stok keluar mitra per pekan. Seblak Rp27.500/pcs · produk lain Rp25.000/pcs.
+                </Dialog.Description>
+              </div>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  aria-label="Tutup riwayat mingguan"
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-line text-muted transition-colors hover:bg-ink-50 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                >
+                  <X className="size-5" aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => onMonthChange(shiftMonthKey(baseMonth, -1))}
+                className="inline-flex min-h-9 items-center gap-1 rounded-md border border-line px-2.5 text-xs font-semibold text-ink-800 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+              >
+                <ChevronLeft className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Sebelumnya</span>
+              </button>
+              <span className="font-display text-sm font-semibold text-ink-900">{data?.month_label ?? baseMonth}</span>
+              <button
+                type="button"
+                onClick={() => onMonthChange(shiftMonthKey(baseMonth, 1))}
+                className="inline-flex min-h-9 items-center gap-1 rounded-md border border-line px-2.5 text-xs font-semibold text-ink-800 transition-colors hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+              >
+                <span className="hidden sm:inline">Berikutnya</span>
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+          <div className="px-5 py-4">
+            {loading ? (
+              <LoadingState label="Memuat riwayat mingguan..." />
+            ) : error ? (
+              <ErrorState message={getErrorMessage(error)} onRetry={onRetry} />
+            ) : data ? (
+              <>
+                <div className="mb-3 grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-line bg-ink-50/60 p-3">
+                    <p className="text-[11px] font-semibold text-muted">Total minggu ini (bulan berjalan)</p>
+                    <strong className="num mt-1 block font-display text-lg tabular-nums text-ink-900">{currency(data.total_gross)}</strong>
+                  </div>
+                  <div className="rounded-lg border border-line bg-ink-50/60 p-3">
+                    <p className="text-[11px] font-semibold text-muted">Total pcs keluar</p>
+                    <strong className="num mt-1 block font-display text-lg tabular-nums text-ink-900">{data.total_units.toLocaleString('id-ID')} pcs</strong>
+                  </div>
+                </div>
+                <ul className="space-y-2">
+                  {data.weeks.map((week) => (
+                    <li
+                      key={week.week}
+                      className={`rounded-lg border p-3 ${week.is_current ? 'border-ink-900 bg-ink-50' : 'border-line bg-surface'} ${week.is_future ? 'opacity-60' : ''}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-semibold text-ink-900">
+                          Minggu {week.week}
+                          <span className="font-normal text-muted"> · {Number(week.start_date.slice(8))}–{Number(week.end_date.slice(8))}</span>
+                        </span>
+                        {week.is_current ? (
+                          <span className="rounded-full bg-ink-900 px-2 py-0.5 text-[10px] font-semibold text-white">Minggu ini</span>
+                        ) : week.is_future ? (
+                          <span className="text-[11px] text-muted">Belum berjalan</span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 flex items-baseline justify-between gap-3">
+                        <strong className="num font-display text-lg tabular-nums text-ink-900">{currency(week.gross)}</strong>
+                        <span className="text-xs tabular-nums text-ink-700">
+                          {week.units.toLocaleString('id-ID')} pcs · {week.partner_count} mitra
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs text-muted">
+                  Pembagian pekan: 1–7, 8–14, 15–21, dan 22–akhir bulan. Angka berasal dari log pengeluaran stok fisik mitra.
+                </p>
+              </>
+            ) : null}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
 function AdminFloatingNavbar({
   tab,
   onSelectTab,
@@ -3399,13 +3618,13 @@ function AdminFloatingNavbar({
             '--hover-index': hoveredNavIndex ?? (activeNavIndex !== -1 ? activeNavIndex : 0),
           } as React.CSSProperties
         }
-        className="pointer-events-auto relative mx-auto grid w-full max-w-[520px] grid-cols-6 items-center overflow-hidden rounded-full border border-white/80 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
+        className="pointer-events-auto relative mx-auto grid w-full max-w-[520px] grid-cols-6 items-center overflow-hidden rounded-full border border-white/80 bg-surface/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] backdrop-blur-2xl backdrop-saturate-150 sm:max-w-xl"
         aria-label="Menu navigasi admin"
       >
         {/* Liquid Glass Gliding Hover Pill */}
         <div
           aria-hidden="true"
-          className={`liquid-pill-hover-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/6)] rounded-full border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+          className={`liquid-pill-hover-x pointer-events-none absolute inset-y-1.5 left-1.5 z-0 w-[calc((100%-12px)/6)] rounded-full border border-white/90 bg-surface/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
             hoveredNavIndex !== null && hoveredNavIndex !== activeNavIndex
               ? 'opacity-100 scale-100'
               : 'pointer-events-none opacity-0 scale-95'
@@ -3508,7 +3727,7 @@ function AdminSidebar({
   return (
     <aside
       id="admin-sidebar"
-      className={`admin-sidebar sticky top-0 z-20 hidden h-screen shrink-0 overflow-hidden border-r border-white/80 bg-white/75 shadow-[inset_-1px_0_1px_rgba(255,255,255,0.8),4px_0_24px_rgba(15,23,42,0.03)] backdrop-blur-2xl backdrop-saturate-150 lg:flex ${
+      className={`admin-sidebar sticky top-0 z-20 hidden h-screen shrink-0 overflow-hidden border-r border-white/80 bg-surface/75 shadow-[inset_-1px_0_1px_rgba(255,255,255,0.8),4px_0_24px_rgba(15,23,42,0.03)] backdrop-blur-2xl backdrop-saturate-150 lg:flex ${
         collapsed ? 'lg:w-16' : 'lg:w-64'
       }`}
       data-collapsed={collapsed}
@@ -3543,7 +3762,7 @@ function AdminSidebar({
               {/* Liquid Glass Gliding Hover Pill */}
               <div
                 aria-hidden="true"
-                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-surface/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
                   hoveredOpIndex !== null && hoveredOpIndex !== activeOpIndex
                     ? 'opacity-100 scale-100'
                     : 'pointer-events-none opacity-0 scale-95'
@@ -3586,7 +3805,7 @@ function AdminSidebar({
                       <span
                         className={`grid min-w-5 h-5 place-items-center rounded-full px-1.5 text-xs font-bold tabular-nums shadow-xs transition-colors ${
                           isActive
-                            ? 'bg-white/20 text-white ring-1 ring-white/30 backdrop-blur-xs'
+                            ? 'bg-surface/20 text-white ring-1 ring-white/30 backdrop-blur-xs'
                             : 'bg-ink-100 text-ink-900'
                         }`}
                       >
@@ -3614,7 +3833,7 @@ function AdminSidebar({
               {/* Liquid Glass Gliding Hover Pill */}
               <div
                 aria-hidden="true"
-                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-surface/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
                   hoveredAnalysisIndex !== null && hoveredAnalysisIndex !== activeAnalysisIndex
                     ? 'opacity-100 scale-100'
                     : 'pointer-events-none opacity-0 scale-95'
@@ -3665,7 +3884,7 @@ function AdminSidebar({
           <button
             type="button"
             onClick={onLogout}
-            className="mt-3 flex min-h-11 w-full items-center gap-2 rounded-xl border border-transparent px-3 text-sm font-medium text-slate-600 transition-all duration-200 hover:border-white/80 hover:bg-white/80 hover:text-crit-fg hover:shadow-xs active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer"
+            className="mt-3 flex min-h-11 w-full items-center gap-2 rounded-xl border border-transparent px-3 text-sm font-medium text-slate-600 transition-all duration-200 hover:border-white/80 hover:bg-surface/80 hover:text-crit-fg hover:shadow-xs active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer"
             aria-label="Keluar"
             title="Keluar"
           >
@@ -3676,7 +3895,7 @@ function AdminSidebar({
       <button
         type="button"
         onClick={() => setCollapsed((current) => !current)}
-        className="absolute right-3 top-5 hidden size-10 place-items-center rounded-xl border border-white/60 bg-white/60 text-ink-700 shadow-2xs backdrop-blur-sm transition-all duration-200 hover:border-white/90 hover:bg-white hover:shadow-xs active:scale-95 lg:grid"
+        className="absolute right-3 top-5 hidden size-10 place-items-center rounded-xl border border-white/60 bg-surface/60 text-ink-700 shadow-2xs backdrop-blur-sm transition-all duration-200 hover:border-white/90 hover:bg-surface hover:shadow-xs active:scale-95 lg:grid"
         aria-label={collapsed ? 'Buka sidebar' : 'Tutup sidebar'}
         aria-controls="admin-sidebar"
         aria-expanded={!collapsed}
@@ -3830,7 +4049,7 @@ function PartnerManagementPanel() {
     onError: (error: unknown) => toast.error(getErrorMessage(error)),
   })
 
-  const fieldClass = 'min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700'
+  const fieldClass = 'min-h-11 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700'
   const labelClass = 'mb-1.5 block text-sm font-semibold text-ink-900'
   const openCreate = () => { setEditingPartner(null); setForm(emptyPartnerForm); setFormOpen(true) }
   const openEdit = (partner: ManagedPartner) => {
@@ -3933,7 +4152,7 @@ function PartnerManagementPanel() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari nama mitra, PIC, telepon, wilayah..."
-            className="min-h-11 w-full rounded-md border border-line bg-white pl-9 pr-10 text-sm text-ink-900 placeholder:text-muted"
+            className="min-h-11 w-full rounded-md border border-line bg-surface pl-9 pr-10 text-sm text-ink-900 placeholder:text-muted"
           />
           {searchQuery ? (
             <button
@@ -3951,7 +4170,7 @@ function PartnerManagementPanel() {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm text-ink-900 sm:w-auto"
+            className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink-900 sm:w-auto"
             aria-label="Filter jenis mitra"
           >
             <option value="all">Semua Jenis ({allPartners.length})</option>
@@ -3971,7 +4190,7 @@ function PartnerManagementPanel() {
       ) : null}
 
       {filteredPartners.length === 0 && allPartners.length > 0 ? (
-        <div className="rounded-lg border border-line bg-white p-8 text-center">
+        <div className="rounded-lg border border-line bg-surface shadow-xs p-8 text-center">
           <p className="text-sm font-medium text-ink-900">Tidak ada mitra yang cocok dengan filter</p>
           <p className="mt-1 text-xs text-muted">Coba ubah kata kunci pencarian atau jenis usaha.</p>
           <button
@@ -3980,7 +4199,7 @@ function PartnerManagementPanel() {
               setSearchQuery('')
               setTypeFilter('all')
             }}
-            className="mt-3 inline-flex min-h-11 items-center justify-center rounded-md border border-line bg-white px-3.5 text-sm font-semibold text-ink-900 hover:bg-ink-50"
+            className="mt-3 inline-flex min-h-11 items-center justify-center rounded-md border border-line bg-surface px-3.5 text-sm font-semibold text-ink-900 hover:bg-ink-50"
           >
             Reset filter
           </button>
@@ -4126,7 +4345,7 @@ function PartnerManagementPanel() {
                 <button
                   type="button"
                   onClick={() => setSelectedDetailPartner(partner)}
-                  className="inline-flex min-h-9 sm:min-h-10 items-center justify-center rounded-md border border-line bg-white px-3 text-xs sm:text-sm font-semibold text-ink-900 hover:bg-ink-50 shadow-2xs"
+                  className="inline-flex min-h-9 sm:min-h-10 items-center justify-center rounded-md border border-line bg-surface px-3 text-xs sm:text-sm font-semibold text-ink-900 hover:bg-ink-50 shadow-2xs"
                 >
                   Detail
                 </button>
@@ -4156,7 +4375,7 @@ function PartnerManagementPanel() {
           <button
             type="button"
             onClick={() => setVisiblePartners((current) => current + 30)}
-            className="min-h-11 w-full rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
+            className="min-h-11 w-full rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
           >
             Tampilkan Mitra lainnya
           </button>
@@ -4184,7 +4403,7 @@ function PartnerManagementPanel() {
       <Dialog.Root open={formOpen} onOpenChange={(open) => { setFormOpen(open); if (!open && !savePartner.isPending) { setForm(emptyPartnerForm); setEditingPartner(null) } }}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/50" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-xl focus-visible:outline-none sm:p-6">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-surface shadow-xs p-5 shadow-xl focus-visible:outline-none sm:p-6">
             <div className="flex items-start justify-between gap-3 border-b border-line pb-4">
               <div>
                 <Dialog.Title className="font-display text-xl font-bold text-ink-900">{editingPartner ? `Ubah profil ${editingPartner.name}` : 'Tambah mitra baru'}</Dialog.Title>
@@ -4194,7 +4413,7 @@ function PartnerManagementPanel() {
                 <button
                   type="button"
                   aria-label="Tutup form"
-                  className="grid size-8 shrink-0 place-items-center rounded-md border border-line bg-white text-muted transition hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
+                  className="grid size-8 shrink-0 place-items-center rounded-md border border-line bg-surface text-muted transition hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700"
                 >
                   <X className="size-4" aria-hidden="true" />
                 </button>
@@ -4219,7 +4438,7 @@ function PartnerManagementPanel() {
       <Dialog.Root open={partnerToDelete !== null} onOpenChange={(open) => { if (!open && !deletePartner.isPending) setPartnerToDelete(null) }}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-white p-5 shadow-2xl focus-visible:outline-none animate-in fade-in zoom-in-95 duration-200 sm:p-6">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-surface shadow-xs p-5 shadow-2xl focus-visible:outline-none animate-in fade-in zoom-in-95 duration-200 sm:p-6">
             <Dialog.Title className="font-display text-xl font-bold text-ink-900">Nonaktifkan {partnerToDelete?.name}?</Dialog.Title>
             <Dialog.Description className="mt-2 text-sm leading-6 text-muted">Akun mitra akan kehilangan akses. Riwayat laporan, pesanan, dan stok tetap tersimpan untuk audit.</Dialog.Description>
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setPartnerToDelete(null)} disabled={deletePartner.isPending} className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700">Batal</button><button type="button" onClick={() => { if (partnerToDelete) deletePartner.mutate(partnerToDelete.id) }} disabled={deletePartner.isPending} className="min-h-11 rounded-md bg-crit px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit disabled:opacity-60">{deletePartner.isPending ? 'Menonaktifkan...' : 'Nonaktifkan mitra'}</button></div>
@@ -4236,7 +4455,7 @@ function PartnerManagementPanel() {
       >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-white p-5 shadow-2xl focus-visible:outline-none animate-in fade-in zoom-in-95 duration-200 sm:p-6">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-surface shadow-xs p-5 shadow-2xl focus-visible:outline-none animate-in fade-in zoom-in-95 duration-200 sm:p-6">
             <div className="flex items-center gap-3">
               <div className="grid size-11 shrink-0 place-items-center rounded-full bg-crit-bg text-crit">
                 <Trash2 className="size-5" aria-hidden="true" />
@@ -4586,7 +4805,7 @@ function StockPanel({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-line/80 bg-white shadow-2xs">
+              <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-line/80 bg-surface shadow-2xs">
                 <img
                   src="/icons/logo.jpg"
                   alt="Daisuki"
@@ -4611,7 +4830,7 @@ function StockPanel({
                   type="button"
                   onClick={resetAllDrafts}
                   disabled={isBatchSaving}
-                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-line bg-white px-3 text-sm font-semibold text-muted hover:bg-paper hover:text-ink-900 disabled:opacity-40"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-line bg-surface px-3 text-sm font-semibold text-muted hover:bg-paper hover:text-ink-900 disabled:opacity-40"
                 >
                   Batal
                 </button>
@@ -4691,7 +4910,7 @@ function StockPanel({
                 key={prod.id}
                 className={`flex flex-col justify-between rounded-md border p-4 ${hasChanged
                     ? 'border-warn bg-warn-bg/30'
-                    : 'border-line bg-white'
+                    : 'border-line bg-surface'
                   }`}
               >
                 {/* Header Card: Nama Produk & Status */}
@@ -4773,7 +4992,7 @@ function StockPanel({
                       disabled={isBatchSaving || parsedDraft <= 0}
                       onClick={() => adjustStock(prod.id, -1, prod.central_stock)}
                       aria-label={`Kurangi 1 ${prod.name}`}
-                      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line bg-white text-ink-700 hover:bg-ink-100 disabled:opacity-40"
+                      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-ink-700 hover:bg-ink-100 disabled:opacity-40"
                     >
                       <Minus className="size-3.5" />
                     </button>
@@ -4800,7 +5019,7 @@ function StockPanel({
                         }
                       }}
                       aria-invalid={!isValid}
-                      className="min-h-11 w-full min-w-0 rounded-md border border-line bg-white px-2 text-center text-base font-semibold tabular-nums text-ink-900 disabled:opacity-50"
+                      className="min-h-11 w-full min-w-0 rounded-md border border-line bg-surface px-2 text-center text-base font-semibold tabular-nums text-ink-900 disabled:opacity-50"
                     />
 
                     <button
@@ -4808,7 +5027,7 @@ function StockPanel({
                       disabled={isBatchSaving}
                       onClick={() => adjustStock(prod.id, 1, prod.central_stock)}
                       aria-label={`Tambah 1 ${prod.name}`}
-                      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line bg-white text-ink-700 hover:bg-ink-100 disabled:opacity-40"
+                      className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-ink-700 hover:bg-ink-100 disabled:opacity-40"
                     >
                       <Plus className="size-3.5" />
                     </button>
@@ -4855,7 +5074,7 @@ function StockPanel({
                   }
                 }}
                   disabled={completeRecall.isPending}
-                  className="min-h-11 shrink-0 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-paper disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
+                  className="min-h-11 shrink-0 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-900 hover:bg-paper disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
                   Tandai sudah dijemput
                 </button>
               </div>
@@ -4901,7 +5120,7 @@ function StockPanel({
               aria-label="Filter cabang"
               value={partner}
               onChange={(event) => onPartner(event.target.value)}
-              className="min-h-11 rounded-sm border border-line bg-white px-3"
+              className="min-h-11 rounded-sm border border-line bg-surface px-3"
             >
               <option value="semua">Semua cabang</option>
               {partnerNames.map((name) => (
@@ -4914,7 +5133,7 @@ function StockPanel({
               onChange={(event) =>
                 onStatus(event.target.value as typeof status)
               }
-              className="min-h-11 rounded-sm border border-line bg-white px-3"
+              className="min-h-11 rounded-sm border border-line bg-surface px-3"
             >
               <option value="semua">Semua status</option>
               <option value="kritis">Kritis</option>
@@ -4949,7 +5168,7 @@ function StockPanel({
           {branchGroups.slice(0, visibleBranches).map((group, index) => (
             <article
               key={group.partner_id}
-              className="overflow-hidden rounded-md border border-line bg-white"
+              className="overflow-hidden rounded-md border border-line bg-surface"
             >
               <button
                 type="button"
@@ -4998,7 +5217,7 @@ function StockPanel({
             <button
               type="button"
               onClick={() => setVisibleBranches((current) => current + 100)}
-              className="min-h-11 w-full rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
+              className="min-h-11 w-full rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50"
             >
               Tampilkan cabang Lainnya
             </button>
@@ -5026,7 +5245,7 @@ function StockPanel({
       }}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl bg-white p-5 shadow-2xl focus:outline-none sm:p-6">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl bg-surface p-5 shadow-2xl focus:outline-none sm:p-6">
             <Dialog.Title className="font-display text-lg font-semibold text-ink-900">Catat penarikan stok mitra</Dialog.Title>
             <Dialog.Description className="mt-2 text-sm leading-6 text-ink-700">
               Stok {recallTarget?.partner_name} akan dicatat 0 pcs. Tim Daisuki perlu menjemput barang berikut.
@@ -5180,7 +5399,7 @@ function OrderPanel({
           onClick={() => setActiveCategory('menunggu')}
           className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'menunggu'
               ? 'border border-amber-300/90 bg-amber-50/95 text-amber-950 shadow-xs'
-              : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
+              : 'border border-line/60 bg-surface text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
         >
           <Clock className={`size-4 ${activeCategory === 'menunggu' ? 'text-amber-600' : 'text-muted'}`} aria-hidden="true" />
@@ -5202,7 +5421,7 @@ function OrderPanel({
           onClick={() => setActiveCategory('dalam_pengiriman')}
           className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'dalam_pengiriman'
               ? 'border border-blue-300/90 bg-blue-50/95 text-blue-950 shadow-xs'
-              : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
+              : 'border border-line/60 bg-surface text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
         >
           <Truck className={`size-4 ${activeCategory === 'dalam_pengiriman' ? 'text-blue-600' : 'text-muted'}`} aria-hidden="true" />
@@ -5224,7 +5443,7 @@ function OrderPanel({
           onClick={() => setActiveCategory('selesai')}
           className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'selesai'
               ? 'border border-emerald-300/90 bg-emerald-50/95 text-emerald-950 shadow-xs'
-              : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
+              : 'border border-line/60 bg-surface text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
         >
           <CheckCircle2 className={`size-4 ${activeCategory === 'selesai' ? 'text-emerald-600' : 'text-muted'}`} aria-hidden="true" />
@@ -5246,7 +5465,7 @@ function OrderPanel({
           onClick={() => setActiveCategory('ditolak')}
           className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${activeCategory === 'ditolak'
               ? 'border border-rose-300/90 bg-rose-50/95 text-rose-950 shadow-xs'
-              : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
+              : 'border border-line/60 bg-surface text-muted hover:border-line hover:bg-paper hover:text-ink-900'
             }`}
         >
           <XCircle className={`size-4 ${activeCategory === 'ditolak' ? 'text-rose-600' : 'text-muted'}`} aria-hidden="true" />
@@ -5324,7 +5543,7 @@ function OrderPanel({
               }}
               type="button"
               onClick={() => setSelectedOrderId(order.id)}
-              className="group flex w-full flex-col justify-between gap-2.5 rounded-lg border border-line bg-white p-3.5 shadow-2xs transition-all hover:border-ink-400 hover:shadow-xs cursor-pointer text-left sm:p-4 focus-visible:outline-2 focus-visible:outline-ink-700"
+              className="group flex w-full flex-col justify-between gap-2.5 rounded-lg border border-line bg-surface shadow-xs p-3.5 shadow-2xs transition-all hover:border-ink-400 hover:shadow-xs cursor-pointer text-left sm:p-4 focus-visible:outline-2 focus-visible:outline-ink-700"
             >
               {/* Baris 1: Nomor Urut, Nama Mitra, Tipe, No PO, Status & Tanggal */}
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-2.5">
@@ -5436,7 +5655,7 @@ function OrderPanel({
           <button
             type="button"
             onClick={() => setVisibleOrders((current) => current + 30)}
-            className="min-h-11 w-full rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50 shadow-2xs"
+            className="min-h-11 w-full rounded-lg border border-line bg-surface shadow-xs px-4 text-sm font-semibold text-ink-700 hover:bg-ink-50 shadow-2xs"
           >
             Tampilkan  pesanan lainnya
           </button>
@@ -5653,9 +5872,9 @@ function ApprovalDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45 backdrop-blur-xs" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl xl:max-w-5xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-white shadow-2xl focus:outline-none">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-1.5rem)] max-w-4xl xl:max-w-5xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none">
           {/* Header Dialog */}
-          <div className="sticky top-0 z-10 border-b border-line bg-white/95 px-5 py-4 backdrop-blur-md sm:px-6">
+          <div className="sticky top-0 z-10 border-b border-line bg-surface/95 px-5 py-4 backdrop-blur-md sm:px-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -5753,11 +5972,11 @@ function ApprovalDialog({
                   Stok pusat sudah direservasi saat pengajuan. Jika jumlah disetujui lebih kecil, selisihnya langsung kembali ke stok tersedia.
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
-                  <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
+                  <span className="inline-flex items-center gap-1.5 rounded bg-surface px-2.5 py-1 font-medium text-ink-800 border border-line">
                     <span className="size-2 rounded-full bg-order-pengiriman" />
                     <strong>Mulai packing:</strong> saat gudang menyiapkan barang
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 font-medium text-ink-800 border border-line">
+                  <span className="inline-flex items-center gap-1.5 rounded bg-surface px-2.5 py-1 font-medium text-ink-800 border border-line">
                     <span className="size-2 rounded-full bg-muted" />
                     <strong>Kirim ke mitra:</strong> tersedia setelah packing selesai
                   </span>
@@ -5804,7 +6023,7 @@ function ApprovalDialog({
                             <img
                               src={resolved}
                               alt={`Foto bukti penerimaan pesanan ${order.order_no}`}
-                              className="max-h-[380px] w-auto max-w-full rounded-md object-contain bg-white shadow-xs"
+                              className="max-h-[380px] w-auto max-w-full rounded-md object-contain bg-surface shadow-xs"
                               loading="lazy"
                             />
                           </div>
@@ -5886,7 +6105,7 @@ function ApprovalDialog({
                     return (
                       <div
                         key={item.id}
-                        className="rounded-xl border border-line bg-white p-3.5 sm:p-4 shadow-2xs transition hover:border-ink-300"
+                        className="rounded-xl border border-line bg-surface shadow-xs p-3.5 sm:p-4 shadow-2xs transition hover:border-ink-300"
                       >
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                           {/* Info Produk & Kondisi Stok */}
@@ -5975,7 +6194,7 @@ function ApprovalDialog({
                             <div className="flex items-center gap-2">
                               {editable ? (
                                 <>
-                                  <div className="inline-flex items-center rounded-lg border border-line bg-white shadow-2xs">
+                                  <div className="inline-flex items-center rounded-lg border border-line bg-surface shadow-xs shadow-2xs">
                                     <button
                                       type="button"
                                       aria-label="Kurangi kuantitas"
@@ -6006,7 +6225,7 @@ function ApprovalDialog({
                                           Number.parseInt(event.target.value, 10) || 0,
                                         )
                                       }
-                                      className="h-8 w-14 shrink-0 border-x border-line bg-white px-1 text-center font-display text-sm font-bold tabular-nums text-ink-900 focus:outline-none"
+                                      className="h-8 w-14 shrink-0 border-x border-line bg-surface px-1 text-center font-display text-sm font-bold tabular-nums text-ink-900 focus:outline-none"
                                     />
                                     <button
                                       type="button"
@@ -6089,7 +6308,7 @@ function ApprovalDialog({
 
             {/* Input Catatan Admin & Template Cepat (Hanya tampil saat mode persetujuan, bukan mode penolakan) */}
             {editable && !rejectionMode ? (
-              <div className="rounded-xl border border-line bg-white p-4 sm:p-5">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label
                     htmlFor={`approval-note-${order.id}`}
@@ -6115,7 +6334,7 @@ function ApprovalDialog({
                         key={template}
                         type="button"
                         onClick={() => onAdminNoteChange(order.id, template)}
-                        className="rounded-md border border-line bg-ink-50 px-2 py-1 text-xs font-medium text-ink-800 transition-colors hover:border-ink-700 hover:bg-white cursor-pointer"
+                        className="rounded-md border border-line bg-ink-50 px-2 py-1 text-xs font-medium text-ink-800 transition-colors hover:border-ink-700 hover:bg-surface cursor-pointer"
                       >
                         {template}
                       </button>
@@ -6188,7 +6407,7 @@ function ApprovalDialog({
                         key={template}
                         type="button"
                         onClick={() => setRejectionReason(template)}
-                        className="rounded-md border border-crit/25 bg-white px-2.5 py-1 text-xs font-medium text-ink-800 transition hover:border-crit hover:bg-crit-bg/40 hover:text-crit active:scale-95 cursor-pointer"
+                        className="rounded-md border border-crit/25 bg-surface px-2.5 py-1 text-xs font-medium text-ink-800 transition hover:border-crit hover:bg-crit-bg/40 hover:text-crit active:scale-95 cursor-pointer"
                       >
                         {template}
                       </button>
@@ -6215,7 +6434,7 @@ function ApprovalDialog({
                     maxLength={1000}
                     value={rejectionReason}
                     onChange={(event) => setRejectionReason(event.target.value)}
-                    className="w-full rounded-lg border border-line bg-white p-3 text-sm text-ink-900 shadow-2xs placeholder:text-muted focus:border-crit focus:outline-none focus:ring-1 focus:ring-crit"
+                    className="w-full rounded-lg border border-line bg-surface shadow-xs p-3 text-sm text-ink-900 shadow-2xs placeholder:text-muted focus:border-crit focus:outline-none focus:ring-1 focus:ring-crit"
                     placeholder="Tuliskan alasan penolakan pesanan ini yang dapat dipahami mitra..."
                   />
                   {!rejectionReason.trim() ? (
@@ -6230,7 +6449,7 @@ function ApprovalDialog({
                   <button
                     type="button"
                     onClick={() => setRejectionMode(false)}
-                    className="min-h-10 rounded-md border border-line bg-white px-4 text-xs font-semibold text-ink-700 hover:bg-paper cursor-pointer"
+                    className="min-h-10 rounded-md border border-line bg-surface px-4 text-xs font-semibold text-ink-700 hover:bg-paper cursor-pointer"
                   >
                     Batal Penolakan
                   </button>
@@ -6287,7 +6506,7 @@ function ApprovalDialog({
                   <button
                     type="button"
                     onClick={() => setShippingConfirmMode(false)}
-                    className="min-h-10 rounded-md border border-line bg-white px-4 text-xs font-semibold text-ink-700 hover:bg-paper cursor-pointer"
+                    className="min-h-10 rounded-md border border-line bg-surface px-4 text-xs font-semibold text-ink-700 hover:bg-paper cursor-pointer"
                   >
                     Tahan dulu (Belum siap)
                   </button>
@@ -6305,16 +6524,16 @@ function ApprovalDialog({
             ) : null}
           </div>
 
-          <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-white p-4 sm:flex-row sm:justify-end sm:p-5">
+          <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-surface p-4 sm:flex-row sm:justify-end sm:p-5">
             {order.status === 'dalam_pengiriman' && order.delivery_code && order.delivery_qr_token ? (
-              <button type="button" onClick={() => setPrintOpen(true)} className="min-h-11 rounded-md border border-ume bg-white px-4 text-sm font-semibold text-ume focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Cetak Resi / Surat Jalan</button>
+              <button type="button" onClick={() => setPrintOpen(true)} className="min-h-11 rounded-md border border-ume bg-surface px-4 text-sm font-semibold text-ume focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume">Cetak Resi / Surat Jalan</button>
             ) : null}
             {order.status === 'diproses' && rejectionMode ? (
               <>
                 <button
                   type="button"
                   onClick={() => setRejectionMode(false)}
-                  className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-paper cursor-pointer"
+                  className="min-h-11 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-700 hover:bg-paper cursor-pointer"
                 >
                   Batal Penolakan
                 </button>
@@ -6373,7 +6592,7 @@ function ApprovalDialog({
                     <Dialog.Close asChild>
                       <button
                         type="button"
-                        className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-700 hover:bg-paper hover:text-ink-900 cursor-pointer"
+                        className="min-h-11 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-700 hover:bg-paper hover:text-ink-900 cursor-pointer"
                       >
                         Siapkan nanti
                       </button>
@@ -6761,7 +6980,7 @@ function NotificationModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100%-1rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200 sm:w-[calc(100%-2rem)]">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100%-1rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200 sm:w-[calc(100%-2rem)]">
           <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
             <div className="min-w-0">
               <Dialog.Title className="font-display text-base font-bold text-ink-900 sm:text-lg">
@@ -6779,7 +6998,7 @@ function NotificationModal({
                   type="button"
                   disabled={isMarkingAll || marking}
                   onClick={() => onReadAll()}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 transition-colors hover:bg-ink-50 disabled:opacity-50 cursor-pointer"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-xs font-semibold text-ink-900 transition-colors hover:bg-ink-50 disabled:opacity-50 cursor-pointer"
                   title="Tandai semua notifikasi yang belum dibaca menjadi sudah dibaca"
                 >
                   {isMarkingAll ? (
@@ -6827,8 +7046,8 @@ function NotificationModal({
                   <article
                     key={item.id}
                     className={`group relative rounded-xl border p-3.5 transition-all duration-200 sm:p-4 ${isUnread
-                        ? 'border-line/90 bg-white shadow-2xs hover:border-ink-300 hover:shadow-xs'
-                        : 'border-line/60 bg-white/60 text-muted hover:border-line hover:bg-white hover:shadow-2xs'
+                        ? 'border-line/90 bg-surface shadow-2xs hover:border-ink-300 hover:shadow-xs'
+                        : 'border-line/60 bg-surface/60 text-muted hover:border-line hover:bg-surface hover:shadow-2xs'
                       }`}
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -6905,7 +7124,7 @@ function NotificationModal({
                             type="button"
                             disabled={marking}
                             onClick={() => onRead(item.id)}
-                            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line/80 bg-white px-2.5 text-xs font-semibold text-muted transition-colors hover:bg-paper hover:text-ink-900 disabled:opacity-40 cursor-pointer"
+                            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line/80 bg-surface px-2.5 text-xs font-semibold text-muted transition-colors hover:bg-paper hover:text-ink-900 disabled:opacity-40 cursor-pointer"
                             title="Tandai sudah dibaca"
                           >
                             <Check className="size-3.5 text-ok" aria-hidden="true" />

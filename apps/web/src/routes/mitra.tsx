@@ -473,7 +473,7 @@ function MitraPortal() {
 
   return (
     <div className={`dashboard-page mitra-dashboard bg-[#f6f7f9] font-sans text-text ${activeTab === 'chat' ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen pb-44 sm:pb-48'}`}>
-      <header className="sticky top-0 z-20 border-b border-line bg-white">
+      <header className="sticky top-0 z-20 border-b border-line bg-surface">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <button
             type="button"
@@ -633,13 +633,13 @@ function MitraPortal() {
                 '--hover-index': hoveredIndex ?? activeIndex,
               } as React.CSSProperties
             }
-            className="pointer-events-auto relative mx-auto grid w-full max-w-[450px] grid-cols-6 items-center overflow-hidden rounded-full border border-ink-700/30 bg-white/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-ink-700/10 backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[490px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
+            className="pointer-events-auto relative mx-auto grid w-full max-w-[450px] grid-cols-6 items-center overflow-hidden rounded-full border border-ink-700/30 bg-surface/70 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.16),0_4px_16px_rgba(15,23,42,0.08),inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-1px_1px_rgba(0,0,0,0.04)] ring-1 ring-ink-700/10 backdrop-blur-2xl backdrop-saturate-150 sm:max-w-[490px] lg:mx-0 lg:flex lg:max-h-[calc(100dvh-2rem)] lg:w-[84px] lg:flex-col lg:gap-2 lg:overflow-y-auto lg:rounded-[2.2rem] lg:p-2"
             aria-label="Menu mitra"
           >
             {/* Liquid Glass Gliding Hover Pill */}
             <div
               aria-hidden="true"
-              className={`liquid-pill-hover-mitra pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] border border-white/90 bg-white/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md
+              className={`liquid-pill-hover-mitra pointer-events-none absolute z-0 rounded-full lg:rounded-[1.4rem] border border-white/90 bg-surface/80 shadow-[0_4px_16px_rgba(15,23,42,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md
                 top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/6)]
                 lg:top-2 lg:bottom-auto lg:left-2 lg:h-[62px] lg:w-[calc(100%-16px)]
                 ${
@@ -811,7 +811,7 @@ function StocksPanel({
             type="button"
             data-tour="logs-tab"
             onClick={onOpenLogs}
-            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-white px-3.5 py-2 text-xs font-semibold text-ink-700 shadow-2xs hover:bg-paper focus-visible:outline-2 focus-visible:outline-ink-900"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-3.5 py-2 text-xs font-semibold text-ink-700 shadow-2xs hover:bg-paper focus-visible:outline-2 focus-visible:outline-ink-900"
           >
             <History className="size-4" aria-hidden="true" /> Lihat log stok
           </button>
@@ -825,7 +825,7 @@ function StocksPanel({
         <div data-tour="central-stock-card" className="flex flex-col gap-2 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between bg-paper/40">
           <div className="flex items-center gap-3">
             <span
-              className="grid size-11 shrink-0 place-items-center rounded-lg border border-line bg-white"
+              className="grid size-11 shrink-0 place-items-center rounded-lg border border-line bg-surface shadow-xs"
               aria-hidden="true"
             >
               <img
@@ -867,7 +867,7 @@ function StocksPanel({
         ) : null}
         <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4">
           {centralProductsQuery.data?.map((product) => (
-            <div key={product.id} className="min-w-0 bg-white p-3.5 sm:p-4">
+            <div key={product.id} className="min-w-0 bg-surface p-3.5 sm:p-4">
               <p
                 className="truncate text-xs font-medium leading-snug tracking-tight text-muted"
                 title={product.name}
@@ -954,7 +954,7 @@ function StocksPanel({
                 return (
                   <article
                     key={stock.product_id}
-                    className={`flex flex-col justify-between rounded-xl border bg-white p-4 shadow-2xs transition-all hover:shadow-xs sm:p-5 ${
+                    className={`flex flex-col justify-between rounded-xl border bg-surface p-4 shadow-2xs transition-all hover:shadow-xs sm:p-5 ${
                       changed
                         ? 'border-emerald-300 ring-1 ring-emerald-200/60 bg-emerald-50/15'
                         : 'border-line hover:border-ink-300'
@@ -1028,7 +1028,7 @@ function StocksPanel({
                           value={qty}
                           max={stock.current_qty}
                           onChange={(val) => onQtyChange(stock, val)}
-                          className="h-11 w-20 sm:w-24 rounded-lg border border-line bg-white text-center text-lg font-bold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-emerald-600"
+                          className="h-11 w-20 sm:w-24 rounded-lg border border-line bg-surface shadow-xs text-center text-lg font-bold tabular-nums text-ink-900 focus-visible:outline-2 focus-visible:outline-emerald-600"
                           aria-label={`Jumlah stok ${stock.product_name}`}
                         />
                         <button
@@ -1142,7 +1142,7 @@ function OrderForm({
         <div className="flex flex-col gap-2 border-b border-line bg-paper/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-center gap-3">
             <span
-              className="grid size-11 shrink-0 place-items-center rounded-lg border border-ink-200 bg-white text-ink-900 shadow-2xs"
+              className="grid size-11 shrink-0 place-items-center rounded-lg border border-ink-200 bg-surface text-ink-900 shadow-2xs"
               aria-hidden="true"
             >
               <PackagePlus className="size-5.5 text-ink-900" />
@@ -1211,7 +1211,7 @@ function OrderForm({
                         onAdd(stock)
                         onQtyChange(stock.product_id, String(suggested))
                       }}
-                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-950 shadow-2xs transition-colors hover:bg-amber-100/60 cursor-pointer"
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-amber-300 bg-surface px-2.5 py-1 text-xs font-semibold text-amber-950 shadow-2xs transition-colors hover:bg-amber-100/60 cursor-pointer"
                     >
                       <span>{stock.product_name}</span>
                       <span className="tabular-nums text-amber-800">
@@ -1248,7 +1248,7 @@ function OrderForm({
                 return (
                   <article
                     key={stock.product_id}
-                    className={`flex flex-col justify-between rounded-xl border bg-white p-4 shadow-2xs transition-all sm:p-5 ${
+                    className={`flex flex-col justify-between rounded-xl border bg-surface p-4 shadow-2xs transition-all sm:p-5 ${
                       isExceeded
                         ? 'border-amber-400 bg-amber-50/20 ring-1 ring-amber-300/70'
                         : selected
@@ -1373,7 +1373,7 @@ function OrderForm({
                               className={`h-11 w-20 sm:w-24 rounded-lg border text-center text-lg font-bold tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 ${
                                 isExceeded
                                   ? 'border-amber-400 bg-amber-50/70 text-amber-950 ring-1 ring-amber-300 focus-visible:outline-amber-600'
-                                  : 'border-line bg-white text-ink-900 focus-visible:outline-ink-700'
+                                  : 'border-line bg-surface text-ink-900 focus-visible:outline-ink-700'
                               }`}
                             />
                             <button
@@ -1434,7 +1434,7 @@ function OrderForm({
                                 )
                               }
                             }}
-                            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-ink-800 bg-white px-3.5 text-sm font-semibold text-ink-900 shadow-2xs transition-colors hover:bg-ink-900 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-ink-800 bg-surface px-3.5 text-sm font-semibold text-ink-900 shadow-2xs transition-colors hover:bg-ink-900 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer"
                           >
                             <Plus className="size-4" aria-hidden="true" />
                             <span>Tambah ke pengajuan</span>
@@ -1463,7 +1463,7 @@ function OrderForm({
         ) : null}
 
         {/* Footer Ringkasan Pengajuan & Catatan */}
-        <div className="border-t border-line bg-white p-4 sm:p-5">
+        <div className="border-t border-line bg-surface p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-bold text-ink-900">
               Ringkasan pengajuan
@@ -1559,7 +1559,7 @@ function OrderForm({
                 value={note}
                 onChange={(event) => onNoteChange(event.target.value)}
                 placeholder="Contoh: dibutuhkan sebelum Jumat untuk akhir pekan"
-                className="mt-1.5 w-full resize-y rounded-lg border border-line bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+                className="mt-1.5 w-full resize-y rounded-lg border border-line bg-surface shadow-xs px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
                 maxLength={500}
               />
             </div>
@@ -1603,7 +1603,7 @@ function DeliveryTourSimulation({ step, onClose, onOpenScanner }: { step: number
           </button>
         ) : null}
       </div>
-      <article data-tour="delivery-order-card" className="rounded-lg border border-line bg-white p-4 sm:p-5">
+      <article data-tour="delivery-order-card" className="rounded-lg border border-line bg-surface shadow-xs p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-display text-base font-bold text-ink-900">Contoh kiriman</h2>
           <span className="rounded-md bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-950">Dalam Pengiriman</span>
@@ -1635,6 +1635,16 @@ function DeliveryTourSimulation({ step, onClose, onOpenScanner }: { step: number
       ) : null}
     </div>
   )
+}
+
+function StatusFilterClass(active: boolean, rejected = false) {
+  return `min-h-11 shrink-0 whitespace-nowrap rounded-lg border px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
+    active
+      ? rejected
+        ? 'border-crit bg-crit text-white'
+        : 'border-ink-900 bg-ink-900 text-white'
+      : 'border-line bg-surface text-ink-800 hover:border-ink-700 hover:bg-paper'
+  }`
 }
 
 function OrderHistory({
@@ -1741,6 +1751,30 @@ function OrderHistory({
     return allOrders.filter((o) => o.status === statusFilter)
   }, [allOrders, statusFilter])
 
+  const orderStages: { status: typeof statusFilter; label: string }[] = [
+    { status: 'ditunda', label: 'Menunggu stok' },
+    { status: 'diproses', label: 'Menunggu Persetujuan' },
+    { status: 'disetujui', label: 'Disetujui' },
+    { status: 'dipacking', label: 'Dipacking' },
+    { status: 'dalam_pengiriman', label: 'Dalam Pengiriman' },
+    { status: 'selesai', label: 'Selesai' },
+  ]
+  const stagePositions = [
+    'sm:col-start-1 sm:row-start-1 lg:col-start-1 lg:row-start-1',
+    'sm:col-start-2 sm:row-start-1 lg:col-start-2 lg:row-start-1',
+    'sm:col-start-2 sm:row-start-2 lg:col-start-3 lg:row-start-1',
+    'sm:col-start-1 sm:row-start-2 lg:col-start-3 lg:row-start-2',
+    'sm:col-start-1 sm:row-start-3 lg:col-start-2 lg:row-start-2',
+    'sm:col-start-2 sm:row-start-3 lg:col-start-1 lg:row-start-2',
+  ]
+  const stageArrows = [
+    'sm:bottom-auto sm:left-auto sm:-right-5 sm:top-1/2 sm:translate-x-0 sm:-translate-y-1/2 sm:rotate-0 lg:bottom-auto lg:left-auto lg:-right-5 lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2 lg:rotate-0',
+    'lg:bottom-auto lg:left-auto lg:-right-5 lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2 lg:rotate-0',
+    'sm:bottom-auto sm:-left-5 sm:right-auto sm:top-1/2 sm:translate-x-0 sm:-translate-y-1/2 sm:rotate-180 lg:-bottom-5 lg:left-1/2 lg:right-auto lg:top-auto lg:-translate-x-1/2 lg:translate-y-0 lg:rotate-90',
+    'lg:bottom-auto lg:-left-5 lg:right-auto lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2 lg:rotate-180',
+    'sm:bottom-auto sm:left-auto sm:-right-5 sm:top-1/2 sm:translate-x-0 sm:-translate-y-1/2 sm:rotate-0 lg:bottom-auto lg:-left-5 lg:right-auto lg:top-1/2 lg:translate-x-0 lg:-translate-y-1/2 lg:rotate-180',
+  ]
+
   return (
     <section
       aria-labelledby="history-heading"
@@ -1794,101 +1828,58 @@ function OrderHistory({
             description="Ajukan restock pertama untuk produk yang mulai menipis."
             action={<div className="flex flex-wrap justify-center gap-2">
               <button type="button" onClick={onOpenOrder} className="min-h-12 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-xs hover:bg-emerald-700">Ajukan restock</button>
-              <button type="button" onClick={() => setSimulationOpen(true)} className="min-h-11 rounded-md border border-ink-700 bg-white px-4 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">Coba simulasi penerimaan</button>
+              <button type="button" onClick={() => setSimulationOpen(true)} className="min-h-11 rounded-md border border-ink-700 bg-surface px-4 text-sm font-semibold text-ink-900 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">Coba simulasi penerimaan</button>
             </div>}
           />
         </div>
       ) : null}
 
-      {/* Filter Tabs Status Pesanan */}
       {allOrders.length > 0 ? (
-        <div className="mt-5 flex flex-wrap items-center gap-1.5 border-b border-line pb-3">
-          <button
-            type="button"
-            onClick={() => setStatusFilter('semua')}
-            className={`min-h-11 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-              statusFilter === 'semua'
-                ? 'border border-emerald-300/90 bg-emerald-50 text-emerald-950 font-semibold shadow-xs'
-                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
-            }`}
+        <div className="mt-5 border-b border-line pb-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={statusFilter === 'semua'}
+              onClick={() => setStatusFilter('semua')}
+              className={StatusFilterClass(statusFilter === 'semua')}
+            >
+              Semua ({allOrders.length})
+            </button>
+            <button
+              type="button"
+              aria-pressed={statusFilter === 'ditolak'}
+              onClick={() => setStatusFilter('ditolak')}
+              className={StatusFilterClass(statusFilter === 'ditolak', true)}
+            >
+              Ditolak ({allOrders.filter((order) => order.status === 'ditolak').length})
+            </button>
+          </div>
+          <div
+            role="group"
+            aria-label="Alur status pesanan"
+            className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2 lg:grid-cols-3"
           >
-            Semua ({allOrders.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('ditunda')}
-            className={`min-h-12 rounded-lg px-4 text-sm font-semibold ${statusFilter === 'ditunda' ? 'border border-amber-300 bg-amber-50 text-amber-950' : 'border border-line bg-white text-ink-800'}`}
-          >
-            Menunggu stok ({allOrders.filter((o) => o.status === 'ditunda').length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('diproses')}
-            className={`min-h-11 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-              statusFilter === 'diproses'
-                ? 'border border-amber-300/90 bg-amber-50 text-amber-950 font-semibold shadow-xs'
-                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
-            }`}
-          >
-            Menunggu Persetujuan (
-            {allOrders.filter((o) => o.status === 'diproses').length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('disetujui')}
-            className={`min-h-11 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-              statusFilter === 'disetujui'
-                ? 'border border-emerald-300/90 bg-emerald-50 text-emerald-950 font-semibold shadow-xs'
-                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
-            }`}
-          >
-            Disetujui (
-            {allOrders.filter((o) => o.status === 'disetujui').length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('dipacking')}
-            className={`min-h-12 rounded-lg px-4 text-sm font-semibold ${statusFilter === 'dipacking' ? 'border border-sky-300 bg-sky-50 text-sky-950' : 'border border-line bg-white text-ink-800'}`}
-          >
-            Dipacking ({allOrders.filter((o) => o.status === 'dipacking').length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('dalam_pengiriman')}
-            className={`min-h-11 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-              statusFilter === 'dalam_pengiriman'
-                ? 'border border-sky-300/90 bg-sky-50 text-sky-950 font-semibold shadow-xs'
-                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
-            }`}
-          >
-            Dalam Pengiriman (
-            {allOrders.filter((o) => o.status === 'dalam_pengiriman').length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('selesai')}
-            className={`min-h-11 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-              statusFilter === 'selesai'
-                ? 'border border-emerald-300/90 bg-emerald-50 text-emerald-950 font-semibold shadow-xs'
-                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
-            }`}
-          >
-            Selesai ({allOrders.filter((o) => o.status === 'selesai').length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('ditolak')}
-            className={`min-h-11 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-              statusFilter === 'ditolak'
-                ? 'border border-crit/40 bg-crit-bg text-crit-fg shadow-xs'
-                : 'border border-line/60 bg-white text-muted hover:border-line hover:bg-paper hover:text-ink-900'
-            }`}
-          >
-            Ditolak ({allOrders.filter((o) => o.status === 'ditolak').length})
-          </button>
+            {orderStages.map(({ status, label }, index) => (
+              <div key={status} className={`relative min-w-0 ${stagePositions[index]}`}>
+                <button
+                  type="button"
+                  aria-pressed={statusFilter === status}
+                  onClick={() => setStatusFilter(status)}
+                  className={`${StatusFilterClass(statusFilter === status)} w-full whitespace-normal text-center`}
+                >
+                  {label} ({allOrders.filter((order) => order.status === status).length})
+                </button>
+                {index < orderStages.length - 1 ? (
+                  <ChevronRight
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute -bottom-5 left-1/2 size-4 -translate-x-1/2 rotate-90 text-muted ${stageArrows[index]}`}
+                  />
+                ) : null}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
-
       {showDeliverySimulation ? <DeliveryTourSimulation step={deliveryTourStep} onClose={() => { setSimulationOpen(false); setDemoScannerOpen(false) }} onOpenScanner={() => setDemoScannerOpen(true)} /> : null}
 
       {/* List Riwayat Pesanan */}
@@ -1933,7 +1924,7 @@ function OrderHistory({
                     setReceiptPhotoError('')
                   }
                 }}
-                className="group relative flex cursor-pointer flex-col justify-between gap-3 rounded-lg border border-line bg-white p-4 transition-colors hover:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
+                className="group relative flex cursor-pointer flex-col justify-between gap-3 rounded-lg border border-line bg-surface shadow-xs p-4 transition-colors hover:border-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -2010,14 +2001,14 @@ function OrderHistory({
           })}
         </div>
       ) : allOrders.length > 0 && !showDeliverySimulation ? (
-        <div className="mt-6 rounded-lg border border-line bg-white p-8 text-center">
+        <div className="mt-6 rounded-lg border border-line bg-surface shadow-xs p-8 text-center">
           <p className="text-sm font-semibold text-ink-900">
             Tidak ada pesanan dengan status ini
           </p>
           <button
             type="button"
             onClick={() => setStatusFilter('semua')}
-            className="mt-3 inline-flex min-h-9 items-center rounded-md border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-paper"
+            className="mt-3 inline-flex min-h-9 items-center rounded-md border border-line bg-surface px-3 text-xs font-semibold text-ink-900 hover:bg-paper"
           >
             Tampilkan Semua Pesanan
           </button>
@@ -2043,7 +2034,7 @@ function OrderHistory({
               onOpenAutoFocus={(event) => {
                 if (deliveryTourStep >= 2) event.preventDefault()
               }}
-              className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-xl animate-in fade-in zoom-in-95 duration-200 focus:outline-hidden sm:p-6"
+              className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-surface shadow-xs p-5 shadow-xl animate-in fade-in zoom-in-95 duration-200 focus:outline-hidden sm:p-6"
               aria-describedby="mitra-order-dialog-desc"
             >
               {/* Header Dialog */}
@@ -2196,7 +2187,7 @@ function OrderHistory({
                           setEditTarget(selectedOrder)
                           setSelectedOrderId(null)
                         }}
-                        className="min-h-11 rounded-md border border-ink-700 bg-white px-4 text-sm font-semibold text-ink-700 focus-visible:outline-2 focus-visible:outline-ink-900"
+                        className="min-h-11 rounded-md border border-ink-700 bg-surface px-4 text-sm font-semibold text-ink-700 focus-visible:outline-2 focus-visible:outline-ink-900"
                       >
                         Edit pengajuan
                       </button>
@@ -2205,7 +2196,7 @@ function OrderHistory({
                       <button
                         type="button"
                         onClick={() => setCancelMode(true)}
-                        className="min-h-11 rounded-md border border-crit bg-white px-4 text-sm font-semibold text-crit-fg focus-visible:outline-2 focus-visible:outline-crit"
+                        className="min-h-11 rounded-md border border-crit bg-surface px-4 text-sm font-semibold text-crit-fg focus-visible:outline-2 focus-visible:outline-crit"
                       >
                         Batalkan pesanan?
                       </button>
@@ -2218,7 +2209,7 @@ function OrderHistory({
                           <button
                             type="button"
                             onClick={() => setCancelMode(false)}
-                            className="min-h-11 rounded-md border border-line bg-white px-4 text-sm"
+                            className="min-h-11 rounded-md border border-line bg-surface px-4 text-sm"
                           >
                             Kembali
                           </button>
@@ -2244,7 +2235,7 @@ function OrderHistory({
                 ) : null}
                 {selectedOrder.status === 'selesai' &&
                 !selectedOrder.receipt_photo_present ? (
-                  <div className="mb-4 rounded-md border border-line bg-white p-4">
+                  <div className="mb-4 rounded-md border border-line bg-surface p-4">
                     <p className="text-sm font-semibold text-ink-900">
                       Foto bukti barang diterima
                     </p>
@@ -2384,7 +2375,7 @@ function OrderHistory({
                   <Dialog.Close asChild>
                     <button
                       type="button"
-                      className="min-h-10 rounded-md border border-line bg-white px-4 text-xs font-semibold text-ink-900 hover:bg-paper"
+                      className="min-h-10 rounded-md border border-line bg-surface px-4 text-xs font-semibold text-ink-900 hover:bg-paper"
                     >
                       Tutup
                     </button>
@@ -2511,7 +2502,7 @@ function EditOrderModal({
     >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/45" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-1rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto overflow-x-hidden rounded-lg border border-line bg-white p-5 shadow-xl focus-visible:outline-2 focus-visible:outline-ume">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-1rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto overflow-x-hidden rounded-lg border border-line bg-surface shadow-xs p-5 shadow-xl focus-visible:outline-2 focus-visible:outline-ume">
           <Dialog.Title className="font-display text-xl font-semibold text-ink-900">
             Edit pengajuan {order.order_no}
           </Dialog.Title>
@@ -2547,7 +2538,7 @@ function EditOrderModal({
                           [item.product_id]: Math.max(0, qty - 1),
                         }))
                       }
-                      className="grid size-8 place-items-center rounded border border-line bg-white text-ink-900 hover:bg-paper active:scale-95"
+                      className="grid size-8 place-items-center rounded border border-line bg-surface text-ink-900 hover:bg-paper active:scale-95"
                       aria-label={`Kurangi ${item.product_name}`}
                     >
                       <Minus className="size-3.5" />
@@ -2560,7 +2551,7 @@ function EditOrderModal({
                           [item.product_id]: val,
                         }))
                       }
-                      className="h-8 w-16 rounded border border-line bg-white px-1 text-center text-sm font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-ink-900"
+                      className="h-8 w-16 rounded border border-line bg-surface px-1 text-center text-sm font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-ink-900"
                       aria-label={`Jumlah restock ${item.product_name}`}
                     />
                     <button
@@ -2571,7 +2562,7 @@ function EditOrderModal({
                           [item.product_id]: qty + 1,
                         }))
                       }
-                      className="grid size-8 place-items-center rounded border border-line bg-white text-ink-900 hover:bg-paper active:scale-95"
+                      className="grid size-8 place-items-center rounded border border-line bg-surface text-ink-900 hover:bg-paper active:scale-95"
                       aria-label={`Tambah ${item.product_name}`}
                     >
                       <Plus className="size-3.5" />
@@ -2579,7 +2570,7 @@ function EditOrderModal({
                     <button
                       type="button"
                       onClick={() => handleRemoveProduct(item.product_id)}
-                      className="grid size-8 place-items-center rounded border border-transparent text-muted hover:border-line hover:bg-white hover:text-crit-fg transition-colors"
+                      className="grid size-8 place-items-center rounded border border-transparent text-muted hover:border-line hover:bg-surface hover:text-crit-fg transition-colors"
                       title="Hapus barang dari pengajuan"
                       aria-label={`Hapus ${item.product_name}`}
                     >
@@ -2613,7 +2604,7 @@ function EditOrderModal({
                 {unaddedProducts.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-emerald-200/80 bg-white p-2.5 shadow-2xs"
+                    className="flex items-center justify-between gap-3 rounded-md border border-emerald-200/80 bg-surface p-2.5 shadow-2xs"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold text-ink-900">
@@ -2649,7 +2640,7 @@ function EditOrderModal({
             value={note}
             maxLength={1000}
             onChange={(event) => setNote(event.target.value)}
-            className="mt-2 min-h-20 w-full rounded-md border border-line bg-white p-3 text-sm focus-visible:outline-2 focus-visible:outline-ume"
+            className="mt-2 min-h-20 w-full rounded-md border border-line bg-surface p-3 text-sm focus-visible:outline-2 focus-visible:outline-ume"
           />
           {items.length === 0 ? (
             <p role="alert" className="mt-2 text-sm text-crit-fg">
@@ -2660,7 +2651,7 @@ function EditOrderModal({
             <button
               type="button"
               onClick={onClose}
-              className="min-h-11 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900"
+              className="min-h-11 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-900"
             >
               Kembali
             </button>
@@ -2871,7 +2862,7 @@ function ProfilePanel({
                 void handlePhotoChange(event.target.files?.[0])
                 event.target.value = ''
               }}
-              className="mt-2 block max-w-full text-sm text-muted file:mr-3 file:min-h-11 file:rounded-md file:border file:border-ink-700 file:bg-white file:px-3 file:text-sm file:font-semibold file:text-ink-700 hover:file:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
+              className="mt-2 block max-w-full text-sm text-muted file:mr-3 file:min-h-11 file:rounded-md file:border file:border-ink-700 file:bg-surface file:px-3 file:text-sm file:font-semibold file:text-ink-700 hover:file:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700"
             />
             <p id="profile-photo-help" className="mt-2 text-xs text-muted">
               JPG, PNG, atau WebP. Foto akan dipotong persegi dan diperkecil
@@ -2998,7 +2989,7 @@ function ProfilePanel({
       <button
         type="button"
         onClick={onLogout}
-        className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold text-crit-fg transition-colors hover:border-crit/40 hover:bg-crit-bg hover:text-crit-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer"
+        className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-crit-fg transition-colors hover:border-crit/40 hover:bg-crit-bg hover:text-crit-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer"
       >
         <LogOut className="size-4" aria-hidden="true" /> Keluar dari akun
       </button>
@@ -3388,7 +3379,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
           type="button"
           onClick={handleExportCsv}
           disabled={filteredLogs.length === 0}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink-900 shadow-2xs transition-colors hover:border-ink-400 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-surface px-4 text-sm font-semibold text-ink-900 shadow-2xs transition-colors hover:border-ink-400 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download className="size-4" aria-hidden="true" />
           Unduh CSV
@@ -3397,7 +3388,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
 
       <div className="flex items-center justify-start sm:justify-end">
         {/* View Mode Toggle */}
-        <div className="flex w-full items-center rounded-lg border border-line bg-white p-1 text-sm font-semibold sm:w-auto">
+        <div className="flex w-full items-center rounded-lg border border-line bg-surface shadow-xs p-1 text-sm font-semibold sm:w-auto">
           <button
             type="button"
             onClick={() => setViewMode('calendar')}
@@ -3477,11 +3468,11 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
       </div>
 
       {query.isLoading ? (
-        <div className="rounded-md border border-line bg-white p-12 shadow-xs">
+        <div className="rounded-md border border-line bg-surface p-12 shadow-xs">
           <LoadingState label="Memuat riwayat log perubahan..." />
         </div>
       ) : logs.length === 0 ? (
-        <div className="rounded-md border border-line bg-white p-8 shadow-xs">
+        <div className="rounded-md border border-line bg-surface p-8 shadow-xs">
           <EmptyState
             title="Belum ada riwayat perubahan"
             description="Catatan perubahan stok fisik harian dan konfirmasi penerimaan pesanan restock akan otomatis tercatat di sini."
@@ -3491,7 +3482,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         /* ALUR KALENDER MINGGUAN + 7 HARI + JAM-JAM PERUBAHAN */
         <div className="space-y-4">
           {/* Navigasi Minggu (< dan >) */}
-          <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-white p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface shadow-xs p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
             {/* Grup kontrol navigasi < dan > berdampingan mengapit tanggal */}
             <div className="flex items-center justify-between gap-1.5 sm:justify-start sm:gap-2">
               <button
@@ -3617,7 +3608,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                       isSelected
                         ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/25'
                         : count > 0
-                          ? 'border-line bg-white text-ink-900 hover:border-ink-400 hover:bg-ink-50/80'
+                          ? 'border-line bg-surface text-ink-900 hover:border-ink-400 hover:bg-ink-50/80'
                           : 'border-line/70 bg-ink-50/40 text-muted hover:border-line hover:bg-ink-50'
                     }`}
                   >
@@ -3643,13 +3634,13 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
                             isSelected
-                              ? 'bg-white/20 text-white'
+                              ? 'bg-surface/20 text-white'
                               : 'bg-ok-bg text-ok-fg'
                           }`}
                         >
                           <span
                             className={`size-1.5 rounded-full ${
-                              isSelected ? 'bg-white' : 'bg-ok'
+                              isSelected ? 'bg-surface' : 'bg-ok'
                             }`}
                           />
                           {count} log
@@ -3667,7 +3658,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
 
                     {count > 0 ? (
                       <span
-                        className={`size-1.5 rounded-full sm:hidden ${isSelected ? 'bg-white' : 'bg-ok'}`}
+                        className={`size-1.5 rounded-full sm:hidden ${isSelected ? 'bg-surface' : 'bg-ok'}`}
                         aria-hidden="true"
                       />
                     ) : null}
@@ -3676,7 +3667,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                       <span
                         className={`absolute -top-1.5 right-1 hidden rounded-sm px-1 text-[8px] font-bold uppercase tracking-wider sm:block ${
                           isSelected
-                            ? 'bg-white text-emerald-800'
+                            ? 'bg-surface text-emerald-800'
                             : 'bg-emerald-700 text-white'
                         }`}
                       >
@@ -3690,7 +3681,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
           </div>
 
           {/* Panel Detail Hari Terpilih & Jam-Jam Perubahan */}
-          <div className="rounded-md border border-line bg-white p-4 sm:p-5 shadow-xs">
+          <div className="rounded-md border border-line bg-surface p-4 sm:p-5 shadow-xs">
             <div className="flex flex-col gap-2 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="flex items-center gap-2">
@@ -3739,7 +3730,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                         key={batch.key}
                         type="button"
                         onClick={() => setSelectedBatch(batch)}
-                        className="group flex min-h-16 flex-col justify-center gap-2 rounded-md border border-line bg-white p-3 text-left transition-colors hover:border-ink-500 hover:bg-ink-50/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:p-3.5"
+                        className="group flex min-h-16 flex-col justify-center gap-2 rounded-md border border-line bg-surface p-3 text-left transition-colors hover:border-ink-500 hover:bg-ink-50/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 sm:p-3.5"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
@@ -3792,7 +3783,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
         </div>
       ) : (
         /* SEMUA LOG: Flat list dengan filter dan pencarian */
-        <div className="overflow-hidden rounded-md border border-line bg-white shadow-xs">
+        <div className="overflow-hidden rounded-md border border-line bg-surface shadow-xs">
           <div className="flex flex-col gap-3 border-b border-line bg-ink-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -3817,7 +3808,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Cari produk..."
-                  className="h-11 w-full rounded-md border border-line bg-white pl-9 pr-3 text-sm text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
+                  className="h-11 w-full rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink-900 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700"
                 />
               </div>
 
@@ -3825,7 +3816,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                 <select
                   value={selectedProduct}
                   onChange={(e) => setSelectedProduct(e.target.value)}
-                  className="h-11 min-w-0 rounded-md border border-line bg-white px-2 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:px-3"
+                  className="h-11 min-w-0 rounded-md border border-line bg-surface px-2 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:px-3"
                   aria-label="Filter berdasarkan produk"
                 >
                   <option value="all">Semua Produk</option>
@@ -3840,7 +3831,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
               <select
                 value={selectedSource}
                 onChange={(e) => setSelectedSource(e.target.value)}
-                className={`h-11 min-w-0 rounded-md border border-line bg-white px-2 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:px-3 ${productOptions.length > 1 ? '' : 'col-span-2'}`}
+                className={`h-11 min-w-0 rounded-md border border-line bg-surface px-2 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink-700 sm:px-3 ${productOptions.length > 1 ? '' : 'col-span-2'}`}
                 aria-label="Filter berdasarkan tipe aktivitas"
               >
                 <option value="all">Semua Tipe</option>
@@ -3893,7 +3884,7 @@ function MitraLogsPanel({ query, partnerName }: MitraLogsPanelProps) {
                     </div>
 
                     <div className="flex items-center justify-between gap-3 sm:justify-end">
-                      <div className="flex items-center gap-1.5 text-xs tabular-nums text-ink-700 sm:rounded-md sm:border sm:border-line sm:bg-white sm:px-2.5 sm:py-1 sm:text-sm">
+                      <div className="flex items-center gap-1.5 text-xs tabular-nums text-ink-700 sm:rounded-md sm:border sm:border-line sm:bg-surface sm:px-2.5 sm:py-1 sm:text-sm">
                         <span className="sm:hidden">Stok</span>
                         <span>{log.qty_before}</span>
                         <span className="text-xs text-muted" aria-hidden="true">

@@ -688,6 +688,80 @@ export const adminModule = new Elysia({ prefix: "/admin" })
 
     return { data: rows };
   })
+  .get("/weekly-details/live", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Forbidden: Admin only" }; }
+    const rows = await retryTransientRead(() => db.execute(sql`
+      SELECT p.id::text AS partner_id, p.name AS partner_name,
+        COALESCE(NULLIF(p.regency_name, ''), 'Tidak diketahui') AS city,
+        pr.id::text AS product_id, pr.name AS product_name,
+        COALESCE(ps.current_qty, 0)::int AS current_qty,
+        COALESCE(logs.consumed, 0)::int AS consumed
+      FROM partners p CROSS JOIN products pr
+      LEFT JOIN partner_stocks ps ON ps.partner_id = p.id AND ps.product_id = pr.id
+      LEFT JOIN LATERAL (
+        SELECT SUM(GREATEST(sl.qty_before - sl.qty_after, 0)) AS consumed
+        FROM stock_logs sl
+        WHERE sl.partner_id = p.id AND sl.product_id = pr.id
+          AND sl.source = 'manual_update'
+          AND sl.created_at >= (date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta') AT TIME ZONE 'Asia/Jakarta')
+          AND sl.created_at <= NOW()
+      ) logs ON TRUE
+      WHERE p.is_active AND pr.is_active
+      ORDER BY p.name, pr.name
+    `)) as unknown as Array<{ partner_id: string; partner_name: string; city: string;
+      product_id: string; product_name: string; current_qty: number; consumed: number }>;
+    return { data: rows.map((row) => ({ ...row, current_qty: Number(row.current_qty),
+      consumed: Number(row.consumed) })) };
+  })
+  .get("/weekly-summary/live", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Forbidden: Admin only" }; }
+    const rows = await retryTransientRead(() => db.execute(sql<{
+      day: string; partner_id: string; partner_name: string; log_count: number; consumed: number;
+    }>`
+      SELECT (sl.created_at AT TIME ZONE 'Asia/Jakarta')::date::text AS day,
+        sl.partner_id::text AS partner_id, p.name AS partner_name,
+        COUNT(*)::int AS log_count,
+        COALESCE(SUM(GREATEST(sl.qty_before - sl.qty_after, 0)), 0)::int AS consumed
+      FROM stock_logs sl JOIN partners p ON p.id = sl.partner_id
+      WHERE sl.source = 'manual_update'
+        AND sl.created_at >= (date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta') AT TIME ZONE 'Asia/Jakarta')
+        AND sl.created_at <= NOW()
+      GROUP BY day, sl.partner_id, p.name
+      ORDER BY day, p.name
+    `)) as unknown as Array<{
+      day: string; partner_id: string; partner_name: string; log_count: number; consumed: number;
+    }>;
+    const byDay = new Map<string, { day: string; active_partners: number; log_count: number }>();
+    const activePartners = new Set<string>();
+    let totalConsumed = 0;
+    for (const row of rows) {
+      const day = byDay.get(row.day) ?? { day: row.day, active_partners: 0, log_count: 0 };
+      day.active_partners += 1;
+      day.log_count += Number(row.log_count);
+      byDay.set(row.day, day);
+      activePartners.add(row.partner_id);
+      totalConsumed += Number(row.consumed);
+    }
+    const todayJakarta = new Date(Date.now() + 7 * 60 * 60_000);
+    const daysSinceMonday = (todayJakarta.getUTCDay() + 6) % 7;
+    const dailyBreakdown = Array.from({ length: daysSinceMonday + 1 }, (_, index) => {
+      const day = new Date(todayJakarta.getTime() - (daysSinceMonday - index) * 86_400_000)
+        .toISOString().slice(0, 10);
+      return byDay.get(day) ?? { day, active_partners: 0, log_count: 0 };
+    });
+    return { data: {
+      total_logs_this_week: dailyBreakdown.reduce((sum, day) => sum + day.log_count, 0),
+      active_partners_count: activePartners.size,
+      total_units_consumed: totalConsumed,
+      daily_update_breakdown: dailyBreakdown,
+      partner_daily_log_breakdown: rows.map((row) => ({ day: row.day, partner_id: row.partner_id,
+        partner_name: row.partner_name, log_count: Number(row.log_count) })),
+    } };
+  })
   .get("/weekly-summary", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }

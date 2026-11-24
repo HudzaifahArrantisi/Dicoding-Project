@@ -34,7 +34,7 @@ export function BatchDetailModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[60] flex max-h-[90vh] w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[60] flex max-h-[90vh] w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
           {/* Header Sticky */}
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-ink-50/95 p-4 backdrop-blur-sm sm:p-5">
             <div className="min-w-0">
@@ -62,7 +62,7 @@ export function BatchDetailModal({
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
+                className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-surface shadow-xs text-muted transition-colors hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-ink-700 cursor-pointer"
                 aria-label="Tutup rincian log"
               >
                 <X className="size-5" aria-hidden="true" />
@@ -71,7 +71,7 @@ export function BatchDetailModal({
           </div>
 
           {/* Ringkasan Perubahan Ringkas */}
-          <div className="flex items-center justify-between gap-2 border-b border-line bg-white px-4 py-2.5 text-xs sm:px-5">
+          <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2.5 text-xs sm:px-5">
             <span className="font-medium text-muted">
               {batch.totalItems} Produk
             </span>
@@ -98,7 +98,7 @@ export function BatchDetailModal({
                 return (
                   <div
                     key={log.id}
-                    className="rounded-lg border border-line bg-white p-3 shadow-2xs transition-colors hover:border-ink-400"
+                    className="rounded-lg border border-line bg-surface shadow-xs p-3 shadow-2xs transition-colors hover:border-ink-400"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold text-ink-900">
@@ -176,7 +176,7 @@ export function BatchDetailModal({
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="min-h-11 rounded-md border border-line bg-white px-5 text-sm font-semibold text-ink-900 hover:bg-ink-50 active:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer shadow-2xs"
+                className="min-h-11 rounded-md border border-line bg-surface px-5 text-sm font-semibold text-ink-900 hover:bg-ink-50 active:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 cursor-pointer shadow-2xs"
               >
                 Tutup
               </button>

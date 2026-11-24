@@ -205,6 +205,26 @@ export async function getWeeklySummary(): Promise<WeeklySummary> {
   return response.data
 }
 
+export async function getLiveWeeklySummary(): Promise<WeeklySummary> {
+  const response = await apiClient.get<{ data: WeeklySummary }>('/admin/weekly-summary/live')
+  return response.data
+}
+
+export interface LiveWeeklyDetail {
+  partner_id: string
+  partner_name: string
+  city: string
+  product_id: string
+  product_name: string
+  current_qty: number
+  consumed: number
+}
+
+export async function getLiveWeeklyDetails(): Promise<LiveWeeklyDetail[]> {
+  const response = await apiClient.get<{ data: LiveWeeklyDetail[] }>('/admin/weekly-details/live')
+  return response.data
+}
+
 /**
  * Mengambil hasil analisis cerdas & rekomendasi rantai pasok dari model AI/Data Science.
  */

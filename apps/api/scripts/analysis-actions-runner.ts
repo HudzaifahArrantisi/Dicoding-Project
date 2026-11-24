@@ -66,7 +66,7 @@ try {
     if (run.status !== "creating") throw new Error(`Run tidak berstatus creating: ${run.status}`);
     started = true;
     await python("data-science/src/weekly_analytics_aggregator.py", ["--start-date", run.start_date,
-      "--end-date", run.end_date, "--run-id", id]);
+      "--end-date", run.end_date, "--run-id", id, "--as-of", run.created_at.toISOString()]);
     const manifest = JSON.parse(await readFile(resolve(dataScienceRunDir(id), "manifest.json"), "utf8")) as Record<string, unknown>;
     if (manifest.run_id !== id || manifest.start_date !== run.start_date || manifest.end_date !== run.end_date) {
       throw new Error("Manifest laporan tidak cocok dengan run");
@@ -82,14 +82,12 @@ try {
     await hydrateDataScienceArtifacts(id);
     const staged = await stageRawReferences(trainingSource === "raw_references");
     cleanup = staged.cleanup;
-    if (trainingSource === "raw_references") {
-      const active = await getActiveRunId();
-      if (active) {
-        const previous = await loadArtifact(active, "daisuki.pkl");
-        if (previous) {
-          await mkdir(aiRunDir(id), { recursive: true });
-          await writeFile(resolve(aiRunDir(id), "daisuki.pkl"), previous);
-        }
+    const active = await getActiveRunId();
+    if (active) {
+      const previous = await loadArtifact(active, "daisuki.pkl");
+      if (previous) {
+        await mkdir(aiRunDir(id), { recursive: true });
+        await writeFile(resolve(aiRunDir(id), "daisuki.pkl"), previous);
       }
     }
     const steps: { label: string; status: "running" | "succeeded" | "failed" }[] = [];

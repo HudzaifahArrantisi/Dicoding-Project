@@ -18,7 +18,8 @@ function validPeriod(start: string, end: string): boolean {
     !Number.isFinite(last.getTime()) || first.toISOString().slice(0, 10) !== start ||
     last.toISOString().slice(0, 10) !== end) return false;
   const days = (last.getTime() - first.getTime()) / 86_400_000;
-  return days >= 0 && days <= 30 && last.getTime() <= Date.now();
+  const todayJakarta = new Date(Date.now() + 7 * 60 * 60_000).toISOString().slice(0, 10);
+  return days >= 0 && days <= 30 && end <= todayJakarta;
 }
 
 export const analysisModule = new Elysia({ prefix: "/analysis" })

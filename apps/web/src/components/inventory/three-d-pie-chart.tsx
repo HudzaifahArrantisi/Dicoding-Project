@@ -227,7 +227,7 @@ export function ThreeDPieChart({
               onClick={() => setChartMode('3d')}
               className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition ${
                 chartMode === '3d'
-                  ? 'bg-white text-ink-900 shadow-xs font-bold'
+                  ? 'bg-surface text-ink-900 shadow-xs font-bold'
                   : 'text-muted hover:text-ink-900'
               }`}
             >
@@ -241,7 +241,7 @@ export function ThreeDPieChart({
               onClick={() => setChartMode('donut')}
               className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition ${
                 chartMode === 'donut'
-                  ? 'bg-white text-ink-900 shadow-xs font-bold'
+                  ? 'bg-surface text-ink-900 shadow-xs font-bold'
                   : 'text-muted hover:text-ink-900'
               }`}
             >

@@ -389,7 +389,7 @@ export function MitraChatRoom({
               <div
                 key={item.session_id}
                 className={`group relative flex items-center gap-1 rounded-xl p-1 transition-colors ${
-                  isCurrent ? 'bg-white shadow-xs ring-1 ring-line' : 'hover:bg-ink-100/60'
+                  isCurrent ? 'bg-surface shadow-xs ring-1 ring-line' : 'hover:bg-ink-100/60'
                 }`}
               >
                 <button
@@ -489,7 +489,7 @@ export function MitraChatRoom({
   return (
     <section
       aria-label="Ruang Chat AI Mitra Daisuki"
-      className="flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-line bg-white"
+      className="flex min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-line bg-surface shadow-xs"
     >
       {/* Mobile Backdrop with Smooth Fade */}
       <div
@@ -506,7 +506,7 @@ export function MitraChatRoom({
         aria-label="Riwayat Percakapan Mobile"
         aria-hidden={!sidebarOpen}
         inert={!sidebarOpen}
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(86vw,320px)] flex-col border-r border-line bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl transition-transform duration-300 ease-out lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[min(86vw,320px)] flex-col border-r border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-2xl transition-transform duration-300 ease-out lg:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -529,7 +529,7 @@ export function MitraChatRoom({
       </aside>
 
       {/* Main Chat Conversation Space */}
-      <div className="flex min-w-0 flex-1 flex-col bg-white">
+      <div className="flex min-w-0 flex-1 flex-col bg-surface">
         {/* Header Ruang Chat */}
         <header className="flex flex-col gap-2 border-b border-line px-3 py-3 sm:min-h-16 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 sm:py-0">
           <div className="flex min-w-0 items-center gap-3">
@@ -584,7 +584,7 @@ export function MitraChatRoom({
               onClick={() => setTourMenuOpen((open) => !open)}
               aria-expanded={tourMenuOpen}
               aria-controls="mitra-chat-tour-menu"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-xs font-semibold text-ink-800 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-xs font-semibold text-ink-800 hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
             >
               <PlayCircle className="size-4" aria-hidden="true" />
               <span className="hidden sm:inline">Panduan fitur</span>
@@ -595,7 +595,7 @@ export function MitraChatRoom({
                 type="button"
                 onClick={() => active && void toggleSession(active)}
                 disabled={busy || Boolean(togglingSessionId)}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-xs font-semibold text-ink-800 hover:bg-white active:scale-95 transition-colors focus-visible:outline-2 focus-visible:outline-ink-900"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-xs font-semibold text-ink-800 hover:bg-surface active:scale-95 transition-colors focus-visible:outline-2 focus-visible:outline-ink-900"
               >
                 <RefreshCw className="size-3.5" />
                 <span>Buka Kembali</span>
@@ -632,7 +632,7 @@ export function MitraChatRoom({
                   key={option.id}
                   type="button"
                   onClick={() => { setTourMenuOpen(false); onStartTour(option.id) }}
-                  className="min-h-11 rounded-lg border border-line bg-white px-3 text-xs font-semibold text-ink-800 hover:border-ink-400 hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+                  className="min-h-11 rounded-lg border border-line bg-surface shadow-xs px-3 text-xs font-semibold text-ink-800 hover:border-ink-400 hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
                 >
                   {option.label}
                 </button>
@@ -659,7 +659,7 @@ export function MitraChatRoom({
           {!loading && messages.length === 0 && !closed ? (
             <div className="mx-auto max-w-xl py-4 sm:py-10">
               <div className="text-center">
-                <div className="mx-auto mb-3 size-12 overflow-hidden rounded-xl border border-line bg-surface">
+                <div className="mx-auto mb-3 size-12 overflow-hidden rounded-xl border border-line bg-surface shadow-xs">
                   <img src="/icons/logo.jpg" alt="Daisuki" className="size-full object-cover" />
                 </div>
                 <h3 className="font-display text-lg font-bold text-ink-950 sm:text-xl">
@@ -679,9 +679,9 @@ export function MitraChatRoom({
                       key={idx}
                       type="button"
                       onClick={() => void send(card.prompt)}
-                      className="group flex min-h-24 flex-col items-start rounded-lg border border-line bg-white p-4 text-left transition-colors hover:border-ink-700 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+                      className="group flex min-h-24 flex-col items-start rounded-lg border border-line bg-surface shadow-xs p-4 text-left transition-colors hover:border-ink-700 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
                     >
-                      <div className="mb-2 flex size-7 items-center justify-center rounded-lg border border-line bg-white text-ink-700 transition-colors group-hover:border-ink-300 group-hover:text-ink-950">
+                      <div className="mb-2 flex size-7 items-center justify-center rounded-lg border border-line bg-surface shadow-xs text-ink-700 transition-colors group-hover:border-ink-300 group-hover:text-ink-950">
                         <Icon className="size-3.5" />
                       </div>
                       <span className="font-display text-sm font-semibold text-ink-950">
@@ -717,7 +717,7 @@ export function MitraChatRoom({
                   className={`relative min-w-0 max-w-[calc(100%-2.5rem)] break-words rounded-2xl px-3 py-2.5 text-sm leading-relaxed transition-all sm:max-w-[88%] sm:px-4 sm:py-3 ${!isUser && item.visualization ? 'w-full' : ''} ${
                     isUser
                       ? 'rounded-tr-xs bg-ink-900 text-white shadow-xs'
-                      : 'rounded-tl-xs border border-line bg-white text-ink-900'
+                      : 'rounded-tl-xs border border-line bg-surface text-ink-900'
                   }`}
                 >
                   {isUser ? (
@@ -804,7 +804,7 @@ export function MitraChatRoom({
           ) : null}
 
           {closed ? (
-            <div className="mx-auto flex max-w-3xl flex-col gap-2 rounded-2xl border border-line/70 bg-white/75 p-3 text-xs text-muted shadow-xs backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-4">
+            <div className="mx-auto flex max-w-3xl flex-col gap-2 rounded-2xl border border-line/70 bg-surface/75 p-3 text-xs text-muted shadow-xs backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-4">
               <span className="text-ink-700">Sesi ini telah diakhiri. Buka kembali sesi atau buat chat baru.</span>
               <button
                 type="button"
@@ -820,7 +820,7 @@ export function MitraChatRoom({
                 e.preventDefault()
                 void send()
               }}
-              className="mx-auto flex max-w-3xl min-w-0 flex-col rounded-lg border border-line bg-white p-2 transition-colors focus-within:border-ink-900 focus-within:ring-2 focus-within:ring-ink-900/10 sm:p-2.5"
+              className="mx-auto flex max-w-3xl min-w-0 flex-col rounded-lg border border-line bg-surface shadow-xs p-2 transition-colors focus-within:border-ink-900 focus-within:ring-2 focus-within:ring-ink-900/10 sm:p-2.5"
             >
               <div className="flex min-w-0 items-end gap-2">
                 <label htmlFor="mitra-chat-draft" className="sr-only">
@@ -869,7 +869,7 @@ export function MitraChatRoom({
       >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-950/40 backdrop-blur-xs" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,420px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line bg-white p-5 shadow-2xl focus:outline-hidden">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,420px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line bg-surface shadow-xs p-5 shadow-2xl focus:outline-hidden">
             <Dialog.Title className="font-display text-base font-bold text-ink-950">
               Hapus Sesi Chat?
             </Dialog.Title>

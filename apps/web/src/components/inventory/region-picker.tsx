@@ -83,7 +83,7 @@ export function RegionPicker({
               if (field.key === 'district_code') onChange({ ...value, district_code: code, village_code: '' })
               if (field.key === 'village_code') onChange({ ...value, village_code: code })
             }}
-            className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-base text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:bg-ink-50 disabled:text-muted"
+            className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-base text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:bg-ink-50 disabled:text-muted"
           >
             <option value="">{field.query.isPending && field.enabled ? 'Memuat...' : `Pilih ${field.label.toLowerCase()}`}</option>
             {field.options?.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}

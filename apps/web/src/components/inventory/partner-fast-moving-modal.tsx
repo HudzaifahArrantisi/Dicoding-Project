@@ -52,9 +52,9 @@ export function PartnerFastMovingModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-2xl sm:max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-2xl sm:max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
           {/* Header Dialog */}
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-6 py-4.5 backdrop-blur-md">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface/95 px-6 py-4.5 backdrop-blur-md">
             <div className="flex items-center gap-3.5 min-w-0">
               <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/20">
                 <Flame className="size-5" aria-hidden="true" />

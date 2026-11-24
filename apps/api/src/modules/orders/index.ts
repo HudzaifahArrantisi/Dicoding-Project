@@ -210,6 +210,78 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
         : [],
     } };
   })
+  .get("/finance/weekly-history", async ({ headers, query, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (user.role !== "admin") { set.status = 403; return { error: "Hanya admin yang dapat melihat riwayat mingguan" }; }
+
+    const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const currentMonth = `${nowWib.getUTCFullYear()}-${String(nowWib.getUTCMonth() + 1).padStart(2, "0")}`;
+    const month = query.month ?? currentMonth;
+    const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);
+    if (!match) { set.status = 400; return { error: "Format bulan harus YYYY-MM" }; }
+
+    const year = Number(match[1]);
+    const monthNumber = Number(match[2]);
+    const nextYear = monthNumber === 12 ? year + 1 : year;
+    const nextMonthNumber = monthNumber === 12 ? 1 : monthNumber + 1;
+    const lastDay = new Date(Date.UTC(nextYear, nextMonthNumber - 1, 0)).getUTCDate();
+    const startIso = `${month}-01T00:00:00+07:00`;
+    const endIso = `${nextYear}-${String(nextMonthNumber).padStart(2, "0")}-01T00:00:00+07:00`;
+
+    const rows = await db.execute<{ week: number; units: number; gross: string; partner_count: number }>(sql`
+      SELECT
+        CASE
+          WHEN EXTRACT(DAY FROM (sl.created_at AT TIME ZONE 'Asia/Jakarta')) <= 7 THEN 1
+          WHEN EXTRACT(DAY FROM (sl.created_at AT TIME ZONE 'Asia/Jakarta')) <= 14 THEN 2
+          WHEN EXTRACT(DAY FROM (sl.created_at AT TIME ZONE 'Asia/Jakarta')) <= 21 THEN 3
+          ELSE 4
+        END AS week,
+        COALESCE(SUM(sl.qty_before - sl.qty_after), 0)::int AS units,
+        COALESCE(SUM((sl.qty_before - sl.qty_after) *
+          CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END), 0)::text AS gross,
+        COUNT(DISTINCT sl.partner_id)::int AS partner_count
+      FROM stock_logs sl
+      JOIN products pr ON pr.id = sl.product_id
+      WHERE sl.source = 'manual_update'
+        AND sl.qty_before > sl.qty_after
+        AND sl.created_at >= ${startIso}::timestamptz
+        AND sl.created_at < ${endIso}::timestamptz
+        AND pr.sku IN ('DSK-SB-001', 'DSK-BR-002', 'DSK-MK-003', 'DSK-KP-004')
+      GROUP BY 1
+    `);
+    const byWeek = new Map(rows.map((row) => [Number(row.week), row]));
+    const isCurrentMonth = month === currentMonth;
+    const todayDay = nowWib.getUTCDate();
+    const currentWeek = isCurrentMonth ? (todayDay <= 7 ? 1 : todayDay <= 14 ? 2 : todayDay <= 21 ? 3 : 4) : null;
+    const weekRanges: Array<[number, number, number]> = [[1, 1, 7], [2, 8, 14], [3, 15, 21], [4, 22, lastDay]];
+    const weeks = weekRanges.map(([week, startDay, endDay]) => {
+      const row = byWeek.get(week);
+      return {
+        week,
+        start_date: `${month}-${String(startDay).padStart(2, "0")}`,
+        end_date: `${month}-${String(endDay).padStart(2, "0")}`,
+        units: Number(row?.units ?? 0),
+        gross: row?.gross ?? "0",
+        partner_count: Number(row?.partner_count ?? 0),
+        is_current: currentWeek === week,
+        is_future: isCurrentMonth && week > (currentWeek ?? 0),
+      };
+    });
+    const monthLabel = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric", timeZone: "UTC" })
+      .format(new Date(Date.UTC(year, monthNumber - 1, 1)));
+
+    return { data: {
+      month,
+      month_label: monthLabel,
+      is_current_month: isCurrentMonth,
+      current_week: currentWeek,
+      today_day: todayDay,
+      weeks,
+      total_units: weeks.reduce((total, week) => total + week.units, 0),
+      total_gross: weeks.reduce((total, week) => total + Number(week.gross), 0).toString(),
+    } };
+  }, { query: t.Object({ month: t.Optional(t.String()) }) })
   .get("/finance/insights", async ({ headers, set }) => {
     const user = await getAuthUser(headers);
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }

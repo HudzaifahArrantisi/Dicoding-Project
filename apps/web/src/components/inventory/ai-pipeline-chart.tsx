@@ -43,7 +43,7 @@ export function AiPipelineChart({ status, pending, loading, onRun, buttonLabel =
       {status?.steps.length ? (
         <ol className="grid gap-2 text-sm sm:grid-cols-2" aria-label="Progres analisis Python">
           {status.steps.map((step, index) => (
-            <li key={step.label} className="flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-ink-700">
+            <li key={step.label} className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-ink-700">
               <span className="num text-xs text-muted">{index + 1}.</span>
               <span className="flex-1">{step.label}</span>
               <span className={step.status === 'failed' ? 'text-crit-fg' : step.status === 'succeeded' ? 'text-ok-fg' : 'text-ink-900'}>

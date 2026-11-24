@@ -235,7 +235,7 @@ export function DeliveryScannerModal({
         <Dialog.Content
           onOpenAutoFocus={(event) => { if (tourActive) event.preventDefault() }}
           onCloseAutoFocus={(event) => { if (tourActive) event.preventDefault() }}
-          className="fixed left-1/2 top-1/2 z-[71] max-h-[92vh] w-[calc(100%-1rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-white p-5 shadow-xl focus-visible:outline-2 focus-visible:outline-ume"
+          className="fixed left-1/2 top-1/2 z-[71] max-h-[92vh] w-[calc(100%-1rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-surface shadow-xs p-5 shadow-xl focus-visible:outline-2 focus-visible:outline-ume"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -250,7 +250,7 @@ export function DeliveryScannerModal({
               <button
                 type="button"
                 aria-label="Tutup pemindai"
-                className="grid size-11 shrink-0 place-items-center rounded-md border border-line bg-white text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
+                className="grid size-11 shrink-0 place-items-center rounded-md border border-line bg-surface text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
               >
                 <X className="size-5" />
               </button>
@@ -292,7 +292,7 @@ export function DeliveryScannerModal({
                 <button
                   type="button"
                   onClick={() => setRestartCount((c) => c + 1)}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded border border-line bg-white px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded border border-line bg-surface px-3 text-xs font-semibold text-ink-900 hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ume"
                 >
                   <RefreshCw className="size-3" />
                   Coba buka kamera lagi
@@ -343,7 +343,7 @@ export function DeliveryScannerModal({
               readOnly={preview}
               autoComplete="off"
               placeholder="DSK-..."
-              className="mt-2 h-12 w-full rounded-md border border-line bg-white px-3 font-mono text-base text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
+              className="mt-2 h-12 w-full rounded-md border border-line bg-surface px-3 font-mono text-base text-ink-900 focus-visible:outline-2 focus-visible:outline-ume"
             />
             <button
               data-tour={preview ? 'delivery-scanner-verify' : undefined}

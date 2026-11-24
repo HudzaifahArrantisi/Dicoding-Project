@@ -4,9 +4,26 @@ import { db, sql } from "./client";
 import { partnerStocks, partners, products, stockLogs, users } from "./schema";
 
 const productSkus = ["DSK-SB-001", "DSK-BR-002", "DSK-MK-003", "DSK-KP-004"];
-const startUtc = new Date("2026-11-15T17:00:00.000Z");
-const endUtc = new Date("2026-11-22T17:00:00.000Z");
 const apply = process.argv.includes("--apply");
+const reset = process.argv.includes("--reset");
+
+function argDate(flag: string): string | null {
+  const index = process.argv.indexOf(flag);
+  if (index === -1) return null;
+  const value = process.argv[index + 1];
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${flag} harus berupa tanggal YYYY-MM-DD`);
+  return value;
+}
+
+const jakartaDay = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit",
+});
+const dateFormatter = jakartaDay;
+
+function shiftDay(ymd: string, delta: number): string {
+  const [year, month, day] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! + delta)).toISOString().slice(0, 10);
+}
 
 function seedUuid(kind: "partner" | "user", number: number) {
   const hex = createHash("sha1").update(`daisuki-demo-mitra-2026:${kind}:${number}`).digest("hex");
@@ -21,7 +38,29 @@ function dailyUsage(partnerNumber: number, productIndex: number, dayIndex: numbe
   return base + (dayIndex % 3 === 0 ? 1 : 0);
 }
 
+// Setiap mitra hanya melaporkan sebagian kombinasi produk-hari sehingga jumlah
+// baris log per mitra berbeda-beda, bukan rata 4 produk x 7 hari.
+function reportedSlot(partnerNumber: number, productIndex: number, dayIndex: number, dayCount: number) {
+  const coverage = 2 + ((partnerNumber * 5) % 3); // 2..4 produk
+  const relativeProduct = (productIndex - (partnerNumber % 4) + 4) % 4;
+  if (relativeProduct >= coverage) return false;
+  const missedDays = (partnerNumber * 3) % Math.min(3, dayCount); // 0..2 hari libur
+  for (let missed = 0; missed < missedDays; missed += 1) {
+    if (dayIndex === (partnerNumber * 7 + missed * 3 + 1) % dayCount) return false;
+  }
+  return (partnerNumber * 31 + productIndex * 17 + dayIndex * 13) % 100 >= 15;
+}
+
 try {
+  const todayWib = jakartaDay.format(new Date());
+  const endDay = argDate("--end") ?? shiftDay(todayWib, -1);
+  const startDay = argDate("--start") ?? shiftDay(endDay, -6);
+  const dayCount = Math.round((Date.parse(`${endDay}T00:00:00Z`) - Date.parse(`${startDay}T00:00:00Z`)) / 86_400_000) + 1;
+  if (dayCount < 1) throw new Error("Rentang tanggal tidak valid");
+  const startUtc = new Date(`${startDay}T00:00:00+07:00`);
+  const endUtc = new Date(`${shiftDay(endDay, 1)}T00:00:00+07:00`);
+  const dayLabels = Array.from({ length: dayCount }, (_, index) => shiftDay(startDay, index));
+
   const partnerIds = Array.from({ length: 100 }, (_, index) => seedUuid("partner", index + 1));
   const userIds = Array.from({ length: 100 }, (_, index) => seedUuid("user", index + 1));
   const [partnerRows, userRows, productRows] = await Promise.all([
@@ -47,65 +86,62 @@ try {
     .where(and(inArray(partnerStocks.partner_id, partnerIds), inArray(partnerStocks.product_id, productRows.map((row) => row.id))));
   if (stockRows.length !== 400) throw new Error(`Butuh 400 stok mitra-produk untuk membangun urutan log; ditemukan ${stockRows.length}.`);
 
-  const existing = await db.select({ partner_id: stockLogs.partner_id, product_id: stockLogs.product_id,
+  const existing = reset ? [] : await db.select({ partner_id: stockLogs.partner_id, product_id: stockLogs.product_id,
     qty_before: stockLogs.qty_before, qty_after: stockLogs.qty_after, created_at: stockLogs.created_at }).from(stockLogs)
     .where(and(inArray(stockLogs.partner_id, partnerIds), eq(stockLogs.source, "manual_update"),
       inArray(stockLogs.product_id, productRows.map((row) => row.id)),
       gte(stockLogs.created_at, startUtc), lt(stockLogs.created_at, endUtc)));
-  const dateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" });
   const existingBySlot = new Map<string, (typeof existing)[number]>();
   for (const row of existing) {
     const day = dateFormatter.format(row.created_at);
-    const key = `${row.partner_id}:${row.product_id}:${day}`;
-    if (existingBySlot.has(key)) throw new Error("Ada lebih dari satu log manual per produk-mitra-hari; tidak ada data yang diubah.");
-    existingBySlot.set(key, row);
+    existingBySlot.set(`${row.partner_id}:${row.product_id}:${day}`, row);
   }
-  if (existing.length > 0 && existing.length < 2800) {
-    const anchorPartners = new Set(existing.map((row) => row.partner_id));
-    const onlyTuesdayAnchors = existing.length === 8 && anchorPartners.size === 2 &&
-      existing.every((row) => dateFormatter.format(row.created_at) === "2026-11-17") &&
-      new Set(existing.map((row) => `${row.partner_id}:${row.product_id}`)).size === 8 &&
-      [...anchorPartners].every((partnerId) => productRows.every((product) =>
-        existing.some((row) => row.partner_id === partnerId && row.product_id === product.id)));
-    if (!onlyTuesdayAnchors) throw new Error(`Ditemukan ${existing.length} log lama pada rentang target dengan pola parsial yang belum aman dilengkapi otomatis; tidak ada data yang diubah.`);
-  }
-  if (existing.length > 2800) throw new Error("Jumlah log pada rentang target melebihi 2.800; tidak ada data yang diubah.");
-
-  if (existing.length === 2800) {
-    console.log("Cakupan 2.800 log untuk 100 mitra x 4 produk x 7 hari sudah lengkap. Tidak ada data ditulis.");
-  } else {
 
   const stockByKey = new Map(stockRows.map((row) => [`${row.partner_id}:${row.product_id}`, row.current_qty]));
   const logs: Array<{ partner_id: string; product_id: string; qty_before: number; qty_after: number;
     source: "manual_update"; created_by: string; created_at: Date }> = [];
+  const perPartnerCount = new Map<string, number>();
 
   for (let partnerIndex = 0; partnerIndex < 100; partnerIndex += 1) {
-    const partnerId = seedUuid("partner", partnerIndex + 1);
+    const partnerNumber = partnerIndex + 1;
+    const partnerId = seedUuid("partner", partnerNumber);
     const userId = userByPartner.get(partnerId)!;
     for (let productIndex = 0; productIndex < productRows.length; productIndex += 1) {
       const productId = productRows[productIndex]!.id;
-      const keyForDay = (dayIndex: number) => `${partnerId}:${productId}:2026-11-${String(16 + dayIndex).padStart(2, "0")}`;
       let qtyAfter = stockByKey.get(`${partnerId}:${productId}`)!;
-      for (let dayIndex = 6; dayIndex >= 0; dayIndex -= 1) {
-        if (existingBySlot.has(keyForDay(dayIndex))) continue;
-        const usage = dailyUsage(partnerIndex + 1, productIndex, dayIndex);
+      for (let dayIndex = dayCount - 1; dayIndex >= 0; dayIndex -= 1) {
+        if (!reportedSlot(partnerNumber, productIndex, dayIndex, dayCount)) continue;
+        if (existingBySlot.has(`${partnerId}:${productId}:${dayLabels[dayIndex]}`)) continue;
+        const usage = dailyUsage(partnerNumber, productIndex, dayIndex);
         const qtyBefore = qtyAfter + usage;
-        const date = new Date(Date.UTC(2026, 10, 16 + dayIndex, 2 + ((partnerIndex + productIndex + dayIndex) % 8)));
+        const hour = 9 + ((partnerNumber + productIndex + dayIndex) % 8);
+        const created_at = new Date(`${dayLabels[dayIndex]}T${String(hour).padStart(2, "0")}:${String((partnerNumber * 7) % 60).padStart(2, "0")}:00+07:00`);
         logs.push({ partner_id: partnerId, product_id: productId, qty_before: qtyBefore,
-          qty_after: qtyAfter, source: "manual_update", created_by: userId, created_at: date });
+          qty_after: qtyAfter, source: "manual_update", created_by: userId, created_at });
+        perPartnerCount.set(partnerId, (perPartnerCount.get(partnerId) ?? 0) + 1);
         qtyAfter = qtyBefore;
       }
     }
   }
 
-    console.log(`Pratinjau: total target 2.800 slot; ${existing.length} log sudah ada dan ${logs.length} log akan ditambahkan.`);
-    console.log("Periode: 16-22 November 2026 WIB. Stok partner_stocks tidak diubah; data dibatasi ke 100 akun demo sintetis.");
-    if (!apply) {
-      console.log("Mode pratinjau: belum ada data ditulis. Tambahkan --apply untuk menyimpan ke database yang dikonfigurasi.");
-    } else {
-      await db.transaction(async (tx) => { await tx.insert(stockLogs).values(logs); });
-      console.log(`Selesai: ${logs.length} log sintetis tersimpan untuk akun mitra demo.`);
-    }
+  const counts = [...perPartnerCount.values()];
+  const min = counts.length ? Math.min(...counts) : 0;
+  const max = counts.length ? Math.max(...counts) : 0;
+  const avg = counts.length ? Math.round((counts.reduce((sum, value) => sum + value, 0) / counts.length) * 10) / 10 : 0;
+  console.log(`Periode target: ${startDay} s/d ${endDay} WIB (${dayCount} hari).`);
+  console.log(`Rencana: ${logs.length} log baru untuk ${perPartnerCount.size} mitra; per mitra min ${min}, max ${max}, rata-rata ${avg}${reset ? " (mode reset)" : ""}.`);
+  if (reset) console.log("Mode --reset: seluruh log manual_update demo di rentang ini akan dihapus lalu diisi ulang.");
+  if (!apply) {
+    console.log("Mode pratinjau: belum ada data ditulis. Tambahkan --apply untuk menyimpan ke database yang dikonfigurasi.");
+  } else {
+    await db.transaction(async (tx) => {
+      if (reset) {
+        await tx.delete(stockLogs).where(and(inArray(stockLogs.partner_id, partnerIds),
+          eq(stockLogs.source, "manual_update"), gte(stockLogs.created_at, startUtc), lt(stockLogs.created_at, endUtc)));
+      }
+      if (logs.length > 0) await tx.insert(stockLogs).values(logs);
+    });
+    console.log(`Selesai: ${logs.length} log sintetis tersimpan untuk akun mitra demo.`);
   }
 } finally {
   await sql.end();

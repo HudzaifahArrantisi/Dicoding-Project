@@ -20,6 +20,34 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
   return response.data
 }
 
+export interface FinanceWeeklyHistoryWeek {
+  week: number
+  start_date: string
+  end_date: string
+  units: number
+  gross: string
+  partner_count: number
+  is_current: boolean
+  is_future: boolean
+}
+
+export interface FinanceWeeklyHistory {
+  month: string
+  month_label: string
+  is_current_month: boolean
+  current_week: number | null
+  today_day: number
+  weeks: FinanceWeeklyHistoryWeek[]
+  total_units: number
+  total_gross: string
+}
+
+export async function getFinanceWeeklyHistory(month?: string): Promise<FinanceWeeklyHistory> {
+  const qs = month ? `?month=${encodeURIComponent(month)}` : ''
+  const response = await apiClient.get<{ data: FinanceWeeklyHistory }>(`/orders/finance/weekly-history${qs}`)
+  return response.data
+}
+
 export interface OperationalInsights {
   deadstock: Array<{ partner_id: string; partner_name: string; product_name: string; current_qty: number; inactive_days: number }>
   audit: Array<{ partner_id: string; partner_name: string; stale_days: number; large_changes: number; priority_score: number }>

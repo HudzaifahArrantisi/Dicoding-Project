@@ -52,7 +52,7 @@ function AnalysisPage() {
         </div>
       </header>
 
-      {user.role === 'data_science' && <form className="rounded-xl border border-line bg-white p-5" onSubmit={(event) => {
+      {user.role === 'data_science' && <form className="rounded-xl border border-line bg-surface shadow-xs p-5" onSubmit={(event) => {
         event.preventDefault()
         void perform('create', () => createAnalysisRun(start, end), 'Laporan dibuat dan menunggu tinjauan Admin.')
       }}>
@@ -69,8 +69,8 @@ function AnalysisPage() {
         <div className="flex items-center justify-between gap-3"><h2 id="run-title" className="font-display text-xl font-semibold">Riwayat laporan</h2><button type="button" onClick={() => void runs.refetch()} className="min-h-11 rounded-lg border border-line px-4 text-sm font-semibold">Segarkan</button></div>
         {runs.isLoading && <p role="status" className="text-sm text-muted">Memuat laporan...</p>}
         {runs.isError && <p role="alert" className="text-sm text-crit-fg">{runs.error instanceof Error ? runs.error.message : 'Gagal memuat laporan'}</p>}
-        {runs.data?.runs.length === 0 && <p className="rounded-xl border border-line bg-white p-5 text-sm text-muted">Belum ada laporan. Data Science dapat membuat laporan untuk periode yang dipilih.</p>}
-        {runs.data?.runs.map((run) => <article key={run.id} className="rounded-xl border border-line bg-white p-5">
+        {runs.data?.runs.length === 0 && <p className="rounded-xl border border-line bg-surface shadow-xs p-5 text-sm text-muted">Belum ada laporan. Data Science dapat membuat laporan untuk periode yang dipilih.</p>}
+        {runs.data?.runs.map((run) => <article key={run.id} className="rounded-xl border border-line bg-surface shadow-xs p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><h3 className="font-semibold">{run.start_date} sampai {run.end_date}</h3><p className="mt-1 font-mono text-xs text-muted">Run {run.id}</p></div>
             <span className="rounded-full border border-line bg-ink-50 px-3 py-1 text-xs font-semibold">{run.is_active ? 'Aktif · ' : ''}{statusName[run.status]}</span>
@@ -90,7 +90,7 @@ function AnalysisPage() {
 
       <WeeklyAbsorptionMatrix />
 
-      {user.role === 'admin' && <form className="rounded-xl border border-line bg-white p-5" onSubmit={(event) => {
+      {user.role === 'admin' && <form className="rounded-xl border border-line bg-surface shadow-xs p-5" onSubmit={(event) => {
         event.preventDefault()
         void perform('team', () => createAnalysisTeamUser(team), 'Akun tim dibuat.')
       }}>

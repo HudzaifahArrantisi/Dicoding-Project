@@ -33,7 +33,8 @@ class WeeklyAnalyticsTests(unittest.TestCase):
                    "qty_requested": 10, "qty_approved": None, "created_at": start + timedelta(days=2)}]
         report, cleaned = analyze(start, end, products, stocks, logs, orders)
         self.assertEqual(report["network_sales"]["total_sold_7d"], 35)
-        self.assertEqual(report["network_sales"]["total_sold_prev_7d"], 7)
+        self.assertEqual(report["network_sales"]["total_sold_prev_7d"], 0)
+        self.assertEqual(len(report["daily_consumption"]), 7)
         self.assertEqual(report["products"][0]["share_pct"], 100)
         self.assertEqual(report["regions"][0]["restock_frequency"], 1)
         self.assertEqual(report["partners"][0]["active_days"], 2)

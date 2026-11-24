@@ -28,6 +28,8 @@ const queryKeys: Record<Role, Partial<Record<Topic, string[][]>>> = {
       ['admin-stock-logs-partner'],
       ['admin-stock-log-partners'],
       ['admin-weekly-summary'],
+      ['admin-live-weekly-summary'],
+      ['admin-live-weekly-details'],
       ['admin-finance-summary'],
     ],
     products: [

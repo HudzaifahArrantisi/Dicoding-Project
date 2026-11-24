@@ -47,8 +47,8 @@ export function ProductSalesDetailModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl sm:max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-6 py-4.5 backdrop-blur-md">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl sm:max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface/95 px-6 py-4.5 backdrop-blur-md">
             <div className="flex items-center gap-3.5 min-w-0">
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-700 ring-1 ring-line">
                 <Package className="size-5" aria-hidden="true" />
@@ -150,7 +150,7 @@ export function ProductSalesDetailModal({
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="min-h-10 rounded-md border border-line bg-white px-5 text-xs font-semibold text-ink-900 hover:bg-ink-50 cursor-pointer shadow-2xs"
+                  className="min-h-10 rounded-md border border-line bg-surface px-5 text-xs font-semibold text-ink-900 hover:bg-ink-50 cursor-pointer shadow-2xs"
                 >
                   Tutup
                 </button>
@@ -202,8 +202,8 @@ export function TopPartnersDetailModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl sm:max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-6 py-4.5 backdrop-blur-md">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl sm:max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface/95 px-6 py-4.5 backdrop-blur-md">
             <div className="flex items-center gap-3.5 min-w-0">
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-700 ring-1 ring-line">
                 <Building2 className="size-5" aria-hidden="true" />
@@ -302,7 +302,7 @@ export function TopPartnersDetailModal({
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="min-h-10 rounded-md border border-line bg-white px-5 text-xs font-semibold text-ink-900 hover:bg-ink-50 cursor-pointer shadow-2xs"
+                  className="min-h-10 rounded-md border border-line bg-surface px-5 text-xs font-semibold text-ink-900 hover:bg-ink-50 cursor-pointer shadow-2xs"
                 >
                   Tutup
                 </button>
@@ -354,8 +354,8 @@ export function TopRegionsDetailModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl sm:max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-6 py-4.5 backdrop-blur-md">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl sm:max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface/95 px-6 py-4.5 backdrop-blur-md">
             <div className="flex items-center gap-3.5 min-w-0">
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-700 ring-1 ring-line">
                 <MapPin className="size-5" aria-hidden="true" />
@@ -447,7 +447,7 @@ export function TopRegionsDetailModal({
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="min-h-10 rounded-md border border-line bg-white px-5 text-xs font-semibold text-ink-900 hover:bg-ink-50 cursor-pointer shadow-2xs"
+                  className="min-h-10 rounded-md border border-line bg-surface px-5 text-xs font-semibold text-ink-900 hover:bg-ink-50 cursor-pointer shadow-2xs"
                 >
                   Tutup
                 </button>
@@ -496,8 +496,8 @@ export function ActiveReportingPartnersModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60 backdrop-blur-xs animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl sm:max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-6 py-4.5 backdrop-blur-md">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl sm:max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface/95 px-6 py-4.5 backdrop-blur-md">
             <div className="flex items-center gap-3.5 min-w-0">
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-700 ring-1 ring-line">
                 <History className="size-5" aria-hidden="true" />
@@ -599,7 +599,7 @@ export function ActiveReportingPartnersModal({
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="min-h-10 rounded-md border border-line bg-white px-5 text-xs font-semibold text-ink-900 hover:bg-ink-50 cursor-pointer shadow-2xs"
+                  className="min-h-10 rounded-md border border-line bg-surface px-5 text-xs font-semibold text-ink-900 hover:bg-ink-50 cursor-pointer shadow-2xs"
                 >
                   Tutup
                 </button>

@@ -29,7 +29,7 @@ export function AnalysisRunPreviewModal({
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/55 backdrop-blur-xs" />
-      <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-[calc(100%-1rem)] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-2xl focus:outline-none sm:w-[calc(100%-2rem)]">
+      <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-[calc(100%-1rem)] max-w-5xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xs shadow-2xl focus:outline-none sm:w-[calc(100%-2rem)]">
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div className="min-w-0">
             <Dialog.Title className="font-display text-xl font-semibold text-ink-900">Pratinjau hasil Data Science</Dialog.Title>
@@ -64,7 +64,7 @@ export function AnalysisRunPreviewModal({
                 <span className="sr-only">Pilih sumber training model</span>
                 <select value={trainingSource} onChange={(event) => onTrainingSourceChange(event.target.value as 'analysis' | 'raw_references')}
                   disabled={continuing || !['draft', 'approved'].includes(run?.status ?? '')}
-                  className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-not-allowed disabled:opacity-60">
+                  className="min-h-11 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-700 disabled:cursor-not-allowed disabled:opacity-60">
                   <option value="analysis">Hasil analisis Data Science</option>
                   <option value="raw_references" disabled={rawReferenceCount === 0}>Data mentah unggahan Admin ({rawReferenceCount})</option>
                 </select>
@@ -87,5 +87,5 @@ function FileCard({ icon, label, value }: { icon: ReactNode; label: string; valu
 }
 
 function Preview({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="overflow-hidden rounded-lg border border-line"><h3 className="border-b border-line bg-ink-50 px-3 py-2 font-mono text-xs font-semibold text-ink-900">{title}</h3><div className="bg-white p-3">{children}</div></section>
+  return <section className="overflow-hidden rounded-lg border border-line"><h3 className="border-b border-line bg-ink-50 px-3 py-2 font-mono text-xs font-semibold text-ink-900">{title}</h3><div className="bg-surface p-3">{children}</div></section>
 }

@@ -343,7 +343,7 @@ export function MitraProductTour({
       <div
         ref={dialogRef}
         style={dialogPositionStyle}
-        className={`fixed z-10 overflow-y-auto rounded-2xl border border-line bg-white p-4 shadow-float sm:p-5 ${
+        className={`fixed z-10 overflow-y-auto rounded-2xl border border-line bg-surface shadow-xs p-4 shadow-float sm:p-5 ${
           isScrolling || reducedMotion || isMobile
             ? 'transition-none'
             : 'transition-[top,left] duration-250 ease-out'
@@ -355,7 +355,7 @@ export function MitraProductTour({
       >
         {rect && isTargetInViewport && !isMobile ? (
           <div
-            className={`pointer-events-none absolute size-3.5 rotate-45 bg-white transition-all duration-300 ease-out ${
+            className={`pointer-events-none absolute size-3.5 rotate-45 bg-surface transition-all duration-300 ease-out ${
               placeAbove
                 ? '-bottom-1.5 border-r border-b border-line shadow-2xs'
                 : '-top-1.5 border-l border-t border-line shadow-2xs'
