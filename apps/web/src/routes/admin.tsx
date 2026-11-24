@@ -2645,6 +2645,17 @@ function AIInsightsPanel({
   )
 }
 
+const PARTNER_COLUMNS = [
+  { key: 'weekly_units', label: 'Konsumsi (pcs)' },
+  { key: 'active_days', label: 'Hari lapor' },
+  { key: 'log_count', label: 'Log stok' },
+  { key: 'critical_frequency', label: 'Kritis' },
+  { key: 'stockout_events', label: 'Stok habis' },
+  { key: 'restock_requests', label: 'Restock' },
+] as const
+
+const ALERT_COLUMNS = new Set(['critical_frequency', 'stockout_events'])
+
 function PartnerAnalysisTable({ analysis }: { analysis?: AIInsights['partner_analysis'] }) {
   const [search, setSearch] = useState('')
   const keyword = search.trim().toLocaleLowerCase('id-ID')
@@ -2655,13 +2666,28 @@ function PartnerAnalysisTable({ analysis }: { analysis?: AIInsights['partner_ana
       .sort((a, b) => b.weekly_units - a.weekly_units || a.partner_name.localeCompare(b.partner_name, 'id-ID')),
   [analysis?.rows, keyword])
 
+  const totals = useMemo(() => rows.reduce(
+    (acc, row) => ({
+      weekly_units: acc.weekly_units + row.weekly_units,
+      active_days: acc.active_days + row.active_days,
+      log_count: acc.log_count + row.log_count,
+      critical_frequency: acc.critical_frequency + row.critical_frequency,
+      stockout_events: acc.stockout_events + row.stockout_events,
+      restock_requests: acc.restock_requests + row.restock_requests,
+    }),
+    { weekly_units: 0, active_days: 0, log_count: 0, critical_frequency: 0, stockout_events: 0, restock_requests: 0 },
+  ), [rows])
+  const number = (value: number) => Number.isFinite(value) ? value.toLocaleString('id-ID') : '—'
+
   return (
     <section className="dashboard-surface min-w-0 overflow-hidden" aria-labelledby="partner-analysis-title">
       <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <h2 id="partner-analysis-title" className="font-display text-lg font-semibold text-ink-900">Analisis seluruh mitra</h2>
           <p className="mt-1 text-xs text-muted">
-            {analysis ? `${analysis.rows.length.toLocaleString('id-ID')} mitra · ${analysis.metadata.start_date}–${analysis.metadata.end_date}` : 'Laporan Data Science belum tersedia'}
+            {analysis
+              ? `${(keyword ? rows.length : analysis.rows.length).toLocaleString('id-ID')} mitra · ${analysis.metadata.start_date}–${analysis.metadata.end_date}`
+              : 'Laporan Data Science belum tersedia'}
           </p>
         </div>
         <label className="block sm:w-64">
@@ -2670,36 +2696,75 @@ function PartnerAnalysisTable({ analysis }: { analysis?: AIInsights['partner_ana
             placeholder="Cari mitra atau wilayah" className="min-h-11 w-full rounded-md border border-line bg-white px-3 text-base text-ink-900 sm:text-sm" />
         </label>
       </div>
-      {analysis && analysis.rows.length > 0 ? (
-        <div className="max-h-[36rem] overflow-auto" role="region" aria-label="Tabel analisis mitra" tabIndex={0}>
-          <table className="w-full min-w-[920px] border-collapse text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-ink-50 text-xs text-ink-700">
-              <tr>
-                <th scope="col" className="border-b border-line px-4 py-3 font-semibold">Mitra</th>
-                <th scope="col" className="border-b border-line px-4 py-3 font-semibold">Wilayah</th>
-                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Konsumsi (pcs)</th>
-                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Hari lapor</th>
-                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Log stok</th>
-                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Kritis</th>
-                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Stok habis</th>
-                <th scope="col" className="border-b border-line px-4 py-3 text-right font-semibold">Restock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.partner_id} className="border-b border-line/70 even:bg-ink-50/40 hover:bg-ink-50">
-                  <th scope="row" className="px-4 py-3 font-medium text-ink-900">{row.partner_name}</th>
-                  <td className="px-4 py-3 text-ink-700">{[row.regency_name, row.province_name].filter((value) => value && !/^(unknown|tidak diketahui)$/i.test(value)).join(', ') || '—'}</td>
-                  {[row.weekly_units, row.active_days, row.log_count, row.critical_frequency, row.stockout_events, row.restock_requests].map((value, index) => (
-                    <td key={index} className="px-4 py-3 text-right tabular-nums text-ink-900">{Number.isFinite(value) ? value.toLocaleString('id-ID') : '—'}</td>
+      {!analysis || analysis.rows.length === 0 ? (
+        <p className="p-4 text-sm text-muted">Belum ada hasil analisis mitra untuk ditampilkan.</p>
+      ) : rows.length === 0 ? (
+        <p className="p-4 text-sm text-muted">Tidak ada mitra yang cocok dengan pencarian.</p>
+      ) : (
+        <>
+          <p id="partner-analysis-scroll-hint" className="border-b border-line bg-ink-50/60 px-4 py-2 text-xs text-muted lg:hidden">
+            Geser tabel ke samping untuk melihat semua kolom.
+          </p>
+          <div className="max-h-[70vh] overflow-auto overscroll-x-contain" role="region"
+            aria-label="Tabel analisis mitra" aria-describedby="partner-analysis-scroll-hint" tabIndex={0}>
+            <table className="w-full min-w-[880px] border-separate border-spacing-0 bg-white text-left text-sm">
+              <caption className="sr-only">
+                Analisis mingguan setiap mitra: konsumsi, hari pelaporan, log stok, kejadian kritis, stok habis, dan permintaan restock.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="sticky top-0 left-0 z-30 border-r border-b border-line bg-ink-50 px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-ink-700 sm:px-4">Mitra</th>
+                  <th scope="col" className="sticky top-0 z-20 border-r border-b border-line bg-ink-50 px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-ink-700 sm:px-4">Wilayah</th>
+                  {PARTNER_COLUMNS.map((column) => (
+                    <th key={column.key} scope="col"
+                      className="sticky top-0 z-20 border-r border-b border-line bg-ink-50 px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap text-ink-700 sm:px-4">
+                      {column.label}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {rows.length === 0 ? <p className="p-4 text-sm text-muted">Tidak ada mitra yang cocok dengan pencarian.</p> : null}
-        </div>
-      ) : <p className="p-4 text-sm text-muted">Belum ada hasil analisis mitra untuk ditampilkan.</p>}
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.partner_id} className="odd:bg-ink-50 hover:bg-ink-100">
+                    <th scope="row" className="sticky left-0 z-10 border-r border-b border-line bg-inherit px-3 py-2.5 font-medium text-ink-900 sm:px-4">
+                      {row.partner_name}
+                    </th>
+                    <td className="border-r border-b border-line px-3 py-2.5 text-ink-700 sm:px-4">
+                      {[row.regency_name, row.province_name].filter((value) => value && !/^(unknown|tidak diketahui)$/i.test(value)).join(', ') || '—'}
+                    </td>
+                    {PARTNER_COLUMNS.map((column) => {
+                      const value = row[column.key]
+                      const alert = ALERT_COLUMNS.has(column.key) && value > 0
+                      return (
+                        <td key={column.key}
+                          className={`border-r border-b border-line px-3 py-2.5 text-right tabular-nums sm:px-4 ${
+                            alert ? 'font-semibold text-crit-fg' : value === 0 ? 'text-muted' : 'text-ink-900'
+                          }`}>
+                          {number(value)}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row" className="sticky bottom-0 left-0 z-30 border-r border-t-2 border-line bg-ink-100 px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-ink-900 sm:px-4">
+                    Total {rows.length.toLocaleString('id-ID')} mitra
+                  </th>
+                  <td className="sticky bottom-0 z-20 border-r border-t-2 border-line bg-ink-100 px-3 py-2.5 text-xs text-muted sm:px-4">—</td>
+                  {PARTNER_COLUMNS.map((column) => (
+                    <td key={column.key}
+                      className="sticky bottom-0 z-20 border-r border-t-2 border-line bg-ink-100 px-3 py-2.5 text-right text-xs font-semibold tabular-nums text-ink-900 sm:px-4">
+                      {number(totals[column.key])}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
+      )}
     </section>
   )
 }

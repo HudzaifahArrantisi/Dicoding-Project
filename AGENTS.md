@@ -168,6 +168,7 @@ Before starting, ask the user when antislop applies: during the work, or after i
 ### Catatan Perubahan Harian (Daily Changelog)
 
 #### 2026-11-24
+- **Tabel analisis mitra di AI Insights bergaya spreadsheet**: Tabel kini memakai garis grid penuh (`border-separate` + `border-r`/`border-b`), zebra strip opak pada baris ganjil, dan latar dasar di `<table>` agar kolom nama serta header yang menempel tidak tembus saat digulir. Kolom Mitra menempel di kiri (`sticky left-0`), header menempel di atas, dan ditambahkan baris kaki `Total {n} mitra` yang menempel di bawah dengan jumlah setiap kolom. Badge kolom Kritis dan Stok habis berwarna merah saat nilainya di atas nol, sel bernilai nol diredupkan, dan semua angka memakai `tabular-nums`. Tinggi gulir naik dari 36 rem ke 70vh, plus petunjuk gulir horizontal khusus layar sempit. Kolom didefinisikan satu kali pada `PARTNER_COLUMNS` sehingga header, isi, dan kaki tidak bisa lagi menyimpang. Pencarian kosong serta keadaan tanpa laporan kini ditangani sebelum tabel dirender. Typecheck belum dijalankan ulang pada sesi ini; eksekusi perintah diblokir.
 - **Auto-deploy API setiap push main**: Workflow `deploy-api.yml` memeriksa tipe API dan deploy `daisuki-api` menggunakan environment `model-LLM`, tanpa filter path. Setup membutuhkan secret `CLOUDFLARE_API_TOKEN` dan variable `CLOUDFLARE_ACCOUNT_ID`. Web tetap memakai Cloudflare Workers Builds; panduan di `docs/DEPLOY_AUTO.md`. Aktivasi production membutuhkan push workflow dan pemasangan token deploy.
 
 #### 2026-11-23

@@ -526,9 +526,6 @@ export function AdminChatRoom({
                 <h1 className="truncate font-display text-sm font-bold text-ink-950 sm:text-base">
                   Pusat Analisis Admin
                 </h1>
-                <span className="hidden rounded-md border border-line bg-paper px-2 py-0.5 text-[10px] font-medium text-ink-700 sm:inline">
-                  Admin Pusat
-                </span>
               </div>
               <p className="truncate text-[11px] text-muted">
                 {closed ? 'Sesi percakapan diarsipkan' : 'Aktif • Gudang pusat & seluruh jaringan cabang'}
@@ -581,7 +578,7 @@ export function AdminChatRoom({
           {loading ? (
             <div className="flex h-full items-center justify-center py-16 text-center text-xs text-muted">
               <Loader2 className="mr-2 size-4 animate-spin text-ink-700" />
-              <span>Memuat percakapan analitik...</span>
+              <span>Tunggu Sebentar...</span>
             </div>
           ) : null}
 
