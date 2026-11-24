@@ -162,6 +162,9 @@ daisuki-inventory/
 
 ## Catatan Perubahan Harian (Daily Changelog)
 
+### 2026-11-24
+- **Auto-deploy API setiap push main**: Workflow `deploy-api.yml` memeriksa tipe API dan deploy `daisuki-api` menggunakan environment `model-LLM`, tanpa filter path. Setup membutuhkan secret `CLOUDFLARE_API_TOKEN` dan variable `CLOUDFLARE_ACCOUNT_ID`. Web tetap memakai Cloudflare Workers Builds; panduan di `docs/DEPLOY_AUTO.md`. Aktivasi production membutuhkan push workflow dan pemasangan token deploy.
+
 ### 2026-11-23
 - **Jawaban Chat AI lebih singkat dan langsung**: Prompt Admin serta Mitra kini meminta jawaban inti dalam 1–3 kalimat atau maksimal 3 poin, tanpa tabel panjang/rekomendasi berulang kecuali diminta. Batas keluaran LLM menjadi 700 token secara default dan 1.800 untuk permintaan detail, daftar, tabel, grafik, atau dokumen.
 - **Penerbitan hasil AI berdasarkan pilihan Admin**: AI Insights kini mengikuti ID run yang dibuat dari klik **Perbarui analisis**, termasuk ketika job masih berstatus `creating`, sehingga run lama tidak terpilih saat run terbaru belum siap. Hasil aktif tetap dipakai selama draft/training berjalan; setelah run yang dipilih berstatus `published`, grafik AI Insights dan ringkasan mingguan dimuat ulang. Polling status dibatasi ke run terpilih dengan interval 5 detik dan berhenti pada status akhir. Typecheck workspace lulus.
