@@ -233,6 +233,11 @@ create table if not exists stock_logs (
 );
 create index if not exists stock_logs_partner_product_created_idx
   on stock_logs (partner_id, product_id, created_at desc);
+-- Index untuk query global by sumber + rentang waktu (weekly-summary/live, finance, AI insights)
+create index if not exists stock_logs_manual_created_idx
+  on stock_logs (created_at desc) where source = 'manual_update';
+create index if not exists stock_logs_product_created_idx
+  on stock_logs (product_id, created_at desc);
 
 create table if not exists stock_recalls (
   id uuid primary key default gen_random_uuid(),

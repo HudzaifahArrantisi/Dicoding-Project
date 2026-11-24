@@ -2894,7 +2894,6 @@ function AdminDashboard() {
     queryFn: getFinanceSummary,
     enabled: user?.role === 'admin' && tab === 'stocks',
     staleTime: 60_000,
-    refetchInterval: 60_000,
   })
   const weeklyHistory = useQuery<FinanceWeeklyHistory>({
     queryKey: ['admin-finance-weekly-history', weeklyHistoryMonth],
@@ -2943,13 +2942,11 @@ function AdminDashboard() {
     queryKey: ['admin-live-weekly-summary'],
     queryFn: () => getLiveWeeklySummary(),
     enabled: user?.role === 'admin' && tab === 'data-science',
-    refetchInterval: 30_000,
   })
   const logPartners = useQuery<StockLogPartner[]>({
     queryKey: ['admin-stock-log-partners'],
     queryFn: () => getPartnerStockLogs(),
     enabled: user?.role === 'admin' && tab === 'data-science',
-    refetchInterval: 30_000,
   })
   const aiInsights = useQuery<AIInsights>({
     queryKey: ['admin-ai-insights'],

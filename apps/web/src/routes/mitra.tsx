@@ -196,13 +196,11 @@ function MitraPortal() {
     queryKey: ['mitra-stocks'],
     queryFn: () => getStocks(),
     enabled: user?.role === 'mitra',
-    refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   })
   const financeQuery = useQuery<FinanceSummary>({
     queryKey: ['mitra-finance-summary'], queryFn: getFinanceSummary,
     enabled: user?.role === 'mitra' && activeTab === 'stocks', staleTime: 60_000,
-    refetchInterval: 60_000,
   })
 
   const ordersQuery = useQuery<Order[]>({
