@@ -147,7 +147,7 @@ export function PartnerStockDetailModal({
             </div>
 
             {/* Daftar Produk dengan Grid Terstruktur & Lurus Sempurna */}
-            <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-xs shadow-xs">
+            <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-xs">
               {/* Tampilan Mobile: Kartu Vertikal Responsif & Rapi */}
               <div className="divide-y divide-line sm:hidden">
                 {group.items.map((stock) => (

@@ -360,12 +360,17 @@ def render_markdown(report: dict) -> str:
     return "\n".join(lines)
 
 
+def parse_as_of(value: str) -> datetime:
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    return datetime.fromisoformat(normalized)
+
+
 def run() -> dict:
     parser = argparse.ArgumentParser()
     parser.add_argument("--start-date", type=date.fromisoformat)
     parser.add_argument("--end-date", type=date.fromisoformat)
     parser.add_argument("--run-id", type=str)
-    parser.add_argument("--as-of", type=datetime.fromisoformat)
+    parser.add_argument("--as-of", type=parse_as_of)
     args = parser.parse_args()
     today = datetime.now(JAKARTA).date()
     end_day = args.end_date or today

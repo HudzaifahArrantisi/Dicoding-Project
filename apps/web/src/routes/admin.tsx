@@ -2017,7 +2017,7 @@ function PartnerStockLogDialog({
                 </div>
 
                 {/* 3. Panel Detail Hari Terpilih & Jam-Jam Perubahan */}
-                <div className="rounded-lg border border-line bg-surface shadow-xs p-3.5 sm:p-5 shadow-xs">
+                <div className="rounded-lg border border-line bg-surface shadow-xs p-3.5 sm:p-5">
                   <div className="flex flex-col gap-2 border-b border-line pb-3 sm:flex-row sm:items-center sm:justify-between sm:pb-4">
                     <div>
                       <div className="flex items-center gap-2">
@@ -3216,7 +3216,7 @@ function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setWeeklyHistoryOpen(true)}
-                  className="group min-w-0 cursor-pointer rounded-xl border border-line bg-surface shadow-xs p-4 text-left shadow-xs transition-colors hover:border-[#E04F33]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
+                  className="group min-w-0 cursor-pointer rounded-xl border border-line bg-surface shadow-xs p-4 text-left transition-colors hover:border-[#E04F33]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
                 >
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">Estimasi penjualan hari ini (WIB)</p>
                   <strong className="num mt-3 block break-words font-display text-3xl font-bold leading-tight tabular-nums text-ink-900 sm:text-4xl">
@@ -3232,7 +3232,7 @@ function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setWeeklyHistoryOpen(true)}
-                  className="group min-w-0 cursor-pointer rounded-xl border border-line bg-surface shadow-xs p-4 text-left shadow-xs transition-colors hover:border-[#E04F33]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
+                  className="group min-w-0 cursor-pointer rounded-xl border border-line bg-surface shadow-xs p-4 text-left transition-colors hover:border-[#E04F33]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:p-5"
                 >
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">Estimasi penjualan 7 hari</p>
                   <strong className="num mt-3 block break-words font-display text-3xl font-bold leading-tight tabular-nums text-ink-900 sm:text-4xl">
@@ -3246,7 +3246,7 @@ function AdminDashboard() {
                   </span>
                 </button>
               </div>
-              <div className="flex flex-col gap-1 rounded-xl border border-line bg-surface shadow-xs px-4 py-3 text-xs text-muted shadow-xs sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex flex-col gap-1 rounded-xl border border-line bg-surface shadow-xs px-4 py-3 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <span>Estimasi 30 hari <strong className="num ml-1 font-semibold tabular-nums text-ink-900">{Number(finance.data.sales_estimate_30d).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })}</strong></span>
                 <span>Log stok keluar · Seblak Rp27.500/pcs · Produk lain Rp25.000/pcs · Perlu verifikasi stok fisik</span>
               </div>
@@ -3267,21 +3267,21 @@ function AdminDashboard() {
           ) : null}
           {tab === 'stocks' && operationalInsights.data ? (
             <section aria-label="Prioritas operasional" className="grid gap-3 lg:grid-cols-3">
-              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 shadow-xs">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4">
                 <h2 className="font-display text-base font-semibold text-ink-900">Potensi deadstock</h2>
                 <p className="mt-1 text-xs text-muted">Stok tersisa tanpa perubahan fisik lebih dari 30 hari. Verifikasi sebelum penarikan.</p>
                 {operationalInsights.data.deadstock.length ? operationalInsights.data.deadstock.slice(0, 3).map((item) => (
                   <p key={`${item.partner_id}-${item.product_name}`} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong> · {item.product_name}<br /><span className="tabular-nums text-crit-fg">{item.current_qty} pcs · {item.inactive_days} hari</span></p>
                 )) : <p className="mt-3 text-sm text-muted">Tidak ada stok yang memenuhi kriteria.</p>}
               </div>
-              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 shadow-xs">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4">
                 <h2 className="font-display text-base font-semibold text-ink-900">Prioritas pemeriksaan</h2>
                 <p className="mt-1 text-xs text-muted">Urutan dari keterlambatan laporan dan perubahan stok besar.</p>
                 {operationalInsights.data.audit.length ? operationalInsights.data.audit.slice(0, 3).map((item) => (
                   <p key={item.partner_id} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong><br /><span className="tabular-nums text-warn-fg">{item.stale_days} hari tanpa laporan · {item.large_changes} perubahan besar</span></p>
                 )) : <p className="mt-3 text-sm text-muted">Tidak ada cabang yang memenuhi kriteria.</p>}
               </div>
-              <div className="rounded-xl border border-line bg-surface shadow-xs p-4 shadow-xs">
+              <div className="rounded-xl border border-line bg-surface shadow-xs p-4">
                 <h2 className="font-display text-base font-semibold text-ink-900">Estimasi kebutuhan pabrik</h2>
                 <p className="mt-1 text-xs text-muted">Kebutuhan 14 hari berdasarkan penurunan stok fisik 30 hari.</p>
                 {operationalInsights.data.factory.map((item) => (

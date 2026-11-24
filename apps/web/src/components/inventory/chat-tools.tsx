@@ -246,7 +246,7 @@ export function ChatToolPdfExport({ data }: { data: PdfExportData }) {
       : undefined)
 
   return (
-    <div className="my-3.5 overflow-hidden rounded-xl border border-line bg-surface shadow-xs p-4 shadow-xs">
+    <div className="my-3.5 overflow-hidden rounded-xl border border-line bg-surface shadow-xs p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex size-9 items-center justify-center rounded-lg border border-line bg-surface shadow-xs text-ink-700">

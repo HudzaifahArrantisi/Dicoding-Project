@@ -964,7 +964,7 @@ export function DeliveryReceiptModal({
                 </div>
               ) : (
                 /* Tampilan Preview: Thermal Struk 80mm */
-                <article className="mx-auto w-full max-w-[80mm] rounded-lg border border-line bg-surface shadow-xs p-4 text-xs text-ink-900 shadow-xs">
+                <article className="mx-auto w-full max-w-[80mm] rounded-lg border border-line bg-surface shadow-xs p-4 text-xs text-ink-900">
                   <header className="border-b border-ink-900 pb-2.5 text-center">
                     <p className="font-display text-lg font-bold">DAISUKI</p>
                     <p className="text-[10px] font-bold tracking-wider text-muted">RESI PENGIRIMAN</p>
