@@ -110,7 +110,6 @@ export function AdminChatRoom({
       const list = await getAdminChatSessions()
       setSessions(list)
     } catch {
-      // Ignored for background updates
     }
   }
 

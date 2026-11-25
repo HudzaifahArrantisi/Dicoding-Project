@@ -573,7 +573,7 @@ function DataSciencePanel({
         </div>
         <div className="py-3 sm:px-4">
           <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Rata-rata konsumsi harian</dt>
-          <dd className="mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${((summary?.total_units_consumed ?? 0) / Math.max(1, summary?.daily_update_breakdown.length ?? 0)).toFixed(1)} pcs`}</dd>
+          <dd className="mt-1 font-display text-2xl font-bold tabular-nums text-ink-900">{summaryError ? '—' : summaryLoading ? '…' : `${Math.round((summary?.total_units_consumed ?? 0) / Math.max(1, summary?.daily_update_breakdown.length ?? 0)).toLocaleString('id-ID')} pcs`}</dd>
         </div>
       </dl></div>}
 
@@ -2230,6 +2230,7 @@ function AIInsightsPanel({
   const analysisRuns = useQuery<{ runs: AnalysisRun[]; active_run_id: string | null }>({
     queryKey: ['analysis-runs'],
     queryFn: getAnalysisRuns,
+    refetchOnMount: 'always',
     refetchInterval: (query) => {
       const runs = query.state.data?.runs ?? []
       const trackedRun = requestedRunId

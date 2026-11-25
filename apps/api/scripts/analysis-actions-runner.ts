@@ -52,6 +52,17 @@ async function publishKv(source: string) {
 
 let cleanup: (() => Promise<void>) | undefined;
 let started = false;
+const trackedSteps: { label: string; status: "running" | "succeeded" | "failed" }[] = [];
+async function beginStep(label: string) {
+  trackedSteps.push({ label, status: "running" });
+  await db.update(analysisRuns).set({ current_step: label, steps: [...trackedSteps] }).where(eq(analysisRuns.id, id));
+}
+async function finishStep(status: "succeeded" | "failed" = "succeeded") {
+  const step = trackedSteps[trackedSteps.length - 1];
+  if (!step) return;
+  step.status = status;
+  await db.update(analysisRuns).set({ steps: [...trackedSteps] }).where(eq(analysisRuns.id, id));
+}
 try {
   const connectionRows = await sql`
     SELECT current_database() AS database,
@@ -65,18 +76,23 @@ try {
   if (stage === "draft") {
     if (run.status !== "creating") throw new Error(`Run tidak berstatus creating: ${run.status}`);
     started = true;
+    await beginStep("Agregasi data mingguan dan empat kategori analisis");
     await python("data-science/src/weekly_analytics_aggregator.py", ["--start-date", run.start_date,
       "--end-date", run.end_date, "--run-id", id, "--as-of", run.created_at.toISOString()]);
+    await finishStep();
+    await beginStep("Simpan laporan dan artefak analisis ke Neon");
     const manifest = JSON.parse(await readFile(resolve(dataScienceRunDir(id), "manifest.json"), "utf8")) as Record<string, unknown>;
     if (manifest.run_id !== id || manifest.start_date !== run.start_date || manifest.end_date !== run.end_date) {
       throw new Error("Manifest laporan tidak cocok dengan run");
     }
     await saveDataScienceArtifacts(id);
+    await finishStep();
     await db.update(analysisRuns).set({ status: "draft", manifest }).where(eq(analysisRuns.id, id));
     console.log(`Laporan ${id} siap ditinjau Admin`);
   } else {
     if (run.status !== "processing" || !run.processed_by) throw new Error("Run belum diklaim untuk training");
     started = true;
+    await beginStep("Persiapan data sumber dan model sebelumnya");
     const trainingSource = (run.manifest as Record<string, unknown> | null)?.training_source === "raw_references"
       ? "raw_references" : "analysis";
     await hydrateDataScienceArtifacts(id);
@@ -90,32 +106,39 @@ try {
         await writeFile(resolve(aiRunDir(id), "daisuki.pkl"), previous);
       }
     }
-    const steps: { label: string; status: "running" | "succeeded" | "failed" }[] = [];
+    await finishStep();
     for (const [label, script] of jobs) {
-      steps.push({ label, status: "running" });
-      await db.update(analysisRuns).set({ current_step: label, steps: [...steps] }).where(eq(analysisRuns.id, id));
+      await beginStep(label);
       try {
         await python(script, script.endsWith("train.py") ? ["--weekly", "--training-source", trainingSource] : [], staged.directory);
-        steps[steps.length - 1].status = "succeeded";
+        await finishStep();
       } catch (error) {
-        steps[steps.length - 1].status = "failed";
-        await db.update(analysisRuns).set({ steps: [...steps] }).where(eq(analysisRuns.id, id));
+        await finishStep("failed");
         throw error;
       }
-      await db.update(analysisRuns).set({ steps: [...steps] }).where(eq(analysisRuns.id, id));
     }
+    await beginStep("Simpan artefak model dan hasil AI ke Neon");
     await saveAiArtifacts(id);
+    await finishStep();
+    await beginStep("Ekspor daisuki.pkl menjadi JSON untuk Worker");
     const modelPath = resolve(aiRunDir(id), "daisuki.pkl");
     const jsonPath = resolve(aiRunDir(id), "daisuki-worker.json");
     await python("ai/retraining/export_worker_classifier.py", [modelPath, jsonPath]);
+    await finishStep();
+    await beginStep("Publikasi model JSON ke Cloudflare KV");
     await publishKv(jsonPath);
+    await finishStep();
+    await beginStep("Terbitkan hasil analisis aktif");
     await publishRecommendations(id, run.processed_by, "analysis_published", true);
+    await finishStep();
     console.log(`Training dan publikasi run ${id} selesai`);
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : "Pipeline gagal";
   if (started) {
-    await db.update(analysisRuns).set({ status: "failed", current_step: null, error: message.slice(0, 600) })
+    const current = trackedSteps[trackedSteps.length - 1];
+    if (current?.status === "running") current.status = "failed";
+    await db.update(analysisRuns).set({ status: "failed", current_step: null, steps: [...trackedSteps], error: message.slice(0, 600) })
       .where(eq(analysisRuns.id, id));
   }
   console.error(message);

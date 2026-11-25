@@ -11,5 +11,6 @@ export const env = {
   PORT: Number(process.env.PORT ?? 3001),
   DATABASE_URL: process.env.DATABASE_URL!,
   WEB_ORIGIN: process.env.WEB_ORIGIN!,
+  GRAPH_ORIGIN: process.env.GRAPH_ORIGIN ?? "",
   RESEND_API_KEY: process.env.RESEND_API_KEY ?? "",
 };

@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "daisuki-graph",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-02",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "graph.daisuki.my.id/*", "zone_name": "daisuki.my.id" },
+  ],
+  "observability": { "enabled": true },
+}

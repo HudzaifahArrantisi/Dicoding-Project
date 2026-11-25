@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { analysisRuns, auditLogs, users } from "../../db/schema";
 import { getAuthUser } from "../../plugins/auth";
@@ -101,6 +101,30 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     if (!user) { set.status = 401; return { error: "Unauthorized" }; }
     if (user.role === "mitra") { set.status = 403; return { error: "Forbidden" }; }
     return { runs: await listAnalysisRuns(), active_run_id: await getActiveRunId() };
+  })
+  .get("/graph/status", async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Sesi login diperlukan" }; }
+    if (!["admin", "data_science", "ai_engineer"].includes(user.role)) {
+      set.status = 403; return { error: "Dashboard Graph hanya untuk tim internal" };
+    }
+    const runs = await db.select({
+      id: analysisRuns.id,
+      start_date: analysisRuns.start_date,
+      end_date: analysisRuns.end_date,
+      status: analysisRuns.status,
+      created_at: analysisRuns.created_at,
+      published_at: analysisRuns.published_at,
+      current_step: analysisRuns.current_step,
+      steps: analysisRuns.steps,
+      is_active: analysisRuns.is_active,
+    }).from(analysisRuns).orderBy(desc(analysisRuns.created_at)).limit(30);
+    return {
+      server_time: new Date().toISOString(),
+      active_run_id: await getActiveRunId(),
+      runs,
+      viewer_role: user.role,
+    };
   })
   .get("/runs/:id/artifacts", async ({ headers, params, set }) => {
     const user = await getAuthUser(headers);

@@ -56,6 +56,7 @@ function isAllowedOrigin(origin?: string | null): boolean {
 
     // 1. Matches configured WEB_ORIGIN
     if (origin === env.WEB_ORIGIN) return true;
+    if (env.GRAPH_ORIGIN && origin === env.GRAPH_ORIGIN) return true;
 
     // 2. Localhost & Loopback
     if (
