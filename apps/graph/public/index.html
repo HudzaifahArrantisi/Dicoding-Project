@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#11182f" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#141a26" />
     <meta
       name="description"
       content="Pantau alur analisis data dan training AI Daisuki secara langsung."
@@ -18,152 +19,140 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <a class="skip-link" href="#main">Lewati ke dashboard</a>
+    <a class="skip-link" href="#main">Lewati ke kanvas</a>
     <header class="topbar">
-      <a
-        class="brand"
-        href="https://daisuki.my.id"
-        aria-label="Daisuki Inventory"
-      >
-        <span class="brand-mark">D</span
-        ><span><strong>Daisuki</strong><small>System Graph</small></span>
+      <a class="brand" href="https://daisuki.my.id" aria-label="Daisuki Inventory">
+        <span class="brand-mark" aria-hidden="true">D</span>
+        <span class="brand-text"><strong>Daisuki</strong><small>System Graph</small></span>
       </a>
-      <div class="topbar-right">
-        <span class="live-pill"
-          ><i></i><span id="live-label">Memulai pemantauan</span></span
-        >
-        <button
-          class="icon-button"
-          id="refresh"
-          type="button"
-          aria-label="Segarkan data"
-          title="Segarkan data"
-        >
-          ↻
+
+      <div class="svc-strip" role="group" aria-label="Status layanan">
+        <span class="svc" data-tone="idle" id="svc-web">
+          <span class="svc-dot" aria-hidden="true"></span>
+          <span class="svc-name">Web</span>
+          <span class="svc-state" id="web-status">Memeriksa</span>
+        </span>
+        <span class="svc" data-tone="idle" id="svc-api">
+          <span class="svc-dot" aria-hidden="true"></span>
+          <span class="svc-name">API</span>
+          <span class="svc-state" id="api-status">Memeriksa</span>
+        </span>
+        <span class="svc" data-tone="ok" id="svc-graph">
+          <span class="svc-dot" aria-hidden="true"></span>
+          <span class="svc-name">Graph</span>
+          <span class="svc-state" id="graph-status">Aktif</span>
+        </span>
+      </div>
+
+      <div class="topbar-actions">
+        <p class="live" id="live-label" role="status">Memulai pemantauan</p>
+        <button class="ctl ctl-icon" id="refresh" type="button" aria-label="Segarkan data" title="Segarkan data">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+            <path d="M20 4v4.5h-4.5" />
+          </svg>
+        </button>
+        <button class="ctl ctl-icon" id="theme" type="button" aria-label="Ganti ke tema terang" aria-pressed="false" title="Ganti tema">
+          <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" />
+          </svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19" />
+          </svg>
         </button>
       </div>
     </header>
 
-    <main id="main" class="shell">
-      <section class="intro">
-        <div>
-          <p class="eyebrow">PUSAT OPERASI · DATA & AI</p>
-          <h1>Alur sistem Daisuki</h1>
-          <p class="intro-copy">
-            Status layanan dan jalannya analisis dari klik Admin sampai model
-            aktif di Cloudflare KV.
-          </p>
+    <main id="main" class="layout">
+      <section class="board" aria-label="Peta proses analisis">
+        <div class="board-toolbar">
+          <div class="board-title">
+            <span class="board-mark" aria-hidden="true">D</span>
+            <span class="board-title-text">
+              <strong>Analysis &amp; model pipeline</strong>
+              <small id="workflow-run-label">Menunggu data run</small>
+            </span>
+          </div>
+          <div class="board-tools" aria-label="Kontrol kanvas">
+            <span class="zoom" id="zoom-label">85%</span>
+            <button class="ctl" id="zoom-out" type="button" aria-label="Perkecil diagram">−</button>
+            <button class="ctl" id="zoom-in" type="button" aria-label="Perbesar diagram">+</button>
+            <button class="ctl" id="fit-flow" type="button">Awal alur</button>
+            <button class="ctl" id="reset-layout" type="button">Susun ulang</button>
+            <button
+              class="ctl ctl-output"
+              id="toggle-sidebar"
+              type="button"
+              aria-controls="runs-sidebar"
+              aria-expanded="true"
+            >
+              <span id="sidebar-toggle-label">Tutup output</span>
+              <span class="count" id="toolbar-run-count">0</span>
+            </button>
+          </div>
         </div>
-        <div class="updated">
-          <span>PEMBARUAN TERAKHIR</span><strong id="updated-at">—</strong>
+
+        <div
+          class="viewport"
+          id="flow-viewport"
+          tabindex="0"
+          aria-label="Kanvas alur. Gunakan Tab untuk memilih tahap, tombol panah untuk menggeser kanvas."
+        >
+          <div class="canvas-frame"><div class="canvas" id="flow-canvas"></div></div>
+        </div>
+
+        <div class="board-footer">
+          <span class="hint">Seret node untuk mengatur alur, geser kanvas untuk berpindah.</span>
+          <span class="board-meta">Diperbarui <strong id="updated-at">belum ada</strong></span>
+          <a href="https://daisuki.my.id/admin" target="_blank" rel="noreferrer">Buka dashboard admin</a>
         </div>
       </section>
 
-      <section class="services" aria-label="Status layanan">
-        <article class="service-card" data-service="web">
-          <div class="service-icon">↗</div>
-          <div class="service-body">
-            <span class="service-name">Web utama</span
-            ><a href="https://daisuki.my.id" target="_blank" rel="noreferrer"
-              >daisuki.my.id</a
-            >
+      <aside class="sidebar" id="runs-sidebar" aria-label="Output run analisis">
+        <section class="inspector" aria-live="polite">
+          <span class="inspector-indicator" id="inspector-indicator" aria-hidden="true"></span>
+          <div class="inspector-copy">
+            <span class="inspector-kicker" id="inspector-kicker">Detail tahap</span>
+            <strong id="inspector-title">Pilih tahap proses</strong>
+            <p id="inspector-description">Klik node pada kanvas untuk melihat tugas dan status tahap tersebut.</p>
           </div>
-          <span class="service-status pending" id="web-status">Memeriksa</span>
-        </article>
-        <article class="service-card" data-service="api">
-          <div class="service-icon">⌘</div>
-          <div class="service-body">
-            <span class="service-name">API backend</span
-            ><a
-              href="https://api.daisuki.my.id/v1/health"
-              target="_blank"
-              rel="noreferrer"
-              >api.daisuki.my.id</a
-            >
+          <div class="inspector-meta">
+            <span id="inspector-status">Belum dipilih</span>
+            <small id="inspector-run">Menunggu run</small>
           </div>
-          <span class="service-status pending" id="api-status">Memeriksa</span>
-        </article>
-        <article class="service-card" data-service="graph">
-          <div class="service-icon">⌗</div>
-          <div class="service-body">
-            <span class="service-name">System Graph</span
-            ><a
-              href="https://graph.daisuki.my.id/health"
-              target="_blank"
-              rel="noreferrer"
-              >graph.daisuki.my.id</a
-            >
-          </div>
-          <span class="service-status online" id="graph-status">Aktif</span>
-        </article>
-      </section>
+        </section>
 
-      <section class="workspace">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">PETA PROSES</p>
-            <h2>Jalur data sampai model</h2>
+        <section class="runs" aria-label="Daftar run analisis">
+          <div class="runs-head">
+            <h2>Run analisis</h2>
+            <span id="run-count" class="count">0</span>
           </div>
-          <span class="legend"
-            ><i class="legend-dot done"></i>Selesai
-            <i class="legend-dot active"></i>Berjalan
-            <i class="legend-dot idle"></i>Menunggu</span
-          >
-        </div>
-        <div class="flow-board" id="flow-board" aria-label="Diagram alur sistem">
-          <div class="flow-toolbar">
-            <div class="flow-toolbar-title"><span class="workflow-mark" aria-hidden="true">D</span><span><strong>Analysis &amp; model pipeline</strong><small id="workflow-run-label">Menunggu data run</small></span></div>
-            <div class="flow-tools" aria-label="Kontrol kanvas workflow"><span id="zoom-label">100%</span><button class="flow-control" id="zoom-out" type="button" aria-label="Perkecil diagram">−</button><button class="flow-control" id="zoom-in" type="button" aria-label="Perbesar diagram">+</button><button class="flow-control fit-control" id="fit-flow" type="button">Awal alur</button></div>
-          </div>
-          <div class="flow-viewport" id="flow-viewport" tabindex="0" aria-label="Kanvas workflow; geser untuk melihat semua node"><div class="flow-canvas" id="flow-canvas"></div></div>
-          <aside class="node-inspector" id="node-inspector" aria-live="polite"><span class="inspector-indicator" id="inspector-indicator" aria-hidden="true"></span><div class="inspector-copy"><span class="node-kicker" id="inspector-kicker">DETAIL NODE</span><strong id="inspector-title">Pilih tahap proses</strong><p id="inspector-description">Klik node pada kanvas untuk melihat tugas dan status tahap tersebut.</p></div><div class="inspector-meta"><span id="inspector-status">Belum dipilih</span><small id="inspector-run">Menunggu run</small></div></aside>
-          <div class="board-footer"><span>Geser kanvas untuk melihat node berikutnya. Klik node untuk detail.</span><a href="https://daisuki.my.id/admin" target="_blank" rel="noreferrer">Buka dashboard admin</a></div>
-        </div>
-      </section>
 
-      <section class="runs-section">
-        <div class="section-heading runs-heading">
-          <div>
-            <p class="eyebrow">NEON · ANALYSIS_RUNS</p>
-            <h2>Run analisis terbaru</h2>
-          </div>
-          <label class="run-filter"
-            >Tampilkan
-            <select id="run-filter" aria-label="Filter run">
+          <label class="filter">
+            <span>Status</span>
+            <select id="run-filter">
               <option value="all">Semua status</option>
               <option value="active">Sedang berjalan</option>
               <option value="published">Terbit</option>
               <option value="failed">Gagal</option>
-            </select></label
-          >
-        </div>
-        <div id="auth-notice" class="notice hidden" role="status">
-          <div>
-            <strong
-              >Masuk sebagai tim internal untuk melihat progres run.</strong
-            >
-            <p>
-              Sesi login Daisuki berlaku untuk domain API. Gunakan akun Admin,
-              Data Science, atau AI Engineer.
-            </p>
-          </div>
-          <a
-            href="https://daisuki.my.id/login?redirect=%2Fadmin"
-            target="_blank"
-            rel="noreferrer"
-            >Buka halaman login</a
-          >
-        </div>
-        <div id="error-notice" class="notice error hidden" role="alert"></div>
-        <div id="runs-list" class="runs-list" aria-live="polite">
-          <div class="empty-state">Menghubungkan ke API dan memuat run…</div>
-        </div>
-      </section>
+            </select>
+          </label>
 
-      <footer class="page-footer">
-        <span>Daisuki Inventory · status operasional</span
-        ><span>Auto-refresh setiap 5 detik saat halaman aktif</span>
-      </footer>
+          <div id="auth-notice" class="notice hidden" role="status">
+            <div>
+              <strong>Masuk untuk melihat output run.</strong>
+              <p>Gunakan akun Admin, Data Science, atau AI Engineer.</p>
+            </div>
+            <a href="https://daisuki.my.id/login?redirect=%2Fadmin" target="_blank" rel="noreferrer">Login</a>
+          </div>
+          <div id="error-notice" class="notice notice-error hidden" role="alert"></div>
+
+          <div id="runs-list" class="runs-list" aria-live="polite">
+            <div class="empty-state">Menghubungkan ke API dan memuat run.</div>
+          </div>
+        </section>
+      </aside>
     </main>
     <script type="module" src="/app.js"></script>
   </body>

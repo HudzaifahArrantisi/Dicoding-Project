@@ -11,7 +11,57 @@ let selectedRun = null;
 let timer;
 let selectedStage = "click";
 let manualNodeSelection = false;
-let flowZoom = 1;
+let flowZoom = 0.85;
+let dragState = null;
+let suppressNodeClick = false;
+
+const THEME_KEY = "daisuki-graph-theme";
+const layout = document.querySelector(".layout");
+const themeButton = el("theme");
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+
+function prefersLight() {
+  return window.matchMedia("(prefers-color-scheme: light)").matches;
+}
+
+function applyTheme(theme) {
+  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+
+  const isLight = document.documentElement.dataset.theme === "light" ||
+    (!document.documentElement.dataset.theme && prefersLight());
+
+  themeButton.setAttribute("aria-pressed", String(isLight));
+  themeButton.setAttribute("aria-label", isLight ? "Ganti ke tema gelap" : "Ganti ke tema terang");
+  if (themeMeta) themeMeta.setAttribute("content", isLight ? "#f2f4f7" : "#141a26");
+}
+
+function initTheme() {
+  let stored = null;
+  try {
+    stored = window.localStorage.getItem(THEME_KEY);
+  } catch {
+    stored = null;
+  }
+  applyTheme(stored);
+
+  themeButton.addEventListener("click", () => {
+    const next = themeButton.getAttribute("aria-pressed") === "true" ? "dark" : "light";
+    try {
+      window.localStorage.setItem(THEME_KEY, next);
+    } catch {
+      /* penyimpanan diblokir, tema tetap berlaku untuk sesi ini */
+    }
+    applyTheme(next);
+  });
+}
+
+function setSidebarCollapsed(collapsed) {
+  layout.classList.toggle("is-output-hidden", collapsed);
+  el("toggle-sidebar").setAttribute("aria-expanded", String(!collapsed));
+  el("sidebar-toggle-label").textContent = collapsed ? "Buka output" : "Tutup output";
+}
+
 
 const STAGE_INFO = {
   click: { lane: "Data Science", kicker: "PEMICU · ADMIN", title: "Perbarui analisis", summary: "Snapshot Senin sampai waktu klik", detail: "Admin meminta laporan baru. Sistem membatasi snapshot dari awal minggu berjalan sampai waktu permintaan." },
@@ -39,23 +89,144 @@ const AI_STAGES = ["training-click", "training-setup", "risk", "evaluation", "al
 
 function renderWorkflow() {
   const canvas = el("flow-canvas");
-  const renderLane = (number, title, subtitle, stages, extraClass = "") => {
-    const nodes = stages.map((key, index) => {
-      const info = STAGE_INFO[key];
-      const ports = `${index ? '<span class="node-port input-port" aria-hidden="true"></span>' : ""}${index < stages.length - 1 ? '<span class="node-port output-port" aria-hidden="true"></span>' : ""}`;
-      const node = `<button class="flow-node${index === 0 ? " trigger-node" : ""}" type="button" data-stage="${key}" aria-pressed="false"><span class="node-kicker">${info.kicker}</span><strong>${info.title}</strong><small>${info.summary}</small><span class="node-state">Menunggu</span>${ports}</button>`;
-      return index < stages.length - 1 ? `${node}<span class="connector" aria-hidden="true"></span>` : node;
-    }).join("");
-    return `<section class="flow-lane ${extraClass}" aria-label="${title} workflow"><div class="lane-label"><span>${number}</span><strong>${title}</strong><small>${subtitle}</small></div><div class="lane-nodes">${nodes}</div></section>`;
-  };
-  canvas.innerHTML = `${renderLane("01", "Data Science", "Log & Data", DATA_STAGES)}<div class="flow-bridge"><span class="bridge-route" aria-hidden="true"></span><strong>Run analisis yang sama diteruskan sebagai sumber AI Engineer</strong></div>${renderLane("02", "AI Engineer", "AI Insights", AI_STAGES, "ai-lane")}`;
+  const viewport = el("flow-viewport");
+  const addNodes = (stages, y, startX = 180, direction = 1) => stages.map((key, index) => {
+    const info = STAGE_INFO[key];
+    const x = startX + index * 125 * direction;
+    return `<button class="flow-node${index === 0 ? " trigger-node" : ""}" type="button" data-stage="${key}" data-x="${x}" data-y="${y}" data-origin-x="${x}" data-origin-y="${y}" style="left:${x}px;top:${y}px" aria-pressed="false" aria-label="${info.title}. ${info.summary}. Seret untuk memindahkan."><span class="node-kicker">${info.kicker}</span><strong>${info.title}</strong><small>${info.summary}</small><span class="node-state">Menunggu</span><span class="node-port input-port" aria-hidden="true"></span><span class="node-port output-port" aria-hidden="true"></span></button>`;
+  }).join("");
+  const aiTopRow = AI_STAGES.slice(0, 6);
+  const aiBottomRow = AI_STAGES.slice(6);
+  canvas.innerHTML = `<svg class="flow-wires" id="flow-wires" aria-hidden="true"></svg><div class="lane-label" style="left:24px;top:94px"><span>01</span><strong>Data Science</strong><small>Log &amp; Data</small></div><div class="lane-label" style="left:24px;top:334px"><span>02</span><strong>AI Engineer</strong><small>AI Insights</small></div>${addNodes(DATA_STAGES, 94)}${addNodes(aiTopRow, 334)}${addNodes(aiBottomRow, 534, 180, 1)}<div class="flow-canvas-note" style="left:24px;top:250px">Hasil Data Science jadi sumber training AI</div>`;
+  // The second AI row runs right-to-left to keep one continuous, readable path.
+  aiBottomRow.forEach((key, index) => {
+    const x = 180 + (aiBottomRow.length - 1 - index) * 125;
+    const node = canvas.querySelector(`[data-stage="${key}"]`);
+    node.dataset.x = String(x);
+    node.dataset.originX = String(x);
+    node.style.left = `${x}px`;
+  });
   canvas.querySelectorAll(".flow-node").forEach((node) => {
     node.addEventListener("click", () => {
+      if (suppressNodeClick) { suppressNodeClick = false; return; }
       manualNodeSelection = true;
       selectedStage = node.dataset.stage;
       updateInspector(selectedRun);
     });
+    node.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      dragState = { node, pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: Number(node.dataset.x), top: Number(node.dataset.y), moved: false };
+      node.setPointerCapture(event.pointerId);
+    });
+    node.addEventListener("pointermove", (event) => {
+      if (!dragState || dragState.node !== node || dragState.pointerId !== event.pointerId) return;
+      const dx = (event.clientX - dragState.x) / flowZoom;
+      const dy = (event.clientY - dragState.y) / flowZoom;
+      if (Math.abs(dx) + Math.abs(dy) > 3) dragState.moved = true;
+      if (!dragState.moved) return;
+      const maxX = canvas.clientWidth - node.offsetWidth;
+      const maxY = canvas.clientHeight - node.offsetHeight;
+      const left = Math.max(0, Math.min(maxX, dragState.left + dx));
+      const top = Math.max(0, Math.min(maxY, dragState.top + dy));
+      node.dataset.x = left;
+      node.dataset.y = top;
+      node.style.left = `${left}px`;
+      node.style.top = `${top}px`;
+      drawWires();
+    });
+    const finishDrag = (event) => {
+      if (!dragState || dragState.node !== node || dragState.pointerId !== event.pointerId) return;
+      suppressNodeClick = dragState.moved;
+      dragState = null;
+      if (suppressNodeClick) window.setTimeout(() => { suppressNodeClick = false; }, 0);
+    };
+    node.addEventListener("pointerup", finishDrag);
+    node.addEventListener("pointercancel", finishDrag);
   });
+  let pan = null;
+  viewport.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".flow-node") || event.button !== 0) return;
+    pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+    viewport.classList.add("is-panning");
+    viewport.setPointerCapture(event.pointerId);
+  });
+  viewport.addEventListener("pointermove", (event) => {
+    if (!pan || event.pointerId !== pan.pointerId) return;
+    viewport.scrollLeft = pan.left - (event.clientX - pan.x);
+    viewport.scrollTop = pan.top - (event.clientY - pan.y);
+  });
+  const finishPan = (event) => {
+    if (!pan || event.pointerId !== pan.pointerId) return;
+    pan = null;
+    viewport.classList.remove("is-panning");
+  };
+  viewport.addEventListener("pointerup", finishPan);
+  viewport.addEventListener("pointercancel", finishPan);
+  viewport.addEventListener("keydown", (event) => {
+    const step = 80;
+    const moves = {
+      ArrowLeft: { left: -step, top: 0 },
+      ArrowRight: { left: step, top: 0 },
+      ArrowUp: { left: 0, top: -step },
+      ArrowDown: { left: 0, top: step },
+    };
+    const move = moves[event.key];
+    if (!move) return;
+    event.preventDefault();
+    viewport.scrollBy(move);
+  });
+  el("reset-layout").addEventListener("click", () => {
+    canvas.querySelectorAll(".flow-node").forEach((node) => {
+      node.dataset.x = node.dataset.originX;
+      node.dataset.y = node.dataset.originY;
+      node.style.left = `${node.dataset.originX}px`;
+      node.style.top = `${node.dataset.originY}px`;
+    });
+    drawWires();
+    viewport.scrollTo({ left: 0, top: 0, behavior: "smooth" });
+  });
+  drawWires();
+}
+
+function drawWires() {
+  const svg = el("flow-wires");
+  if (!svg) return;
+  const paths = [];
+  const connect = (keys, className = "") => keys.slice(0, -1).forEach((key, index) => {
+    const from = document.querySelector(`[data-stage="${key}"]`);
+    const to = document.querySelector(`[data-stage="${keys[index + 1]}"]`);
+    if (!from || !to) return;
+    const fx = Number(from.dataset.x);
+    const fy = Number(from.dataset.y);
+    const tx = Number(to.dataset.x);
+    const ty = Number(to.dataset.y);
+    // Baris kedua AI berjalan kanan ke kiri, jadi sisi keluar/masuk port mengikuti arah alur.
+    const forward = tx >= fx;
+    const x1 = forward ? fx + from.offsetWidth : fx;
+    const x2 = forward ? tx : tx + to.offsetWidth;
+    const y1 = fy + from.offsetHeight / 2;
+    const y2 = ty + to.offsetHeight / 2;
+    const bend = Math.max(28, Math.abs(x2 - x1) * 0.45) * (forward ? 1 : -1);
+    const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
+    const state = from.classList.contains("done") && to.classList.contains("done") ? "done" : from.classList.contains("done") && (to.classList.contains("active") || to.classList.contains("ready")) ? "active" : "";
+    const arrow = state || "idle";
+    paths.push(`<path class="wire ${state} ${className}" d="${d}" marker-end="url(#wire-arrow-${arrow})"/>`);
+  });
+  connect(DATA_STAGES);
+  connect(AI_STAGES);
+  const lastData = document.querySelector(`[data-stage="artifacts"]`);
+  const firstAi = document.querySelector(`[data-stage="training-click"]`);
+  if (lastData && firstAi) {
+    const x1 = Number(lastData.dataset.x) + lastData.offsetWidth / 2;
+    const y1 = Number(lastData.dataset.y) + lastData.offsetHeight;
+    const x2 = Number(firstAi.dataset.x) + firstAi.offsetWidth / 2;
+    const y2 = Number(firstAi.dataset.y);
+    paths.push(`<path class="wire bridge-wire" d="M ${x1} ${y1} C ${x1} ${y1 + 90}, ${x2} ${y2 - 90}, ${x2} ${y2}" marker-end="url(#wire-arrow-idle)"/>`);
+  }
+  const marker = (id, color) =>
+    `<marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="${color}"/></marker>`;
+  svg.innerHTML =
+    `<defs>${marker("wire-arrow-idle", "var(--wire)")}${marker("wire-arrow-done", "var(--wire-done)")}${marker("wire-arrow-active", "var(--wire-active)")}</defs>${paths.join("")}`;
 }
 
 const stepStage = (label = "") => {
@@ -108,7 +279,6 @@ function paintFlow(run) {
     node.classList.remove("done", "active", "failed", "ready");
     node.querySelector(".node-state").textContent = "Menunggu";
   });
-  document.querySelectorAll(".connector").forEach((line) => line.classList.remove("done", "active"));
   if (!run) {
     el("workflow-run-label").textContent = "Belum ada run analisis";
     updateInspector(null);
@@ -153,21 +323,11 @@ function paintFlow(run) {
     if (status === "failed" && !steps.some((item) => item.status === "failed")) setNode(isTrain ? "training-setup" : "analytics", "failed");
   }
 
-  for (const path of [DATA_STAGES, AI_STAGES]) {
-    path.slice(0, -1).forEach((key, index) => {
-      const node = document.querySelector(`[data-stage="${key}"]`);
-      const line = node?.nextElementSibling;
-      const next = document.querySelector(`[data-stage="${path[index + 1]}"]`);
-      if (!line?.classList.contains("connector") || !next) return;
-      if (node.classList.contains("done") && next.classList.contains("done")) line.classList.add("done");
-      else if (node.classList.contains("done") && (next.classList.contains("active") || next.classList.contains("ready"))) line.classList.add("active");
-    });
-  }
-
   if (!manualNodeSelection) {
     const next = document.querySelector(".flow-node.active, .flow-node.ready, .flow-node.failed");
     selectedStage = next?.dataset.stage ?? "click";
   }
+  drawWires();
   updateInspector(run);
 }
 function statusLabel(status) {
@@ -193,7 +353,7 @@ function stepClass(status) {
         : "";
 }
 function formatDate(value) {
-  if (!value) return "—";
+  if (!value) return "belum ada";
   return new Intl.DateTimeFormat("id-ID", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -233,12 +393,14 @@ function matchesFilter(run, filter) {
 function renderRuns() {
   const filter = el("run-filter").value;
   const runs = latestRuns.filter((run) => matchesFilter(run, filter));
+  el("run-count").textContent = String(runs.length);
+  el("toolbar-run-count").textContent = String(runs.length);
   if (!runs.length) {
     el("runs-list").innerHTML =
       '<div class="empty-state">Belum ada run pada filter ini.</div>';
     return;
   }
-  el("runs-list").innerHTML = runs
+  el("runs-list").innerHTML = runs.slice(0, 10)
     .map((run) => {
       const steps = runSteps(run);
       const range = `${run.start_date} → ${run.end_date}`;
@@ -253,7 +415,7 @@ function renderRuns() {
       ].includes(run.status)
         ? run.status
         : "unknown";
-      return `<article class="run-card"><header class="run-header"><i class="run-state ${state}" aria-hidden="true"></i><div class="run-title"><strong>${escapeHtml(range)}</strong><span>${escapeHtml(run.id)}</span></div><span class="run-badge ${state}">${escapeHtml(statusLabel(run.status))}</span><span class="run-meta">${escapeHtml(formatDate(run.created_at))}</span></header><div class="run-details"><div class="run-progress" aria-label="Tahapan proses">${steps.map((step) => `<span class="step ${stepClass(step.status)}"><i aria-hidden="true"></i><span class="step-label">${escapeHtml(step.label)}</span></span>`).join("")}</div><div class="run-foot"><span>${run.current_step ? `Sedang: ${escapeHtml(run.current_step)}` : run.status === "failed" ? "Runner mencatat kegagalan. Lihat log workflow untuk detail." : `Periode snapshot: ${escapeHtml(range)}`}</span><a href="${GITHUB_WORKFLOW}" target="_blank" rel="noreferrer">Buka GitHub Actions ↗</a></div></div></article>`;
+      return `<details class="run-card"><summary class="run-header"><i class="run-state ${state}" aria-hidden="true"></i><div class="run-title"><strong>${escapeHtml(range)}</strong><span>${escapeHtml(run.id.slice(0, 8))} · ${escapeHtml(formatDate(run.created_at))}</span></div><span class="run-badge ${state}">${escapeHtml(statusLabel(run.status))}</span></summary><div class="run-details"><div class="run-progress" aria-label="Tahapan proses">${steps.map((step) => `<span class="step ${stepClass(step.status)}"><i aria-hidden="true"></i><span class="step-label">${escapeHtml(step.label)}</span></span>`).join("")}</div><div class="run-foot"><span>${run.current_step ? `Sedang: ${escapeHtml(run.current_step)}` : run.status === "failed" ? "Runner gagal. Buka log workflow untuk detail." : `Periode snapshot: ${escapeHtml(range)}`}</span><a href="${GITHUB_WORKFLOW}" target="_blank" rel="noreferrer">Buka GitHub Actions</a></div></div></details>`;
     })
     .join("");
 }
@@ -268,17 +430,17 @@ function escapeHtml(value) {
 }
 
 async function checkServices() {
-  const setStatus = (id, label, state) => {
-    el(id).textContent = label;
-    el(id).className = `service-status ${state}`;
+  const setStatus = (svcId, stateId, label, tone) => {
+    el(stateId).textContent = label;
+    el(svcId).dataset.tone = tone;
   };
   const front = fetch("https://daisuki.my.id/", {
     method: "HEAD",
     mode: "no-cors",
     cache: "no-store",
   })
-    .then(() => setStatus("web-status", "Terjangkau", "online"))
-    .catch(() => setStatus("web-status", "Tidak terjangkau", "offline"));
+    .then(() => setStatus("svc-web", "web-status", "Terjangkau", "ok"))
+    .catch(() => setStatus("svc-web", "web-status", "Terputus", "crit"));
   const api = fetch(`${API}/health`, {
     credentials: "include",
     cache: "no-store",
@@ -287,14 +449,21 @@ async function checkServices() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json();
     })
-    .then(() => setStatus("api-status", "Aktif", "online"))
-    .catch(() => setStatus("api-status", "Gangguan", "offline"));
+    .then(() => setStatus("svc-api", "api-status", "Aktif", "ok"))
+    .catch(() => setStatus("svc-api", "api-status", "Gangguan", "crit"));
   await Promise.all([front, api]);
+}
+
+function setLive(label, tone) {
+  const live = el("live-label");
+  live.textContent = label;
+  if (tone) live.dataset.tone = tone;
+  else delete live.dataset.tone;
 }
 
 async function refresh() {
   if (document.hidden) return;
-  el("live-label").textContent = "Memperbarui…";
+  setLive("Memperbarui", "warn");
   try {
     const response = await fetch(`${API}/analysis/graph/status`, {
       credentials: "include",
@@ -306,8 +475,7 @@ async function refresh() {
       latestRuns = [];
       paintFlow(null);
       renderRuns();
-      el("live-label").textContent =
-        response.status === 401 ? "Perlu login" : "Akses ditolak";
+      setLive(response.status === 401 ? "Perlu login" : "Akses ditolak", "warn");
     } else if (!response.ok)
       throw new Error(`API mengembalikan HTTP ${response.status}`);
     else {
@@ -321,13 +489,14 @@ async function refresh() {
         ) ?? latestRuns[0];
       paintFlow(selected);
       renderRuns();
-      el("live-label").textContent = data.viewer_role
-        ? `Live · ${data.viewer_role}`
-        : "Live";
+      setLive(
+        data.viewer_role ? `Live · ${data.viewer_role}` : "Live",
+        "ok",
+      );
       el("updated-at").textContent = formatDate(data.server_time);
     }
   } catch (error) {
-    el("live-label").textContent = "Koneksi terputus";
+    setLive("Koneksi terputus", "warn");
     el("error-notice").textContent =
       error instanceof Error ? error.message : "Gagal menghubungi API";
     el("error-notice").classList.remove("hidden");
@@ -337,15 +506,18 @@ async function refresh() {
   }
 }
 
+initTheme();
 el("run-filter").addEventListener("change", renderRuns);
 renderWorkflow();
 updateInspector(null);
+if (window.matchMedia("(max-width: 860px)").matches) setSidebarCollapsed(true);
 const applyZoom = () => {
-  el("flow-canvas").style.setProperty("--flow-zoom", String(flowZoom));
+  el("flow-viewport").style.setProperty("--flow-zoom", String(flowZoom));
   el("zoom-label").textContent = `${Math.round(flowZoom * 100)}%`;
 };
+applyZoom();
 el("zoom-out").addEventListener("click", () => {
-  flowZoom = Math.max(0.7, Math.round((flowZoom - 0.1) * 10) / 10);
+  flowZoom = Math.max(0.5, Math.round((flowZoom - 0.1) * 10) / 10);
   applyZoom();
 });
 el("zoom-in").addEventListener("click", () => {
@@ -354,6 +526,9 @@ el("zoom-in").addEventListener("click", () => {
 });
 el("fit-flow").addEventListener("click", () => {
   el("flow-viewport").scrollTo({ left: 0, top: 0, behavior: "smooth" });
+});
+el("toggle-sidebar").addEventListener("click", () => {
+  setSidebarCollapsed(!layout.classList.contains("is-output-hidden"));
 });
 el("refresh").addEventListener("click", () => {
   void checkServices();
