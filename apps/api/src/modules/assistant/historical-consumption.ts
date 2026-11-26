@@ -7,6 +7,13 @@ export function requestedHistoricalDays(message: string, now = new Date()): stri
   const found = new Set<string>();
   for (const match of message.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) found.add(match[0]);
   const wibYear = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jakarta", year: "numeric" }).format(now));
+  const sharedMonth = new RegExp(`\\b(\\d{1,2})\\s*(?:dan|&|,|serta)\\s*(\\d{1,2})\\s+(${monthPattern})(?:\\s+(\\d{4}))?\\b`, "g");
+  for (const match of message.toLowerCase().matchAll(sharedMonth)) {
+    const monthIndex = months.findIndex((month) => month.startsWith(match[3]));
+    const prefix = `${match[4] ?? wibYear}-${String(monthIndex + 1).padStart(2, "0")}-`;
+    found.add(`${prefix}${match[1].padStart(2, "0")}`);
+    found.add(`${prefix}${match[2].padStart(2, "0")}`);
+  }
   for (const match of message.toLowerCase().matchAll(new RegExp(`\\b(\\d{1,2})\\s+(${monthPattern})(?:\\s+(\\d{4}))?\\b`, "g"))) {
     const monthIndex = months.findIndex((month) => month.startsWith(match[2]));
     found.add(`${match[3] ?? wibYear}-${String(monthIndex + 1).padStart(2, "0")}-${match[1].padStart(2, "0")}`);
@@ -106,9 +113,29 @@ export function historicalTopReply(message: string, days: HistoricalDay[]): stri
 
 export function historicalComparisonReply(message: string, days: HistoricalDay[]): string | null {
   if (days.length !== 2 || !/banding|perbandingan|selisih|perubahan/i.test(message)
-    || !/konsumsi|stok|stock|terjual/i.test(message)
-    || (/mitra|cabang/i.test(message) && !/semua|seluruh|jaringan/i.test(message))) return null;
+    || !/konsumsi|stok|stock|terjual|keluar/i.test(message)) return null;
   const [first, second] = [...days].sort((a, b) => a.day.localeCompare(b.day));
+  const normalizedMessage = message.toLocaleLowerCase("id-ID");
+  const partner = [...new Set([...first.partners, ...second.partners].map((row) => row.name))]
+    .sort((a, b) => b.length - a.length)
+    .find((name) => {
+      const escaped = name.toLocaleLowerCase("id-ID").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, "u").test(normalizedMessage);
+    });
+  if (partner) {
+    const firstRow = first.partners.find((row) => row.name.toLocaleLowerCase("id-ID") === partner.toLocaleLowerCase("id-ID"));
+    const secondRow = second.partners.find((row) => row.name.toLocaleLowerCase("id-ID") === partner.toLocaleLowerCase("id-ID"));
+    if (!firstRow || !secondRow) {
+      const available = firstRow ?? secondRow;
+      const availableDay = firstRow ? first.day : second.day;
+      const missingDay = firstRow ? second.day : first.day;
+      return `Untuk **${partner}**, ${availableDay} tercatat **${available?.units.toLocaleString("id-ID")} pcs** keluar dari ${available?.log_count} log. Pada ${missingDay} tidak ada log penurunan stok; selisih kedua tanggal belum dapat dihitung dari catatan yang tersedia.`;
+    }
+    const difference = secondRow.units - firstRow.units;
+    const higher = difference > 0 ? second.day : difference < 0 ? first.day : "sama";
+    return `Stok keluar **${partner}**: ${first.day} **${firstRow.units.toLocaleString("id-ID")} pcs** (${firstRow.log_count} log), ${second.day} **${secondRow.units.toLocaleString("id-ID")} pcs** (${secondRow.log_count} log). ${higher === "sama" ? "Keduanya sama." : `${higher} lebih tinggi **${Math.abs(difference).toLocaleString("id-ID")} pcs**.`}`;
+  }
+  if (/\bmitra\b|\bcabang\b/i.test(message) && !/semua|seluruh|jaringan/i.test(message)) return null;
   if (!first.partners.length || !second.partners.length) return null;
   const difference = second.total_units - first.total_units;
   const direction = difference > 0 ? "naik" : difference < 0 ? "turun" : "tetap";

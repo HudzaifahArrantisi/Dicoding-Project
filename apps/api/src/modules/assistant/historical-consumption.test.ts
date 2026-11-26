@@ -10,6 +10,8 @@ describe("historical consumption", () => {
     expect(requestedHistoricalDays("konsumsi 20 november", now)).toEqual(["2026-11-20"]);
     expect(requestedHistoricalDays("bandingkan 1 oktober 2025 dan 20 november 2026", now))
       .toEqual(["2025-10-01", "2026-11-20"]);
+    expect(requestedHistoricalDays("Bandingkan stok Kafe Langit Tangerang pada 18 dan 20 November 2026", now))
+      .toEqual(["2026-11-18", "2026-11-20"]);
   });
 
   it("menjawab mitra teratas dari fakta harian, bukan ringkasan mingguan", () => {
@@ -28,6 +30,17 @@ describe("historical consumption", () => {
       { day: "2026-11-21", total_units: 75, log_count: 8, partners: [{ name: "A", units: 75, log_count: 8 }] },
     ]);
     expect(reply).toContain("turun **25 pcs**");
+  });
+
+  it("membandingkan mitra yang disebut dan tidak menganggap tanggal tanpa log sebagai nol", () => {
+    const first = { day: "2026-11-18", total_units: 100, log_count: 10,
+      partners: [{ name: "Kafe Langit Tangerang", units: 15, log_count: 3 }, { name: "Kafe Lain", units: 85, log_count: 7 }] };
+    const second = { day: "2026-11-20", total_units: 120, log_count: 12,
+      partners: [{ name: "Kafe Langit Tangerang", units: 22, log_count: 4 }, { name: "Kafe Lain", units: 98, log_count: 8 }] };
+    const question = "Bandingkan stok yang keluar di Kafe Langit Tangerang pada 18 dan 20 November 2026. Tanggal mana yang lebih tinggi, dan berapa selisihnya?";
+    expect(historicalComparisonReply(question, [first, second])).toContain("2026-11-20 lebih tinggi **7 pcs**");
+    expect(historicalComparisonReply(question, [first, { ...second, partners: [] }]))
+      .toContain("Pada 2026-11-20 tidak ada log penurunan stok");
   });
 
   it("membaca shard tanggal dari KV dengan batas akses mitra", () => {

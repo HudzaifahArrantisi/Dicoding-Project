@@ -166,6 +166,9 @@ daisuki-inventory/
 
 ## Catatan Perubahan Harian (Daily Changelog)
 
+### 2026-11-27
+- **Perbandingan harian Chat Admin per mitra**: Parser membaca `18 dan 20 November 2026` sebagai dua tanggal. Jawaban perbandingan untuk nama mitra yang disebut dihitung langsung dari log Neon, dengan jumlah dan selisih pcs; tanggal tanpa log tidak dianggap nol. Uji Bun dan typecheck API lulus.
+
 ### 2026-11-26
 - **RAG historis dan stok real time untuk Admin dan Mitra di API Worker**: Chat Admin membaca konsumsi harian dan log mitra hingga menit WIB dari Neon; Chat Mitra hanya membaca log dan arsip cabangnya sendiri berdasarkan JWT. Pertanyaan periode lama mengambil artefak run terbit dari Neon jika indeks model belum memuatnya. Training berikutnya menggabungkan kembali periode terbit ke `daisuki.pkl`, menjaga indeks lama saat training referensi mentah, dan mengekspor indeks historis berversi per periode ke Cloudflare KV agar tiap nilai di bawah 25 MiB. Agregator menyimpan konsumsi per mitra per hari untuk run baru. Typecheck API, uji RAG Bun, uji indeks Python, query Neon, dan dry-run Worker lulus.
 - **Satu pipeline deploy untuk tiga Worker**: Menghapus `.github/workflows/deploy-api.yml` dan `deploy-graph.yml`, lalu menggantinya dengan `.github/workflows/deploy.yml` yang berjalan pada setiap push ke `main` tanpa filter path. Workflow memuat tiga job paralel — `daisuki-api` (typecheck lalu deploy), `daisuki-graph` (aset statik `apps/graph/public`), dan `daisuki-inventory` (`bun run build` dari `apps/web/.env.production` lalu deploy) — sehingga `git add . && git commit && git push` menerbitkan ketiganya sekaligus dan kegagalan satu Worker tidak membatalkan yang lain. Cloudflare Workers Builds untuk `daisuki-inventory` harus dinonaktifkan agar tidak bentrok dengan deploy web dari Actions; `docs/DEPLOY_AUTO.md` diperbarui dengan tabel job, langkah DNS `graph` (AAAA `100::` proxied), dan catatan DNS/route.
