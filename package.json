@@ -6,9 +6,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun scripts/banner.ts && bun run --cwd apps/web dev",
+    "dev": "bun scripts/banner.ts && bun run --cwd apps/web concurrently -n api,web,graph -c green,cyan,magenta \"bun run --cwd ../api dev\" \"bun run dev:web\" \"bun run --cwd ../graph dev\"",
     "dev:web": "bun run --cwd apps/web dev:web",
-    "dev:api": "bun scripts/banner.ts && bun run --cwd apps/api dev",
+    "dev:api": "bun scripts/banner.ts --api-only && bun run --cwd apps/api dev",
+    "dev:graph": "bun run --cwd apps/graph dev",
     "qa:api": "bun scripts/qa-api.ts",
     "seed": "bun run --cwd apps/api seed",
     "ai:naive-bayes": "python ai/jobs/regional_stockout_naive_bayes.py",

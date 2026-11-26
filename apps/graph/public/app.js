@@ -1,4 +1,7 @@
 const localHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const WEB_ORIGIN = localHost
+  ? `http://${window.location.hostname}:3000`
+  : "https://daisuki.my.id";
 const API = localHost
   ? `http://${window.location.hostname}:3001/v1`
   : "https://api.daisuki.my.id/v1";
@@ -8,7 +11,9 @@ const REFRESH_MS = 5000;
 const el = (id) => document.getElementById(id);
 let latestRuns = [];
 let selectedRun = null;
-let timer;
+let timer = null;
+let refreshInFlight = false;
+let authBlocked = false;
 let selectedStage = "click";
 let manualNodeSelection = false;
 let flowZoom = 0.85;
@@ -434,7 +439,7 @@ async function checkServices() {
     el(stateId).textContent = label;
     el(svcId).dataset.tone = tone;
   };
-  const front = fetch("https://daisuki.my.id/", {
+  const front = fetch(`${WEB_ORIGIN}/`, {
     method: "HEAD",
     mode: "no-cors",
     cache: "no-store",
@@ -461,8 +466,22 @@ function setLive(label, tone) {
   else delete live.dataset.tone;
 }
 
+function startPolling() {
+  if (timer) return;
+  timer = setInterval(() => {
+    void refresh();
+  }, REFRESH_MS);
+}
+
+function stopPolling() {
+  if (!timer) return;
+  clearInterval(timer);
+  timer = null;
+}
+
 async function refresh() {
-  if (document.hidden) return;
+  if (document.hidden || refreshInFlight) return;
+  refreshInFlight = true;
   setLive("Memperbarui", "warn");
   try {
     const response = await fetch(`${API}/analysis/graph/status`, {
@@ -470,6 +489,8 @@ async function refresh() {
       cache: "no-store",
     });
     if (response.status === 401 || response.status === 403) {
+      authBlocked = true;
+      stopPolling();
       el("auth-notice").classList.remove("hidden");
       el("error-notice").classList.add("hidden");
       latestRuns = [];
@@ -480,6 +501,7 @@ async function refresh() {
       throw new Error(`API mengembalikan HTTP ${response.status}`);
     else {
       const data = await response.json();
+      authBlocked = false;
       el("auth-notice").classList.add("hidden");
       el("error-notice").classList.add("hidden");
       latestRuns = data.runs ?? [];
@@ -494,8 +516,10 @@ async function refresh() {
         "ok",
       );
       el("updated-at").textContent = formatDate(data.server_time);
+      startPolling();
     }
   } catch (error) {
+    authBlocked = false;
     setLive("Koneksi terputus", "warn");
     el("error-notice").textContent =
       error instanceof Error ? error.message : "Gagal menghubungi API";
@@ -503,9 +527,18 @@ async function refresh() {
     if (!latestRuns.length)
       el("runs-list").innerHTML =
         '<div class="empty-state">Status run belum dapat diambil. Coba segarkan lagi.</div>';
+    startPolling();
+  } finally {
+    refreshInFlight = false;
   }
 }
 
+if (localHost) {
+  document.querySelectorAll('a[href^="https://daisuki.my.id"]').forEach((link) => {
+    const href = link.getAttribute("href");
+    if (href) link.setAttribute("href", href.replace("https://daisuki.my.id", WEB_ORIGIN));
+  });
+}
 initTheme();
 el("run-filter").addEventListener("change", renderRuns);
 renderWorkflow();
@@ -540,11 +573,13 @@ document.addEventListener("visibilitychange", () => {
     void refresh();
   }
 });
+window.addEventListener("focus", () => {
+  if (authBlocked && !document.hidden) {
+    void refresh();
+  }
+});
 void checkServices();
 void refresh();
-timer = setInterval(() => {
-  void refresh();
-}, REFRESH_MS);
 setInterval(() => {
   if (!document.hidden) void checkServices();
 }, 30000);

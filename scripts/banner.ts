@@ -41,16 +41,22 @@ const bannerLines = [
   `${blue1}  ╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝${reset}`,
 ]
 
-export function printServerBanner() {
+export function printServerBanner(apiOnly = false) {
   console.log()
   console.log(bannerLines.join('\n'))
   console.log()
   console.log(`  ${green}●${reset} ${bold}SERVER STATUS${reset} : ${green}${bold}ONLINE${reset} ${dim}(Development Environment)${reset}`)
-  console.log(`  ${cyan1}➜${reset} ${bold}Frontend Web${reset}  : ${cyan1}http://localhost:3000${reset}`)
+  if (!apiOnly) {
+    console.log(`  ${cyan1}➜${reset} ${bold}Frontend Web${reset}  : ${cyan1}http://localhost:3000${reset}`)
+  }
   console.log(`  ${cyan1}➜${reset} ${bold}Backend API${reset}   : ${cyan1}http://localhost:3001${reset}`)
+  if (!apiOnly) {
+    console.log(`  ${cyan1}➜${reset} ${bold}System Graph${reset}  : ${cyan1}http://localhost:8787${reset}`)
+  }
+  console.log(`  ${cyan1}➜${reset} ${bold}Python Model${reset}  : ${cyan1}daisuki.pkl (via API worker)${reset}`)
   console.log(`  ${dim}──────────────────────────────────────────────────────────${reset}\n`)
 }
 
 if (import.meta.main) {
-  printServerBanner()
+  printServerBanner(process.argv.includes('--api-only'))
 }

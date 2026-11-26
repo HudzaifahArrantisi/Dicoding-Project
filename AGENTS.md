@@ -109,9 +109,10 @@ Gunakan **strictly [Bun](https://bun.sh/)** untuk semua operasi JS/TS (jangan gu
 
 ```bash
 bun install                 # Pasang seluruh dependensi workspace
-bun run dev                 # Jalankan Web (port 3000) dan API (port 3001) bersamaan
+bun run dev                 # Jalankan Web (3000), API + Python daisuki.pkl (3001), dan Graph (8787) bersamaan
 bun run dev:web             # Jalankan hanya frontend web
 bun run dev:api             # Jalankan hanya backend API
+bun run dev:graph           # Jalankan hanya dashboard Graph (8787)
 bun run typecheck           # Pemeriksaan tipe TypeScript di seluruh workspace
 bun --cwd apps/web run lint # Linting frontend web
 bun --cwd apps/web run build# Build production bundle frontend
@@ -166,6 +167,10 @@ Before starting, ask the user when antislop applies: during the work, or after i
    - Setiap kali selesai melakukan perbaikan bug, penambahan fitur, atau refaktor kode, catat ringkasan perubahannya ke seksi ini di [AGENTS.md](AGENTS.md) dan [CLAUDE.md](CLAUDE.md) dengan tanggal hari pengerjaan (`YYYY-MM-DD`).
 
 ### Catatan Perubahan Harian (Daily Changelog)
+
+#### 2026-11-26
+- **Hentikan polling loop 401/403 pada Dashboard Graph (`apps/graph`)**: Memperbaiki `apps/graph/public/app.js` agar menghentikan `setInterval` 5 detik saat `/v1/analysis/graph/status` mengembalikan `401`/`403` (sesi belum login atau kedaluwarsa) serta mencegah request bertumpuk (`refreshInFlight`), lalu melanjutkan polling otomatis ketika pengguna kembali fokus ke tab atau menekan tombol segarkan setelah login. Tautan login/admin dan cek `svc-web` pada preview lokal kini diarahkan ke `http://localhost:3000` (dengan izin `connect-src` port 3000 khusus mode dev di `apps/graph/src/index.ts`).
+- **Integrasi Graph lokal (`localhost:8787`) ke `bun run dev` root**: Memperbarui skrip `dev` di [package.json](package.json) root agar menjalankan `api` (port 3001 beserta worker Python `daisuki.pkl`), `web` (port 3000), dan `graph` (port 8787) secara bersamaan melalui `concurrently`. Menambahkan skrip `dev:graph` di root, flag `--port 8787` di [apps/graph/package.json](apps/graph/package.json), serta pembaruan info Graph dan Python model di [scripts/banner.ts](scripts/banner.ts) dan dokumentasi terkait.
 
 #### 2026-11-25
 - **Dashboard System Graph di `graph.daisuki.my.id`**: Menambahkan static Cloudflare Worker `daisuki-graph` untuk memantau keterjangkauan web, health API, serta run analisis dan training dari endpoint terautentikasi. Diagram memetakan klik Admin → API → Neon → GitHub Actions → Python → artefak → ekspor model → KV → AI Insights. Endpoint baru hanya mengizinkan Admin, Data Science, dan AI Engineer serta tidak mengembalikan teks error runner mentah. Runner kini menyimpan tahapan agregasi, penyimpanan artefak, persiapan training, tujuh job, ekspor, publikasi KV, dan penerbitan hasil ke `analysis_runs`; dashboard refresh tiap 5 detik. Ditambahkan workflow deploy Graph untuk push `main` pada `apps/graph/**`, konfigurasi CORS `GRAPH_ORIGIN`, dan panduan setup DNS/deploy di `docs/GRAPH_DASHBOARD.md`. Preview `localhost` kini diarahkan ke API lokal port 3001. Typecheck API lulus; Wrangler dry-run berhasil memuat 4 berkas asset. Deploy dan verifikasi browser production belum dilakukan.

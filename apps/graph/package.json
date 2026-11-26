@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bunx wrangler@4.95.0 dev --var GRAPH_LOCAL_API:true --config wrangler.jsonc",
+    "dev": "bunx wrangler@4.95.0 dev --port 8787 --var GRAPH_LOCAL_API:true --config wrangler.jsonc",
     "deploy": "bunx wrangler@4.95.0 deploy --config wrangler.jsonc"
   }
 }

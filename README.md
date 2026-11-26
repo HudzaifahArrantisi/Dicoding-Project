@@ -299,9 +299,10 @@ Aplikasi siap diakses di browser:
 
 | Perintah | Keterangan |
 |---|---|
-| `bun run dev` | Menjalankan Web (port 3000) & API (port 3001) secara bersamaan |
+| `bun run dev` | Menjalankan Web (port 3000), API + worker Python `daisuki.pkl` (port 3001), & Dashboard Graph (port 8787) secara bersamaan |
 | `bun run dev:web` | Menjalankan hanya Frontend web |
-| `bun run dev:api` | Menjalankan hanya Backend API |
+| `bun run dev:api` | Menjalankan hanya Backend API & worker Python `daisuki.pkl` |
+| `bun run dev:graph` | Menjalankan hanya Dashboard Graph (port 8787) |
 | `bun run typecheck` | Pemeriksaan tipe TypeScript di seluruh workspace |
 | `bun --cwd apps/web run lint` | Menjalankan ESLint pada frontend |
 | `bun --cwd apps/web run build` | Build production frontend |
