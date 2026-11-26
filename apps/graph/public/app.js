@@ -8,22 +8,32 @@ const API = localHost
 const GITHUB_WORKFLOW =
   "https://github.com/HudzaifahArrantisi/Dicoding-Project/actions/workflows/analysis-pipeline.yml";
 const REFRESH_MS = 5000;
+const CANVAS_WIDTH = 1120;
+const CANVAS_HEIGHT = 690;
+const DESKTOP_MQ = window.matchMedia("(min-width: 1080px)");
+const MOBILE_MQ = window.matchMedia("(max-width: 640px)");
+const COARSE_POINTER_MQ = window.matchMedia("(pointer: coarse)");
+
 const el = (id) => document.getElementById(id);
 let latestRuns = [];
 let selectedRun = null;
+let manualRunId = null;
 let timer = null;
 let refreshInFlight = false;
 let authBlocked = false;
 let selectedStage = "click";
 let manualNodeSelection = false;
 let flowZoom = 0.85;
+let manualZoom = false;
 let dragState = null;
 let suppressNodeClick = false;
+let desktopSidebarPreferredHidden = false;
 
 const THEME_KEY = "daisuki-graph-theme";
 const layout = document.querySelector(".layout");
 const themeButton = el("theme");
 const themeMeta = document.querySelector('meta[name="theme-color"]');
+const drawerBackdrop = el("drawer-backdrop");
 
 function prefersLight() {
   return window.matchMedia("(prefers-color-scheme: light)").matches;
@@ -61,12 +71,77 @@ function initTheme() {
   });
 }
 
-function setSidebarCollapsed(collapsed) {
-  layout.classList.toggle("is-output-hidden", collapsed);
-  el("toggle-sidebar").setAttribute("aria-expanded", String(!collapsed));
-  el("sidebar-toggle-label").textContent = collapsed ? "Buka output" : "Tutup output";
+function isDrawerMode() {
+  return !DESKTOP_MQ.matches && !MOBILE_MQ.matches;
 }
 
+function setSidebarCollapsed(collapsed, { rememberDesktop = false } = {}) {
+  if (rememberDesktop && DESKTOP_MQ.matches) {
+    desktopSidebarPreferredHidden = collapsed;
+  }
+  layout.classList.toggle("is-output-hidden", collapsed);
+  const toggleBtn = el("toggle-sidebar");
+  toggleBtn.setAttribute("aria-expanded", String(!collapsed));
+  el("sidebar-toggle-label").textContent = collapsed ? "Buka output" : "Tutup output";
+  if (drawerBackdrop) {
+    drawerBackdrop.classList.toggle("hidden", collapsed || !isDrawerMode());
+  }
+}
+
+function setMobileView(view) {
+  const next = view === "runs" ? "runs" : "flow";
+  layout.dataset.mobileView = next;
+  el("tab-flow").setAttribute("aria-selected", String(next === "flow"));
+  el("tab-runs").setAttribute("aria-selected", String(next === "runs"));
+  if (next === "flow") {
+    requestAnimationFrame(() => {
+      if (!manualZoom) fitFlowToViewport();
+      drawWires();
+    });
+  }
+}
+
+function syncResponsiveMode() {
+  if (MOBILE_MQ.matches) {
+    if (drawerBackdrop) drawerBackdrop.classList.add("hidden");
+  } else if (DESKTOP_MQ.matches) {
+    setSidebarCollapsed(desktopSidebarPreferredHidden);
+  } else {
+    // Tablet / split-screen: keep canvas unobstructed until operator opens output drawer.
+    setSidebarCollapsed(true);
+  }
+  const hint = el("canvas-hint");
+  if (hint) {
+    hint.textContent = COARSE_POINTER_MQ.matches
+      ? "Ketuk tahap untuk detail, geser kanvas untuk menjelajah."
+      : "Seret node untuk mengatur alur, geser kanvas untuk berpindah.";
+  }
+  if (!manualZoom) {
+    requestAnimationFrame(() => fitFlowToViewport());
+  }
+}
+
+function applyZoom() {
+  el("flow-viewport").style.setProperty("--flow-zoom", String(flowZoom));
+  el("zoom-label").textContent = `${Math.round(flowZoom * 100)}%`;
+}
+
+function fitFlowToViewport() {
+  const viewport = el("flow-viewport");
+  if (!viewport || viewport.clientWidth === 0) return;
+  const availW = Math.max(280, viewport.clientWidth - 20);
+  const availH = Math.max(220, viewport.clientHeight - 20);
+  let target;
+  if (MOBILE_MQ.matches) {
+    // Keep nodes comfortably legible on phones with smooth horizontal panning.
+    target = Math.min(0.76, Math.max(0.62, availH / CANVAS_HEIGHT));
+  } else {
+    target = Math.min(availW / CANVAS_WIDTH, availH / CANVAS_HEIGHT);
+    target = Math.max(0.55, Math.min(1.0, target));
+  }
+  flowZoom = Math.round(target * 20) / 20;
+  applyZoom();
+}
 
 const STAGE_INFO = {
   click: { lane: "Data Science", kicker: "PEMICU · ADMIN", title: "Perbarui analisis", summary: "Snapshot Senin sampai waktu klik", detail: "Admin meminta laporan baru. Sistem membatasi snapshot dari awal minggu berjalan sampai waktu permintaan." },
@@ -98,7 +173,7 @@ function renderWorkflow() {
   const addNodes = (stages, y, startX = 180, direction = 1) => stages.map((key, index) => {
     const info = STAGE_INFO[key];
     const x = startX + index * 125 * direction;
-    return `<button class="flow-node${index === 0 ? " trigger-node" : ""}" type="button" data-stage="${key}" data-x="${x}" data-y="${y}" data-origin-x="${x}" data-origin-y="${y}" style="left:${x}px;top:${y}px" aria-pressed="false" aria-label="${info.title}. ${info.summary}. Seret untuk memindahkan."><span class="node-kicker">${info.kicker}</span><strong>${info.title}</strong><small>${info.summary}</small><span class="node-state">Menunggu</span><span class="node-port input-port" aria-hidden="true"></span><span class="node-port output-port" aria-hidden="true"></span></button>`;
+    return `<button class="flow-node${index === 0 ? " trigger-node" : ""}" type="button" data-stage="${key}" data-x="${x}" data-y="${y}" data-origin-x="${x}" data-origin-y="${y}" style="left:${x}px;top:${y}px" aria-pressed="false" aria-label="${info.title}. ${info.summary}."><span class="node-kicker">${info.kicker}</span><strong>${info.title}</strong><small>${info.summary}</small><span class="node-state">Menunggu</span><span class="node-port input-port" aria-hidden="true"></span><span class="node-port output-port" aria-hidden="true"></span></button>`;
   }).join("");
   const aiTopRow = AI_STAGES.slice(0, 6);
   const aiBottomRow = AI_STAGES.slice(6);
@@ -119,7 +194,7 @@ function renderWorkflow() {
       updateInspector(selectedRun);
     });
     node.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || event.pointerType === "touch") return;
       dragState = { node, pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: Number(node.dataset.x), top: Number(node.dataset.y), moved: false };
       node.setPointerCapture(event.pointerId);
     });
@@ -150,7 +225,7 @@ function renderWorkflow() {
   });
   let pan = null;
   viewport.addEventListener("pointerdown", (event) => {
-    if (event.target.closest(".flow-node") || event.button !== 0) return;
+    if (event.pointerType === "touch" || event.target.closest(".flow-node") || event.button !== 0) return;
     pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
     viewport.classList.add("is-panning");
     viewport.setPointerCapture(event.pointerId);
@@ -167,6 +242,14 @@ function renderWorkflow() {
   };
   viewport.addEventListener("pointerup", finishPan);
   viewport.addEventListener("pointercancel", finishPan);
+  viewport.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    manualZoom = true;
+    const delta = event.deltaY < 0 ? 0.05 : -0.05;
+    flowZoom = Math.max(0.5, Math.min(1.25, Math.round((flowZoom + delta) * 20) / 20));
+    applyZoom();
+  }, { passive: false });
   viewport.addEventListener("keydown", (event) => {
     const step = 80;
     const moves = {
@@ -205,7 +288,6 @@ function drawWires() {
     const fy = Number(from.dataset.y);
     const tx = Number(to.dataset.x);
     const ty = Number(to.dataset.y);
-    // Baris kedua AI berjalan kanan ke kiri, jadi sisi keluar/masuk port mengikuti arah alur.
     const forward = tx >= fx;
     const x1 = forward ? fx + from.offsetWidth : fx;
     const x2 = forward ? tx : tx + to.offsetWidth;
@@ -267,14 +349,16 @@ function updateInspector(run) {
   const info = STAGE_INFO[selectedStage];
   if (!info) return;
   const node = document.querySelector(`[data-stage="${selectedStage}"]`);
-  const state = ["done", "active", "ready", "failed"].find((name) => node?.classList.contains(name));
+  const state = ["done", "active", "ready", "failed"].find((name) => node?.classList.contains(name)) ?? "idle";
   const stateLabels = { done: "Selesai", active: "Sedang berjalan", ready: "Siap dimulai", failed: "Gagal", idle: "Menunggu" };
   el("inspector-kicker").textContent = info.kicker;
   el("inspector-title").textContent = info.title;
   el("inspector-description").textContent = info.detail;
-  el("inspector-status").textContent = stateLabels[state ?? "idle"];
-  el("inspector-indicator").className = `inspector-indicator ${state ?? "idle"}`;
-  el("inspector-run").textContent = run ? `${run.start_date}–${run.end_date} · ${run.id.slice(0, 8)}` : "Belum ada run";
+  const statusBadge = el("inspector-status");
+  statusBadge.textContent = stateLabels[state];
+  statusBadge.dataset.state = state;
+  el("inspector-indicator").className = `inspector-indicator ${state}`;
+  el("inspector-run").textContent = run ? `${run.start_date} s/d ${run.end_date} · ${run.id.slice(0, 8)}` : "Belum ada run";
   document.querySelectorAll(".flow-node").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.stage === selectedStage)));
 }
 
@@ -294,7 +378,7 @@ function paintFlow(run) {
   const steps = Array.isArray(run.steps) ? run.steps : [];
   const stage = stepStage(run.current_step);
   const isTrain = ["processing", "published"].includes(status) || steps.some((item) => AI_STAGES.includes(stepStage(item.label)));
-  el("workflow-run-label").textContent = `Run ${run.id.slice(0, 8)} · ${run.start_date}–${run.end_date} · ${statusLabel(status)}`;
+  el("workflow-run-label").textContent = `Run ${run.id.slice(0, 8)} · ${run.start_date} s/d ${run.end_date} · ${statusLabel(status)}`;
 
   for (const key of ["click", "api", "neon"]) setNode(key, "done");
   if (status === "creating") {
@@ -335,6 +419,7 @@ function paintFlow(run) {
   drawWires();
   updateInspector(run);
 }
+
 function statusLabel(status) {
   return (
     {
@@ -348,6 +433,7 @@ function statusLabel(status) {
     }[status] ?? status
   );
 }
+
 function stepClass(status) {
   return status === "running"
     ? "running"
@@ -357,6 +443,7 @@ function stepClass(status) {
         ? "succeeded"
         : "";
 }
+
 function formatDate(value) {
   if (!value) return "belum ada";
   return new Intl.DateTimeFormat("id-ID", {
@@ -365,6 +452,7 @@ function formatDate(value) {
     timeZone: "Asia/Jakarta",
   }).format(new Date(value));
 }
+
 function runSteps(run) {
   const list = Array.isArray(run.steps) ? run.steps : [];
   if (list.length) return list;
@@ -388,6 +476,7 @@ function runSteps(run) {
     ];
   return [{ label: "Menunggu pencatatan langkah runner", status: "" }];
 }
+
 function matchesFilter(run, filter) {
   if (filter === "active")
     return ["creating", "approved", "processing"].includes(run.status);
@@ -395,20 +484,32 @@ function matchesFilter(run, filter) {
     return run.status === filter;
   return true;
 }
+
 function renderRuns() {
   const filter = el("run-filter").value;
   const runs = latestRuns.filter((run) => matchesFilter(run, filter));
-  el("run-count").textContent = String(runs.length);
-  el("toolbar-run-count").textContent = String(runs.length);
+  const countText = String(runs.length);
+  el("run-count").textContent = countText;
+  el("toolbar-run-count").textContent = countText;
+  el("mobile-run-count").textContent = countText;
+
+  const listEl = el("runs-list");
   if (!runs.length) {
-    el("runs-list").innerHTML =
-      '<div class="empty-state">Belum ada run pada filter ini.</div>';
+    listEl.innerHTML =
+      '<div class="empty-state">Belum ada run pada filter ini. Pilih "Semua status" atau jalankan analisis baru dari dashboard admin.</div>';
     return;
   }
-  el("runs-list").innerHTML = runs.slice(0, 10)
+
+  const openIds = new Set(
+    Array.from(listEl.querySelectorAll(".run-card[open]")).map((card) => card.dataset.runId),
+  );
+
+  listEl.innerHTML = runs
     .map((run) => {
       const steps = runSteps(run);
-      const range = `${run.start_date} → ${run.end_date}`;
+      const range = `${run.start_date} s/d ${run.end_date}`;
+      const isSelected = selectedRun?.id === run.id;
+      const isOpen = openIds.has(run.id);
       const state = [
         "creating",
         "draft",
@@ -420,10 +521,11 @@ function renderRuns() {
       ].includes(run.status)
         ? run.status
         : "unknown";
-      return `<details class="run-card"><summary class="run-header"><i class="run-state ${state}" aria-hidden="true"></i><div class="run-title"><strong>${escapeHtml(range)}</strong><span>${escapeHtml(run.id.slice(0, 8))} · ${escapeHtml(formatDate(run.created_at))}</span></div><span class="run-badge ${state}">${escapeHtml(statusLabel(run.status))}</span></summary><div class="run-details"><div class="run-progress" aria-label="Tahapan proses">${steps.map((step) => `<span class="step ${stepClass(step.status)}"><i aria-hidden="true"></i><span class="step-label">${escapeHtml(step.label)}</span></span>`).join("")}</div><div class="run-foot"><span>${run.current_step ? `Sedang: ${escapeHtml(run.current_step)}` : run.status === "failed" ? "Runner gagal. Buka log workflow untuk detail." : `Periode snapshot: ${escapeHtml(range)}`}</span><a href="${GITHUB_WORKFLOW}" target="_blank" rel="noreferrer">Buka GitHub Actions</a></div></div></details>`;
+      return `<details class="run-card${isSelected ? " is-selected" : ""}" data-run-id="${escapeHtml(run.id)}"${isOpen ? " open" : ""}><summary class="run-header"><i class="run-state ${state}" aria-hidden="true"></i><div class="run-title"><strong><span class="run-date">${escapeHtml(run.start_date)}</span><span class="run-sep">s/d</span><span class="run-date">${escapeHtml(run.end_date)}</span></strong><span>${escapeHtml(run.id.slice(0, 8))} · ${escapeHtml(formatDate(run.created_at))}</span></div><span class="run-badge ${state}">${escapeHtml(statusLabel(run.status))}</span><svg class="run-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="run-details"><div class="run-progress" aria-label="Tahapan proses">${steps.map((step) => `<span class="step ${stepClass(step.status)}"><i aria-hidden="true"></i><span class="step-label">${escapeHtml(step.label)}</span></span>`).join("")}</div><div class="run-foot"><span>${run.current_step ? `Sedang: ${escapeHtml(run.current_step)}` : run.status === "failed" ? "Runner gagal. Buka log workflow untuk detail." : `Periode snapshot: ${escapeHtml(range)}`}</span><div class="run-foot-actions"><button type="button" class="ctl run-inspect-btn" data-select-run="${escapeHtml(run.id)}"${isSelected ? " disabled" : ""}>${isSelected ? "Aktif di alur" : "Tampilkan di alur"}</button><a href="${GITHUB_WORKFLOW}" target="_blank" rel="noreferrer">Log GitHub Actions</a></div></div></div></details>`;
     })
     .join("");
 }
+
 function escapeHtml(value) {
   return String(value ?? "").replace(
     /[&<>"']/g,
@@ -494,6 +596,7 @@ async function refresh() {
       el("auth-notice").classList.remove("hidden");
       el("error-notice").classList.add("hidden");
       latestRuns = [];
+      manualRunId = null;
       paintFlow(null);
       renderRuns();
       setLive(response.status === 401 ? "Perlu login" : "Akses ditolak", "warn");
@@ -506,9 +609,12 @@ async function refresh() {
       el("error-notice").classList.add("hidden");
       latestRuns = data.runs ?? [];
       const selected =
+        (manualRunId && latestRuns.find((run) => run.id === manualRunId)) ||
         latestRuns.find((run) =>
           ["creating", "processing", "approved"].includes(run.status),
-        ) ?? latestRuns[0];
+        ) ||
+        latestRuns[0] ||
+        null;
       paintFlow(selected);
       renderRuns();
       setLive(
@@ -526,7 +632,7 @@ async function refresh() {
     el("error-notice").classList.remove("hidden");
     if (!latestRuns.length)
       el("runs-list").innerHTML =
-        '<div class="empty-state">Status run belum dapat diambil. Coba segarkan lagi.</div>';
+        '<div class="empty-state">Status run belum dapat diambil. Periksa koneksi lalu tekan tombol segarkan.</div>';
     startPolling();
   } finally {
     refreshInFlight = false;
@@ -539,30 +645,84 @@ if (localHost) {
     if (href) link.setAttribute("href", href.replace("https://daisuki.my.id", WEB_ORIGIN));
   });
 }
+
 initTheme();
 el("run-filter").addEventListener("change", renderRuns);
+el("runs-list").addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-select-run]");
+  if (!btn) return;
+  const targetRun = latestRuns.find((run) => run.id === btn.dataset.selectRun);
+  if (!targetRun) return;
+  manualRunId = targetRun.id;
+  manualNodeSelection = false;
+  paintFlow(targetRun);
+  renderRuns();
+  if (MOBILE_MQ.matches) {
+    setMobileView("flow");
+  } else if (isDrawerMode()) {
+    setSidebarCollapsed(true);
+  }
+});
+
 renderWorkflow();
 updateInspector(null);
-if (window.matchMedia("(max-width: 860px)").matches) setSidebarCollapsed(true);
-const applyZoom = () => {
-  el("flow-viewport").style.setProperty("--flow-zoom", String(flowZoom));
-  el("zoom-label").textContent = `${Math.round(flowZoom * 100)}%`;
-};
-applyZoom();
+syncResponsiveMode();
+
+DESKTOP_MQ.addEventListener("change", syncResponsiveMode);
+MOBILE_MQ.addEventListener("change", syncResponsiveMode);
+COARSE_POINTER_MQ.addEventListener("change", syncResponsiveMode);
+
+let resizeRaf = 0;
+window.addEventListener("resize", () => {
+  if (resizeRaf) cancelAnimationFrame(resizeRaf);
+  resizeRaf = requestAnimationFrame(() => {
+    if (!manualZoom) fitFlowToViewport();
+    drawWires();
+  });
+});
+
 el("zoom-out").addEventListener("click", () => {
+  manualZoom = true;
   flowZoom = Math.max(0.5, Math.round((flowZoom - 0.1) * 10) / 10);
   applyZoom();
 });
 el("zoom-in").addEventListener("click", () => {
-  flowZoom = Math.min(1.2, Math.round((flowZoom + 0.1) * 10) / 10);
+  manualZoom = true;
+  flowZoom = Math.min(1.25, Math.round((flowZoom + 0.1) * 10) / 10);
   applyZoom();
+});
+el("fit-zoom").addEventListener("click", () => {
+  manualZoom = false;
+  fitFlowToViewport();
+  el("flow-viewport").scrollTo({ left: 0, top: 0, behavior: "smooth" });
 });
 el("fit-flow").addEventListener("click", () => {
   el("flow-viewport").scrollTo({ left: 0, top: 0, behavior: "smooth" });
 });
 el("toggle-sidebar").addEventListener("click", () => {
-  setSidebarCollapsed(!layout.classList.contains("is-output-hidden"));
+  const nextCollapsed = !layout.classList.contains("is-output-hidden");
+  setSidebarCollapsed(nextCollapsed, { rememberDesktop: true });
+  if (!manualZoom) {
+    window.setTimeout(() => fitFlowToViewport(), 180);
+  }
 });
+el("close-drawer").addEventListener("click", () => {
+  setSidebarCollapsed(true);
+  el("toggle-sidebar").focus();
+});
+drawerBackdrop.addEventListener("click", () => {
+  setSidebarCollapsed(true);
+  el("toggle-sidebar").focus();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && isDrawerMode() && !layout.classList.contains("is-output-hidden")) {
+    setSidebarCollapsed(true);
+    el("toggle-sidebar").focus();
+  }
+});
+el("tab-flow").addEventListener("click", () => setMobileView("flow"));
+el("tab-runs").addEventListener("click", () => setMobileView("runs"));
+
 el("refresh").addEventListener("click", () => {
   void checkServices();
   void refresh();

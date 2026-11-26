@@ -16,7 +16,7 @@ Stages are reported at the boundaries the runner can observe. The Python weekly 
 
 1. Add a proxied DNS record for `graph` in the `daisuki.my.id` zone so the Worker route can serve the hostname.
 2. Deploy `apps/graph/wrangler.jsonc`; it attaches `graph.daisuki.my.id/*` to Worker `daisuki-graph` and serves static files from `apps/graph/public`.
-3. The `deploy-graph.yml` workflow deploys on pushes to `main` that change `apps/graph/**`. It reuses GitHub environment `model-LLM` and its `CLOUDFLARE_API_TOKEN` secret and `CLOUDFLARE_ACCOUNT_ID` variable.
+3. Deployment is handled by the `graph` job in `.github/workflows/deploy.yml`, which runs on every push to `main` (no path filter) alongside the API and web jobs, using GitHub environment `model-LLM` with its `CLOUDFLARE_API_TOKEN` secret and `CLOUDFLARE_ACCOUNT_ID` variable.
 4. The API Worker needs `GRAPH_ORIGIN=https://graph.daisuki.my.id` in its Wrangler variables for credentialed CORS. This repository's `apps/api/wrangler.jsonc` includes it; deploy the API Worker after this change.
 5. Open the dashboard while signed in to `daisuki.my.id` with an Admin, Data Science, or AI Engineer account. The API session cookie is sent to `api.daisuki.my.id` by the browser; no token is stored in the graph page.
 

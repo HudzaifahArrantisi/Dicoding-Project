@@ -2,7 +2,7 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#141a26" />
     <meta
@@ -45,7 +45,7 @@
       </div>
 
       <div class="topbar-actions">
-        <p class="live" id="live-label" role="status">Memulai pemantauan</p>
+        <p class="live" id="live-label" role="status">Memulai</p>
         <button class="ctl ctl-icon" id="refresh" type="button" aria-label="Segarkan data" title="Segarkan data">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="M20 12a8 8 0 1 1-2.6-5.9" />
@@ -64,8 +64,34 @@
       </div>
     </header>
 
-    <main id="main" class="layout">
-      <section class="board" aria-label="Peta proses analisis">
+    <nav class="mobile-tabs" role="tablist" aria-label="Mode tampilan Graph">
+      <button
+        class="mobile-tab"
+        id="tab-flow"
+        type="button"
+        role="tab"
+        aria-selected="true"
+        aria-controls="board-panel"
+        data-mobile-view="flow"
+      >
+        <span>Alur pipeline</span>
+      </button>
+      <button
+        class="mobile-tab"
+        id="tab-runs"
+        type="button"
+        role="tab"
+        aria-selected="false"
+        aria-controls="runs-sidebar"
+        data-mobile-view="runs"
+      >
+        <span>Output run</span>
+        <span class="count" id="mobile-run-count">0</span>
+      </button>
+    </nav>
+
+    <main id="main" class="layout" data-mobile-view="flow">
+      <section class="board" id="board-panel" aria-label="Peta proses analisis">
         <div class="board-toolbar">
           <div class="board-title">
             <span class="board-mark" aria-hidden="true">D</span>
@@ -75,11 +101,16 @@
             </span>
           </div>
           <div class="board-tools" aria-label="Kontrol kanvas">
-            <span class="zoom" id="zoom-label">85%</span>
-            <button class="ctl" id="zoom-out" type="button" aria-label="Perkecil diagram">−</button>
-            <button class="ctl" id="zoom-in" type="button" aria-label="Perbesar diagram">+</button>
-            <button class="ctl" id="fit-flow" type="button">Awal alur</button>
-            <button class="ctl" id="reset-layout" type="button">Susun ulang</button>
+            <div class="tool-group" role="group" aria-label="Perbesaran kanvas">
+              <button class="ctl ctl-step" id="zoom-out" type="button" aria-label="Perkecil diagram" title="Perkecil">−</button>
+              <span class="zoom" id="zoom-label">85%</span>
+              <button class="ctl ctl-step" id="zoom-in" type="button" aria-label="Perbesar diagram" title="Perbesar">+</button>
+              <button class="ctl" id="fit-zoom" type="button" title="Sesuaikan diagram dengan layar">Pas</button>
+            </div>
+            <div class="tool-group" role="group" aria-label="Navigasi kanvas">
+              <button class="ctl" id="fit-flow" type="button">Awal alur</button>
+              <button class="ctl ctl-desktop-only" id="reset-layout" type="button">Susun ulang</button>
+            </div>
             <button
               class="ctl ctl-output"
               id="toggle-sidebar"
@@ -102,31 +133,48 @@
           <div class="canvas-frame"><div class="canvas" id="flow-canvas"></div></div>
         </div>
 
+        <section class="inspector" id="stage-inspector" aria-label="Detail tahap terpilih" aria-live="polite">
+          <span class="inspector-indicator" id="inspector-indicator" aria-hidden="true"></span>
+          <div class="inspector-copy">
+            <div class="inspector-head">
+              <span class="inspector-kicker" id="inspector-kicker">Detail tahap</span>
+              <span class="inspector-status-badge" id="inspector-status">Belum dipilih</span>
+            </div>
+            <strong id="inspector-title">Pilih tahap proses</strong>
+            <p id="inspector-description">Klik tahap pada kanvas untuk melihat tugas dan statusnya.</p>
+          </div>
+          <div class="inspector-meta">
+            <small id="inspector-run">Menunggu run</small>
+          </div>
+        </section>
+
         <div class="board-footer">
-          <span class="hint">Seret node untuk mengatur alur, geser kanvas untuk berpindah.</span>
+          <span class="hint" id="canvas-hint">Seret node untuk mengatur alur, geser kanvas untuk berpindah.</span>
           <span class="board-meta">Diperbarui <strong id="updated-at">belum ada</strong></span>
           <a href="https://daisuki.my.id/admin" target="_blank" rel="noreferrer">Buka dashboard admin</a>
         </div>
       </section>
 
-      <aside class="sidebar" id="runs-sidebar" aria-label="Output run analisis">
-        <section class="inspector" aria-live="polite">
-          <span class="inspector-indicator" id="inspector-indicator" aria-hidden="true"></span>
-          <div class="inspector-copy">
-            <span class="inspector-kicker" id="inspector-kicker">Detail tahap</span>
-            <strong id="inspector-title">Pilih tahap proses</strong>
-            <p id="inspector-description">Klik node pada kanvas untuk melihat tugas dan status tahap tersebut.</p>
-          </div>
-          <div class="inspector-meta">
-            <span id="inspector-status">Belum dipilih</span>
-            <small id="inspector-run">Menunggu run</small>
-          </div>
-        </section>
+      <div class="drawer-backdrop hidden" id="drawer-backdrop" aria-hidden="true"></div>
 
+      <aside class="sidebar" id="runs-sidebar" aria-label="Output run analisis">
         <section class="runs" aria-label="Daftar run analisis">
           <div class="runs-head">
-            <h2>Run analisis</h2>
-            <span id="run-count" class="count">0</span>
+            <div class="runs-head-title">
+              <h2>Run analisis</h2>
+              <span id="run-count" class="count">0</span>
+            </div>
+            <button
+              class="ctl ctl-icon drawer-close"
+              id="close-drawer"
+              type="button"
+              aria-label="Tutup panel output"
+              title="Tutup panel output"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
           </div>
 
           <label class="filter">
