@@ -14,6 +14,9 @@ import { isStaleCatalogExcerpt, retailPriceReply } from "./retail-price-reply";
 import { composeAdminFallbackReply } from "./admin-compose";
 import { understandAdminMessage, understandMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
+import { exactStockLogReply, historicalComparisonReply, historicalTopReply, loadExactStockLogs,
+  loadHistoricalConsumption, parseExactLogRequest } from "./historical-consumption";
+import { loadPartnerDailyFacts, loadPublishedAnalysisArchive } from "./archived-analysis";
 import { approvedModelContextReply, composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge, selectPublicRagMemory } from "./company-knowledge";
 import { isAssistantIdentityQuestion } from "./identity";
 import { generateLlmReply, getLastLlmStatus } from "./llm-client";
@@ -262,6 +265,13 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const resolvedIntent = scopeRefused ? null : identityQuestion ? "identity" : knowledgeTopic ?? resolveMitraIntent(standaloneQuery, previousIntent, classified);
     const crossTenant = isCrossTenantQuestion(message) || isCrossTenantQuestion(standaloneQuery) || resolvedIntent === "top_partners";
     const refused = scopeRefused || crossTenant;
+    if (!refused) {
+      const [daily, archived] = await Promise.all([
+        loadPartnerDailyFacts(standaloneQuery, user.partnerId),
+        loadPublishedAnalysisArchive(standaloneQuery, user.partnerId),
+      ]);
+      understanding.analysis_documents = [...daily, ...archived, ...(understanding.analysis_documents ?? [])].slice(0, 8);
+    }
     const intent = refused ? null : resolvedIntent;
     const [context, knowledge] = await Promise.all([contextPromise, knowledgePromise]);
     const publicMemory = selectPublicRagMemory(understanding.documents, binaryReady ? [] : knowledge?.documents ?? []);
@@ -623,10 +633,18 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       .where(and(eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
 
     // 1. Data Realtime Database
-    const context = await loadAdminContext();
+    const exactLogRequest = parseExactLogRequest(message);
+    const [context, historicalDays, exactLogs] = await Promise.all([
+      loadAdminContext(), exactLogRequest ? Promise.resolve([]) : loadHistoricalConsumption(message),
+      exactLogRequest ? loadExactStockLogs(exactLogRequest) : Promise.resolve(null),
+    ]);
 
     // 2. Machine Learning model daisuki.pkl
-    const model = await withinModelBudget(understandAdminMessage(message), 5000, emptyModel);
+    const model: ModelResult = { ...await withinModelBudget(understandAdminMessage(message), 5000, emptyModel) };
+    if (!exactLogRequest) {
+      const archived = await loadPublishedAnalysisArchive(message);
+      model.analysis_documents = [...archived, ...(model.analysis_documents ?? [])].slice(0, 8);
+    }
     const binaryReady = model.retrieval_ready === true || model.raw_retrieval_ready === true || !!model.analysis_documents?.length;
     const [markdownExcerpts, companyData] = await Promise.all([
       binaryReady ? Promise.resolve([]) : searchAdminKnowledge(message, 5),
@@ -663,6 +681,8 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const approvedAdminContextReply = approvedModelContextReply(message, knowledgeExcerpts);
     const fallback = priceReply ? { ...baseFallback, reply: priceReply }
       : approvedAdminContextReply ? { ...baseFallback, reply: approvedAdminContextReply } : baseFallback;
+    const exactHistoricalReply = exactLogs ? exactStockLogReply(exactLogs) : historicalTopReply(message, historicalDays)
+      ?? historicalComparisonReply(message, historicalDays);
 
     // 5. LLM Prompt
     let llmReply: string | null = null;
@@ -672,6 +692,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       context,
       model,
       knowledgeExcerpts,
+      historicalDays,
       companyData,
       memory: {
         summary: memory?.summary ?? "",
@@ -679,7 +700,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       },
     });
 
-    if (!approvedAdminContextReply && !priceReply) {
+    if (!approvedAdminContextReply && !priceReply && !exactHistoricalReply) {
       try {
         llmReply = await generateLlmReply({
           systemPrompt,
@@ -691,8 +712,9 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       }
     }
 
-    const response = grounded && llmReply ? { ...fallback, reply: llmReply } : fallback;
-    const source = grounded ? "llm" : "fallback";
+    const response = exactHistoricalReply ? { ...fallback, reply: exactHistoricalReply }
+      : grounded && llmReply ? { ...fallback, reply: llmReply } : fallback;
+    const source = grounded && !exactHistoricalReply ? "llm" : "fallback";
 
     // Simpan interaksi ke database (partner_id = null untuk admin)
     const [saved] = await db.insert(assistantChatEvents).values({

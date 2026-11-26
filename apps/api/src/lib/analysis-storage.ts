@@ -66,7 +66,8 @@ export async function deleteAdminRawReference(id: string, actorId: string) {
 }
 
 async function saveArtifact(runId: string, kind: "data_science" | "ai", fileName: string, content: Buffer) {
-  if (content.length > 20 * 1024 * 1024) throw new Error(`Artefak ${fileName} melebihi 20 MB`);
+  const maxBytes = fileName === "daisuki.pkl" ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
+  if (content.length > maxBytes) throw new Error(`Artefak ${fileName} melebihi ${maxBytes / 1024 / 1024} MB`);
   const mimeType = fileName.endsWith(".json") ? "application/json" : fileName.endsWith(".csv") ? "text/csv" :
     fileName.endsWith(".md") ? "text/markdown" : "application/octet-stream";
   const payload = mimeType === "application/json" ? JSON.parse(textDecoder.decode(content)) : null;

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import pickle
+from datetime import date, timedelta
 from pathlib import Path
 
 from sklearn.feature_extraction.text import CountVectorizer
@@ -57,6 +58,30 @@ def main() -> None:
         bundle = pickle.load(source)
     if not isinstance(bundle, dict) or "intent" not in bundle:
         raise ValueError("Invalid Daisuki model bundle")
+    analysis = export_retrieval(bundle.get("analysis_retrieval") or {})
+    history_days: dict[str, str] = {}
+    latest_analysis = None
+    run_tag = str((bundle.get("mainbrain_meta") or {}).get("source_run_id") or "manual")
+    if analysis:
+        periods = sorted({str(item.get("period", "")) for item in analysis["documents"] if item.get("period")})
+        for period in periods:
+            start_text, separator, end_text = period.partition(" sampai ")
+            if not separator:
+                continue
+            start, end = date.fromisoformat(start_text), date.fromisoformat(end_text)
+            positions = [i for i, item in enumerate(analysis["documents"]) if item.get("period") == period]
+            shard = {**analysis, "documents": [analysis["documents"][i] for i in positions],
+                     "vectors": [analysis["vectors"][i] for i in positions]}
+            shard_key = f"daisuki-history-{run_tag}-{start.isoformat()}"
+            shard_path = args.destination.parent / f"{shard_key}.json"
+            shard_path.parent.mkdir(parents=True, exist_ok=True)
+            shard_path.write_text(json.dumps({"format_version": 1, "analysis_retrieval": shard}, ensure_ascii=False,
+                                             separators=(",", ":")), encoding="utf-8")
+            current = start
+            while current <= end:
+                history_days[current.isoformat()] = shard_key
+                current += timedelta(days=1)
+            latest_analysis = shard
     exported = {
         "format_version": 1,
         "metadata": bundle.get("metadata") or {},
@@ -64,7 +89,8 @@ def main() -> None:
         "risk": export_pipeline(bundle["risk"]) if "risk" in bundle else None,
         "retrieval": export_retrieval(bundle.get("retrieval") or {}),
         "raw_retrieval": export_retrieval(bundle.get("raw_pdf_retrieval") or {}),
-        "analysis_retrieval": export_retrieval(bundle.get("analysis_retrieval") or {}),
+        "analysis_retrieval": latest_analysis,
+        "history_days": history_days,
     }
     args.destination.parent.mkdir(parents=True, exist_ok=True)
     args.destination.write_text(json.dumps(exported, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

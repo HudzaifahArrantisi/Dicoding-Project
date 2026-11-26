@@ -9,7 +9,7 @@ import { DAISUKI_AI_IDENTITY_REPLY } from "./identity";
 export function buildMitraRagFacts(context: MitraContext, model: ModelResult, previousIntent?: string | null) {
   const predictions = new Map(model.predictions.map((item) => [item.product_id, item]));
   return {
-    weekly_analysis_from_daisuki_model: (model.analysis_documents ?? []).map((item) => ({
+    historical_analysis_sources: (model.analysis_documents ?? []).map((item) => ({
       source: item.source, period: item.period, excerpt: item.excerpt,
     })),
     profile: {
@@ -110,7 +110,7 @@ export function buildMitraRagPrompt(context: MitraContext, model: ModelResult, p
   if (process.env.ASSISTANT_RELAXED_CHAT === "true") {
     const facts = buildMitraRagFacts(context, model, previousIntent);
     const compactFacts = {
-      weekly_analysis_from_daisuki_model: facts.weekly_analysis_from_daisuki_model,
+      historical_analysis_sources: facts.historical_analysis_sources,
       profile: facts.profile,
       stocks: facts.operational_facts.stocks,
       totals: facts.operational_facts.totals,
@@ -151,7 +151,7 @@ Perhatikan MEMORI_PERCAKAPAN dan percakapan terbaru. Jika mitra meminta menjumla
 Jika mitra bertanya siapa atau apa diri Anda (termasuk "siapakah dia" dan "chatbot ini siapa"), perkenalkan diri sebagai Daisuki AI Assistant sesuai reference.model_identity. Jelaskan peran model daisuki.pkl tanpa mengaku sebagai manusia atau pelaku transaksi.
 FAKTA_JSON adalah satu-satunya sumber angka stok, konsumsi, pesanan, profil cabang, dan hasil klasifikasi. Data berasal dari PostgreSQL mitra ini dan model daisuki.pkl; jangan menebak data yang null atau tidak ada. COMPANY_KNOWLEDGE dan MEMORI_MAINBRAIN_TEREKSTRAK hanya sumber profil perusahaan, tim, dan SOP, bukan sumber angka stok/PO/status pesanan.
 Harga normal/eceran per pcs ada di FAKTA_JSON.reference.retail_prices_per_pcs dan operational_facts.stocks[].unit_price. Estimasi omzet memakai harga normal ini dan jumlah stok keluar yang tercatat. Daftar harga hanya memuat nama produk dan harga normal; jangan tampilkan SKU atau kolom harga pasokan B2B. Jangan mengganti harga normal dengan angka dari memori atau dokumen lama.
-Jika diminta rangkuman mingguan, pisahkan "Analisis mingguan dari daisuki.pkl" (periode dan cuplikan weekly_analysis_from_daisuki_model) dari "Kondisi terkini dari database" (operational_facts). Analisis model adalah snapshot periode lama; jangan sebut sebagai stok saat ini. Jika cuplikan kosong, katakan analisis model belum tersedia.
+Jika diminta rangkuman historis, gunakan periode dan sumber dalam historical_analysis_sources. Sumber neon:stock_logs adalah catatan harian yang dibaca saat pertanyaan masuk; sumber analisis lain adalah snapshot run terbit atau indeks model. Pisahkan semuanya dari kondisi stok terkini dalam operational_facts. Jangan menyebut snapshot sebagai stok saat ini. Jika cuplikan kosong, katakan fakta historis belum tersedia.
 Untuk gudang saya, stok saya, toko saya, atau cabang saya, gunakan operational_facts.stocks[].current_stock. Untuk gudang pusat atau stok pusat, gunakan operational_facts.stocks[].central_stock_available. Singkatan nama produk resmi seperti Basreng boleh dipakai jika jelas. Jangan membuat nomor PO, jumlah operasional, mitra, atau tindakan yang tidak ada di fakta. Jangan memakai angka dari pesan pengguna sebagai fakta terverifikasi.
 Jika mitra mengoreksi rujukan stok, akui kekeliruan dengan sopan, sebut angka stok cabangnya dari FAKTA_JSON, dan jelaskan bila laporan fisik perlu diperbarui. Jangan mengklaim koreksi percakapan sudah mengubah stok database.
 Stok toko tidak memiliki batas maksimum tetap. Buffer minimal hanya ambang peringatan, bukan kapasitas toko. Pengajuan restock dibatasi stok gudang pusat saat transaksi. Stok toko baru bertambah setelah kiriman diterima dan resi berhasil diverifikasi.
@@ -216,6 +216,7 @@ export function isGroundedLlmReply(reply: string, context: MitraContext, model: 
   if (/\b(?:sudah|telah)\s+(?:mengubah|menambah|membuat|mengajukan|menyetujui|membatalkan|mengirim)\b/i.test(reply)) return false;
   const withoutOrders = nonToolCode.replace(/\bPO-[A-Z0-9-]+\b/gi, "");
   const allowedNumbers = numericValues(buildMitraRagFacts(context, model));
+  documentNumbers(model.analysis_documents ?? [], allowedNumbers);
   if (knowledge) documentNumbers({ company: knowledge.company, sop: knowledge.sop, documents: knowledge.documents }, allowedNumbers);
   if (conversation) documentNumbers(conversation, allowedNumbers);
   const operationalClaim = /\b(?:stok|gudang|cabang|toko|sisa|pcs|buffer|pesanan|konsumsi|terjual|restock|omset|omzet|penjualan|harga|price)\b/i.test(withoutOrders) || mentionedOrders.length > 0;
