@@ -22,6 +22,7 @@ import {
 import { FALLBACK_WEEKLY_ABSORPTION_MATRIX } from '@/data/weekly-absorption-matrix-fallback'
 import {
   FALLBACK_OPERATIONAL_INSIGHT,
+  type CityInsightItem,
   type OperationalInsightResponse,
 } from '@/data/operational-insight-fallback'
 
@@ -101,8 +102,15 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
   const [expandedPartnerId, setExpandedPartnerId] = useState<string | null>(null)
 
   // Ambil list rankings untuk periode terpilih
-  const currentPeriodData = matrix.period_data[selectedPeriod] ?? matrix.period_data[matrix.metadata.current_period_id] ?? Object.values(matrix.period_data)[0]
-  const rawRankings: PartnerAbsorptionRanking[] = currentPeriodData?.rankings ?? []
+  const matrixPeriods = matrix.period_data as Record<string, { period_id: string; rankings: PartnerAbsorptionRanking[] } | undefined>
+  const firstPeriod: { period_id: string; rankings: PartnerAbsorptionRanking[] } | undefined =
+    Object.values(matrix.period_data)[0]
+  const currentPeriodData =
+    matrixPeriods[selectedPeriod] ??
+    matrixPeriods[matrix.metadata.current_period_id] ??
+    firstPeriod
+  const rawRankings: PartnerAbsorptionRanking[] =
+    (currentPeriodData as { rankings: PartnerAbsorptionRanking[] } | undefined)?.rankings ?? []
 
   // Hitung sisa hari stok aman untuk cabang-cabang mendesak (< 7 hari)
   const breachedPartners = useMemo(() => {
@@ -191,7 +199,9 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
     const periodLabel = currentPeriodObj?.label ?? selectedPeriod
 
     if (selectedCity !== 'Semua Lokasi') {
-      const cityData = periodData.city_insights?.[selectedCity] ?? insights.city_insights?.[selectedCity]
+      const periodCityInsights = periodData.city_insights as Record<string, CityInsightItem | undefined>
+      const networkCityInsights = insights.city_insights as Record<string, CityInsightItem | undefined>
+      const cityData = periodCityInsights[selectedCity] ?? networkCityInsights[selectedCity]
       if (cityData) {
         return {
           scopeTitle: `Wilayah ${selectedCity}`,
@@ -224,9 +234,9 @@ export function WeeklyAbsorptionMatrix({ view = 'overview' }: { view?: 'overview
       scopeTitle: 'Seluruh Jaringan Mitra',
       headline: periodData.headline,
       summary: periodData.executive_summary,
-      status: (periodData.total_critical_branches > 0 ? 'Kritis' : 'Aman') as 'Kritis' | 'Aman',
+      status: periodData.total_critical_branches > 0 ? 'Kritis' : 'Aman',
       recommendedAction: null,
-      priorityActions: periodData.priority_actions ?? [],
+      priorityActions: periodData.priority_actions,
       periodLabel,
     }
   }, [insights, selectedPeriod, selectedCity, matrix.available_periods, filteredRankings])

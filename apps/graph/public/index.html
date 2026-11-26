@@ -96,11 +96,15 @@
           <div class="board-title">
             <span class="board-mark" aria-hidden="true">D</span>
             <span class="board-title-text">
-              <strong>Analysis &amp; model pipeline</strong>
+              <strong>Alur analisis &amp; training model</strong>
               <small id="workflow-run-label">Menunggu data run</small>
             </span>
           </div>
           <div class="board-tools" aria-label="Kontrol kanvas">
+            <div class="tool-group version-switch" role="tablist" aria-label="Versi alur pipeline">
+              <button class="ctl version-tab" id="version-local" type="button" role="tab" data-version="local" aria-selected="true">Lokal</button>
+              <button class="ctl version-tab" id="version-production" type="button" role="tab" data-version="production" aria-selected="false">Produksi</button>
+            </div>
             <div class="tool-group" role="group" aria-label="Perbesaran kanvas">
               <button class="ctl ctl-step" id="zoom-out" type="button" aria-label="Perkecil diagram" title="Perkecil">−</button>
               <span class="zoom" id="zoom-label">85%</span>
@@ -149,7 +153,14 @@
         </section>
 
         <div class="board-footer">
-          <span class="hint" id="canvas-hint">Seret node untuk mengatur alur, geser kanvas untuk berpindah.</span>
+          <div class="legend" aria-label="Keterangan warna status">
+            <span class="legend-item"><i class="legend-dot done" aria-hidden="true"></i>Selesai</span>
+            <span class="legend-item"><i class="legend-dot active" aria-hidden="true"></i>Berjalan</span>
+            <span class="legend-item"><i class="legend-dot ready" aria-hidden="true"></i>Siap</span>
+            <span class="legend-item"><i class="legend-dot failed" aria-hidden="true"></i>Gagal</span>
+            <span class="legend-item"><i class="legend-dot idle" aria-hidden="true"></i>Menunggu</span>
+          </div>
+          <span class="hint" id="canvas-hint">Seret node untuk mengatur posisi, geser kanvas untuk berpindah.</span>
           <span class="board-meta">Diperbarui <strong id="updated-at">belum ada</strong></span>
           <a href="https://daisuki.my.id/admin" target="_blank" rel="noreferrer">Buka dashboard admin</a>
         </div>

@@ -7,9 +7,21 @@ const API = localHost
   : "https://api.daisuki.my.id/v1";
 const GITHUB_WORKFLOW =
   "https://github.com/HudzaifahArrantisi/Dicoding-Project/actions/workflows/analysis-pipeline.yml";
-const REFRESH_MS = 5000;
-const CANVAS_WIDTH = 1120;
-const CANVAS_HEIGHT = 690;
+const ACTIVE_STATUSES = ["creating", "processing", "approved"];
+const REFRESH_ACTIVE_MS = 2000;
+const REFRESH_IDLE_MS = 8000;
+const REFRESH_TIMEOUT_MS = 9000;
+
+/* 4-band planar grid constants (synced to CSS custom properties --canvas-w / --canvas-h) */
+const CANVAS_WIDTH = 1656;
+const CANVAS_HEIGHT = 790;
+const START_X = 216;
+const NODE_STEP = 196;
+const BRANCH_OFFSET_X = 56;
+const BAND_HEIGHT = 146;
+const BAND_Y = [20, 220, 420, 620];
+const NODE_Y = BAND_Y.map((y) => y + 16);
+
 const DESKTOP_MQ = window.matchMedia("(min-width: 1080px)");
 const MOBILE_MQ = window.matchMedia("(max-width: 640px)");
 const COARSE_POINTER_MQ = window.matchMedia("(pointer: coarse)");
@@ -18,8 +30,23 @@ const el = (id) => document.getElementById(id);
 let latestRuns = [];
 let selectedRun = null;
 let manualRunId = null;
-let timer = null;
+let latestActiveRunId = null;
+const VERSION_KEY = "daisuki-graph-version";
+let currentVersion = (() => {
+  const requested = new URLSearchParams(window.location.search).get("flow");
+  if (requested === "local" || requested === "production") return requested;
+  try {
+    const saved = window.localStorage.getItem(VERSION_KEY);
+    if (saved === "local" || saved === "production") return saved;
+  } catch {
+    // Local storage can be unavailable in private mode; fall back to host detection.
+  }
+  return localHost ? "local" : "production";
+})();
+let pollTimer = null;
 let refreshInFlight = false;
+let activeAbort = null;
+let lastUpdatedAt = 0;
 let authBlocked = false;
 let selectedStage = "click";
 let manualNodeSelection = false;
@@ -48,7 +75,7 @@ function applyTheme(theme) {
 
   themeButton.setAttribute("aria-pressed", String(isLight));
   themeButton.setAttribute("aria-label", isLight ? "Ganti ke tema gelap" : "Ganti ke tema terang");
-  if (themeMeta) themeMeta.setAttribute("content", isLight ? "#f2f4f7" : "#141a26");
+  if (themeMeta) themeMeta.setAttribute("content", isLight ? "#f1f4f8" : "#0f1520");
 }
 
 function initTheme() {
@@ -93,6 +120,9 @@ function setMobileView(view) {
   layout.dataset.mobileView = next;
   el("tab-flow").setAttribute("aria-selected", String(next === "flow"));
   el("tab-runs").setAttribute("aria-selected", String(next === "runs"));
+  if (MOBILE_MQ.matches && window.scrollY > 0) {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
   if (next === "flow") {
     requestAnimationFrame(() => {
       if (!manualZoom) fitFlowToViewport();
@@ -107,33 +137,60 @@ function syncResponsiveMode() {
   } else if (DESKTOP_MQ.matches) {
     setSidebarCollapsed(desktopSidebarPreferredHidden);
   } else {
-    // Tablet / split-screen: keep canvas unobstructed until operator opens output drawer.
     setSidebarCollapsed(true);
   }
   const hint = el("canvas-hint");
   if (hint) {
     hint.textContent = COARSE_POINTER_MQ.matches
       ? "Ketuk tahap untuk detail, geser kanvas untuk menjelajah."
-      : "Seret node untuk mengatur alur, geser kanvas untuk berpindah.";
+      : "Seret node untuk mengatur posisi, geser kanvas untuk berpindah.";
   }
   if (!manualZoom) {
     requestAnimationFrame(() => fitFlowToViewport());
   }
 }
 
+function syncVersionTabs() {
+  document.querySelectorAll(".version-tab").forEach((tab) => {
+    tab.setAttribute("aria-selected", String(tab.dataset.version === currentVersion));
+  });
+}
+
+function switchVersion(next) {
+  if (!VERSIONS[next] || next === currentVersion) return;
+  currentVersion = next;
+  try {
+    window.localStorage.setItem(VERSION_KEY, next);
+  } catch {
+    // Ignore storage failures; the choice only lasts for this page view.
+  }
+  selectedStage = "click";
+  manualNodeSelection = false;
+  syncVersionTabs();
+  renderWorkflow();
+  paintFlow(selectedRun, latestActiveRunId);
+  requestAnimationFrame(() => {
+    if (!manualZoom) fitFlowToViewport();
+    drawWires();
+  });
+}
+
 function applyZoom() {
-  el("flow-viewport").style.setProperty("--flow-zoom", String(flowZoom));
+  const viewport = el("flow-viewport");
+  viewport.style.setProperty("--canvas-w", `${CANVAS_WIDTH}px`);
+  viewport.style.setProperty("--canvas-h", `${CANVAS_HEIGHT}px`);
+  viewport.style.setProperty("--flow-zoom", String(flowZoom));
   el("zoom-label").textContent = `${Math.round(flowZoom * 100)}%`;
 }
 
 function fitFlowToViewport() {
   const viewport = el("flow-viewport");
   if (!viewport || viewport.clientWidth === 0) return;
-  const availW = Math.max(280, viewport.clientWidth - 20);
-  const availH = Math.max(220, viewport.clientHeight - 20);
+  const availW = Math.max(280, viewport.clientWidth - 24);
+  const availH = Math.max(220, viewport.clientHeight - 24);
   let target;
   if (MOBILE_MQ.matches) {
-    // Keep nodes comfortably legible on phones with smooth horizontal panning.
+    // Readable card size on phones with smooth horizontal scrolling across bands.
     target = Math.min(0.76, Math.max(0.62, availH / CANVAS_HEIGHT));
   } else {
     target = Math.min(availW / CANVAS_WIDTH, availH / CANVAS_HEIGHT);
@@ -145,47 +202,208 @@ function fitFlowToViewport() {
 
 const STAGE_INFO = {
   click: { lane: "Data Science", kicker: "PEMICU · ADMIN", title: "Perbarui analisis", summary: "Snapshot Senin sampai waktu klik", detail: "Admin meminta laporan baru. Sistem membatasi snapshot dari awal minggu berjalan sampai waktu permintaan." },
-  api: { lane: "Data Science", kicker: "CLOUDFLARE WORKER", title: "Terima request API", summary: "POST /analysis/runs", detail: "API memvalidasi sesi, role, serta periode sebelum membuat run analisis." },
+  api: { lane: "Data Science", kicker: "API BACKEND", title: "Terima request API", summary: "POST /analysis/runs", detail: "API memvalidasi sesi, role, serta periode sebelum membuat run analisis." },
   neon: { lane: "Data Science", kicker: "NEON POSTGRES", title: "Simpan run", summary: "ID, periode, status", detail: "Run disimpan dengan ID, tanggal awal dan akhir, status, serta pemilik permintaan." },
   "actions-draft": { lane: "Data Science", kicker: "GITHUB ACTIONS", title: "Jalankan stage draft", summary: "Runner mengambil run terpilih", detail: "Workflow mengambil run berdasarkan ID dan menjalankan agregasi Data Science untuk periode tersebut." },
+  "py-draft": { lane: "Data Science", kicker: "BUN · PYTHON LOKAL", title: "Agregasi lokal", summary: "API spawn skrip Python", detail: "API lokal (Bun) menjalankan skrip agregasi Data Science langsung di mesin ini, tanpa GitHub Actions dan tanpa antrean runner." },
   analytics: { lane: "Data Science", kicker: "PYTHON · DATA SCIENCE", title: "Agregasi mingguan", summary: "Empat kategori analisis", detail: "Python merangkum konsumsi produk, konsumsi mitra, aktivitas wilayah, dan pelaporan stok." },
-  artifacts: { lane: "Data Science", kicker: "NEON POSTGRES", title: "Simpan hasil analisis", summary: "Ringkasan, tabel, kategori", detail: "Laporan empat kategori dan file pendukung disimpan sebagai artefak milik run." },
-  "training-click": { lane: "AI Engineer", kicker: "PEMICU · ADMIN", title: "Mulai training model", summary: "Gunakan run Data Science terpilih", detail: "Admin memilih sumber training pada AI Insights. Hasil aktif lama tetap dipakai sampai proses baru berhasil diterbitkan." },
-  "training-setup": { lane: "AI Engineer", kicker: "PYTHON · PERSIAPAN", title: "Siapkan data dan model", summary: "Artefak run + model sebelumnya", detail: "Runner memuat hasil Data Science dan model aktif sebelumnya sebagai bahan proses training." },
+  artifacts: { lane: "Data Science", kicker: "NEON POSTGRES", title: "Simpan laporan", summary: "Laporan dan empat kategori", detail: "Laporan empat kategori, tabel, dan file pendukung disimpan ke Neon sebagai artefak milik run." },
+  "active-result": { lane: "Data Science", kicker: "HASIL AKTIF", title: "Grafik final tetap lama", summary: "Hasil aktif sebelumnya dipakai", detail: "Selama run baru masih draft atau sedang ditinjau, grafik final dan ringkasan di web tetap memakai hasil run yang sudah terbit sebelumnya." },
+  draft: { lane: "Data Science", kicker: "STATUS · DRAFT", title: "Run berstatus draft", summary: "Artefak disimpan per ID run", detail: "Setelah agregasi selesai, run berubah dari creating menjadi draft. Artefak tersimpan per ID run dan menunggu ditinjau Admin." },
+  review: { lane: "Data Science", kicker: "TINJAUAN · ADMIN", title: "Tinjau di AI Insights", summary: "Admin membuka run yang sama", detail: "Admin membuka AI Insights, meninjau laporan empat kategori milik run tersebut, lalu memilih sumber training sebelum memulai proses." },
+  "training-click": { lane: "AI Engineer", kicker: "PEMICU · ADMIN", title: "Mulai training model", summary: "Gunakan run Data Science terpilih", detail: "Admin menekan mulai analisis dan training pada AI Insights. Hasil aktif lama tetap dipakai sampai proses baru berhasil diterbitkan." },
+  "actions-train": { lane: "AI Engineer", kicker: "GITHUB ACTIONS", title: "Jalankan job AI", summary: "Tujuh job dan training model", detail: "Workflow training mengambil artefak run yang dipilih dari Neon lalu menjalankan tujuh job AI berurutan hingga model terbentuk." },
+  "local-jobs": { lane: "AI Engineer", kicker: "BUN · PYTHON LOKAL", title: "Tujuh job lokal", summary: "Training di mesin ini", detail: "API lokal menjalankan tujuh job Python berurutan di mesin yang sama, lalu menyimpan artefak run ke Neon." },
+  "training-setup": { lane: "AI Engineer", kicker: "PYTHON · PERSIAPAN", title: "Siapkan data & model", summary: "Artefak run + model sebelumnya", detail: "Runner memuat hasil Data Science dan model aktif sebelumnya sebagai bahan proses training." },
   risk: { lane: "AI Engineer", kicker: "JOB 1 · NAIVE BAYES", title: "Analisis risiko stok", summary: "Prediksi risiko kekurangan stok", detail: "Job menghitung risiko stockout per pasangan mitra dan produk." },
   evaluation: { lane: "AI Engineer", kicker: "JOB 2 · EVALUASI", title: "Evaluasi historis", summary: "Ukur performa prediksi", detail: "Job mengevaluasi prediksi terhadap kejadian historis yang tersedia." },
   allocation: { lane: "AI Engineer", kicker: "JOB 3 · ALOKASI", title: "Pratinjau alokasi", summary: "Prioritas pasokan", detail: "Job menyusun rekomendasi alokasi berdasarkan kebutuhan dan stok." },
-  "facts-rag": { lane: "AI Engineer", kicker: "JOB 4 · FAKTA & RAG", title: "Bangun fakta dashboard", summary: "Fakta untuk AI Insights dan RAG", detail: "Job menyiapkan fakta mingguan yang dipakai dashboard dan konteks retrieval chatbot." },
+  "facts-rag": { lane: "AI Engineer", kicker: "JOB 4 · FAKTA & RAG", title: "Bangun fakta dashboard", summary: "Fakta AI Insights dan RAG", detail: "Job menyiapkan fakta mingguan yang dipakai dashboard dan konteks retrieval chatbot." },
   "model-training": { lane: "AI Engineer", kicker: "JOB 5 · TRAINING", title: "Latih daisuki.pkl", summary: "Model dari sumber run terpilih", detail: "Job memperbarui model menggunakan laporan Data Science atau referensi mentah yang dipilih." },
+  fallback: { lane: "AI Engineer", kicker: "JALUR GAGAL", title: "Hasil lama tetap dipakai", summary: "Training gagal aman", detail: "Jika training gagal, run ditandai failed dan model serta hasil aktif sebelumnya tetap dipakai sampai ada training ulang." },
   chart: { lane: "AI Engineer", kicker: "JOB 6 · GRAFIK", title: "Susun grafik model", summary: "Ringkasan prediksi konsumsi", detail: "Job menyiapkan data grafik evaluasi dan ringkasan model untuk ditampilkan." },
   validation: { lane: "AI Engineer", kicker: "JOB 7 · VALIDASI", title: "Validasi keluaran", summary: "Periksa hasil pipeline", detail: "Job memastikan keluaran model dan artefak siap disimpan." },
   persist: { lane: "AI Engineer", kicker: "NEON POSTGRES", title: "Simpan artefak AI", summary: "Model dan hasil run", detail: "Artefak model, evaluasi, fakta, dan hasil AI disimpan ke database untuk run ini." },
-  export: { lane: "AI Engineer", kicker: "EKSPOR MODEL", title: "Ekspor PKL ke JSON", summary: "Format inferensi Cloudflare Worker", detail: "Classifier diekspor dari daisuki.pkl ke format JSON yang dapat dibaca API Worker." },
+  "pkl-local": { lane: "AI Engineer", kicker: "FILE · DAISUKI.PKL", title: "daisuki.pkl aktif", summary: "Dibaca API lokal", detail: "Model ditulis sebagai daisuki.pkl di folder artefak run. API lokal membacanya langsung, tanpa ekspor JSON dan tanpa Cloudflare KV." },
+  export: { lane: "AI Engineer", kicker: "EKSPOR MODEL", title: "Ekspor PKL ke JSON", summary: "Format inferensi Worker", detail: "Classifier diekspor dari daisuki.pkl ke format JSON yang dapat dibaca API Worker." },
   kv: { lane: "AI Engineer", kicker: "CLOUDFLARE KV", title: "Publikasikan model", summary: "Binding DAISUKI_MODEL", detail: "File JSON model dipublikasikan ke Workers KV untuk dibaca API Worker." },
-  published: { lane: "AI Engineer", kicker: "HASIL AKTIF", title: "Terbitkan AI Insights", summary: "Run terbaru menjadi hasil aktif", detail: "Run ditandai terbit. AI Insights dan ringkasan menggunakan hasil terbaru." },
+  published: { lane: "AI Engineer", kicker: "HASIL AKTIF", title: "Terbitkan AI Insights", summary: "Run terbaru menjadi aktif", detail: "Run ditandai terbit dan aktif. Rekomendasi serta hasil analisis run ini menggantikan hasil aktif sebelumnya." },
+  reload: { lane: "AI Engineer", kicker: "API LOKAL", title: "Muat ulang model", summary: "Worker memuat .pkl baru", detail: "API lokal memuat ulang worker model sehingga chatbot dan AI Insights memakai daisuki.pkl versi terbaru." },
+  refresh: { lane: "AI Engineer", kicker: "WEB · MUAT ULANG", title: "Muat ulang grafik", summary: "Grafik dan ringkasan terbaru", detail: "Web memuat ulang grafik dan ringkasan dari run terbaru setelah run tersebut terbit, sehingga tampilan Admin memakai hasil yang sama." },
 };
-const DATA_STAGES = ["click", "api", "neon", "actions-draft", "analytics", "artifacts"];
-const AI_STAGES = ["training-click", "training-setup", "risk", "evaluation", "allocation", "facts-rag", "model-training", "chart", "validation", "persist", "export", "kv", "published"];
+
+/*
+  4-band planar Left -> Right layout (0 wire crossings in both Lokal and Produksi):
+    Band 1 (y=20):  01..06 Data Science + side branch active-result
+    Band 2 (y=220): 07..12 Draft, Review, Trigger & Job 1
+    Band 3 (y=420): 13..16 Jobs 2..5 + side branch fallback
+    Band 4 (y=620): 17..22 (Lokal) / 17..23 (Produksi) Validation & Publication
+*/
+const VERSIONS = {
+  local: {
+    name: "Lokal",
+    lanes: [
+      { no: "FASE 01", title: "Log & Data", sub: "Bun + Python lokal, agregasi draft", y: BAND_Y[0] },
+      { no: "FASE 02", title: "Tinjauan & Pemicu", sub: "Review Admin lalu mulai 7 job lokal", y: BAND_Y[1] },
+      { no: "FASE 03", title: "Training Model AI", sub: "Evaluasi, alokasi, RAG, latih .pkl", y: BAND_Y[2] },
+      { no: "FASE 04", title: "Publikasi Lokal", sub: "Simpan artefak & muat ulang worker", y: BAND_Y[3] },
+    ],
+    nodes: [
+      { key: "click", row: 0, col: 0, step: "01" },
+      { key: "api", row: 0, col: 1, step: "02" },
+      { key: "neon", row: 0, col: 2, step: "03" },
+      { key: "py-draft", row: 0, col: 3, step: "04" },
+      { key: "analytics", row: 0, col: 4, step: "05" },
+      { key: "artifacts", row: 0, col: 5, step: "06" },
+      { key: "active-result", row: 0, col: 6, branch: true, badge: "AMAN" },
+
+      { key: "draft", row: 1, col: 0, step: "07" },
+      { key: "review", row: 1, col: 1, step: "08" },
+      { key: "training-click", row: 1, col: 2, step: "09" },
+      { key: "local-jobs", row: 1, col: 3, step: "10" },
+      { key: "training-setup", row: 1, col: 4, step: "11" },
+      { key: "risk", row: 1, col: 5, step: "12" },
+
+      { key: "evaluation", row: 2, col: 0, step: "13" },
+      { key: "allocation", row: 2, col: 1, step: "14" },
+      { key: "facts-rag", row: 2, col: 2, step: "15" },
+      { key: "model-training", row: 2, col: 3, step: "16" },
+      { key: "fallback", row: 2, col: 4, branch: true, badge: "GAGAL" },
+
+      { key: "chart", row: 3, col: 0, step: "17" },
+      { key: "validation", row: 3, col: 1, step: "18" },
+      { key: "persist", row: 3, col: 2, step: "19" },
+      { key: "pkl-local", row: 3, col: 3, step: "20" },
+      { key: "published", row: 3, col: 4, step: "21" },
+      { key: "reload", row: 3, col: 5, step: "22" },
+    ],
+    edges: [
+      ["click", "api"],
+      ["api", "neon"],
+      ["neon", "py-draft"],
+      ["py-draft", "analytics"],
+      ["analytics", "artifacts"],
+      ["artifacts", "active-result", { kind: "branch", label: "Saat draft" }],
+      ["artifacts", "draft"],
+      ["draft", "review"],
+      ["review", "training-click", { kind: "trigger" }],
+      ["training-click", "local-jobs"],
+      ["local-jobs", "training-setup"],
+      ["training-setup", "risk"],
+      ["risk", "evaluation"],
+      ["evaluation", "allocation"],
+      ["allocation", "facts-rag"],
+      ["facts-rag", "model-training"],
+      ["model-training", "fallback", { kind: "fail", label: "Jika gagal" }],
+      ["model-training", "chart"],
+      ["chart", "validation"],
+      ["validation", "persist"],
+      ["persist", "pkl-local"],
+      ["pkl-local", "published"],
+      ["published", "reload"],
+    ],
+    dataStages: ["click", "api", "neon", "py-draft", "analytics", "artifacts", "draft"],
+    aiStages: ["training-click", "local-jobs", "training-setup", "risk", "evaluation", "allocation", "facts-rag", "model-training", "chart", "validation", "persist", "pkl-local", "published", "reload"],
+    draftRunner: "py-draft",
+    trainRunner: "local-jobs",
+  },
+  production: {
+    name: "Produksi",
+    lanes: [
+      { no: "FASE 01", title: "Log & Data", sub: "Worker API + GitHub Actions draft", y: BAND_Y[0] },
+      { no: "FASE 02", title: "Tinjauan & Pemicu", sub: "Review Admin lalu jalankan Actions AI", y: BAND_Y[1] },
+      { no: "FASE 03", title: "Training Model AI", sub: "Evaluasi, alokasi, RAG, latih .pkl", y: BAND_Y[2] },
+      { no: "FASE 04", title: "Publikasi KV & Web", sub: "Ekspor JSON, Cloudflare KV, terbitkan", y: BAND_Y[3] },
+    ],
+    nodes: [
+      { key: "click", row: 0, col: 0, step: "01" },
+      { key: "api", row: 0, col: 1, step: "02" },
+      { key: "neon", row: 0, col: 2, step: "03" },
+      { key: "actions-draft", row: 0, col: 3, step: "04" },
+      { key: "analytics", row: 0, col: 4, step: "05" },
+      { key: "artifacts", row: 0, col: 5, step: "06" },
+      { key: "active-result", row: 0, col: 6, branch: true, badge: "AMAN" },
+
+      { key: "draft", row: 1, col: 0, step: "07" },
+      { key: "review", row: 1, col: 1, step: "08" },
+      { key: "training-click", row: 1, col: 2, step: "09" },
+      { key: "actions-train", row: 1, col: 3, step: "10" },
+      { key: "training-setup", row: 1, col: 4, step: "11" },
+      { key: "risk", row: 1, col: 5, step: "12" },
+
+      { key: "evaluation", row: 2, col: 0, step: "13" },
+      { key: "allocation", row: 2, col: 1, step: "14" },
+      { key: "facts-rag", row: 2, col: 2, step: "15" },
+      { key: "model-training", row: 2, col: 3, step: "16" },
+      { key: "fallback", row: 2, col: 4, branch: true, badge: "GAGAL" },
+
+      { key: "chart", row: 3, col: 0, step: "17" },
+      { key: "validation", row: 3, col: 1, step: "18" },
+      { key: "persist", row: 3, col: 2, step: "19" },
+      { key: "export", row: 3, col: 3, step: "20" },
+      { key: "kv", row: 3, col: 4, step: "21" },
+      { key: "published", row: 3, col: 5, step: "22" },
+      { key: "refresh", row: 3, col: 6, step: "23" },
+    ],
+    edges: [
+      ["click", "api"],
+      ["api", "neon"],
+      ["neon", "actions-draft"],
+      ["actions-draft", "analytics"],
+      ["analytics", "artifacts"],
+      ["artifacts", "active-result", { kind: "branch", label: "Saat draft" }],
+      ["artifacts", "draft"],
+      ["draft", "review"],
+      ["review", "training-click", { kind: "trigger" }],
+      ["training-click", "actions-train"],
+      ["actions-train", "training-setup"],
+      ["training-setup", "risk"],
+      ["risk", "evaluation"],
+      ["evaluation", "allocation"],
+      ["allocation", "facts-rag"],
+      ["facts-rag", "model-training"],
+      ["model-training", "fallback", { kind: "fail", label: "Jika gagal" }],
+      ["model-training", "chart"],
+      ["chart", "validation"],
+      ["validation", "persist"],
+      ["persist", "export"],
+      ["export", "kv"],
+      ["kv", "published"],
+      ["published", "refresh"],
+    ],
+    dataStages: ["click", "api", "neon", "actions-draft", "analytics", "artifacts", "draft"],
+    aiStages: ["training-click", "actions-train", "training-setup", "risk", "evaluation", "allocation", "facts-rag", "model-training", "chart", "validation", "persist", "export", "kv", "published", "refresh"],
+    draftRunner: "actions-draft",
+    trainRunner: "actions-train",
+  },
+};
 
 function renderWorkflow() {
+  const version = VERSIONS[currentVersion];
   const canvas = el("flow-canvas");
-  const viewport = el("flow-viewport");
-  const addNodes = (stages, y, startX = 180, direction = 1) => stages.map((key, index) => {
-    const info = STAGE_INFO[key];
-    const x = startX + index * 125 * direction;
-    return `<button class="flow-node${index === 0 ? " trigger-node" : ""}" type="button" data-stage="${key}" data-x="${x}" data-y="${y}" data-origin-x="${x}" data-origin-y="${y}" style="left:${x}px;top:${y}px" aria-pressed="false" aria-label="${info.title}. ${info.summary}."><span class="node-kicker">${info.kicker}</span><strong>${info.title}</strong><small>${info.summary}</small><span class="node-state">Menunggu</span><span class="node-port input-port" aria-hidden="true"></span><span class="node-port output-port" aria-hidden="true"></span></button>`;
-  }).join("");
-  const aiTopRow = AI_STAGES.slice(0, 6);
-  const aiBottomRow = AI_STAGES.slice(6);
-  canvas.innerHTML = `<svg class="flow-wires" id="flow-wires" aria-hidden="true"></svg><div class="lane-label" style="left:24px;top:94px"><span>01</span><strong>Data Science</strong><small>Log &amp; Data</small></div><div class="lane-label" style="left:24px;top:334px"><span>02</span><strong>AI Engineer</strong><small>AI Insights</small></div>${addNodes(DATA_STAGES, 94)}${addNodes(aiTopRow, 334)}${addNodes(aiBottomRow, 534, 180, 1)}<div class="flow-canvas-note" style="left:24px;top:250px">Hasil Data Science jadi sumber training AI</div>`;
-  // The second AI row runs right-to-left to keep one continuous, readable path.
-  aiBottomRow.forEach((key, index) => {
-    const x = 180 + (aiBottomRow.length - 1 - index) * 125;
-    const node = canvas.querySelector(`[data-stage="${key}"]`);
-    node.dataset.x = String(x);
-    node.dataset.originX = String(x);
-    node.style.left = `${x}px`;
-  });
+
+  const bandsHtml = version.lanes
+    .map(
+      (lane) =>
+        `<div class="lane-band" style="top:${lane.y}px"><div class="lane-label"><span class="lane-num">${lane.no}</span><strong>${lane.title}</strong><small>${lane.sub}</small></div></div>`,
+    )
+    .join("");
+
+  const nodesHtml = version.nodes
+    .map((item) => {
+      const info = STAGE_INFO[item.key];
+      const x = START_X + item.col * NODE_STEP + (item.branch ? BRANCH_OFFSET_X : 0);
+      const y = NODE_Y[item.row];
+      const badgeText = item.step ?? item.badge ?? "";
+      return `<button class="flow-node${item.branch ? " branch-node" : ""}" type="button" data-stage="${item.key}" data-x="${x}" data-y="${y}" data-origin-x="${x}" data-origin-y="${y}" style="left:${x}px;top:${y}px" aria-pressed="false" aria-label="${badgeText ? `Tahap ${badgeText}. ` : ""}${info.title}. ${info.summary}."><div class="node-top"><span class="node-kicker">${info.kicker}</span>${badgeText ? `<span class="node-step">${badgeText}</span>` : ""}</div><strong>${info.title}</strong><small>${info.summary}</small><div class="node-foot"><span class="node-state">Menunggu</span></div></button>`;
+    })
+    .join("");
+
+  canvas.innerHTML =
+    bandsHtml +
+    `<svg class="flow-wires" id="flow-wires" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}" aria-hidden="true"></svg>` +
+    nodesHtml;
+
   canvas.querySelectorAll(".flow-node").forEach((node) => {
     node.addEventListener("click", () => {
       if (suppressNodeClick) { suppressNodeClick = false; return; }
@@ -204,10 +422,10 @@ function renderWorkflow() {
       const dy = (event.clientY - dragState.y) / flowZoom;
       if (Math.abs(dx) + Math.abs(dy) > 3) dragState.moved = true;
       if (!dragState.moved) return;
-      const maxX = canvas.clientWidth - node.offsetWidth;
-      const maxY = canvas.clientHeight - node.offsetHeight;
-      const left = Math.max(0, Math.min(maxX, dragState.left + dx));
-      const top = Math.max(0, Math.min(maxY, dragState.top + dy));
+      const maxX = CANVAS_WIDTH - node.offsetWidth - 16;
+      const maxY = CANVAS_HEIGHT - node.offsetHeight - 16;
+      const left = Math.max(16, Math.min(maxX, dragState.left + dx));
+      const top = Math.max(16, Math.min(maxY, dragState.top + dy));
       node.dataset.x = left;
       node.dataset.y = top;
       node.style.left = `${left}px`;
@@ -223,6 +441,18 @@ function renderWorkflow() {
     node.addEventListener("pointerup", finishDrag);
     node.addEventListener("pointercancel", finishDrag);
   });
+
+  applyZoom();
+  bindCanvasControls();
+  drawWires();
+}
+
+let canvasBound = false;
+
+function bindCanvasControls() {
+  if (canvasBound) return;
+  canvasBound = true;
+  const viewport = el("flow-viewport");
   let pan = null;
   viewport.addEventListener("pointerdown", (event) => {
     if (event.pointerType === "touch" || event.target.closest(".flow-node") || event.button !== 0) return;
@@ -264,7 +494,7 @@ function renderWorkflow() {
     viewport.scrollBy(move);
   });
   el("reset-layout").addEventListener("click", () => {
-    canvas.querySelectorAll(".flow-node").forEach((node) => {
+    el("flow-canvas").querySelectorAll(".flow-node").forEach((node) => {
       node.dataset.x = node.dataset.originX;
       node.dataset.y = node.dataset.originY;
       node.style.left = `${node.dataset.originX}px`;
@@ -273,47 +503,127 @@ function renderWorkflow() {
     drawWires();
     viewport.scrollTo({ left: 0, top: 0, behavior: "smooth" });
   });
-  drawWires();
 }
 
 function drawWires() {
   const svg = el("flow-wires");
   if (!svg) return;
-  const paths = [];
-  const connect = (keys, className = "") => keys.slice(0, -1).forEach((key, index) => {
-    const from = document.querySelector(`[data-stage="${key}"]`);
-    const to = document.querySelector(`[data-stage="${keys[index + 1]}"]`);
-    if (!from || !to) return;
+  const wires = [];
+  const anchors = [];
+  const labels = [];
+
+  const resolveEdgeState = (from, to, kind) => {
+    if (kind === "fail") {
+      if (to.classList.contains("ready") || to.classList.contains("failed")) return "failed";
+      return "";
+    }
+    if (kind === "branch") {
+      if (to.classList.contains("done")) return "done";
+      if (to.classList.contains("ready") || to.classList.contains("active")) return "active";
+      return "";
+    }
+    if (from.classList.contains("done") && to.classList.contains("done")) return "done";
+    if (from.classList.contains("done") && (to.classList.contains("active") || to.classList.contains("ready"))) return "active";
+    if (to.classList.contains("failed")) return "failed";
+    return "";
+  };
+
+  const version = VERSIONS[currentVersion];
+  for (const [fromKey, toKey, meta = {}] of version.edges) {
+    const from = document.querySelector(`[data-stage="${fromKey}"]`);
+    const to = document.querySelector(`[data-stage="${toKey}"]`);
+    if (!from || !to) continue;
+
     const fx = Number(from.dataset.x);
     const fy = Number(from.dataset.y);
+    const fw = from.offsetWidth || 164;
+    const fh = from.offsetHeight || 114;
     const tx = Number(to.dataset.x);
     const ty = Number(to.dataset.y);
-    const forward = tx >= fx;
-    const x1 = forward ? fx + from.offsetWidth : fx;
-    const x2 = forward ? tx : tx + to.offsetWidth;
-    const y1 = fy + from.offsetHeight / 2;
-    const y2 = ty + to.offsetHeight / 2;
-    const bend = Math.max(28, Math.abs(x2 - x1) * 0.45) * (forward ? 1 : -1);
-    const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
-    const state = from.classList.contains("done") && to.classList.contains("done") ? "done" : from.classList.contains("done") && (to.classList.contains("active") || to.classList.contains("ready")) ? "active" : "";
-    const arrow = state || "idle";
-    paths.push(`<path class="wire ${state} ${className}" d="${d}" marker-end="url(#wire-arrow-${arrow})"/>`);
-  });
-  connect(DATA_STAGES);
-  connect(AI_STAGES);
-  const lastData = document.querySelector(`[data-stage="artifacts"]`);
-  const firstAi = document.querySelector(`[data-stage="training-click"]`);
-  if (lastData && firstAi) {
-    const x1 = Number(lastData.dataset.x) + lastData.offsetWidth / 2;
-    const y1 = Number(lastData.dataset.y) + lastData.offsetHeight;
-    const x2 = Number(firstAi.dataset.x) + firstAi.offsetWidth / 2;
-    const y2 = Number(firstAi.dataset.y);
-    paths.push(`<path class="wire bridge-wire" d="M ${x1} ${y1} C ${x1} ${y1 + 90}, ${x2} ${y2 - 90}, ${x2} ${y2}" marker-end="url(#wire-arrow-idle)"/>`);
+    const tw = to.offsetWidth || 164;
+    const th = to.offsetHeight || 114;
+
+    const kind = meta.kind ?? "main";
+    const state = resolveEdgeState(from, to, kind);
+    const dashed = kind !== "main" ? "bridge-wire" : "";
+    const markerId = `wire-arrow-${state || "idle"}`;
+    const marker = `marker-end="url(#${markerId})"`;
+
+    let d = "";
+    let sx = 0;
+    let sy = 0;
+    let lx = 0;
+    let ly = 0;
+
+    if (Math.abs(ty - fy) < 48) {
+      // Same band: clean horizontal wire with optional gentle orthogonal step if dragged vertically.
+      const forward = tx >= fx;
+      const x1 = forward ? fx + fw : fx;
+      const x2 = forward ? tx : tx + tw;
+      const y1 = fy + fh / 2;
+      const y2 = ty + th / 2;
+      sx = x1;
+      sy = y1;
+      lx = (x1 + x2) / 2;
+      ly = (y1 + y2) / 2 - 14;
+      if (Math.abs(y2 - y1) <= 2) {
+        d = `M ${x1} ${y1} L ${x2} ${y2}`;
+      } else {
+        const mx = (x1 + x2) / 2;
+        const dx = forward ? 1 : -1;
+        const dy = y2 > y1 ? 1 : -1;
+        const r = Math.min(10, Math.abs(mx - x1), Math.abs(y2 - y1) / 2);
+        d = `M ${x1} ${y1} L ${mx - dx * r} ${y1} Q ${mx} ${y1} ${mx} ${y1 + dy * r} L ${mx} ${y2 - dy * r} Q ${mx} ${y2} ${mx + dx * r} ${y2} L ${x2} ${y2}`;
+      }
+    } else if (ty > fy) {
+      // Band wrap downwards: orthogonal rounded corridor wire between bands (never touches cards).
+      const x1 = fx + fw / 2;
+      const y1 = fy + fh;
+      const x2 = tx + tw / 2;
+      const y2 = ty;
+      const midY = Math.round((y1 + y2) / 2);
+      sx = x1;
+      sy = y1;
+      lx = (x1 + x2) / 2;
+      ly = midY - 12;
+      if (Math.abs(x2 - x1) < 4) {
+        d = `M ${x1} ${y1} L ${x2} ${y2}`;
+      } else {
+        const dir = x2 > x1 ? 1 : -1;
+        const r = Math.min(12, Math.abs(x2 - x1) / 2, Math.max(4, Math.abs(midY - y1) - 2), Math.max(4, Math.abs(y2 - midY) - 2));
+        d = `M ${x1} ${y1} L ${x1} ${midY - r} Q ${x1} ${midY} ${x1 + dir * r} ${midY} L ${x2 - dir * r} ${midY} Q ${x2} ${midY} ${x2} ${midY + r} L ${x2} ${y2}`;
+      }
+    } else {
+      // Dragged above source: orthogonal rounded corridor upwards.
+      const x1 = fx + fw / 2;
+      const y1 = fy;
+      const x2 = tx + tw / 2;
+      const y2 = ty + th;
+      const midY = Math.round((y1 + y2) / 2);
+      const dir = x2 >= x1 ? 1 : -1;
+      const r = Math.min(12, Math.abs(x2 - x1) / 2, Math.max(4, Math.abs(y1 - midY) - 2));
+      sx = x1;
+      sy = y1;
+      lx = (x1 + x2) / 2;
+      ly = midY - 12;
+      d = `M ${x1} ${y1} L ${x1} ${midY + r} Q ${x1} ${midY} ${x1 + dir * r} ${midY} L ${x2 - dir * r} ${midY} Q ${x2} ${midY} ${x2} ${midY - r} L ${x2} ${y2}`;
+    }
+
+    wires.push(`<path class="wire ${state} ${dashed}" data-from="${fromKey}" data-to="${toKey}" d="${d}" ${marker}/>`);
+    anchors.push(`<circle class="wire-anchor ${state}" cx="${sx}" cy="${sy}" r="3.5"/>`);
+
+    if (meta.label) {
+      const w = Math.max(48, meta.label.length * 6.2 + 12);
+      labels.push(
+        `<g><rect class="wire-label-bg ${state}" x="${lx - w / 2}" y="${ly - 9}" width="${w}" height="18" rx="5"/><text class="wire-label-text ${state}" x="${lx}" y="${ly}">${escapeHtml(meta.label)}</text></g>`,
+      );
+    }
   }
-  const marker = (id, color) =>
-    `<marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="${color}"/></marker>`;
+
+  const markerDef = (id, color) =>
+    `<marker id="${id}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="${color}"/></marker>`;
   svg.innerHTML =
-    `<defs>${marker("wire-arrow-idle", "var(--wire)")}${marker("wire-arrow-done", "var(--wire-done)")}${marker("wire-arrow-active", "var(--wire-active)")}</defs>${paths.join("")}`;
+    `<defs>${markerDef("wire-arrow-idle", "var(--wire)")}${markerDef("wire-arrow-done", "var(--wire-done)")}${markerDef("wire-arrow-active", "var(--wire-active)")}${markerDef("wire-arrow-failed", "var(--wire-failed)")}</defs>${wires.join("")}${anchors.join("")}${labels.join("")}`;
 }
 
 const stepStage = (label = "") => {
@@ -324,8 +634,8 @@ const stepStage = (label = "") => {
   if (name.includes("risiko naive bayes")) return "risk";
   if (name.includes("evaluasi historis")) return "evaluation";
   if (name.includes("pratinjau alokasi")) return "allocation";
-  if (name.includes("fakta dashboard")) return "facts-rag";
-  if (name.includes("training daisuki")) return "model-training";
+  if (name.includes("fakta")) return "facts-rag";
+  if (name.includes("training") && name.includes("daisuki")) return "model-training";
   if (name.includes("grafik konsumsi")) return "chart";
   if (name.includes("validasi hasil")) return "validation";
   if (name.includes("simpan artefak model")) return "persist";
@@ -336,13 +646,13 @@ const stepStage = (label = "") => {
   return null;
 };
 
-function setNode(name, state) {
+function setNode(name, state, custom) {
   const node = document.querySelector(`[data-stage="${name}"]`);
   if (!node) return;
   node.classList.remove("done", "active", "failed", "ready");
   if (state) node.classList.add(state);
   const labels = { done: "Selesai", active: "Berjalan", ready: "Siap", failed: "Gagal" };
-  node.querySelector(".node-state").textContent = labels[state] ?? "Menunggu";
+  node.querySelector(".node-state").textContent = custom ?? labels[state] ?? "Menunggu";
 }
 
 function updateInspector(run) {
@@ -362,7 +672,8 @@ function updateInspector(run) {
   document.querySelectorAll(".flow-node").forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.stage === selectedStage)));
 }
 
-function paintFlow(run) {
+function paintFlow(run, activeRunId = latestActiveRunId) {
+  const version = VERSIONS[currentVersion];
   selectedRun = run;
   document.querySelectorAll(".flow-node").forEach((node) => {
     node.classList.remove("done", "active", "failed", "ready");
@@ -377,29 +688,35 @@ function paintFlow(run) {
   const status = run.status;
   const steps = Array.isArray(run.steps) ? run.steps : [];
   const stage = stepStage(run.current_step);
-  const isTrain = ["processing", "published"].includes(status) || steps.some((item) => AI_STAGES.includes(stepStage(item.label)));
+  const isTrain = ["processing", "published"].includes(status) || steps.some((item) => version.aiStages.includes(stepStage(item.label)));
+  const isActiveRun = Boolean(activeRunId) && run.id === activeRunId;
   el("workflow-run-label").textContent = `Run ${run.id.slice(0, 8)} · ${run.start_date} s/d ${run.end_date} · ${statusLabel(status)}`;
 
   for (const key of ["click", "api", "neon"]) setNode(key, "done");
+  if (activeRunId && !isActiveRun) setNode("active-result", "ready", "Hasil aktif");
+
   if (status === "creating") {
     if (run.current_step && stage) {
-      const stageIndex = DATA_STAGES.indexOf(stage);
-      DATA_STAGES.slice(0, Math.max(stageIndex, 0)).forEach((key) => setNode(key, "done"));
-      setNode("actions-draft", "done");
+      const stageIndex = version.dataStages.indexOf(stage);
+      version.dataStages.slice(0, Math.max(stageIndex, 0)).forEach((key) => setNode(key, "done"));
+      setNode(version.draftRunner, "done");
       setNode(stage, "active");
-    } else setNode("actions-draft", "active");
+    } else setNode(version.draftRunner, "active");
   } else if (["draft", "approved"].includes(status)) {
-    for (const key of DATA_STAGES) setNode(key, "done");
+    for (const key of version.dataStages) setNode(key, "done");
+    setNode("review", status === "approved" ? "done" : "ready");
     setNode("training-click", "ready");
   } else if (status === "rejected") {
-    for (const key of DATA_STAGES) setNode(key, "done");
+    for (const key of version.dataStages) setNode(key, "done");
   } else if (["processing", "published", "failed"].includes(status)) {
     const failedDataStage = status === "failed" && !isTrain;
     if (!failedDataStage) {
-      for (const key of DATA_STAGES) setNode(key, "done");
+      for (const key of version.dataStages) setNode(key, "done");
+      setNode("review", "done");
       setNode("training-click", "done");
-    } else setNode("actions-draft", "done");
-    if (status === "published") for (const key of AI_STAGES) setNode(key, "done");
+      setNode(version.trainRunner, status === "failed" ? "failed" : status === "published" || stage ? "done" : "active");
+    } else setNode(version.draftRunner, "done");
+    if (status === "published") for (const key of version.aiStages) setNode(key, "done");
 
     for (const item of steps) {
       const mapped = stepStage(item.label);
@@ -409,11 +726,18 @@ function paintFlow(run) {
     }
     if (stage && STAGE_INFO[stage]) setNode(stage, status === "failed" ? "failed" : "active");
     if (status === "processing" && !stage) setNode("training-setup", "active");
-    if (status === "failed" && !steps.some((item) => item.status === "failed")) setNode(isTrain ? "training-setup" : "analytics", "failed");
+    if (status === "failed") {
+      if (!steps.some((item) => item.status === "failed")) setNode(isTrain ? "training-setup" : "analytics", "failed");
+      if (isTrain) setNode("fallback", "ready", "Hasil lama dipakai");
+    }
   }
+  if (isActiveRun && status === "published") setNode("active-result", "done", "Aktif");
 
   if (!manualNodeSelection) {
-    const next = document.querySelector(".flow-node.active, .flow-node.ready, .flow-node.failed");
+    const next =
+      document.querySelector(".flow-node.failed") ??
+      document.querySelector(".flow-node.active") ??
+      document.querySelector(".flow-node.ready");
     selectedStage = next?.dataset.stage ?? "click";
   }
   drawWires();
@@ -458,7 +782,7 @@ function runSteps(run) {
   if (list.length) return list;
   if (run.status === "creating")
     return [
-      { label: "Menunggu runner analisis GitHub Actions", status: "running" },
+      { label: "Menunggu runner analisis", status: "running" },
     ];
   if (run.status === "draft")
     return [
@@ -472,7 +796,7 @@ function runSteps(run) {
     ];
   if (run.status === "published")
     return [
-      { label: "Pipeline selesai dan model aktif di KV", status: "succeeded" },
+      { label: "Pipeline selesai dan model aktif", status: "succeeded" },
     ];
   return [{ label: "Menunggu pencatatan langkah runner", status: "" }];
 }
@@ -568,27 +892,55 @@ function setLive(label, tone) {
   else delete live.dataset.tone;
 }
 
-function startPolling() {
-  if (timer) return;
-  timer = setInterval(() => {
-    void refresh();
-  }, REFRESH_MS);
+function hasActiveRun() {
+  return latestRuns.some((run) => ACTIVE_STATUSES.includes(run.status));
+}
+
+function nextRefreshDelay() {
+  return hasActiveRun() ? REFRESH_ACTIVE_MS : REFRESH_IDLE_MS;
 }
 
 function stopPolling() {
-  if (!timer) return;
-  clearInterval(timer);
-  timer = null;
+  if (!pollTimer) return;
+  clearTimeout(pollTimer);
+  pollTimer = null;
+}
+
+function scheduleRefresh(delay = nextRefreshDelay()) {
+  stopPolling();
+  if (authBlocked || document.hidden) return;
+  pollTimer = setTimeout(() => {
+    pollTimer = null;
+    void refresh();
+  }, delay);
+}
+
+function formatRelative(timestamp) {
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 5) return "baru saja";
+  if (seconds < 60) return `${seconds} dtk lalu`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} mnt lalu`;
+  return `${Math.floor(minutes / 60)} jam lalu`;
 }
 
 async function refresh() {
-  if (document.hidden || refreshInFlight) return;
+  if (document.hidden) return;
+  if (refreshInFlight) {
+    scheduleRefresh(REFRESH_ACTIVE_MS);
+    return;
+  }
   refreshInFlight = true;
-  setLive("Memperbarui", "warn");
+  const controller = new AbortController();
+  activeAbort = controller;
+  const abortTimer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
+  const slowNotice = setTimeout(() => setLive("Memperbarui…", "warn"), 600);
   try {
     const response = await fetch(`${API}/analysis/graph/status`, {
       credentials: "include",
       cache: "no-store",
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
     });
     if (response.status === 401 || response.status === 403) {
       authBlocked = true;
@@ -596,6 +948,7 @@ async function refresh() {
       el("auth-notice").classList.remove("hidden");
       el("error-notice").classList.add("hidden");
       latestRuns = [];
+      latestActiveRunId = null;
       manualRunId = null;
       paintFlow(null);
       renderRuns();
@@ -608,11 +961,19 @@ async function refresh() {
       el("auth-notice").classList.add("hidden");
       el("error-notice").classList.add("hidden");
       latestRuns = data.runs ?? [];
+      latestActiveRunId = data.active_run_id ?? null;
+      const newestActive = latestRuns.find((run) => ACTIVE_STATUSES.includes(run.status));
+      if (
+        manualRunId &&
+        newestActive &&
+        newestActive.id !== manualRunId &&
+        newestActive.id === latestRuns[0]?.id
+      ) {
+        manualRunId = null;
+      }
       const selected =
         (manualRunId && latestRuns.find((run) => run.id === manualRunId)) ||
-        latestRuns.find((run) =>
-          ["creating", "processing", "approved"].includes(run.status),
-        ) ||
+        newestActive ||
         latestRuns[0] ||
         null;
       paintFlow(selected);
@@ -621,21 +982,28 @@ async function refresh() {
         data.viewer_role ? `Live · ${data.viewer_role}` : "Live",
         "ok",
       );
-      el("updated-at").textContent = formatDate(data.server_time);
-      startPolling();
+      lastUpdatedAt = Date.now();
+      el("updated-at").textContent = formatRelative(lastUpdatedAt);
+      el("updated-at").title = formatDate(data.server_time);
     }
   } catch (error) {
     authBlocked = false;
-    setLive("Koneksi terputus", "warn");
-    el("error-notice").textContent =
-      error instanceof Error ? error.message : "Gagal menghubungi API";
-    el("error-notice").classList.remove("hidden");
+    const aborted = error instanceof DOMException && error.name === "AbortError";
+    setLive(aborted ? "Memuat ulang…" : "Koneksi terputus", "warn");
+    if (!aborted) {
+      el("error-notice").textContent =
+        error instanceof Error ? error.message : "Gagal menghubungi API";
+      el("error-notice").classList.remove("hidden");
+    }
     if (!latestRuns.length)
       el("runs-list").innerHTML =
         '<div class="empty-state">Status run belum dapat diambil. Periksa koneksi lalu tekan tombol segarkan.</div>';
-    startPolling();
   } finally {
+    clearTimeout(abortTimer);
+    clearTimeout(slowNotice);
     refreshInFlight = false;
+    activeAbort = null;
+    scheduleRefresh();
   }
 }
 
@@ -664,6 +1032,10 @@ el("runs-list").addEventListener("click", (event) => {
   }
 });
 
+document.querySelectorAll(".version-tab").forEach((tab) => {
+  tab.addEventListener("click", () => switchVersion(tab.dataset.version));
+});
+syncVersionTabs();
 renderWorkflow();
 updateInspector(null);
 syncResponsiveMode();
@@ -724,6 +1096,7 @@ el("tab-flow").addEventListener("click", () => setMobileView("flow"));
 el("tab-runs").addEventListener("click", () => setMobileView("runs"));
 
 el("refresh").addEventListener("click", () => {
+  activeAbort?.abort();
   void checkServices();
   void refresh();
 });
@@ -731,15 +1104,19 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     void checkServices();
     void refresh();
+  } else {
+    stopPolling();
   }
 });
 window.addEventListener("focus", () => {
-  if (authBlocked && !document.hidden) {
-    void refresh();
-  }
+  if (!document.hidden && Date.now() - lastUpdatedAt > 1500) void refresh();
 });
 void checkServices();
 void refresh();
+setInterval(() => {
+  if (document.hidden || !lastUpdatedAt) return;
+  el("updated-at").textContent = formatRelative(lastUpdatedAt);
+}, 1000);
 setInterval(() => {
   if (!document.hidden) void checkServices();
 }, 30000);

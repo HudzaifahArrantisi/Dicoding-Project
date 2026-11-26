@@ -34,6 +34,14 @@ Training manual `python ai/retraining/train.py --mode 1|2|3` menyimpan hasil ke 
 
 ## Memperbarui model
 
+Run yang sudah diterbitkan disimpan sebagai artefak Data Science dan AI Engineer per run di Neon. Saat training run baru, runner mengambil kembali versi terbit terbaru dari tiap periode awal yang artefaknya lengkap, membangun ulang indeks analisis lintas periode, lalu menyimpan indeks lengkap dalam `daisuki.pkl` run aktif. Ekspor JSON menyimpan model utama di kunci KV `daisuki` dan indeks per periode di kunci berversi `daisuki-history-<run-id>-YYYY-MM-DD`; Worker memilih kunci dari tanggal pertanyaan. Training dari referensi mentah mempertahankan indeks analisis lama. Empat kategori, laporan mingguan, dan hasil job AI tetap tersedia secara utuh di artefak Neon; model menyimpan cuplikan yang bisa dicari. Satu nilai KV dibatasi 25 MiB, sehingga arsip utuh tidak dipindahkan seluruhnya ke satu kunci KV.
+
+Laporan Data Science baru juga menyimpan konsumsi per mitra per hari di `weekly_analytics_summary.json`. Indeks lokal dan JSON Worker dapat mengambil tanggal spesifik serta merangking mitra menurut konsumsi hari tersebut. Untuk pertanyaan Admin yang menyebut tanggal, API menghitung kembali konsumsi dari `stock_logs` jika data mentah masih tersedia; ini juga melayani arsip lama yang belum mempunyai rincian harian. Log yang ditambahkan setelah sebuah run dibuat tidak mengubah snapshot run itu. Buat dan terbitkan run analisis baru agar data tambahan masuk ke `daisuki.pkl` dan KV.
+
+Untuk pertanyaan Admin dengan nama mitra, tanggal, dan jam sampai menit (misalnya `Kafe Langit Tangerang pada 18 nov jam 12.32 WIB`), API membaca log penurunan stok pada menit WIB tersebut langsung dari Neon dan menampilkan produk, stok sebelum/sesudah, waktu, sumber, serta total pcs keluar. Jika tidak ada log pada menit itu, jawaban menyatakan tidak ada catatan; hal tersebut tidak membuktikan tidak ada penjualan. Jalur ini hanya tersedia pada Chat Admin yang terautentikasi.
+
+Di Cloudflare Worker production, indeks hasil training dibaca dari KV. Ketika pertanyaan menyebut tanggal historis, API juga mengambil artefak run `published` terbaru yang mencakup tanggal itu langsung dari Neon sebagai sumber RAG cadangan. Chat Admin dapat melihat ringkasan produk, peringkat mitra, dan hasil AI Engineer dari arsip tersebut; Chat Mitra hanya menerima baris analisis milik `partner_id` dari JWT. Untuk Mitra, API juga menyusun fakta konsumsi harian dari `stock_logs` milik cabangnya pada tanggal yang diminta. Semua cuplikan menyertakan sumber dan periode, sehingga snapshot analisis lama tidak disamakan dengan stok real time. Jalur arsip ini tetap berjalan sebelum indeks KV dari training berikutnya diterbitkan.
+
 Untuk memperbarui intent dan indeks dokumen publik tanpa mengubah classifier risiko, jalankan dari root:
 
 ```powershell

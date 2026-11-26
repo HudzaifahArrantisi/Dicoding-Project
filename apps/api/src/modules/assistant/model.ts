@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { ModelRecord } from "./context";
 import { activeArtifact, workspaceRoot } from "../../lib/analysis-artifacts";
 import { currentModelKv, sql } from "../../db/client";
-import { predictWorkerClassifier, searchWorkerAnalysisRetrieval, searchWorkerRawRetrieval, searchWorkerRetrieval, stockRiskText, type WorkerClassifierBundle } from "./worker-classifier";
+import { analysisQueryDay, predictWorkerClassifier, searchWorkerAnalysisRetrieval, searchWorkerRawRetrieval, searchWorkerRetrieval, stockRiskText, type WorkerClassifierBundle, type WorkerRetrieval } from "./worker-classifier";
 
 export interface ModelPrediction {
   product_id: string;
@@ -149,6 +149,15 @@ export function createInlineWorker(): Worker {
       if (client.isDead) throw new Error("Model Worker tidak aktif");
       const bundle = await loadWorkerBundle();
       if (!bundle) return { available: false, predictions: [] };
+      let analysisRetrieval: WorkerRetrieval | null = bundle.analysis_retrieval;
+      const day = message ? analysisQueryDay(message) : null;
+      const historyKey = day ? bundle.history_days?.[day] : undefined;
+      if (day && bundle.history_days && !historyKey) analysisRetrieval = null;
+      if (historyKey && currentModelKv()) {
+        const history = await currentModelKv()!.get(historyKey, "json") as
+          { format_version?: number; analysis_retrieval?: WorkerRetrieval } | null;
+        analysisRetrieval = history?.format_version === 1 ? history.analysis_retrieval ?? null : null;
+      }
       const predictions = bundle.risk ? records.map((record) => {
         const prediction = predictWorkerClassifier(bundle.risk!, stockRiskText(record));
         return { product_id: record.product_id, label: prediction.label as ModelPrediction["label"], confidence: prediction.confidence };
@@ -160,7 +169,7 @@ export function createInlineWorker(): Worker {
         identity: bundle.metadata as ModelIdentity,
         documents: message ? searchWorkerRetrieval(bundle.retrieval, message) as ModelResult["documents"] : [],
         raw_documents: adminAccess && message ? searchWorkerRawRetrieval(bundle.raw_retrieval, message) as ModelResult["raw_documents"] : [],
-        analysis_documents: (partnerId || adminAccess) && message ? searchWorkerAnalysisRetrieval(bundle.analysis_retrieval, partnerId, message, adminAccess) as ModelResult["analysis_documents"] : [],
+        analysis_documents: (partnerId || adminAccess) && message ? searchWorkerAnalysisRetrieval(analysisRetrieval, partnerId, message, adminAccess) as ModelResult["analysis_documents"] : [],
         retrieval_ready: !!bundle.retrieval?.documents.length,
         raw_retrieval_ready: adminAccess && !!bundle.raw_retrieval?.documents.length,
         risk_available: !!bundle.risk,

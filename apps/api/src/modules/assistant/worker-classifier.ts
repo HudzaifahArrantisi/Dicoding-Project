@@ -13,6 +13,7 @@ export interface WorkerClassifierBundle {
   retrieval: WorkerRetrieval | null;
   raw_retrieval: WorkerRetrieval | null;
   analysis_retrieval: WorkerRetrieval | null;
+  history_days?: Record<string, string>;
 }
 
 export interface WorkerRetrieval {
@@ -109,10 +110,29 @@ export function searchWorkerRawRetrieval(index: WorkerRetrieval | null, query: s
     .map(({ position, score }) => result(index, position, score));
 }
 
+export function analysisQueryDay(query: string): string | null {
+  const isoDate = query.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0];
+  const monthNames = ["januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"];
+  const writtenDate = query.toLowerCase().match(/\b(\d{1,2})\s+(januari|jan|februari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|agustus|agu|september|sep|oktober|okt|november|nov|desember|des)(?:\s+(\d{4}))?\b/);
+  return isoDate ?? (writtenDate ? `${writtenDate[3] ?? new Date().getFullYear()}-${String(monthNames.findIndex((month) => month.startsWith(writtenDate[2])) + 1).padStart(2, "0")}-${writtenDate[1].padStart(2, "0")}` : null);
+}
+
 export function searchWorkerAnalysisRetrieval(index: WorkerRetrieval | null, partnerId: string | undefined, query: string, adminAccess = false): Array<Record<string, unknown>> {
   if (!index || (!partnerId && !adminAccess)) return [];
   const own = scoreWorkerRetrieval(index, query).filter(({ position }) => adminAccess || index.documents[position].partner_id === partnerId)
     .sort((a, b) => b.score - a.score || a.position - b.position);
+  const day = analysisQueryDay(query);
+  if (day) {
+    const dated = own.filter(({ position }) => index.documents[position].day === day);
+    if (dated.length) {
+      const highest = /tinggi|terbanyak|terbesar|paling|top/i.test(query);
+      dated.sort((a, b) => highest
+        ? Number(index.documents[b.position].consumed_units ?? 0) - Number(index.documents[a.position].consumed_units ?? 0)
+        : b.score - a.score);
+      return dated.slice(0, 6).map(({ position, score }) => result(index, position, score));
+    }
+    return [];
+  }
   const overview = adminAccess ? undefined : own.find(({ position }) => index.documents[position].source === "category_partners.json");
   const lower = query.toLowerCase();
   let selected = own.filter(({ score }) => score >= 0.03).slice(0, 6);

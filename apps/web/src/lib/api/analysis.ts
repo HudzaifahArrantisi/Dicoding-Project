@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import type { OperationalInsightResponse } from '@/data/operational-insight-fallback'
 
 export interface AnalysisRun {
   id: string
@@ -160,5 +161,5 @@ export type {
 } from '@/data/operational-insight-fallback'
 
 export async function getOperationalInsight() {
-  return apiRequest<import('@/data/operational-insight-fallback').OperationalInsightResponse>('/analysis/operational-insight')
+  return apiRequest<OperationalInsightResponse>('/analysis/operational-insight')
 }

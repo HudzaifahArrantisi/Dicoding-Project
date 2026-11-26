@@ -107,12 +107,16 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
         raise ValueError("Rentang analisis harus minimal satu hari")
     partner_names = {s["partner_id"]: s["partner_name"] for s in stocks}
     daily_partner_counts: dict[tuple[str, str], int] = defaultdict(int)
+    daily_partner_units: dict[tuple[str, str], int] = defaultdict(int)
     for row in logs:
         if start <= row["created_at"] < end and row["partner_id"] in partner_names:
             day = row["created_at"].astimezone(JAKARTA).date().isoformat()
             daily_partner_counts[(day, row["partner_id"])] += 1
+            daily_partner_units[(day, row["partner_id"])] += max(0, row["qty_before"] - row["qty_after"])
     partner_daily = [{"day": day, "partner_id": partner_id, "partner_name": partner_names[partner_id], "log_count": count}
                      for (day, partner_id), count in sorted(daily_partner_counts.items())]
+    for item in partner_daily:
+        item["consumed_units"] = daily_partner_units[(item["day"], item["partner_id"])]
     daily_reporting = [{"day": (start.astimezone(JAKARTA).date() + timedelta(days=i)).isoformat(),
                         "active_partners": sum(day == (start.astimezone(JAKARTA).date() + timedelta(days=i)).isoformat()
                                                for day, _ in daily_partner_counts),

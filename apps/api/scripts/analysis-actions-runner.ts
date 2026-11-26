@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { db, sql } from "../src/db/client";
@@ -22,32 +22,35 @@ const jobs = [
   ["Validasi hasil", "ai/jobs/validate_stage.py"],
 ] as const;
 
-async function python(script: string, args: string[] = [], rawDirectory?: string) {
+async function python(script: string, args: string[] = [], rawDirectory?: string, historicalRunIds: string[] = []) {
   const child = Bun.spawn([process.env.DAISUKI_PYTHON_BIN || "python", resolve(workspaceRoot, script), ...args], {
     cwd: workspaceRoot,
     env: { ...process.env, DAISUKI_ANALYSIS_RUN_ID: id,
+      DAISUKI_HISTORICAL_RUN_IDS: historicalRunIds.join(","),
       ...(rawDirectory ? { DAISUKI_RAW_REFERENCES_DIR: rawDirectory } : {}) },
     stdout: "inherit", stderr: "inherit",
   });
   if (await child.exited !== 0) throw new Error(`${script} gagal`);
 }
 
-async function publishKv(source: string) {
+async function publishKv(source: string, key = "daisuki") {
   const token = process.env.CLOUDFLARE_KV_TOKEN;
   const account = process.env.CLOUDFLARE_ACCOUNT_ID;
   const namespace = process.env.CLOUDFLARE_KV_NAMESPACE_ID;
   if (!token || !account || !namespace) throw new Error("Secret Cloudflare KV belum lengkap");
   const content = await readFile(source);
   if (content.byteLength > 25 * 1024 * 1024) throw new Error("JSON model melebihi batas KV 25 MiB");
-  const bundle = JSON.parse(content.toString("utf8")) as { format_version?: number; intent?: unknown };
-  if (bundle.format_version !== 1 || !bundle.intent) throw new Error("JSON model tidak valid");
-  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/storage/kv/namespaces/${namespace}/values/daisuki`, {
+  const bundle = JSON.parse(content.toString("utf8")) as { format_version?: number; intent?: unknown; analysis_retrieval?: unknown };
+  if (bundle.format_version !== 1 || (key === "daisuki" ? !bundle.intent : !bundle.analysis_retrieval)) {
+    throw new Error("JSON model tidak valid");
+  }
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/storage/kv/namespaces/${namespace}/values/${key}`, {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream" },
     body: content,
   });
   if (!response.ok) throw new Error(`Publikasi KV gagal (${response.status})`);
-  console.log(`Model run ${id} terbit ke KV (${content.byteLength} bytes)`);
+  console.log(`Model run ${id}: ${key} terbit ke KV (${content.byteLength} bytes)`);
 }
 
 let cleanup: (() => Promise<void>) | undefined;
@@ -96,6 +99,29 @@ try {
     const trainingSource = (run.manifest as Record<string, unknown> | null)?.training_source === "raw_references"
       ? "raw_references" : "analysis";
     await hydrateDataScienceArtifacts(id);
+    const publishedRuns = await db.select({ id: analysisRuns.id, start_date: analysisRuns.start_date }).from(analysisRuns)
+      .where(eq(analysisRuns.status, "published")).orderBy(analysisRuns.published_at);
+    const latestByStart = new Map(publishedRuns.map((published) => [published.start_date, published]));
+    const historicalRunIds: string[] = [];
+    for (const previousRun of latestByStart.values()) {
+      if (previousRun.id === id) continue;
+      try {
+        await hydrateDataScienceArtifacts(previousRun.id);
+      } catch (error) {
+        console.warn(`Arsip run ${previousRun.id} tidak lengkap; gunakan arsip model sebelumnya: ${error instanceof Error ? error.message : "Error"}`);
+        continue;
+      }
+      const previousAiDir = aiRunDir(previousRun.id);
+      for (const name of ["weekly_operational_facts.json", "regional_stockout_insights.json",
+        "model_evaluation.json", "allocation_preview.json"]) {
+        const content = await loadArtifact(previousRun.id, name);
+        if (content) {
+          await mkdir(previousAiDir, { recursive: true });
+          await writeFile(resolve(previousAiDir, name), content);
+        }
+      }
+      historicalRunIds.push(previousRun.id);
+    }
     const staged = await stageRawReferences(trainingSource === "raw_references");
     cleanup = staged.cleanup;
     const active = await getActiveRunId();
@@ -110,7 +136,7 @@ try {
     for (const [label, script] of jobs) {
       await beginStep(label);
       try {
-        await python(script, script.endsWith("train.py") ? ["--weekly", "--training-source", trainingSource] : [], staged.directory);
+        await python(script, script.endsWith("train.py") ? ["--weekly", "--training-source", trainingSource] : [], staged.directory, historicalRunIds);
         await finishStep();
       } catch (error) {
         await finishStep("failed");
@@ -126,6 +152,9 @@ try {
     await python("ai/retraining/export_worker_classifier.py", [modelPath, jsonPath]);
     await finishStep();
     await beginStep("Publikasi model JSON ke Cloudflare KV");
+    for (const name of (await readdir(aiRunDir(id))).filter((entry) => /^daisuki-history-[0-9a-f-]{36}-\d{4}-\d{2}-\d{2}\.json$/.test(entry))) {
+      await publishKv(resolve(aiRunDir(id), name), name.slice(0, -5));
+    }
     await publishKv(jsonPath);
     await finishStep();
     await beginStep("Terbitkan hasil analisis aktif");

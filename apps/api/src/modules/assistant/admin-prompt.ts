@@ -2,17 +2,19 @@ import type { AdminContext } from "./admin-context";
 import type { AdminIndexedExcerpt } from "./admin-knowledge";
 import type { ModelResult } from "./model";
 import { OFFICIAL_RETAIL_PRICES, retailPriceForProduct } from "@daisuki/shared";
+import type { HistoricalDay } from "./historical-consumption";
 
 export interface BuildAdminPromptOptions {
   context: AdminContext;
   model: ModelResult;
   knowledgeExcerpts: AdminIndexedExcerpt[];
+  historicalDays?: HistoricalDay[];
   companyData?: { company_profile?: unknown; sop_procedures?: unknown; business_rules?: unknown } | null;
   memory?: { summary: string; recent: string };
 }
 
 export function buildAdminRagPrompt(options: BuildAdminPromptOptions): string {
-  const { context, model, knowledgeExcerpts, companyData, memory } = options;
+  const { context, model, knowledgeExcerpts, historicalDays, companyData, memory } = options;
 
   const warehouseFacts = context.warehouse.map((w) => ({
     product_name: w.name,
@@ -75,6 +77,7 @@ PEDOMAN UTAMA:
    - Gunakan FAKTA_DATABASE_REALTIME di bawah sebagai sumber mutlak untuk angka stok gudang pusat, kesehatan cabang, daftar cabang kritis, pesanan pending (menunggu persetujuan), kiriman aktif, dan log mutasi terbaru.
    - Harga normal/eceran resmi per pcs ada di FAKTA_DATABASE_REALTIME.harga_normal_per_pcs. Seblak Rp27.500; Basreng, Makaroni, dan Keripik Pisang Rp25.000. Daftar harga untuk pengguna hanya memuat nama produk dan harga normal; jangan tampilkan SKU atau kolom harga pasokan B2B. Jangan memakai dokumen lama untuk menjawab harga normal. Estimasi omzet dari log stok keluar memakai harga normal ini.
    - Jangan mengarang angka atau nomor PO yang tidak ada di fakta database.
+   - Untuk tanggal historis yang ditanya, gunakan FAKTA_KONSUMSI_HARIAN bila tersedia. Jangan memakai peringkat mingguan sebagai jawaban untuk satu tanggal. Jika tidak ada fakta tanggal itu di database maupun arsip analisis, katakan angka belum tersedia.
 3. Sumber Model Machine Learning & Training (daisuki.pkl):
    - daisuki.pkl adalah model lokal Multinomial Naive Bayes untuk klasifikasi intent pesan dan prediksi prioritas risiko restock toko cabang (urgent_restock, regular_order, normal).
    - Analisis spasial wilayah menggunakan Multi-Factor Naive Bayes (Zona Merah, Kuning, Hijau) dari Data Science.
@@ -103,6 +106,10 @@ ${JSON.stringify({
   log_mutasi_terbaru: recentLogsList,
   analisis_mingguan_dan_wilayah: weeklyFacts,
 })}
+
+FAKTA_KONSUMSI_HARIAN:
+${JSON.stringify((historicalDays ?? []).map((day) => ({ day: day.day, total_units: day.total_units, log_count: day.log_count,
+  top_partners: day.partners.slice(0, 20) })))}
 
 STATUS_MODEL_MACHINE_LEARNING:
 ${JSON.stringify({

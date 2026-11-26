@@ -108,20 +108,24 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     if (!["admin", "data_science", "ai_engineer"].includes(user.role)) {
       set.status = 403; return { error: "Dashboard Graph hanya untuk tim internal" };
     }
-    const runs = await db.select({
-      id: analysisRuns.id,
-      start_date: analysisRuns.start_date,
-      end_date: analysisRuns.end_date,
-      status: analysisRuns.status,
-      created_at: analysisRuns.created_at,
-      published_at: analysisRuns.published_at,
-      current_step: analysisRuns.current_step,
-      steps: analysisRuns.steps,
-      is_active: analysisRuns.is_active,
-    }).from(analysisRuns).orderBy(desc(analysisRuns.created_at)).limit(30);
+    const [runs, activeRunId] = await Promise.all([
+      db.select({
+        id: analysisRuns.id,
+        start_date: analysisRuns.start_date,
+        end_date: analysisRuns.end_date,
+        status: analysisRuns.status,
+        created_at: analysisRuns.created_at,
+        published_at: analysisRuns.published_at,
+        current_step: analysisRuns.current_step,
+        steps: analysisRuns.steps,
+        is_active: analysisRuns.is_active,
+      }).from(analysisRuns).orderBy(desc(analysisRuns.created_at)).limit(30),
+      getActiveRunId(),
+    ]);
+    set.headers["Cache-Control"] = "no-store";
     return {
       server_time: new Date().toISOString(),
-      active_run_id: await getActiveRunId(),
+      active_run_id: activeRunId,
       runs,
       viewer_role: user.role,
     };

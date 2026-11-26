@@ -38,17 +38,11 @@ function dailyUsage(partnerNumber: number, productIndex: number, dayIndex: numbe
   return base + (dayIndex % 3 === 0 ? 1 : 0);
 }
 
-// Setiap mitra hanya melaporkan sebagian kombinasi produk-hari sehingga jumlah
-// baris log per mitra berbeda-beda, bukan rata 4 produk x 7 hari.
-function reportedSlot(partnerNumber: number, productIndex: number, dayIndex: number, dayCount: number) {
-  const coverage = 2 + ((partnerNumber * 5) % 3); // 2..4 produk
-  const relativeProduct = (productIndex - (partnerNumber % 4) + 4) % 4;
-  if (relativeProduct >= coverage) return false;
-  const missedDays = (partnerNumber * 3) % Math.min(3, dayCount); // 0..2 hari libur
-  for (let missed = 0; missed < missedDays; missed += 1) {
-    if (dayIndex === (partnerNumber * 7 + missed * 3 + 1) % dayCount) return false;
-  }
-  return (partnerNumber * 31 + productIndex * 17 + dayIndex * 13) % 100 >= 15;
+function reportedSlot(partnerNumber: number, productIndex: number, dayIndex: number) {
+  const coverage = 1 + ((partnerNumber * 11 + dayIndex * (partnerNumber % 5 + 1)
+    + Math.floor(partnerNumber / 7)) % 4);
+  const firstProduct = (partnerNumber + dayIndex) % productSkus.length;
+  return (productIndex - firstProduct + productSkus.length) % productSkus.length < coverage;
 }
 
 try {
@@ -94,7 +88,9 @@ try {
   const existingBySlot = new Map<string, (typeof existing)[number]>();
   for (const row of existing) {
     const day = dateFormatter.format(row.created_at);
-    existingBySlot.set(`${row.partner_id}:${row.product_id}:${day}`, row);
+    const key = `${row.partner_id}:${row.product_id}:${day}`;
+    const firstLog = existingBySlot.get(key);
+    if (!firstLog || row.created_at < firstLog.created_at) existingBySlot.set(key, row);
   }
 
   const stockByKey = new Map(stockRows.map((row) => [`${row.partner_id}:${row.product_id}`, row.current_qty]));
@@ -110,8 +106,12 @@ try {
       const productId = productRows[productIndex]!.id;
       let qtyAfter = stockByKey.get(`${partnerId}:${productId}`)!;
       for (let dayIndex = dayCount - 1; dayIndex >= 0; dayIndex -= 1) {
-        if (!reportedSlot(partnerNumber, productIndex, dayIndex, dayCount)) continue;
-        if (existingBySlot.has(`${partnerId}:${productId}:${dayLabels[dayIndex]}`)) continue;
+        const existingLog = existingBySlot.get(`${partnerId}:${productId}:${dayLabels[dayIndex]}`);
+        if (existingLog) {
+          qtyAfter = existingLog.qty_before;
+          continue;
+        }
+        if (!reportedSlot(partnerNumber, productIndex, dayIndex)) continue;
         const usage = dailyUsage(partnerNumber, productIndex, dayIndex);
         const qtyBefore = qtyAfter + usage;
         const hour = 9 + ((partnerNumber + productIndex + dayIndex) % 8);

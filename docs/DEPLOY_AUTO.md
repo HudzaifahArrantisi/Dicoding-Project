@@ -1,22 +1,39 @@
 # Deploy otomatis setelah push
 
 Setiap push ke `main` memicu satu workflow **Deploy Daisuki Workers**
-(`.github/workflows/deploy.yml`). Workflow menjalankan tiga job paralel yang
-masing-masing menerbitkan satu Worker:
+(`.github/workflows/deploy.yml`). Workflow menjalankan pemeriksaan kode lebih
+dulu, baru menerbitkan tiga Worker:
 
-| Job | Worker | Konfigurasi | Catatan |
+| Job | Jenis | Isi | Syarat |
 |---|---|---|---|
-| `api` | `daisuki-api` | `apps/api/wrangler.jsonc` | Dijalankan setelah `typecheck` API lulus |
-| `graph` | `daisuki-graph` | `apps/graph/wrangler.jsonc` | Aset statik dari `apps/graph/public` |
-| `web` | `daisuki-inventory` | `apps/web/wrangler.jsonc` | `bun run build` lalu `wrangler deploy` |
+| `checks` | gerbang | `bun install --frozen-lockfile`, `bun run typecheck` (web + API), `bun run --cwd apps/web lint`, `node --check apps/graph/public/app.js`, `bun run build` web | wajib lulus |
+| `tests` | laporan | `bun test` (JUnit diunggah sebagai artefak `bun-test-report`) | tidak memblokir deploy |
+| `api` | deploy | `daisuki-api` dari `apps/api/wrangler.jsonc` | `needs: checks` |
+| `graph` | deploy | `daisuki-graph`, aset `apps/graph/public` | `needs: checks` |
+| `web` | deploy | `daisuki-inventory`, `bun run build` lalu `wrangler deploy` | `needs: checks` |
+
+Jika `checks` gagal, ketiga deploy tidak dijalankan. Job `tests` sengaja
+`continue-on-error` karena sebagian suite membutuhkan database dan LLM live;
+hasilnya tetap terlihat di tab Actions dan artefak, tetapi tidak menahan rilis.
 
 Tidak ada filter path: perubahan di mana pun (web, API, graph, dokumentasi,
-Python) tetap menerbitkan ketiga Worker. Job berjalan paralel, jadi gagal di
-satu Worker tidak membatalkan dua lainnya. Untuk mengulang, buka
+Python) tetap menerbitkan ketiga Worker. Ketiga job deploy berjalan paralel,
+jadi gagal di satu Worker tidak membatalkan dua lainnya. Untuk mengulang, buka
 GitHub → Actions → **Deploy Daisuki Workers** → **Run workflow** pada `main`.
 
-Job yang sama juga menangani deploy Graph, sehingga workflow
-`deploy-graph.yml` dan `deploy-api.yml` sudah dihapus.
+Workflow `deploy-graph.yml` dan `deploy-api.yml` sudah dihapus; semuanya
+ditangani satu pipeline ini.
+
+### Menjalankan pemeriksaan yang sama secara lokal
+
+```powershell
+bun install --frozen-lockfile
+bun run typecheck
+bun run --cwd apps/web lint
+node --check apps/graph/public/app.js
+bun run --cwd apps/web build
+bun test   # opsional, sebagian butuh DB/LLM
+```
 
 ## Setup satu kali
 

@@ -8,6 +8,8 @@
 - API availability from `GET /v1/health`.
 - Run snapshots and pipeline stages from Neon `analysis_runs`.
 - Python aggregation, the seven AI jobs, model export, KV publication, and final publication from runner-written `current_step` and `steps` fields.
+- Two lanes mirror the operating flow: **Data Science** (`Perbarui analisis` → API → Neon `creating` → GitHub Actions → Python 4 kategori → simpan laporan → run `draft` → tinjau di AI Insights, dengan node samping *Hasil aktif tetap dipakai*) and **AI Engineer** (`Mulai training` → GitHub Actions job AI → tujuh job → model `daisuki.pkl` → simpan artefak → ekspor JSON → KV → terbit → muat ulang grafik), plus a dashed *Hasil lama tetap dipakai* branch when training fails.
+- The canvas has a **Lokal / Produksi** switch. `Lokal` shows the same runner replaced by local execution (`Bun` spawns Python directly, `daisuki.pkl` is read from disk, no JSON export and no Cloudflare KV, then the local model worker reloads). `Produksi` shows GitHub Actions, the JSON export, and the `DAISUKI_MODEL` KV publication. The host decides the default (`localhost` → Lokal), an explicit click is remembered in `localStorage`, and `?flow=local|production` overrides it for previews.
 - Generic link to GitHub Actions for detailed workflow logs. The dashboard never exposes raw runner error text.
 
 Stages are reported at the boundaries the runner can observe. The Python weekly aggregator is one tracked stage; it does not publish internal per-category percentages. Do not present invented percentages as telemetry.

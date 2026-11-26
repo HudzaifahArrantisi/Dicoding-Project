@@ -278,10 +278,17 @@ def run_retraining_loop(training_source: str = "analysis") -> bool:
                 raw_digest.update(path.read_bytes())
             raw_input_sha256 = raw_digest.hexdigest()
         intent_texts, intent_labels = build_intent_samples()
+        previous_bundle: dict[str, Any] = {}
+        if MODEL_OUTPUT_FILE.is_file():
+            with MODEL_OUTPUT_FILE.open("rb") as previous_file:
+                loaded = pickle.load(previous_file)
+            if not isinstance(loaded, dict):
+                raise ValueError("Format model sebelumnya tidak didukung")
+            previous_bundle = loaded
         bundle: dict[str, Any] = {
             "intent": train_pipeline(intent_texts, intent_labels, fit_prior=False),
             "public_knowledge": collect_mainbrain_knowledge_snippets(),
-            "retrieval": build_knowledge_index(),
+            "retrieval": build_knowledge_index(shared_summaries=previous_bundle.get("shared_summaries", [])),
             "mainbrain_meta": {
                 "total_documents": mainbrain_stats["total"],
                 "converted_markdowns": mainbrain_stats["success"],
@@ -301,18 +308,21 @@ def run_retraining_loop(training_source: str = "analysis") -> bool:
                 "identity_bio": IDENTITY_BIO,
             },
         }
+        for retained in ("analysis_retrieval", "raw_pdf_retrieval", "shared_summaries"):
+            if retained in previous_bundle:
+                bundle[retained] = previous_bundle[retained]
         if run_id():
+            historical = bundle.get("analysis_retrieval")
+            for historical_id in filter(None, os.environ.get("DAISUKI_HISTORICAL_RUN_IDS", "").split(",")):
+                historical_folder = RUNS / str(uuid.UUID(historical_id))
+                historical = build_analysis_index(historical_folder, historical,
+                                                  BASE_DIR.parent / "data" / "private" / "runs" / historical_id)
             if training_source == "analysis":
-                previous_index = None
-                if MODEL_OUTPUT_FILE.is_file():
-                    with MODEL_OUTPUT_FILE.open("rb") as previous_file:
-                        previous_bundle = pickle.load(previous_file)
-                    if not isinstance(previous_bundle, dict):
-                        raise ValueError("Format model sebelumnya tidak didukung")
-                    previous_index = previous_bundle.get("analysis_retrieval")
-                bundle["analysis_retrieval"] = build_analysis_index(handoff.parent, previous_index)
+                historical = build_analysis_index(handoff.parent, historical, stage_dir())
             else:
                 bundle["raw_pdf_retrieval"] = build_raw_reference_index(raw_paths)
+            if historical:
+                bundle["analysis_retrieval"] = historical
         if len(set(labels)) >= 2:
             bundle["risk"] = train_pipeline(texts, labels)
             bundle["mainbrain_meta"]["risk_model_source"] = risk_training_source
