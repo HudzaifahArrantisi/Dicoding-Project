@@ -75,17 +75,18 @@ function applyTheme(theme) {
 
   themeButton.setAttribute("aria-pressed", String(isLight));
   themeButton.setAttribute("aria-label", isLight ? "Ganti ke tema gelap" : "Ganti ke tema terang");
-  if (themeMeta) themeMeta.setAttribute("content", isLight ? "#f1f4f8" : "#0f1520");
+  if (themeMeta) themeMeta.setAttribute("content", isLight ? "#f2f4f7" : "#0b101c");
 }
 
 function initTheme() {
+  const requested = new URLSearchParams(window.location.search).get("theme");
   let stored = null;
   try {
     stored = window.localStorage.getItem(THEME_KEY);
   } catch {
     stored = null;
   }
-  applyTheme(stored);
+  applyTheme(requested === "light" || requested === "dark" ? requested : stored);
 
   themeButton.addEventListener("click", () => {
     const next = themeButton.getAttribute("aria-pressed") === "true" ? "dark" : "light";
@@ -186,8 +187,8 @@ function applyZoom() {
 function fitFlowToViewport() {
   const viewport = el("flow-viewport");
   if (!viewport || viewport.clientWidth === 0) return;
-  const availW = Math.max(280, viewport.clientWidth - 24);
-  const availH = Math.max(220, viewport.clientHeight - 24);
+  const availW = Math.max(280, viewport.clientWidth - 40);
+  const availH = Math.max(220, viewport.clientHeight - 40);
   let target;
   if (MOBILE_MQ.matches) {
     // Readable card size on phones with smooth horizontal scrolling across bands.
@@ -198,6 +199,14 @@ function fitFlowToViewport() {
   }
   flowZoom = Math.round(target * 20) / 20;
   applyZoom();
+  // Second pass: shave 5% steps until the frame really fits (guards late layout and scrollbars).
+  const frame = viewport.querySelector(".canvas-frame");
+  let guard = 0;
+  while (frame && frame.getBoundingClientRect().width > viewport.clientWidth - 4 && flowZoom > 0.5 && guard < 8) {
+    flowZoom = Math.round((flowZoom - 0.05) * 20) / 20;
+    applyZoom();
+    guard += 1;
+  }
 }
 
 const STAGE_INFO = {

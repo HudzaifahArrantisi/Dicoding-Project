@@ -1,16 +1,18 @@
 # Deploy otomatis setelah push
 
 Setiap push ke `main` memicu satu workflow **Deploy Daisuki Workers**
-(`.github/workflows/deploy.yml`). Workflow menjalankan pemeriksaan kode lebih
-dulu, baru menerbitkan tiga Worker:
+(`.github/workflows/deploy.yml`). Pull request ke `main` juga menjalankan
+pemeriksaan (`checks` dan `tests`) tanpa melakukan deploy. Workflow menjalankan
+pemeriksaan kode lebih dulu, baru menerbitkan tiga Worker beserta smoke test
+health pasca-deploy:
 
 | Job | Jenis | Isi | Syarat |
 |---|---|---|---|
-| `checks` | gerbang | `bun install --frozen-lockfile`, `bun run typecheck` (web + API), `bun run --cwd apps/web lint`, `node --check apps/graph/public/app.js`, `bun run build` web | wajib lulus |
-| `tests` | laporan | `bun test` (JUnit diunggah sebagai artefak `bun-test-report`) | tidak memblokir deploy |
-| `api` | deploy | `daisuki-api` dari `apps/api/wrangler.jsonc` | `needs: checks` |
-| `graph` | deploy | `daisuki-graph`, aset `apps/graph/public` | `needs: checks` |
-| `web` | deploy | `daisuki-inventory`, `bun run build` lalu `wrangler deploy` | `needs: checks` |
+| `checks` | gerbang | `bun install --frozen-lockfile`, `bun run typecheck` (web + API), `bun run --cwd apps/web lint`, `node --check apps/graph/public/app.js`, `py_compile` (`ai/` + `data-science/`), `bun run test:ci` (unit test offline), `bun run build` web | wajib lulus |
+| `tests` | laporan | `bun test` penuh (JUnit diunggah sebagai artefak `bun-test-report`) | tidak memblokir deploy |
+| `api` | deploy | `daisuki-api` dari `apps/api/wrangler.jsonc` + smoke test `/v1/health` | `needs: checks`, bukan PR |
+| `graph` | deploy | `daisuki-graph`, aset `apps/graph/public` + smoke test `/health` | `needs: checks`, bukan PR |
+| `web` | deploy | `daisuki-inventory`, `bun run build`, `wrangler deploy` + smoke test `/` | `needs: checks`, bukan PR |
 
 Jika `checks` gagal, ketiga deploy tidak dijalankan. Job `tests` sengaja
 `continue-on-error` karena sebagian suite membutuhkan database dan LLM live;
@@ -31,6 +33,8 @@ bun install --frozen-lockfile
 bun run typecheck
 bun run --cwd apps/web lint
 node --check apps/graph/public/app.js
+python -c "import pathlib, py_compile; files=[p for d in ('ai','data-science') for p in pathlib.Path(d).rglob('*.py') if '.venv' not in p.parts]; [py_compile.compile(str(f), doraise=True) for f in files]"
+bun run test:ci
 bun run --cwd apps/web build
 bun test   # opsional, sebagian butuh DB/LLM
 ```

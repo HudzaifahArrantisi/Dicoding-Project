@@ -1,7 +1,9 @@
 /*
   Daisuki System Graph.
-  Clean operator UI: kartu netral berhirarki jelas, status lewat badge terukur (bukan blok hijau berat),
-  alur 4 fase berurutan kiri-ke-kanan dengan jalur ortogonal tanpa persilangan, dua tema WCAG AA.
+  Design read: internal pipeline monitor for Admin / Data Science / AI Engineer,
+  warm ink-on-paper operational ledger, dial ENERGY 1 / RHYTHM 2 / MOTION 1.
+  Satu aksen (terracotta) berarti "sedang bergerak atau dipilih"; selesai memakai
+  grafit netral supaya status tidak berebut perhatian dengan aksen.
 */
 
 :root {
@@ -10,142 +12,139 @@
   --font-display: "Bricolage Grotesque", "Figtree", sans-serif;
   --font-mono: "DM Mono", ui-monospace, monospace;
 
-  --page: #0f1520;
-  --surface: #161e2c;
-  --surface-2: #1d2738;
-  --line: #283449;
-  --line-strong: #5a6b86;
-  --ink: #f1f5f9;
-  --muted: #a6b4c8;
-  --muted-strong: #d5dfec;
+  --page: #0b101c;
+  --surface: #131a29;
+  --surface-2: #192133;
+  --line: #242e45;
+  --line-strong: #6d7d9c;
+  --ink: #eef2f8;
+  --muted: #97a5bd;
+  --muted-strong: #d2dbe9;
 
-  --accent: #e04f33;
+  --accent: #e2604a;
   --accent-fill: #c9452b;
-  --accent-ink: #ffab98;
-  --ok: #38b878;
-  --ok-ink: #7ee2a8;
-  --ok-bg: #132a21;
-  --ok-line: #2d7a55;
-  --warn: #e0a34c;
-  --warn-ink: #f7ca78;
-  --warn-bg: #2d2314;
-  --warn-line: #b87c24;
-  --crit: #e57368;
-  --crit-ink: #ffa099;
-  --crit-bg: #311a1e;
-  --crit-line: #b84b44;
-  --idle-ink: #c7d2e2;
-  --idle-bg: #232e42;
+  --accent-ink: #f2a897;
+  --ok: #7d8fae;
+  --ok-ink: #d6e1f1;
+  --ok-bg: #1a2335;
+  --ok-line: #3a4763;
+  --warn: #e2604a;
+  --warn-ink: #ffb2a1;
+  --warn-bg: #2b1a17;
+  --warn-line: #8f4a39;
+  --crit: #d3584e;
+  --crit-ink: #ffa9a2;
+  --crit-bg: #2c1719;
+  --crit-line: #8f3d3a;
+  --idle-ink: #b9c5d8;
+  --idle-bg: #202a3e;
 
-  --canvas: #0c111b;
-  --canvas-dot: #1f2a3d;
-  --lane-bg: rgba(22, 30, 44, 0.72);
-  --lane-line: #253145;
-  --node: #1b2434;
-  --node-line: #34435c;
-  --node-hover: #222e42;
-  --node-shadow: 0 2px 6px rgba(4, 8, 16, 0.28);
+  --canvas: #0a0f1a;
+  --lane-bg: transparent;
+  --lane-line: #212b41;
+  --node: #151d2d;
+  --node-line: #2b3750;
+  --node-hover: #1b2438;
+  --node-shadow: 0 1px 2px rgba(3, 6, 14, 0.35);
 
-  --wire: #51627d;
-  --wire-done: #3aa56d;
-  --wire-active: #e0a34c;
-  --wire-failed: #d95d54;
-  --backdrop: rgba(6, 10, 18, 0.62);
-  --shadow-drawer: -12px 0 36px rgba(4, 8, 16, 0.45);
-  --radius: 12px;
-  --radius-sm: 8px;
+  --wire: #465670;
+  --wire-done: #5f7393;
+  --wire-active: #e2604a;
+  --wire-failed: #d3584e;
+  --backdrop: rgba(5, 9, 17, 0.66);
+  --shadow-drawer: -12px 0 36px rgba(3, 7, 14, 0.45);
+  --radius: 10px;
+  --radius-sm: 6px;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --page: #f1f4f8;
+  --page: #f2f4f7;
   --surface: #ffffff;
-  --surface-2: #f5f7fb;
-  --line: #dce3ee;
-  --line-strong: #8795ab;
+  --surface-2: #f7f8fa;
+  --line: #dfe3ea;
+  --line-strong: #78849a;
   --ink: #141b3d;
-  --muted: #525f77;
-  --muted-strong: #313d55;
+  --muted: #55617a;
+  --muted-strong: #333f5c;
 
   --accent: #c9452b;
   --accent-fill: #c9452b;
-  --accent-ink: #ac3a21;
-  --ok: #198754;
-  --ok-ink: #115e38;
-  --ok-bg: #e3f6ec;
-  --ok-line: #6db892;
-  --warn: #b87409;
-  --warn-ink: #7c4e00;
-  --warn-bg: #fef3d6;
-  --warn-line: #d4942a;
-  --crit: #c5302c;
-  --crit-ink: #99201c;
-  --crit-bg: #fde9e8;
-  --crit-line: #d97872;
-  --idle-ink: #3c485e;
-  --idle-bg: #eaedf4;
+  --accent-ink: #a83a22;
+  --ok: #6b7a96;
+  --ok-ink: #33405a;
+  --ok-bg: #eef1f6;
+  --ok-line: #c3ccdb;
+  --warn: #c9452b;
+  --warn-ink: #a2381f;
+  --warn-bg: #fbebe6;
+  --warn-line: #d99583;
+  --crit: #b3261e;
+  --crit-ink: #92211b;
+  --crit-bg: #fcebe9;
+  --crit-line: #d1948f;
+  --idle-ink: #4c5972;
+  --idle-bg: #eef0f5;
 
-  --canvas: #eef1f7;
-  --canvas-dot: #cfd8e6;
-  --lane-bg: rgba(255, 255, 255, 0.72);
-  --lane-line: #d6dfec;
+  --canvas: #f6f7f9;
+  --lane-bg: transparent;
+  --lane-line: #e2e6ee;
   --node: #ffffff;
-  --node-line: #c7d2e2;
-  --node-hover: #f7f9fc;
-  --node-shadow: 0 2px 6px rgba(20, 27, 61, 0.06);
+  --node-line: #d8dee9;
+  --node-hover: #fbfcfe;
+  --node-shadow: 0 1px 2px rgba(20, 27, 61, 0.05);
 
-  --wire: #95a4bc;
-  --wire-done: #288a58;
-  --wire-active: #c48014;
-  --wire-failed: #c5302c;
-  --backdrop: rgba(20, 27, 61, 0.36);
+  --wire: #b9c3d3;
+  --wire-done: #8b9ab3;
+  --wire-active: #c9452b;
+  --wire-failed: #b3261e;
+  --backdrop: rgba(20, 27, 61, 0.34);
   --shadow-drawer: -10px 0 30px rgba(23, 32, 58, 0.16);
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --page: #f1f4f8;
+    --page: #f2f4f7;
     --surface: #ffffff;
-    --surface-2: #f5f7fb;
-    --line: #dce3ee;
-    --line-strong: #8795ab;
+    --surface-2: #f7f8fa;
+    --line: #dfe3ea;
+    --line-strong: #78849a;
     --ink: #141b3d;
-    --muted: #525f77;
-    --muted-strong: #313d55;
+    --muted: #55617a;
+    --muted-strong: #333f5c;
 
     --accent: #c9452b;
     --accent-fill: #c9452b;
-    --accent-ink: #ac3a21;
-    --ok: #198754;
-    --ok-ink: #115e38;
-    --ok-bg: #e3f6ec;
-    --ok-line: #6db892;
-    --warn: #b87409;
-    --warn-ink: #7c4e00;
-    --warn-bg: #fef3d6;
-    --warn-line: #d4942a;
-    --crit: #c5302c;
-    --crit-ink: #99201c;
-    --crit-bg: #fde9e8;
-    --crit-line: #d97872;
-    --idle-ink: #3c485e;
-    --idle-bg: #eaedf4;
+    --accent-ink: #a83a22;
+    --ok: #6b7a96;
+    --ok-ink: #33405a;
+    --ok-bg: #eef1f6;
+    --ok-line: #c3ccdb;
+    --warn: #c9452b;
+    --warn-ink: #a2381f;
+    --warn-bg: #fbebe6;
+    --warn-line: #d99583;
+    --crit: #b3261e;
+    --crit-ink: #92211b;
+    --crit-bg: #fcebe9;
+    --crit-line: #d1948f;
+    --idle-ink: #4c5972;
+    --idle-bg: #eef0f5;
 
-    --canvas: #eef1f7;
-    --canvas-dot: #cfd8e6;
-    --lane-bg: rgba(255, 255, 255, 0.72);
-    --lane-line: #d6dfec;
+    --canvas: #f6f7f9;
+    --lane-bg: transparent;
+    --lane-line: #e2e6ee;
     --node: #ffffff;
-    --node-line: #c7d2e2;
-    --node-hover: #f7f9fc;
-    --node-shadow: 0 2px 6px rgba(20, 27, 61, 0.06);
+    --node-line: #d8dee9;
+    --node-hover: #fbfcfe;
+    --node-shadow: 0 1px 2px rgba(20, 27, 61, 0.05);
 
-    --wire: #95a4bc;
-    --wire-done: #288a58;
-    --wire-active: #c48014;
-    --wire-failed: #c5302c;
-    --backdrop: rgba(20, 27, 61, 0.36);
+    --wire: #b9c3d3;
+    --wire-done: #8b9ab3;
+    --wire-active: #c9452b;
+    --wire-failed: #b3261e;
+    --backdrop: rgba(20, 27, 61, 0.34);
     --shadow-drawer: -10px 0 30px rgba(23, 32, 58, 0.16);
   }
 }
@@ -498,8 +497,8 @@ select {
 
 .board-title-text strong {
   display: block;
-  font-size: 13.5px;
-  font-weight: 700;
+  font: 700 14.5px/1.25 var(--font-display);
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -598,11 +597,10 @@ select {
   display: grid;
   align-content: safe center;
   justify-content: safe center;
+  padding: 14px 0 24px;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  background-color: var(--canvas);
-  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background: var(--canvas);
   cursor: grab;
   scrollbar-color: var(--line-strong) transparent;
   scrollbar-width: thin;
@@ -633,29 +631,35 @@ select {
   transform-origin: top left;
 }
 
-/* 4 Clean Phase Bands */
+/* 4 phase rows: hairline ledger rules, no tinted panels */
 
 .lane-band {
   position: absolute;
   left: 24px;
   width: calc(var(--canvas-w, 1656px) - 48px);
   height: 146px;
-  border: 1px solid var(--lane-line);
-  border-radius: 14px;
+  border: 0;
+  border-top: 1px solid var(--lane-line);
+  border-radius: 0;
   background: var(--lane-bg);
   pointer-events: none;
 }
 
+.lane-band:last-of-type {
+  border-bottom: 1px solid var(--lane-line);
+}
+
 .lane-label {
   position: absolute;
-  left: 16px;
-  top: 16px;
-  width: 162px;
-  height: 114px;
+  left: 0;
+  top: 1px;
+  width: 168px;
+  height: calc(100% - 1px);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 10px 12px;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 14px 16px 10px 0;
   border-right: 1px solid var(--lane-line);
   pointer-events: none;
 }
@@ -664,25 +668,26 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   color: var(--accent-ink);
-  font: 500 11px/1 var(--font-mono);
-  letter-spacing: 0.04em;
+  font: 500 12px/1 var(--font-display);
+  letter-spacing: 0.1em;
 }
 
 .lane-label strong {
-  font: 700 14.5px/1.2 var(--font-display);
+  font: 700 14px/1.25 var(--font-display);
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
 .lane-label small {
-  margin-top: 5px;
+  margin-top: 3px;
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.35;
 }
 
-/* Clean, High-Legibility Pipeline Node Cards */
+/* Stage cards on paper: hairline border, lift only while hovered or dragged */
 
 .flow-node {
   position: absolute;
@@ -694,11 +699,11 @@ select {
   height: 114px;
   padding: 10px 12px;
   border: 1px solid var(--node-line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--node);
   color: var(--ink);
   text-align: left;
-  box-shadow: var(--node-shadow);
+  box-shadow: none;
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -711,15 +716,18 @@ select {
 .flow-node:hover {
   border-color: var(--muted-strong);
   background: var(--node-hover);
+  box-shadow: var(--node-shadow);
 }
 
 .flow-node:active {
   cursor: grabbing;
+  box-shadow: var(--node-shadow);
 }
 
 .flow-node[aria-pressed="true"] {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .flow-node.branch-node {
@@ -745,10 +753,10 @@ select {
 
 .node-step {
   flex: 0 0 auto;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--idle-bg);
-  color: var(--idle-ink);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
   font: 500 10px/1.3 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
@@ -787,11 +795,11 @@ select {
 .node-state {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 7px;
-  border-radius: 5px;
-  background: var(--idle-bg);
-  color: var(--idle-ink);
+  gap: 6px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-strong);
   font-size: 10.5px;
   font-weight: 600;
   line-height: 1.25;
@@ -805,14 +813,13 @@ select {
   background: var(--line-strong);
 }
 
-/* Status accents: calm card border + high-contrast status pill (clean & airy) */
+/* Status: one quiet signal per state (dot + label), no rings or glows */
 
 .flow-node.done {
-  border-color: var(--ok-line);
+  border-color: var(--node-line);
 }
 
 .flow-node.done .node-state {
-  background: var(--ok-bg);
   color: var(--ok-ink);
 }
 
@@ -821,25 +828,16 @@ select {
 }
 
 .flow-node.done .node-step {
-  background: var(--ok-bg);
-  color: var(--ok-ink);
+  color: var(--muted-strong);
 }
 
 .flow-node.active,
 .flow-node.ready {
   border-color: var(--warn-line);
-  box-shadow: 0 0 0 1px var(--warn-line);
-}
-
-.flow-node.active[aria-pressed="true"],
-.flow-node.ready[aria-pressed="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .flow-node.active .node-state,
 .flow-node.ready .node-state {
-  background: var(--warn-bg);
   color: var(--warn-ink);
 }
 
@@ -850,17 +848,14 @@ select {
 
 .flow-node.active .node-step,
 .flow-node.ready .node-step {
-  background: var(--warn-bg);
   color: var(--warn-ink);
 }
 
 .flow-node.failed {
   border-color: var(--crit-line);
-  box-shadow: 0 0 0 1px var(--crit-line);
 }
 
 .flow-node.failed .node-state {
-  background: var(--crit-bg);
   color: var(--crit-ink);
 }
 
@@ -869,7 +864,6 @@ select {
 }
 
 .flow-node.failed .node-step {
-  background: var(--crit-bg);
   color: var(--crit-ink);
 }
 
@@ -888,7 +882,7 @@ select {
 .wire {
   fill: none;
   stroke: var(--wire);
-  stroke-width: 2;
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -899,14 +893,14 @@ select {
 
 .wire.active {
   stroke: var(--wire-active);
-  stroke-width: 2.25;
+  stroke-width: 1.75;
   stroke-dasharray: 7 5;
-  animation: wire-flow 1s linear infinite;
+  animation: wire-flow 1.2s linear infinite;
 }
 
 .wire.failed {
   stroke: var(--wire-failed);
-  stroke-width: 2.25;
+  stroke-width: 1.75;
 }
 
 .wire.bridge-wire {
@@ -1972,6 +1966,45 @@ select {
   .board-tools .ctl {
     padding: 0 8px;
     font-size: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Header becomes a two-column grid so no control can be clipped at the edge. */
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 8px;
+  }
+
+  .brand {
+    min-width: 0;
+  }
+
+  .brand-text {
+    min-width: 0;
+  }
+
+  .brand-text strong,
+  .brand-text small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar-actions {
+    margin-left: 0;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+  }
+
+  .svc-strip {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px 14px;
   }
 }
 

@@ -14,6 +14,19 @@
 
 Stages are reported at the boundaries the runner can observe. The Python weekly aggregator is one tracked stage; it does not publish internal per-category percentages. Do not present invented percentages as telemetry.
 
+## Visual language
+
+Design read: internal pipeline monitor for Admin, Data Science, and AI Engineer, in a warm ink-on-paper operational ledger, dial **ENERGY 1 / RHYTHM 2 / MOTION 1**.
+
+Reasons behind the current look:
+
+- **Palette from the product identity.** Paper `#f6f7f9`, surface `#ffffff`, ink `#141b3d`, and the terracotta accent `#c9452b` are the same tokens the web app uses, so the dashboard reads as the same product instead of a separate tool.
+- **One accent, one meaning.** Terracotta marks "moving or selected" only: the active stage, the selected version tab, and the selected run. Completed stages use graphite, not green, so status never competes with the accent.
+- **No decorative canvas grid.** The dot grid was removed because it added texture without information. The phase rows are drawn as hairline ledger rules with a numbered `FASE 0n` label, which is the identity motif.
+- **Cards stay flat until touched.** Stage cards use a 1px hairline and only lift on hover or while dragging, so elevation means interaction.
+- **Motion has one job.** The dashed flow on the active wire shows the direction of travel. Nothing pulses or floats on its own.
+- **Both themes are first class.** The page follows the OS theme, the header toggle persists a choice in `localStorage`, and `?theme=light` or `?theme=dark` forces a theme for previews.
+
 ## Cloudflare setup
 
 1. Add a proxied DNS record for `graph` in the `daisuki.my.id` zone so the Worker route can serve the hostname.

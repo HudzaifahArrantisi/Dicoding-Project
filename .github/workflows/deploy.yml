@@ -3,6 +3,8 @@ name: Deploy Daisuki Workers
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +28,11 @@ jobs:
         run: bun run --cwd apps/web lint
       - name: Check graph dashboard script syntax
         run: node --check apps/graph/public/app.js
+      - name: Check Python syntax (ai + data-science)
+        run: |
+          python3 -c "import pathlib, py_compile; files=[p for d in ('ai','data-science') for p in pathlib.Path(d).rglob('*.py') if '.venv' not in p.parts]; [py_compile.compile(str(f), doraise=True) for f in files]; print(f'py_compile OK: {len(files)} files')"
+      - name: Run offline unit tests
+        run: bun run test:ci
       - name: Build web bundle
         working-directory: apps/web
         run: bun run build
@@ -54,6 +61,7 @@ jobs:
 
   api:
     name: Deploy API Worker
+    if: github.event_name != 'pull_request'
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -82,9 +90,12 @@ jobs:
       - name: Deploy API Worker
         working-directory: apps/api
         run: bunx wrangler@4.95.0 deploy --config wrangler.jsonc
+      - name: Smoke test API health
+        run: curl -fsS --retry 3 --retry-delay 3 --retry-all-errors https://api.daisuki.my.id/v1/health
 
   graph:
     name: Deploy Graph Worker
+    if: github.event_name != 'pull_request'
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -111,9 +122,12 @@ jobs:
       - name: Deploy Graph Worker and assets
         working-directory: apps/graph
         run: bunx wrangler@4.95.0 deploy --config wrangler.jsonc
+      - name: Smoke test Graph health
+        run: curl -fsS --retry 3 --retry-delay 3 --retry-all-errors https://graph.daisuki.my.id/health
 
   web:
     name: Deploy Web Worker
+    if: github.event_name != 'pull_request'
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -145,3 +159,5 @@ jobs:
       - name: Deploy Web Worker
         working-directory: apps/web
         run: bunx wrangler@4.95.0 deploy
+      - name: Smoke test Web
+        run: curl -fsSI --retry 3 --retry-delay 3 --retry-all-errors https://daisuki.my.id/
