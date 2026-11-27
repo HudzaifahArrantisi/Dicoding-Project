@@ -67,6 +67,7 @@ export interface AdminPartnerSummary {
     par_level: number;
     status: "aman" | "waspada" | "kritis";
     sold_7d: number;
+    logs_7d?: number;
   }>;
 }
 
@@ -138,10 +139,12 @@ export async function loadAdminContext(): Promise<AdminContext> {
         par_level: number;
         updated_at: Date;
         sold_7d: number;
+        logs_7d: number;
       }>`
         WITH sales AS (
           SELECT partner_id, product_id,
-            COALESCE(SUM(qty_before - qty_after) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days'), 0)::int AS sold_7d
+            COALESCE(SUM(qty_before - qty_after) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days'), 0)::int AS sold_7d,
+            COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::int AS logs_7d
           FROM stock_logs
           WHERE source = 'manual_update' AND qty_before > qty_after AND created_at >= NOW() - INTERVAL '7 days'
           GROUP BY partner_id, product_id
@@ -150,7 +153,7 @@ export async function loadAdminContext(): Promise<AdminContext> {
           ps.partner_id::text, pa.name AS partner_name, pa.type::text AS partner_type,
           COALESCE(pa.regency_name, '-')::text AS city, COALESCE(pa.province_name, '-')::text AS province,
           ps.product_id::text, pr.name AS product_name, ps.current_qty::int, ps.par_level::int,
-          ps.updated_at, COALESCE(s.sold_7d, 0)::int AS sold_7d
+          ps.updated_at, COALESCE(s.sold_7d, 0)::int AS sold_7d, COALESCE(s.logs_7d, 0)::int AS logs_7d
         FROM partner_stocks ps
         JOIN partners pa ON pa.id = ps.partner_id AND pa.is_active = true
         JOIN products pr ON pr.id = ps.product_id AND pr.is_active = true
@@ -220,6 +223,7 @@ export async function loadAdminContext(): Promise<AdminContext> {
       par_level: number | string;
       updated_at: Date | string;
       sold_7d: number | string;
+      logs_7d?: number | string;
     }>);
 
     const orderIds = [...pendingOrderRows.map((o) => o.id), ...shipmentOrderRows.map((o) => o.id)];
@@ -317,6 +321,7 @@ export async function loadAdminContext(): Promise<AdminContext> {
         par_level: Number(row.par_level),
         status,
         sold_7d: Number(row.sold_7d),
+        logs_7d: Number(row.logs_7d ?? 0),
       });
     }
 

@@ -92,6 +92,19 @@ export function buildAdminRagPrompt(options: BuildAdminPromptOptions): string {
         }))
     : [];
 
+  const regionalRealtimeSummary = Array.from(
+    context.partners_overview.reduce((map, p) => {
+      const key = p.city && p.city !== "-" ? `${p.city} (${p.province})` : p.partner_name.split(" ").slice(-1)[0] ?? "Lainnya";
+      const cur = map.get(key) ?? { region: key, partner_count: 0, logs_7d: 0, sold_7d: 0, current_stock: 0 };
+      cur.partner_count += 1;
+      cur.logs_7d += p.stocks.reduce((s, item) => s + (item.logs_7d ?? 0), 0);
+      cur.sold_7d += p.stocks.reduce((s, item) => s + item.sold_7d, 0);
+      cur.current_stock += p.stocks.reduce((s, item) => s + item.current_qty, 0);
+      map.set(key, cur);
+      return map;
+    }, new Map<string, { region: string; partner_count: number; logs_7d: number; sold_7d: number; current_stock: number }>()).values(),
+  ).sort((a, b) => b.logs_7d - a.logs_7d || b.sold_7d - a.sold_7d);
+
   return `Anda adalah Asisten AI Administrator Pusat Daisuki Inventory (Daisuki Central Admin AI).
 Tugas Anda adalah mendampingi Admin Daisuki Pusat dalam memantau, menganalisis, dan mengambil keputusan logistik, restock, stok gudang pusat, evaluasi cabang mitra, serta menanggapi pertanyaan seputar data sistem, model machine learning (daisuki.pkl), maupun dokumen pengetahuan / karya ilmiah di sistem.
 
@@ -129,6 +142,7 @@ ${JSON.stringify({
   pesanan_sedang_dalam_pengiriman: shipmentsList,
   log_mutasi_terbaru: recentLogsList,
   mitra_realtime_sesuai_pertanyaan: matchedRealtimePartners,
+  rekap_wilayah_7_hari_realtime: regionalRealtimeSummary,
   analisis_mingguan_dan_wilayah: weeklyFacts,
 })}
 

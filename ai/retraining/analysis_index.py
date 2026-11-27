@@ -89,19 +89,34 @@ def build_analysis_index(folder: Path, previous_index: dict | None = None, ai_fo
                   for name in ("products", "partners", "regions", "reporting")}
     period = f"{categories['partners']['start_date']} sampai {categories['partners']['end_date']}"
     docs = []
-    for name in ("products", "regions"):
-        for item in categories[name]["items"]:
-            docs.append({"partner_id": None, "source": f"category_{name}.json", "period": period,
-                         "excerpt": f"Analisis agregat {name} periode {period}: {json.dumps(item, ensure_ascii=False)}"})
+    for item in categories["products"]["items"]:
+        docs.append({
+            "partner_id": None,
+            "source": "category_products.json",
+            "period": period,
+            "excerpt": (
+                f"Analisis produk periode {period}: peringkat #{item.get('rank', '-')} {item.get('product_name', '')} "
+                f"({item.get('category', '')}) terjual {item.get('weekly_units', 0)} pcs "
+                f"dengan pangsa {item.get('share_pct', 0)}%."
+            ),
+        })
+    for item in categories["regions"]["items"]:
+        docs.append({
+            "partner_id": None,
+            "source": "category_regions.json",
+            "period": period,
+            "excerpt": (
+                f"Analisis aktivitas wilayah periode {period}: peringkat #{item.get('rank', '-')} "
+                f"{item.get('regency_name', '')}, {item.get('province_name', '')} — konsumsi {item.get('weekly_units', 0)} pcs, "
+                f"{item.get('active_partners', 0)} mitra aktif melapor dari {item.get('partner_count', 0)} mitra, "
+                f"frekuensi restock {item.get('restock_frequency', 0)} kali."
+            ),
+        })
     for name in ("partners", "reporting"):
         for item in categories[name]["items"]:
             partner_id = item.get("partner_id")
             if not partner_id:
                 continue
-            allowed = ("partner_name", "partner_type", "province_name", "regency_name", "weekly_units",
-                       "log_count", "minus_log_count", "critical_frequency", "stockout_events",
-                       "restock_requests", "active_days", "daily_velocity", "turnover_rate", "reporting_status")
-            facts = {key: item[key] for key in allowed if key in item}
             docs.append({
                 "partner_id": partner_id,
                 "partner_name": item.get("partner_name"),
@@ -110,21 +125,31 @@ def build_analysis_index(folder: Path, previous_index: dict | None = None, ai_fo
                 "regency_name": item.get("regency_name"),
                 "source": f"category_{name}.json",
                 "period": period,
-                "excerpt": f"Analisis mingguan cabang sendiri periode {period}: {json.dumps(facts, ensure_ascii=False)}",
+                "excerpt": (
+                    f"Analisis mingguan mitra {item.get('partner_name', '')} ({item.get('partner_type', '')}, "
+                    f"{item.get('regency_name', '')}, {item.get('province_name', '')}) periode {period}: "
+                    f"konsumsi {item.get('weekly_units', 0)} pcs, {item.get('log_count', 0)} log laporan "
+                    f"(log minus: {item.get('minus_log_count', item.get('log_count', 0))}), "
+                    f"{item.get('active_days', 0)} hari aktif melapor, laju harian {item.get('daily_velocity', 0)} pcs/hari, "
+                    f"status pelaporan {item.get('reporting_status', '-')}, pengajuan restock {item.get('restock_requests', 0)} kali, "
+                    f"kejadian kritis {item.get('critical_frequency', 0)} kali, stok habis {item.get('stockout_events', 0)} kali. "
+                    f"{json.dumps({k: item[k] for k in ('weekly_units', 'log_count', 'restock_requests', 'stockout_events') if k in item}, ensure_ascii=False)}"
+                ),
             })
     with (folder / "cleaned_inventory_summary.csv").open(newline="", encoding="utf-8-sig") as source:
         for row in csv.DictReader(source):
             if not row.get("partner_id") or not row.get("product_name"):
                 continue
-            allowed = ("partner_name", "partner_type", "province_name", "regency_name", "product_name",
-                       "weekly_consumption", "days_of_cover", "report_count", "critical_count")
-            facts = {key: row[key] for key in allowed if key in row}
             docs.append({
                 "partner_id": row["partner_id"],
                 "partner_name": row.get("partner_name"),
                 "source": "cleaned_inventory_summary.csv",
                 "period": period,
-                "excerpt": f"Analisis produk cabang sendiri periode {period}: {json.dumps(facts, ensure_ascii=False)}",
+                "excerpt": (
+                    f"Analisis produk cabang {row.get('partner_name', '')} ({row.get('regency_name', '')}) periode {period}: "
+                    f"{row.get('product_name', '')} konsumsi {row.get('weekly_consumption', 0)} pcs, "
+                    f"sisa stok {row.get('current_qty', 0)} pcs, ketahanan stok {row.get('days_of_cover', 0)} hari."
+                ),
             })
     summary = json.loads((folder / "weekly_analytics_summary.json").read_text(encoding="utf-8")) if (folder / "weekly_analytics_summary.json").exists() else {}
     for item in summary.get("partner_daily_log_breakdown", []):

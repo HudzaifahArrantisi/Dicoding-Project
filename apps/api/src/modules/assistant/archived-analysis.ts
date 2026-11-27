@@ -59,21 +59,30 @@ export function selectArchivedDocuments(
     }
     return documents.slice(0, 3);
   }
-  const products = items(byName.get("category_products.json") ?? null).slice(0, 4).map((row) => ({
-    product_name: row.product_name, weekly_units: row.weekly_units, share_pct: row.share_pct,
-  }));
-  if (products.length) documents.push({ partner_id: "", source: "neon:category_products.json", period,
-    excerpt: `Analisis produk periode ${period}: ${JSON.stringify(products)}`, score: 1 });
-  const partners = items(byName.get("category_partners.json") ?? null).slice(0, 5).map((row) => ({
-    partner_name: row.partner_name, weekly_units: row.weekly_units, log_count: row.log_count,
-  }));
-  if (partners.length) documents.push({ partner_id: "", source: "neon:category_partners.json", period,
-    excerpt: `Peringkat mingguan mitra periode ${period}: ${JSON.stringify(partners)}`, score: 1 });
+  const products = items(byName.get("category_products.json") ?? null).slice(0, 4);
+  if (products.length) {
+    const prodText = products.map((row) => `${row.product_name}: ${row.weekly_units} pcs (${row.share_pct}%)`).join("; ");
+    documents.push({ partner_id: "", source: "neon:category_products.json", period,
+      excerpt: `Analisis produk periode ${period}: ${prodText}.`, score: 1 });
+  }
+  const partners = items(byName.get("category_partners.json") ?? null).slice(0, 5);
+  if (partners.length) {
+    const partText = partners.map((row) => `${row.partner_name} (${row.weekly_units} pcs, ${row.log_count} log)`).join("; ");
+    documents.push({ partner_id: "", source: "neon:category_partners.json", period,
+      excerpt: `Peringkat mingguan mitra periode ${period}: ${partText}.`, score: 1 });
+  }
+  const regions = items(byName.get("category_regions.json") ?? null).slice(0, 10);
+  if (regions.length) {
+    const regText = regions.map((row) => `${row.regency_name}, ${row.province_name} (${row.weekly_units} pcs, ${row.active_partners}/${row.partner_count} mitra aktif)`).join("; ");
+    documents.push({ partner_id: "", source: "neon:category_regions.json", period,
+      excerpt: `Analisis wilayah periode ${period}: ${regText}.`, score: 1 });
+  }
   const ai = byName.get("weekly_operational_facts.json");
-  if (ai) documents.push({ partner_id: "", source: "neon:weekly_operational_facts.json", period,
-    excerpt: `Hasil AI Engineer periode ${period}: ${JSON.stringify({ network_sales: ai.network_sales,
-      top_selling_products: ai.top_selling_products, regional_hotspots: Array.isArray(ai.regional_hotspots)
-        ? ai.regional_hotspots.slice(0, 3) : [] }).slice(0, 1400)}`, score: 1 });
+  if (ai) {
+    const sales = (ai.network_sales ?? {}) as Record<string, unknown>;
+    documents.push({ partner_id: "", source: "neon:weekly_operational_facts.json", period,
+      excerpt: `Ringkasan operasional AI Engineer periode ${period}: total konsumsi jaringan ${sales.total_sold_7d ?? 0} pcs, permintaan restock ${sales.requested_restock_units ?? 0} pcs, disetujui ${sales.approved_restock_units ?? 0} pcs.`, score: 1 });
+  }
   return documents.slice(0, 8);
 }
 

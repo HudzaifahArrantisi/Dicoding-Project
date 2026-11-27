@@ -49,3 +49,6 @@ ai/data/mainbrain/context_embeddings/cleaned_inventory_summary.md
 ai/data/mainbrain/context_embeddings/ai_analysis_summary.md
 ai/data/mainbrain/context_embeddings/*.md
 !ai/data/mainbrain/context_embeddings/*.public.md
+
+# Snapshot rilis lama: punya .git sendiri, jangan pernah jadi submodule/gitlink
+.release-rag/

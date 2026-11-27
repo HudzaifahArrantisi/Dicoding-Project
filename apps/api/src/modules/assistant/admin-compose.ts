@@ -9,6 +9,65 @@ export interface AdminAssistantReply {
   quickReplies: string[];
 }
 
+const KNOWN_REGIONS: Array<{ label: string; aliases: string[]; matchPartner: (city: string, name: string) => boolean }> = [
+  { label: "Jakarta", aliases: ["jakarta", "dki jakarta", "jaksel", "jakbar", "jaktim", "jakut"], matchPartner: (c, n) => /jakarta|jaksel/i.test(c) || /jakarta|jaksel/i.test(n) },
+  { label: "Kota Depok", aliases: ["depok", "kota depok"], matchPartner: (c, n) => /depok/i.test(c) || /depok/i.test(n) },
+  { label: "Kota Bandung", aliases: ["bandung", "kota bandung"], matchPartner: (c, n) => /bandung/i.test(c) || /bandung/i.test(n) },
+  { label: "Kota Bogor", aliases: ["bogor", "kota bogor", "cijeruk"], matchPartner: (c, n) => /bogor|cijeruk/i.test(c) || /bogor|cijeruk/i.test(n) },
+  { label: "Kota Bekasi", aliases: ["bekasi", "kota bekasi"], matchPartner: (c, n) => /bekasi/i.test(c) || /bekasi/i.test(n) },
+  { label: "Kota Tangerang", aliases: ["tangerang", "kota tangerang"], matchPartner: (c, n) => (/tangerang/i.test(c) || /tangerang/i.test(n)) && !/selatan/i.test(c) && !/selatan/i.test(n) },
+  { label: "Kota Tangerang Selatan", aliases: ["tangerang selatan", "tangsel", "serpong", "bsd"], matchPartner: (c, n) => /tangerang selatan|serpong|bsd/i.test(c) || /tangerang selatan|serpong|bsd/i.test(n) },
+  { label: "Kota Denpasar", aliases: ["denpasar", "bali"], matchPartner: (c, n) => /denpasar|bali/i.test(c) || /denpasar/i.test(n) },
+  { label: "Kota Balikpapan", aliases: ["balikpapan"], matchPartner: (c, n) => /balikpapan/i.test(c) || /balikpapan/i.test(n) },
+  { label: "Kota Surabaya", aliases: ["surabaya"], matchPartner: (c, n) => /surabaya/i.test(c) || /surabaya/i.test(n) },
+  { label: "Yogyakarta", aliases: ["yogyakarta", "jogja", "bantul"], matchPartner: (c, n) => /yogyakarta|bantul/i.test(c) || /yogyakarta/i.test(n) },
+  { label: "Kota Semarang", aliases: ["semarang"], matchPartner: (c, n) => /semarang/i.test(c) || /semarang/i.test(n) },
+  { label: "Kota Solo", aliases: ["solo", "surakarta"], matchPartner: (c, n) => /solo|surakarta/i.test(c) || /solo/i.test(n) },
+  { label: "Kota Medan", aliases: ["medan"], matchPartner: (c, n) => /medan/i.test(c) || /medan/i.test(n) },
+  { label: "Kota Palembang", aliases: ["palembang"], matchPartner: (c, n) => /palembang/i.test(c) || /palembang/i.test(n) },
+  { label: "Kota Makassar", aliases: ["makassar"], matchPartner: (c, n) => /makassar/i.test(c) || /makassar/i.test(n) },
+  { label: "Kota Padang", aliases: ["padang"], matchPartner: (c, n) => /padang/i.test(c) || /padang/i.test(n) },
+  { label: "Kota Mataram", aliases: ["mataram"], matchPartner: (c, n) => /mataram/i.test(c) || /mataram/i.test(n) },
+  { label: "Kabupaten Sidoarjo", aliases: ["sidoarjo"], matchPartner: (c, n) => /sidoarjo/i.test(c) || /sidoarjo/i.test(n) },
+  { label: "Kota Cirebon", aliases: ["cirebon"], matchPartner: (c, n) => /cirebon/i.test(c) || /cirebon/i.test(n) },
+  { label: "Kota Serang", aliases: ["serang"], matchPartner: (c, n) => /serang/i.test(c) || /serang/i.test(n) },
+  { label: "Kota Malang", aliases: ["malang"], matchPartner: (c, n) => /malang/i.test(c) || /malang/i.test(n) },
+];
+
+function cleanExcerptText(excerpt: string): string {
+  const trimmed = excerpt.trim();
+  const jsonMatch = trimmed.match(/^(.*?):\s*(\{.*\}|\[.*\])\s*$/s);
+  if (!jsonMatch) return trimmed.replace(/\s*\{[^{}]*"weekly_units"[^{}]*\}\s*$/, "");
+  const prefix = jsonMatch[1].trim();
+  try {
+    const parsed = JSON.parse(jsonMatch[2]) as unknown;
+    const formatObj = (obj: Record<string, unknown>) => {
+      const parts: string[] = [];
+      if (obj.regency_name || obj.province_name) parts.push(`Wilayah: **${[obj.regency_name, obj.province_name].filter(Boolean).join(", ")}**`);
+      if (obj.partner_name) parts.push(`Mitra: **${obj.partner_name}**`);
+      if (obj.product_name) parts.push(`Produk: **${obj.product_name}**`);
+      if (obj.weekly_units !== undefined) parts.push(`Konsumsi: **${Number(obj.weekly_units).toLocaleString("id-ID")} pcs**`);
+      if (obj.share_pct !== undefined) parts.push(`Pangsa: **${obj.share_pct}%**`);
+      if (obj.log_count !== undefined) parts.push(`Laporan: **${obj.log_count} log**`);
+      if (obj.active_partners !== undefined && obj.partner_count !== undefined) {
+        parts.push(`Mitra aktif: **${obj.active_partners} dari ${obj.partner_count} mitra**`);
+      }
+      if (obj.restock_frequency !== undefined) parts.push(`Frekuensi restock: **${obj.restock_frequency} kali**`);
+      return parts.join(" · ") || prefix;
+    };
+    if (Array.isArray(parsed)) {
+      const lines = parsed.filter((x): x is Record<string, unknown> => Boolean(x && typeof x === "object")).map((item) => `• ${formatObj(item)}`);
+      return `${prefix}:\n${lines.join("\n")}`;
+    }
+    if (parsed && typeof parsed === "object") {
+      return `${prefix} — ${formatObj(parsed as Record<string, unknown>)}.`;
+    }
+  } catch {
+    // Biarkan teks asli bila bukan JSON valid
+  }
+  return trimmed;
+}
+
 export function composeAdminFallbackReply(
   message: string,
   context: AdminContext,
@@ -129,10 +188,61 @@ export function composeAdminFallbackReply(
     };
   }
 
+  const mentionedRegions = KNOWN_REGIONS.filter((region) =>
+    region.aliases.some((alias) => new RegExp(`(^|[^a-z0-9])${alias}(?=$|[^a-z0-9])`, "i").test(normalized)),
+  );
+  if (mentionedRegions.length >= 1) {
+    const stats = mentionedRegions.map((region) => {
+      const partners = context.partners_overview.filter((p) => region.matchPartner(p.city, p.partner_name));
+      const totalStock = partners.reduce((sum, p) => sum + p.stocks.reduce((s, item) => s + item.current_qty, 0), 0);
+      const totalSold7d = partners.reduce((sum, p) => sum + p.stocks.reduce((s, item) => s + item.sold_7d, 0), 0);
+      const totalLogs7d = partners.reduce((sum, p) => sum + p.stocks.reduce((s, item) => s + (item.logs_7d ?? 0), 0), 0);
+      const activeSoldPartners = partners.filter((p) => p.stocks.some((s) => (s.logs_7d ?? s.sold_7d) > 0)).length;
+      return { label: region.label, partnerCount: partners.length, activeSoldPartners, totalStock, totalSold7d, totalLogs7d, partners };
+    });
+
+    if (stats.length >= 2) {
+      const [first, second] = stats;
+      const diffLogs = first.totalLogs7d - second.totalLogs7d;
+      const diffSold = first.totalSold7d - second.totalSold7d;
+      const diffPartners = first.partnerCount - second.partnerCount;
+      const logLeaderText = diffLogs > 0
+        ? `**${first.label}** memiliki **${Math.abs(diffLogs).toLocaleString("id-ID")} log lebih banyak**`
+        : diffLogs < 0
+          ? `**${second.label}** memiliki **${Math.abs(diffLogs).toLocaleString("id-ID")} log lebih banyak**`
+          : "kedua wilayah memiliki jumlah log yang sama";
+      return {
+        reply: `**Perbandingan Wilayah ${first.label} vs ${second.label} (7 Hari Terakhir):**\n` +
+          `• **${first.label}**: **${first.totalLogs7d.toLocaleString("id-ID")} log** dari **${first.partnerCount} mitra** (${first.activeSoldPartners} mitra aktif melapor), total konsumsi **${first.totalSold7d.toLocaleString("id-ID")} pcs**, sisa stok **${first.totalStock.toLocaleString("id-ID")} pcs**.\n` +
+          `• **${second.label}**: **${second.totalLogs7d.toLocaleString("id-ID")} log** dari **${second.partnerCount} mitra** (${second.activeSoldPartners} mitra aktif melapor), total konsumsi **${second.totalSold7d.toLocaleString("id-ID")} pcs**, sisa stok **${second.totalStock.toLocaleString("id-ID")} pcs**.\n\n` +
+          `Kesimpulan: ${logLeaderText} dan selisih konsumsi **${Math.abs(diffSold).toLocaleString("id-ID")} pcs** (selisih jumlah mitra: **${Math.abs(diffPartners)} mitra**).`,
+        quickReplies,
+      };
+    }
+
+    const single = stats[0];
+    if (single.partnerCount > 0) {
+      const topPartners = [...single.partners]
+        .map((p) => ({
+          name: p.partner_name,
+          stock: p.stocks.reduce((s, i) => s + i.current_qty, 0),
+          sold: p.stocks.reduce((s, i) => s + i.sold_7d, 0),
+          logs: p.stocks.reduce((s, i) => s + (i.logs_7d ?? 0), 0),
+        }))
+        .sort((a, b) => b.logs - a.logs || b.sold - a.sold)
+        .slice(0, 8)
+        .map((p) => `• **${p.name}**: **${p.logs} log**, konsumsi 7 hari **${p.sold.toLocaleString("id-ID")} pcs**, sisa stok **${p.stock.toLocaleString("id-ID")} pcs**`);
+      return {
+        reply: `**Ringkasan Wilayah ${single.label}** (**${single.totalLogs7d.toLocaleString("id-ID")} log** dari **${single.partnerCount} mitra**, total konsumsi 7 hari **${single.totalSold7d.toLocaleString("id-ID")} pcs**, sisa stok **${single.totalStock.toLocaleString("id-ID")} pcs**):\n${topPartners.join("\n")}`,
+        quickReplies,
+      };
+    }
+  }
+
   const privateReference = knowledgeExcerpts.find((item) => item.version === "daisuki.pkl");
   if (privateReference) {
     return {
-      reply: `Menurut referensi privat **${privateReference.title}**:\n\n${privateReference.excerpt.slice(0, 1000)}\n\nSumber: ${privateReference.source}`,
+      reply: `Menurut referensi privat **${privateReference.title}**:\n\n${cleanExcerptText(privateReference.excerpt).slice(0, 1000)}\n\nSumber: ${privateReference.source}`,
       quickReplies,
     };
   }
@@ -141,7 +251,7 @@ export function composeAdminFallbackReply(
     const partnerDaily = knowledgeExcerpts.find((item) => item.source.includes("partner_daily_consumption"));
     const reference = partnerDaily ?? knowledgeExcerpts[0];
     return {
-      reply: `Menurut dokumen **${reference.title}**:\n\n${reference.excerpt.slice(0, 1000)}\n\nSumber: ${reference.source}`,
+      reply: `Menurut dokumen **${reference.title}**:\n\n${cleanExcerptText(reference.excerpt).slice(0, 1000)}\n\nSumber: ${reference.source}`,
       quickReplies,
     };
   }
