@@ -1,6 +1,7 @@
 import { sql } from "../../db/client";
 import { requestedHistoricalDays } from "./historical-consumption";
 import type { ModelResult } from "./model";
+import { partnerNameSimilarity } from "./worker-classifier";
 
 type AnalysisDocument = NonNullable<ModelResult["analysis_documents"]>[number];
 type ArchivedArtifact = { file_name: string; payload: Record<string, unknown> | null };
@@ -11,19 +12,41 @@ function items(payload: Record<string, unknown> | null): Array<Record<string, un
 }
 
 export function selectArchivedDocuments(
-  artifacts: ArchivedArtifact[], day: string, period: string, partnerId?: string,
+  artifacts: ArchivedArtifact[], day: string, period: string, partnerId?: string, query = "",
 ): AnalysisDocument[] {
   const byName = new Map(artifacts.map((artifact) => [artifact.file_name, artifact.payload]));
   const documents: AnalysisDocument[] = [];
   const daily = byName.get("weekly_analytics_summary.json")?.partner_daily_log_breakdown;
   if (Array.isArray(daily)) {
-    const matching = daily.filter((row): row is Record<string, unknown> =>
+    let matching = daily.filter((row): row is Record<string, unknown> =>
       Boolean(row && typeof row === "object" && row.day === day && typeof row.partner_id === "string"
         && (partnerId === undefined || row.partner_id === partnerId) && typeof row.consumed_units === "number"));
-    matching.sort((a, b) => Number(b.consumed_units) - Number(a.consumed_units));
+    if (!partnerId && query) {
+      const scored = matching.map((row) => ({
+        row,
+        sim: partnerNameSimilarity(query, String(row.partner_name ?? "")),
+      })).sort((a, b) => b.sim - a.sim || Number(b.row.consumed_units) - Number(a.row.consumed_units));
+      if (scored.length && scored[0].sim >= 0.72) {
+        matching = scored.filter((item) => item.sim >= 0.72).map((item) => item.row);
+      } else {
+        matching.sort((a, b) => Number(b.consumed_units) - Number(a.consumed_units));
+      }
+    } else {
+      matching.sort((a, b) => Number(b.consumed_units) - Number(a.consumed_units));
+    }
     for (const row of matching.slice(0, partnerId ? 1 : 5)) {
-      documents.push({ partner_id: String(row.partner_id), source: "neon:partner_daily_consumption",
-        period, excerpt: `Konsumsi mitra ${row.partner_name} pada ${day}: ${row.consumed_units} pcs dari ${row.log_count} log.`, score: 1 });
+      const logs = Array.isArray(row.logs) ? row.logs.filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object")) : [];
+      const logDetail = logs.length
+        ? ` Rincian jam log: ${logs.map((entry) => `pukul ${entry.time_wib} WIB ${entry.product_name} ${entry.qty_before}->${entry.qty_after} pcs (minus ${entry.consumed_units} pcs)`).join("; ")}.`
+        : "";
+      const profile = [row.partner_type, row.regency_name, row.province_name].filter(Boolean).join(", ");
+      documents.push({
+        partner_id: String(row.partner_id),
+        source: "neon:partner_daily_consumption",
+        period,
+        excerpt: `Konsumsi mitra ${row.partner_name}${profile ? ` (${profile})` : ""} pada ${day}: ${row.consumed_units} pcs dari ${row.log_count} log.${logDetail}`,
+        score: 1,
+      });
     }
   }
   if (partnerId) {
@@ -70,7 +93,7 @@ export async function loadPublishedAnalysisArchive(message: string, partnerId?: 
         AND file_name IN ('weekly_analytics_summary.json', 'category_products.json',
           'category_partners.json', 'category_reporting.json', 'weekly_operational_facts.json')
     `;
-    documents.push(...selectArchivedDocuments([...artifacts], day, `${run.start_date} sampai ${run.end_date}`, partnerId));
+    documents.push(...selectArchivedDocuments([...artifacts], day, `${run.start_date} sampai ${run.end_date}`, partnerId, message));
   }
   return [...new Map(documents.map((doc) => [`${doc.source}:${doc.period}:${doc.excerpt}`, doc])).values()].slice(0, 8);
 }

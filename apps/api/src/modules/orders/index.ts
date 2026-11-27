@@ -282,60 +282,6 @@ export const ordersModule = new Elysia({ prefix: "/orders" })
       total_gross: weeks.reduce((total, week) => total + Number(week.gross), 0).toString(),
     } };
   }, { query: t.Object({ month: t.Optional(t.String()) }) })
-  .get("/finance/insights", async ({ headers, set }) => {
-    const user = await getAuthUser(headers);
-    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
-    if (user.role !== "admin") { set.status = 403; return { error: "Hanya admin yang dapat melihat analisis jaringan" }; }
-    const deadstock = await db.execute<{
-      partner_id: string; partner_name: string; product_name: string; current_qty: number; inactive_days: number;
-    }>(sql`
-      SELECT ps.partner_id, pa.name AS partner_name, pr.name AS product_name, ps.current_qty,
-        floor(extract(epoch FROM (now() - coalesce(m.last_movement, ps.updated_at))) / 86400)::int AS inactive_days
-      FROM partner_stocks ps
-      JOIN partners pa ON pa.id = ps.partner_id
-      JOIN products pr ON pr.id = ps.product_id
-      LEFT JOIN LATERAL (
-        SELECT max(sl.created_at) AS last_movement FROM stock_logs sl
-        WHERE sl.partner_id = ps.partner_id AND sl.product_id = ps.product_id
-          AND sl.qty_before <> sl.qty_after
-      ) m ON true
-      WHERE ps.current_qty > 0 AND coalesce(m.last_movement, ps.updated_at) < now() - interval '30 days'
-      ORDER BY inactive_days DESC, ps.current_qty DESC LIMIT 30
-    `);
-    const audit = await db.execute<{
-      partner_id: string; partner_name: string; stale_days: number; large_changes: number; priority_score: number;
-    }>(sql`
-      SELECT pa.id AS partner_id, pa.name AS partner_name,
-        floor(extract(epoch FROM (now() - max(ps.updated_at))) / 86400)::int AS stale_days,
-        count(sl.id) FILTER (WHERE sl.created_at >= now() - interval '30 days'
-          AND sl.source IN ('manual_update', 'adjustment') AND abs(sl.qty_after - sl.qty_before) > greatest(10, sl.qty_before * 0.5))::int AS large_changes,
-        (greatest(0, floor(extract(epoch FROM (now() - max(ps.updated_at))) / 86400) - 7)
-          + 3 * count(sl.id) FILTER (WHERE sl.created_at >= now() - interval '30 days'
-          AND sl.source IN ('manual_update', 'adjustment') AND abs(sl.qty_after - sl.qty_before) > greatest(10, sl.qty_before * 0.5)))::int AS priority_score
-      FROM partners pa JOIN partner_stocks ps ON ps.partner_id = pa.id
-      LEFT JOIN stock_logs sl ON sl.partner_id = ps.partner_id AND sl.product_id = ps.product_id
-      GROUP BY pa.id, pa.name
-      HAVING max(ps.updated_at) < now() - interval '7 days'
-        OR count(sl.id) FILTER (WHERE sl.created_at >= now() - interval '30 days'
-          AND sl.source IN ('manual_update', 'adjustment') AND abs(sl.qty_after - sl.qty_before) > greatest(10, sl.qty_before * 0.5)) > 0
-      ORDER BY priority_score DESC LIMIT 20
-    `);
-    const factory = await db.execute<{
-      product_id: string; product_name: string; central_stock: number; sold_30d: number; forecast_14d: number; suggested_qty: number;
-    }>(sql`
-      SELECT pr.id AS product_id, pr.name AS product_name, pr.central_stock,
-        coalesce(sum(greatest(sl.qty_before - sl.qty_after, 0)) FILTER
-          (WHERE sl.source = 'manual_update' AND sl.created_at >= now() - interval '30 days'), 0)::int AS sold_30d,
-        ceil(coalesce(sum(greatest(sl.qty_before - sl.qty_after, 0)) FILTER
-          (WHERE sl.source = 'manual_update' AND sl.created_at >= now() - interval '30 days'), 0) * 14.0 / 30)::int AS forecast_14d,
-        greatest(0, ceil(coalesce(sum(greatest(sl.qty_before - sl.qty_after, 0)) FILTER
-          (WHERE sl.source = 'manual_update' AND sl.created_at >= now() - interval '30 days'), 0) * 14.0 / 30) - pr.central_stock)::int AS suggested_qty
-      FROM products pr LEFT JOIN stock_logs sl ON sl.product_id = pr.id
-      WHERE pr.is_active = true GROUP BY pr.id, pr.name, pr.central_stock
-      ORDER BY suggested_qty DESC, pr.name
-    `);
-    return { data: { deadstock, audit, factory, method: "Estimasi dari penurunan stok fisik 30 hari; perlu verifikasi lapangan sebelum PO." } };
-  })
   .post(
     "/",
     async ({ headers, body, set }) => {

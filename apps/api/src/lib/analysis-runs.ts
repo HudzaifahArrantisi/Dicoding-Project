@@ -1,13 +1,13 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { db } from "../db/client";
+import { db, sql as rawSql } from "../db/client";
 import { analysisRuns, auditLogs, notifications, products, restockRecommendations } from "../db/schema";
 import { aiRunDir, clearActiveRun, dataScienceRunDir, activeRunId, publishActiveRun, workspaceRoot } from "./analysis-artifacts";
 import { reloadMitraModelWorker } from "../modules/assistant/model";
 import { publishInventoryChange } from "../realtime";
-import { hydrateDataScienceArtifacts, loadArtifact, saveAiArtifacts, saveDataScienceArtifacts, stageRawReferences } from "./analysis-storage";
+import { getActiveRunId, hydrateDataScienceArtifacts, loadArtifact, saveAiArtifacts, saveDataScienceArtifacts, stageRawReferences } from "./analysis-storage";
 import { dispatchAnalysisAction } from "./analysis-actions";
 
 const python = process.env.DAISUKI_PYTHON_BIN || process.env.PYTHON_EXECUTABLE ||
@@ -28,10 +28,11 @@ type Step = { label: string; status: "running" | "succeeded" | "failed" };
 type PreviewItem = { partner_id: string; partner_name: string; product_id: string; product_name: string;
   forecast_qty: number; days_of_cover: number; suggested_qty: number; priority_rule: boolean; stockout_probability: number };
 
-async function pythonJob(script: string, runId: string, args: string[] = [], rawDirectory?: string): Promise<string> {
+async function pythonJob(script: string, runId: string, args: string[] = [], rawDirectory?: string, historicalRunIds: string[] = []): Promise<string> {
   const child = Bun.spawn([python, resolve(workspaceRoot, script), ...args], {
     cwd: workspaceRoot,
     env: { ...process.env, DAISUKI_ANALYSIS_RUN_ID: runId,
+      DAISUKI_HISTORICAL_RUN_IDS: historicalRunIds.join(","),
       ...(rawDirectory ? { DAISUKI_RAW_REFERENCES_DIR: rawDirectory } : {}) },
     stdout: "pipe", stderr: "pipe",
   });
@@ -199,7 +200,29 @@ export async function processAnalysisRun(id: string, actorId: string, requestedT
           .where(eq(analysisRuns.id, id));
       }
       await hydrateDataScienceArtifacts(id);
-      const previousModelId = activeRunId();
+      const publishedRuns = await db.select({ id: analysisRuns.id, start_date: analysisRuns.start_date })
+        .from(analysisRuns).where(eq(analysisRuns.status, "published")).orderBy(analysisRuns.published_at);
+      const latestByStart = new Map(publishedRuns.map((published) => [published.start_date, published]));
+      const historicalRunIds: string[] = [];
+      for (const previousRun of latestByStart.values()) {
+        if (previousRun.id === id) continue;
+        try {
+          await hydrateDataScienceArtifacts(previousRun.id);
+        } catch {
+          continue;
+        }
+        const previousAiDir = aiRunDir(previousRun.id);
+        for (const name of ["weekly_operational_facts.json", "regional_stockout_insights.json",
+          "model_evaluation.json", "allocation_preview.json"]) {
+          const content = await loadArtifact(previousRun.id, name);
+          if (content) {
+            await mkdir(previousAiDir, { recursive: true });
+            await writeFile(resolve(previousAiDir, name), content);
+          }
+        }
+        historicalRunIds.push(previousRun.id);
+      }
+      const previousModelId = await getActiveRunId();
       if (previousModelId) {
         const previousModel = await loadArtifact(previousModelId, "daisuki.pkl");
         if (previousModel) {
@@ -215,13 +238,26 @@ export async function processAnalysisRun(id: string, actorId: string, requestedT
         try {
           const args = job.path === "ai/retraining/train.py"
             ? ["--weekly", "--training-source", trainingSource] : [];
-          await pythonJob(job.path, id, args, staged.directory);
+          await pythonJob(job.path, id, args, staged.directory, historicalRunIds);
           steps[steps.length - 1].status = "succeeded";
         } catch (error) {
           steps[steps.length - 1].status = "failed";
           throw error;
         }
         await db.update(analysisRuns).set({ steps: [...steps] }).where(eq(analysisRuns.id, id));
+      }
+      const modelPath = resolve(aiRunDir(id), "daisuki.pkl");
+      const jsonPath = resolve(aiRunDir(id), "daisuki-worker.json");
+      try {
+        await pythonJob("ai/retraining/export_worker_classifier.py", id, [modelPath, jsonPath]);
+        const workerJsonText = await readFile(jsonPath, "utf8");
+        await rawSql`
+          INSERT INTO worker_model_artifacts (name, payload)
+          VALUES ('daisuki', ${workerJsonText}::jsonb)
+          ON CONFLICT (name) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()
+        `;
+      } catch (exportError) {
+        console.warn("[ANALYSIS] Ekspor JSON Worker lokal dilewati:", exportError instanceof Error ? exportError.message : "Error");
       }
       await saveAiArtifacts(id);
       const previous = activeRunId();

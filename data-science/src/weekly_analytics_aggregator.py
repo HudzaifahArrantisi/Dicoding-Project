@@ -33,6 +33,10 @@ CATEGORY_FILES = {
     "regions": "category_regions.json",
     "reporting": "category_reporting.json",
 }
+MONTH_NAMES_ID = (
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+)
 
 
 def database_url() -> str:
@@ -71,8 +75,9 @@ def fetch_rows(start: datetime, end: datetime, as_of: datetime | None = None) ->
                 WHERE p.is_active AND pr.is_active""", (upper_bound,))
             stocks = cursor.fetchall()
             cursor.execute("""SELECT sl.partner_id::text AS partner_id, sl.product_id::text AS product_id,
-                sl.qty_before, sl.qty_after, sl.created_at
-                FROM stock_logs sl WHERE sl.source='manual_update' AND sl.created_at >= %s AND sl.created_at < %s""",
+                sl.qty_before, sl.qty_after, sl.source::text AS source, sl.created_at
+                FROM stock_logs sl WHERE sl.source='manual_update' AND sl.created_at >= %s AND sl.created_at < %s
+                ORDER BY sl.created_at, sl.id""",
                 (start, upper_bound))
             logs = cursor.fetchall()
             cursor.execute("""SELECT o.id::text AS order_id, o.partner_id::text AS partner_id,
@@ -106,17 +111,63 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
     if days < 1:
         raise ValueError("Rentang analisis harus minimal satu hari")
     partner_names = {s["partner_id"]: s["partner_name"] for s in stocks}
+    partner_profiles = {
+        s["partner_id"]: {
+            "partner_name": s["partner_name"],
+            "partner_type": str(s.get("partner_type") or ""),
+            "province_name": str(s.get("province_name") or ""),
+            "regency_name": str(s.get("regency_name") or ""),
+        }
+        for s in stocks
+    }
+    product_names = {p["id"]: p["name"] for p in products}
     daily_partner_counts: dict[tuple[str, str], int] = defaultdict(int)
     daily_partner_units: dict[tuple[str, str], int] = defaultdict(int)
+    daily_partner_logs: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for row in logs:
         if start <= row["created_at"] < end and row["partner_id"] in partner_names:
-            day = row["created_at"].astimezone(JAKARTA).date().isoformat()
+            wib_dt = row["created_at"].astimezone(JAKARTA)
+            day = wib_dt.date().isoformat()
+            qty_before = int(row["qty_before"])
+            qty_after = int(row["qty_after"])
+            consumed_item = max(0, qty_before - qty_after)
             daily_partner_counts[(day, row["partner_id"])] += 1
-            daily_partner_units[(day, row["partner_id"])] += max(0, row["qty_before"] - row["qty_after"])
-    partner_daily = [{"day": day, "partner_id": partner_id, "partner_name": partner_names[partner_id], "log_count": count}
-                     for (day, partner_id), count in sorted(daily_partner_counts.items())]
-    for item in partner_daily:
-        item["consumed_units"] = daily_partner_units[(item["day"], item["partner_id"])]
+            daily_partner_units[(day, row["partner_id"])] += consumed_item
+            daily_partner_logs[(day, row["partner_id"])].append({
+                "time_wib": wib_dt.strftime("%H:%M:%S"),
+                "hour": wib_dt.hour,
+                "minute": wib_dt.minute,
+                "product_id": row["product_id"],
+                "product_name": product_names.get(row["product_id"], ""),
+                "qty_before": qty_before,
+                "qty_after": qty_after,
+                "delta": qty_after - qty_before,
+                "consumed_units": consumed_item,
+                "is_minus": qty_before > qty_after,
+                "source": str(row.get("source") or "manual_update"),
+            })
+    partner_daily = []
+    for (day, partner_id), count in sorted(daily_partner_counts.items()):
+        parsed_day = date.fromisoformat(day)
+        profile = partner_profiles.get(partner_id, {})
+        entries = sorted(daily_partner_logs[(day, partner_id)], key=lambda item: (item["time_wib"], item["product_name"]))
+        partner_daily.append({
+            "day": day,
+            "year": parsed_day.year,
+            "month": parsed_day.month,
+            "month_name": MONTH_NAMES_ID[parsed_day.month - 1],
+            "day_of_month": parsed_day.day,
+            "partner_id": partner_id,
+            "partner_name": partner_names[partner_id],
+            "partner_type": profile.get("partner_type", ""),
+            "province_name": profile.get("province_name", ""),
+            "regency_name": profile.get("regency_name", ""),
+            "log_count": count,
+            "minus_log_count": sum(1 for entry in entries if entry["is_minus"]),
+            "consumed_units": daily_partner_units[(day, partner_id)],
+            "hours": sorted({entry["hour"] for entry in entries}),
+            "logs": entries,
+        })
     daily_reporting = [{"day": (start.astimezone(JAKARTA).date() + timedelta(days=i)).isoformat(),
                         "active_partners": sum(day == (start.astimezone(JAKARTA).date() + timedelta(days=i)).isoformat()
                                                for day, _ in daily_partner_counts),
@@ -176,13 +227,15 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
         pid = stock["partner_id"]
         if pid not in partner_totals:
             partner_totals[pid] = {"partner_id": pid, "partner_name": stock["partner_name"],
+                                   "partner_type": str(stock.get("partner_type") or ""),
                                    "province_name": stock["province_name"], "regency_name": stock["regency_name"],
-                                   "weekly_units": 0, "log_count": 0, "active_days": set(), "critical_frequency": 0,
+                                   "weekly_units": 0, "log_count": 0, "minus_log_count": 0, "active_days": set(), "critical_frequency": 0,
                                    "stockout_events": 0, "restock_requests": 0,
                                    "current_stock_total": 0, "buffer_total": 0, "last_report_at": None}
         partner = partner_totals[pid]
         partner["weekly_units"] += consumed
         partner["log_count"] += len(current_logs)
+        partner["minus_log_count"] += sum(1 for row in current_logs if row["qty_before"] > row["qty_after"])
         partner["critical_frequency"] += critical
         partner["stockout_events"] += zero
         partner["current_stock_total"] += qty

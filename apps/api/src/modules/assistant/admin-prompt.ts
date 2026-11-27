@@ -3,6 +3,7 @@ import type { AdminIndexedExcerpt } from "./admin-knowledge";
 import type { ModelResult } from "./model";
 import { OFFICIAL_RETAIL_PRICES, retailPriceForProduct } from "@daisuki/shared";
 import type { HistoricalDay } from "./historical-consumption";
+import { partnerNameSimilarity } from "./worker-classifier";
 
 export interface BuildAdminPromptOptions {
   context: AdminContext;
@@ -11,10 +12,11 @@ export interface BuildAdminPromptOptions {
   historicalDays?: HistoricalDay[];
   companyData?: { company_profile?: unknown; sop_procedures?: unknown; business_rules?: unknown } | null;
   memory?: { summary: string; recent: string };
+  userMessage?: string;
 }
 
 export function buildAdminRagPrompt(options: BuildAdminPromptOptions): string {
-  const { context, model, knowledgeExcerpts, historicalDays, companyData, memory } = options;
+  const { context, model, knowledgeExcerpts, historicalDays, companyData, memory, userMessage = "" } = options;
 
   const warehouseFacts = context.warehouse.map((w) => ({
     product_name: w.name,
@@ -68,6 +70,28 @@ export function buildAdminRagPrompt(options: BuildAdminPromptOptions): string {
     regional_hotspots: context.weekly_facts.regional_hotspots,
   } : null;
 
+  const matchedRealtimePartners = userMessage
+    ? context.partners_overview
+        .map((p) => ({
+          partner: p,
+          sim: partnerNameSimilarity(userMessage, p.partner_name),
+          total_stock: p.stocks.reduce((sum, s) => sum + s.current_qty, 0),
+          total_sold_7d: p.stocks.reduce((sum, s) => sum + s.sold_7d, 0),
+        }))
+        .filter((item) => item.sim >= 0.72)
+        .sort((a, b) => b.sim - a.sim)
+        .slice(0, 6)
+        .map(({ partner, total_stock, total_sold_7d }) => ({
+          partner_name: partner.partner_name,
+          partner_type: partner.partner_type,
+          city: partner.city,
+          province: partner.province,
+          total_current_stock: total_stock,
+          total_sold_7d,
+          stocks: partner.stocks,
+        }))
+    : [];
+
   return `Anda adalah Asisten AI Administrator Pusat Daisuki Inventory (Daisuki Central Admin AI).
 Tugas Anda adalah mendampingi Admin Daisuki Pusat dalam memantau, menganalisis, dan mengambil keputusan logistik, restock, stok gudang pusat, evaluasi cabang mitra, serta menanggapi pertanyaan seputar data sistem, model machine learning (daisuki.pkl), maupun dokumen pengetahuan / karya ilmiah di sistem.
 
@@ -104,6 +128,7 @@ ${JSON.stringify({
   antrean_pesanan_menunggu_persetujuan: pendingOrdersList,
   pesanan_sedang_dalam_pengiriman: shipmentsList,
   log_mutasi_terbaru: recentLogsList,
+  mitra_realtime_sesuai_pertanyaan: matchedRealtimePartners,
   analisis_mingguan_dan_wilayah: weeklyFacts,
 })}
 

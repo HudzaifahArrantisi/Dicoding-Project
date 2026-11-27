@@ -63,6 +63,40 @@ describe("historical consumption", () => {
     ] })).toContain("**6 pcs**");
   });
 
+  it("mengenali jam bulat pagi/siang/malam, rentang jam, serta typo kata tanggal", () => {
+    const now = new Date("2026-11-27T12:00:00Z");
+    const morning = parseExactLogRequest(
+      "jika saya ingin tau berpa jumlah log - nya pada mitra Minimarket Akasia Balikpapan pada tagggal 17 november itu pada jam 9 pagi itu berapa",
+      now,
+    );
+    expect(morning).toEqual({
+      partnerName: "Minimarket Akasia Balikpapan",
+      day: "2026-11-17",
+      hour: 9,
+      minute: 0,
+      wholeHour: true,
+    });
+    const typoMorning = parseExactLogRequest(
+      "jika saya ingin tau jumal log - mines pada mitra minimarket akasia balikpapa pada tanggah 17 november it pada jam 9 berapa",
+      now,
+    );
+    expect(typoMorning?.day).toBe("2026-11-17");
+    expect(typoMorning?.hour).toBe(9);
+    expect(typoMorning?.wholeHour).toBe(true);
+    const range = parseExactLogRequest(
+      "berapa jumlah log stok pada mitra Minimarket Akasia Balikpapan inin dari jam 12siang ke jam 3 sore pada tanggal 17 november??",
+      now,
+    );
+    expect(range).toEqual({
+      partnerName: "Minimarket Akasia Balikpapan",
+      day: "2026-11-17",
+      hour: 12,
+      minute: 0,
+      wholeHour: true,
+      endHour: 15,
+    });
+  });
+
   it("membaca arsip Neon per periode tanpa membocorkan mitra lain", () => {
     const artifacts = [
       { file_name: "weekly_analytics_summary.json", payload: { partner_daily_log_breakdown: [

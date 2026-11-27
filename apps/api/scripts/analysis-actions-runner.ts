@@ -152,10 +152,16 @@ try {
     await python("ai/retraining/export_worker_classifier.py", [modelPath, jsonPath]);
     await finishStep();
     await beginStep("Publikasi model JSON ke Cloudflare KV");
-    for (const name of (await readdir(aiRunDir(id))).filter((entry) => /^daisuki-history-[0-9a-f-]{36}-\d{4}-\d{2}-\d{2}\.json$/.test(entry))) {
+    for (const name of (await readdir(aiRunDir(id))).filter((entry) => /^daisuki-history-(?:[0-9a-f-]{36}-)?\d{4}-\d{2}-\d{2}\.json$/.test(entry))) {
       await publishKv(resolve(aiRunDir(id), name), name.slice(0, -5));
     }
     await publishKv(jsonPath);
+    const workerJsonText = await readFile(jsonPath, "utf8");
+    await sql`
+      INSERT INTO worker_model_artifacts (name, payload)
+      VALUES ('daisuki', ${workerJsonText}::jsonb)
+      ON CONFLICT (name) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()
+    `;
     await finishStep();
     await beginStep("Terbitkan hasil analisis aktif");
     await publishRecommendations(id, run.processed_by, "analysis_published", true);

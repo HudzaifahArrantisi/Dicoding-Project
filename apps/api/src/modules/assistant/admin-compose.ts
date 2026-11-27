@@ -2,6 +2,7 @@ import type { AdminContext } from "./admin-context";
 import type { AdminIndexedExcerpt } from "./admin-knowledge";
 import type { ModelResult } from "./model";
 import { retailPriceReply } from "./retail-price-reply";
+import { partnerNameSimilarity } from "./worker-classifier";
 
 export interface AdminAssistantReply {
   reply: string;
@@ -94,6 +95,40 @@ export function composeAdminFallbackReply(
     };
   }
 
+  const matchedPartners = context.partners_overview
+    .map((p) => ({
+      partner: p,
+      sim: partnerNameSimilarity(message, p.partner_name),
+      totalStock: p.stocks.reduce((sum, s) => sum + s.current_qty, 0),
+      totalSold7d: p.stocks.reduce((sum, s) => sum + s.sold_7d, 0),
+    }))
+    .filter((item) => item.sim >= 0.72)
+    .sort((a, b) => b.sim - a.sim);
+
+  if (matchedPartners.length >= 2 && /banding|perbandingan|selisih|\bvs\b/i.test(normalized)) {
+    const [first, second] = matchedPartners;
+    const diffSold = first.totalSold7d - second.totalSold7d;
+    const diffStock = first.totalStock - second.totalStock;
+    const soldLeader = diffSold > 0
+      ? `**${first.partner.partner_name}** lebih tinggi **${Math.abs(diffSold).toLocaleString("id-ID")} pcs**`
+      : diffSold < 0
+        ? `**${second.partner.partner_name}** lebih tinggi **${Math.abs(diffSold).toLocaleString("id-ID")} pcs**`
+        : "konsumsi 7 hari keduanya sama";
+    return {
+      reply: `**Perbandingan Realtime Mitra (Database):**\n- **${first.partner.partner_name}** (${first.partner.partner_type}, ${first.partner.city}): Sisa stok **${first.totalStock.toLocaleString("id-ID")} pcs**, konsumsi 7 hari terakhir **${first.totalSold7d.toLocaleString("id-ID")} pcs**.\n- **${second.partner.partner_name}** (${second.partner.partner_type}, ${second.partner.city}): Sisa stok **${second.totalStock.toLocaleString("id-ID")} pcs**, konsumsi 7 hari terakhir **${second.totalSold7d.toLocaleString("id-ID")} pcs**.\n\nSelisih konsumsi 7 hari: ${soldLeader} (selisih sisa stok: **${Math.abs(diffStock).toLocaleString("id-ID")} pcs**).`,
+      quickReplies,
+    };
+  }
+
+  if (matchedPartners.length === 1 && /\b(?:stok|stock|konsumsi|penjualan|terjual|sisa|kondisi)\b/i.test(normalized)) {
+    const { partner, totalStock, totalSold7d } = matchedPartners[0];
+    const items = partner.stocks.map((s) => `- ${s.product_name}: sisa **${s.current_qty} pcs** (${s.status}, terjual 7 hari: ${s.sold_7d} pcs)`).join("\n");
+    return {
+      reply: `**Status Realtime ${partner.partner_name}** (${partner.partner_type}, ${partner.city}):\nTotal sisa stok **${totalStock.toLocaleString("id-ID")} pcs** · Konsumsi 7 hari terakhir **${totalSold7d.toLocaleString("id-ID")} pcs**\n${items}`,
+      quickReplies,
+    };
+  }
+
   const privateReference = knowledgeExcerpts.find((item) => item.version === "daisuki.pkl");
   if (privateReference) {
     return {
@@ -103,7 +138,8 @@ export function composeAdminFallbackReply(
   }
 
   if (knowledgeExcerpts.length) {
-    const reference = knowledgeExcerpts[0];
+    const partnerDaily = knowledgeExcerpts.find((item) => item.source.includes("partner_daily_consumption"));
+    const reference = partnerDaily ?? knowledgeExcerpts[0];
     return {
       reply: `Menurut dokumen **${reference.title}**:\n\n${reference.excerpt.slice(0, 1000)}\n\nSumber: ${reference.source}`,
       quickReplies,

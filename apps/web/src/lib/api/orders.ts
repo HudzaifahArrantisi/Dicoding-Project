@@ -48,18 +48,6 @@ export async function getFinanceWeeklyHistory(month?: string): Promise<FinanceWe
   return response.data
 }
 
-export interface OperationalInsights {
-  deadstock: Array<{ partner_id: string; partner_name: string; product_name: string; current_qty: number; inactive_days: number }>
-  audit: Array<{ partner_id: string; partner_name: string; stale_days: number; large_changes: number; priority_score: number }>
-  factory: Array<{ product_id: string; product_name: string; central_stock: number; sold_30d: number; forecast_14d: number; suggested_qty: number }>
-  method: string
-}
-
-export async function getOperationalInsights(): Promise<OperationalInsights> {
-  const response = await apiClient.get<{ data: OperationalInsights }>('/orders/finance/insights')
-  return response.data
-}
-
 export interface CreateOrderPayload {
   items: CreateOrderItemPayload[]
   note?: string

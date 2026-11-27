@@ -153,10 +153,20 @@ export function createInlineWorker(): Worker {
       const day = message ? analysisQueryDay(message) : null;
       const historyKey = day ? bundle.history_days?.[day] : undefined;
       if (day && bundle.history_days && !historyKey) analysisRetrieval = null;
-      if (historyKey && currentModelKv()) {
-        const history = await currentModelKv()!.get(historyKey, "json") as
-          { format_version?: number; analysis_retrieval?: WorkerRetrieval } | null;
-        analysisRetrieval = history?.format_version === 1 ? history.analysis_retrieval ?? null : null;
+      if (historyKey) {
+        if (currentModelKv()) {
+          const history = await currentModelKv()!.get(historyKey, "json") as
+            { format_version?: number; analysis_retrieval?: WorkerRetrieval } | null;
+          analysisRetrieval = history?.format_version === 1 ? history.analysis_retrieval ?? null : null;
+        } else {
+          const [row] = await sql<{ payload: { format_version?: number; analysis_retrieval?: WorkerRetrieval } }[]>`
+            select payload from analysis_run_artifacts
+            where run_id = (select id from analysis_runs where is_active = true order by published_at desc nulls last limit 1)
+              and file_name = ${`${historyKey}.json`}
+            limit 1
+          `;
+          analysisRetrieval = row?.payload?.format_version === 1 ? row.payload.analysis_retrieval ?? null : null;
+        }
       }
       const predictions = bundle.risk ? records.map((record) => {
         const prediction = predictWorkerClassifier(bundle.risk!, stockRiskText(record));
@@ -189,13 +199,22 @@ function resolvePythonBinary(): string {
   return process.platform === "win32" ? "python" : "python3";
 }
 
+function resolveModelArtifactPath(): string {
+  if (process.env.DAISUKI_MODEL_PATH?.trim()) {
+    return resolve(workspaceRoot, process.env.DAISUKI_MODEL_PATH.trim());
+  }
+  const active = activeArtifact("model");
+  if (existsSync(active)) return active;
+  const manual = resolve(workspaceRoot, "ai/data/private/manual/daisuki.pkl");
+  if (existsSync(manual)) return manual;
+  return active;
+}
+
 function createWorker() {
   const retrainingDir = resolve(import.meta.dir, "../../../../../ai/retraining");
   const scriptPath = resolve(retrainingDir, "inference_worker.py");
   const python = resolvePythonBinary();
-  const modelPath = process.env.DAISUKI_MODEL_PATH?.trim()
-    ? resolve(workspaceRoot, process.env.DAISUKI_MODEL_PATH.trim())
-    : activeArtifact("model");
+  const modelPath = resolveModelArtifactPath();
   console.log(`[ASSISTANT MODEL] Artefak: ${modelPath}`);
   const processHandle = Bun.spawn([python, "-u", scriptPath], {
     cwd: retrainingDir,

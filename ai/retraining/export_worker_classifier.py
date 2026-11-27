@@ -22,8 +22,8 @@ def export_pipeline(pipeline: Pipeline) -> dict:
         raise ValueError("Unsupported vectorizer configuration")
     return {
         "classes": classifier.classes_.tolist(),
-        "class_log_prior": classifier.class_log_prior_.tolist(),
-        "feature_log_prob": classifier.feature_log_prob_.tolist(),
+        "class_log_prior": [round(float(x), 5) for x in classifier.class_log_prior_.tolist()],
+        "feature_log_prob": [[round(float(x), 5) for x in row] for row in classifier.feature_log_prob_.tolist()],
         "vocabulary": {key: int(value) for key, value in vectorizer.vocabulary_.items()},
     }
 
@@ -38,12 +38,12 @@ def export_retrieval(index: dict) -> dict | None:
     rows = []
     for row in range(matrix.shape[0]):
         start, end = matrix.indptr[row], matrix.indptr[row + 1]
-        rows.append([[int(column), float(weight)] for column, weight in zip(
+        rows.append([[int(column), round(float(weight), 4)] for column, weight in zip(
             matrix.indices[start:end], matrix.data[start:end], strict=True)])
     return {
         "documents": index["documents"],
         "vocabulary": {key: int(value) for key, value in vectorizer.vocabulary_.items()},
-        "idf": vectorizer.idf_.tolist(),
+        "idf": [round(float(x), 4) for x in vectorizer.idf_.tolist()],
         "vectors": rows,
         "max_excerpts": index.get("max_excerpts", 3),
     }
@@ -61,7 +61,6 @@ def main() -> None:
     analysis = export_retrieval(bundle.get("analysis_retrieval") or {})
     history_days: dict[str, str] = {}
     latest_analysis = None
-    run_tag = str((bundle.get("mainbrain_meta") or {}).get("source_run_id") or "manual")
     if analysis:
         periods = sorted({str(item.get("period", "")) for item in analysis["documents"] if item.get("period")})
         for period in periods:
@@ -72,7 +71,7 @@ def main() -> None:
             positions = [i for i, item in enumerate(analysis["documents"]) if item.get("period") == period]
             shard = {**analysis, "documents": [analysis["documents"][i] for i in positions],
                      "vectors": [analysis["vectors"][i] for i in positions]}
-            shard_key = f"daisuki-history-{run_tag}-{start.isoformat()}"
+            shard_key = f"daisuki-history-{start.isoformat()}"
             shard_path = args.destination.parent / f"{shard_key}.json"
             shard_path.parent.mkdir(parents=True, exist_ok=True)
             shard_path.write_text(json.dumps({"format_version": 1, "analysis_retrieval": shard}, ensure_ascii=False,

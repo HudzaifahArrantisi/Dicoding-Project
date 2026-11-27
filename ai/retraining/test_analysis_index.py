@@ -26,8 +26,16 @@ class PartnerAnalysisIndexTests(unittest.TestCase):
                 writer.writerows([{"partner_id": "a", "product_name": "Basreng", "weekly_consumption": 12},
                                   {"partner_id": "b", "product_name": "Seblak", "weekly_consumption": 999}])
             (folder / "weekly_analytics_summary.json").write_text(json.dumps({"partner_daily_log_breakdown": [
-                {"day": "2026-11-02", "partner_id": "a", "partner_name": "A", "consumed_units": 12, "log_count": 2},
-                {"day": "2026-11-02", "partner_id": "b", "partner_name": "B", "consumed_units": 999, "log_count": 3},
+                {"day": "2026-11-02", "month_name": "November", "year": 2026, "partner_id": "a",
+                 "partner_name": "Minimarket Akasia Balikpapan", "partner_type": "minimarket",
+                 "regency_name": "Kota Balikpapan", "province_name": "Kalimantan Timur",
+                 "consumed_units": 12, "log_count": 2, "minus_log_count": 2, "hours": [9, 15],
+                 "logs": [{"time_wib": "09:40:00", "hour": 9, "minute": 40, "product_name": "Keripik Pisang Rasa Coklat",
+                           "qty_before": 95, "qty_after": 91, "consumed_units": 4, "source": "manual_update"}]},
+                {"day": "2026-11-02", "month_name": "November", "year": 2026, "partner_id": "b",
+                 "partner_name": "Restoran Akasia Balikpapan", "partner_type": "restaurant",
+                 "regency_name": "Kota Balikpapan", "province_name": "Kalimantan Timur",
+                 "consumed_units": 999, "log_count": 3, "minus_log_count": 3, "hours": [12]},
             ]}), encoding="utf-8")
             index = build_analysis_index(folder)
             self.assertTrue(index["documents"])
@@ -38,6 +46,13 @@ class PartnerAnalysisIndexTests(unittest.TestCase):
             self.assertEqual(search_partner_analysis(index, "c", "rangkum minggu saya"), [])
             self.assertEqual(search_partner_analysis(index, "a", "konsumsi 2 november 2026")[0]["consumed_units"], 12)
             self.assertEqual(search_partner_analysis(index, None, "mitra paling tinggi konsumsi 2 november 2026", admin_access=True)[0]["partner_id"], "b")
+            fuzzy_hit = search_partner_analysis(
+                index, None,
+                "berapa jumlah log minus pada mitra minimarker akasia balikpapapn pada tagggal 2 november 2026 jam 9 pagi",
+                admin_access=True,
+            )
+            self.assertEqual(fuzzy_hit[0]["partner_id"], "a")
+            self.assertIn("09:40:00 WIB", fuzzy_hit[0]["excerpt"])
             old_count = len(index["documents"])
             for name in ("products", "partners", "regions", "reporting"):
                 path = folder / f"category_{name}.json"

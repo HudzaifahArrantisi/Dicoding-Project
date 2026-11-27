@@ -14,7 +14,7 @@ import { isStaleCatalogExcerpt, retailPriceReply } from "./retail-price-reply";
 import { composeAdminFallbackReply } from "./admin-compose";
 import { understandAdminMessage, understandMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
-import { exactStockLogReply, historicalComparisonReply, historicalTopReply, loadExactStockLogs,
+import { exactStockLogReply, historicalComparisonReply, historicalPartnerDayReply, historicalTopReply, loadExactStockLogs,
   loadHistoricalConsumption, parseExactLogRequest } from "./historical-consumption";
 import { loadPartnerDailyFacts, loadPublishedAnalysisArchive } from "./archived-analysis";
 import { approvedModelContextReply, composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge, selectPublicRagMemory } from "./company-knowledge";
@@ -682,7 +682,8 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const fallback = priceReply ? { ...baseFallback, reply: priceReply }
       : approvedAdminContextReply ? { ...baseFallback, reply: approvedAdminContextReply } : baseFallback;
     const exactHistoricalReply = exactLogs ? exactStockLogReply(exactLogs) : historicalTopReply(message, historicalDays)
-      ?? historicalComparisonReply(message, historicalDays);
+      ?? historicalComparisonReply(message, historicalDays)
+      ?? historicalPartnerDayReply(message, historicalDays);
 
     // 5. LLM Prompt
     let llmReply: string | null = null;
@@ -694,6 +695,7 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       knowledgeExcerpts,
       historicalDays,
       companyData,
+      userMessage: message,
       memory: {
         summary: memory?.summary ?? "",
         recent: buildConversationContext(turns),

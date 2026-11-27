@@ -117,14 +117,71 @@ export function analysisQueryDay(query: string): string | null {
   return isoDate ?? (writtenDate ? `${writtenDate[3] ?? new Date().getFullYear()}-${String(monthNames.findIndex((month) => month.startsWith(writtenDate[2])) + 1).padStart(2, "0")}-${writtenDate[1].padStart(2, "0")}` : null);
 }
 
+const PARTNER_QUERY_STOPWORDS = new Set([
+  "mitra", "cabang", "toko", "pada", "tanggal", "tagggal", "tanggah", "tgl", "jam", "pukul",
+  "pagi", "siang", "sore", "malam", "malem", "berapa", "berpa", "jumlah", "jumal", "jmalh",
+  "log", "logs", "stok", "stock", "minus", "mines", "keluar", "terjual", "konsumsi",
+  "dari", "sampai", "ke", "dan", "itu", "ini", "yang", "saya", "ingin", "tau", "tahu",
+  "november", "nov", "oktober", "okt", "desember", "des", "wib",
+]);
+
+function levenshteinRatio(a: string, b: string): number {
+  if (a === b) return 1;
+  if (!a.length || !b.length) return 0;
+  const prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const temp = prev[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + cost);
+      diag = temp;
+    }
+  }
+  const maxLen = Math.max(a.length, b.length);
+  return (maxLen - prev[b.length]) / maxLen;
+}
+
+export function partnerNameSimilarity(query: string, partnerName: string): number {
+  if (!partnerName) return 0;
+  const qLower = query.toLowerCase();
+  const pLower = partnerName.toLowerCase();
+  if (qLower.includes(pLower)) return 1;
+  const pTokens = (pLower.match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+  if (!pTokens.length) return 0;
+  const qTokens = (qLower.match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((tok) => !PARTNER_QUERY_STOPWORDS.has(tok));
+  if (!qTokens.length) return 0;
+  let sum = 0;
+  let matched = 0;
+  for (const pTok of pTokens) {
+    let best = 0;
+    for (const qTok of qTokens) {
+      const ratio = levenshteinRatio(pTok, qTok);
+      if (ratio > best) best = ratio;
+    }
+    if (best >= 0.7) matched++;
+    sum += best;
+  }
+  if (matched < Math.max(2, pTokens.length)) return 0;
+  return sum / pTokens.length;
+}
+
 export function searchWorkerAnalysisRetrieval(index: WorkerRetrieval | null, partnerId: string | undefined, query: string, adminAccess = false): Array<Record<string, unknown>> {
   if (!index || (!partnerId && !adminAccess)) return [];
   const own = scoreWorkerRetrieval(index, query).filter(({ position }) => adminAccess || index.documents[position].partner_id === partnerId)
     .sort((a, b) => b.score - a.score || a.position - b.position);
   const day = analysisQueryDay(query);
   if (day) {
-    const dated = own.filter(({ position }) => index.documents[position].day === day);
+    let dated = own.filter(({ position }) => index.documents[position].day === day);
     if (dated.length) {
+      const withSim = dated.map((item) => ({
+        ...item,
+        sim: partnerNameSimilarity(query, String(index.documents[item.position].partner_name ?? "")),
+      })).sort((a, b) => b.sim - a.sim);
+      if (withSim[0].sim >= 0.72) {
+        dated = withSim.filter((item) => item.sim >= 0.72);
+      }
       const highest = /tinggi|terbanyak|terbesar|paling|top/i.test(query);
       dated.sort((a, b) => highest
         ? Number(index.documents[b.position].consumed_units ?? 0) - Number(index.documents[a.position].consumed_units ?? 0)
@@ -132,6 +189,16 @@ export function searchWorkerAnalysisRetrieval(index: WorkerRetrieval | null, par
       return dated.slice(0, 6).map(({ position, score }) => result(index, position, score));
     }
     return [];
+  }
+  if (adminAccess) {
+    const withSim = own.map((item) => ({
+      ...item,
+      sim: partnerNameSimilarity(query, String(index.documents[item.position].partner_name ?? "")),
+    })).sort((a, b) => b.sim - a.sim || b.score - a.score);
+    if (withSim.length && withSim[0].sim >= 0.75) {
+      return withSim.filter((item) => item.sim >= 0.75).slice(0, 6)
+        .map(({ position, score }) => result(index, position, score));
+    }
   }
   const overview = adminAccess ? undefined : own.find(({ position }) => index.documents[position].source === "category_partners.json");
   const lower = query.toLowerCase();

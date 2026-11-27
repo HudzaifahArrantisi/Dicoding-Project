@@ -85,6 +85,7 @@ export async function saveAiArtifacts(runId: string) {
   const directory = aiRunDir(runId);
   for (const name of await readdir(directory)) {
     if (!/^[a-z0-9_.-]+\.(json|csv|md|pkl)$/i.test(name)) continue;
+    if (/^daisuki-(?:worker|history-)/i.test(name)) continue;
     await saveArtifact(runId, "ai", name, await readFile(resolve(directory, name)));
   }
 }

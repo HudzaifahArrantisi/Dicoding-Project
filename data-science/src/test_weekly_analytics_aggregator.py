@@ -42,6 +42,13 @@ class WeeklyAnalyticsTests(unittest.TestCase):
         self.assertEqual(next(item for item in report["partners"] if item["partner_id"] == "m2")["log_count"], 0)
         self.assertEqual(len(report["daily_reporting"]), 7)
         self.assertEqual(report["daily_reporting"][1]["log_count"], 1)
+        self.assertEqual(len(report["partner_daily_log_breakdown"]), 2)
+        first_day_breakdown = report["partner_daily_log_breakdown"][0]
+        self.assertEqual(first_day_breakdown["partner_type"], "hotel")
+        self.assertEqual(first_day_breakdown["month_name"], "November")
+        self.assertEqual(first_day_breakdown["minus_log_count"], 1)
+        self.assertEqual(first_day_breakdown["logs"][0]["time_wib"], "00:00:00")
+        self.assertEqual(first_day_breakdown["logs"][0]["consumed_units"], 14)
         self.assertEqual(report["warehouse"][0]["central_stock"], 30)
         self.assertEqual(len(cleaned), 2)
         self.assertEqual(cleaned[0]["weekly_consumption"], 35)

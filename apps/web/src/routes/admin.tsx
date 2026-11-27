@@ -59,7 +59,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { getFinanceSummary, getFinanceWeeklyHistory, getOperationalInsights, type FinanceSummary, type FinanceWeeklyHistory, type OperationalInsights } from '@/lib/api/orders'
+import { getFinanceSummary, getFinanceWeeklyHistory, type FinanceSummary, type FinanceWeeklyHistory } from '@/lib/api/orders'
 import {
   EmptyState,
   ErrorState,
@@ -2902,12 +2902,6 @@ function AdminDashboard() {
     enabled: user?.role === 'admin' && weeklyHistoryOpen,
     staleTime: 60_000,
   })
-  const operationalInsights = useQuery<OperationalInsights>({
-    queryKey: ['admin-operational-insights'],
-    queryFn: getOperationalInsights,
-    enabled: user?.role === 'admin' && tab === 'stocks',
-    staleTime: 60_000,
-  })
   const stocks = useQuery<StockItem[]>({
     queryKey: ['admin-stocks'],
     queryFn: () => getStocks(),
@@ -3251,32 +3245,6 @@ function AdminDashboard() {
           />
           {tab === 'stocks' && finance.isError ? (
             <ErrorState message={getErrorMessage(finance.error)} onRetry={() => void finance.refetch()} />
-          ) : null}
-          {tab === 'stocks' && operationalInsights.data ? (
-            <section aria-label="Prioritas operasional" className="grid gap-3 lg:grid-cols-3">
-              <div className="rounded-xl border border-line bg-surface shadow-xs p-4">
-                <h2 className="font-display text-base font-semibold text-ink-900">Potensi deadstock</h2>
-                <p className="mt-1 text-xs text-muted">Stok tersisa tanpa perubahan fisik lebih dari 30 hari. Verifikasi sebelum penarikan.</p>
-                {operationalInsights.data.deadstock.length ? operationalInsights.data.deadstock.slice(0, 3).map((item) => (
-                  <p key={`${item.partner_id}-${item.product_name}`} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong> · {item.product_name}<br /><span className="tabular-nums text-crit-fg">{item.current_qty} pcs · {item.inactive_days} hari</span></p>
-                )) : <p className="mt-3 text-sm text-muted">Tidak ada stok yang memenuhi kriteria.</p>}
-              </div>
-              <div className="rounded-xl border border-line bg-surface shadow-xs p-4">
-                <h2 className="font-display text-base font-semibold text-ink-900">Prioritas pemeriksaan</h2>
-                <p className="mt-1 text-xs text-muted">Urutan dari keterlambatan laporan dan perubahan stok besar.</p>
-                {operationalInsights.data.audit.length ? operationalInsights.data.audit.slice(0, 3).map((item) => (
-                  <p key={item.partner_id} className="mt-3 border-t border-line pt-2 text-sm text-ink-800"><strong>{item.partner_name}</strong><br /><span className="tabular-nums text-warn-fg">{item.stale_days} hari tanpa laporan · {item.large_changes} perubahan besar</span></p>
-                )) : <p className="mt-3 text-sm text-muted">Tidak ada cabang yang memenuhi kriteria.</p>}
-              </div>
-              <div className="rounded-xl border border-line bg-surface shadow-xs p-4">
-                <h2 className="font-display text-base font-semibold text-ink-900">Estimasi kebutuhan pabrik</h2>
-                <p className="mt-1 text-xs text-muted">Kebutuhan 14 hari berdasarkan penurunan stok fisik 30 hari.</p>
-                {operationalInsights.data.factory.map((item) => (
-                  <p key={item.product_id} className="mt-2 border-t border-line pt-2 text-sm text-ink-800">{item.product_name}: <strong className="tabular-nums">{item.suggested_qty} pcs</strong> tambahan</p>
-                ))}
-                <p className="mt-3 text-xs text-muted">Konfirmasi penjualan riil dan kapasitas produksi dengan PT Kim Manufaktur sebelum membuat PO.</p>
-              </div>
-            </section>
           ) : null}
           {tab === 'stocks' ? (
             <section aria-labelledby="summary-title" className="dashboard-panel-enter">
