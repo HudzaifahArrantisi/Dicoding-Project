@@ -15,7 +15,20 @@ const modelPath = resolve(import.meta.dir, '../../../../../ai/data/mainbrain/mod
 const python = process.env.DAISUKI_PYTHON_BIN || 'python'
 process.env.DAISUKI_MODEL_PATH = modelPath
 
-test.skipIf(!existsSync(modelPath) || !Bun.which(python))('memakai daisuki.pkl untuk menilai data stok mitra', async () => {
+// Worker Python butuh numpy dan scikit-learn untuk unpickle model. Di CI tanpa
+// dependensi itu, uji dilewati supaya kegagalan lingkungan tidak tampak sebagai bug kode.
+const pythonHasDeps = (() => {
+  if (!Bun.which(python)) return false
+  try {
+    return Bun.spawnSync([python, '-c', 'import numpy, sklearn'], { stdout: 'ignore', stderr: 'ignore' }).exitCode === 0
+  } catch {
+    return false
+  }
+})()
+
+const canRunModel = existsSync(modelPath) && pythonHasDeps
+
+test.skipIf(!canRunModel)('memakai daisuki.pkl untuk menilai data stok mitra', async () => {
   const record: ModelRecord = {
     partner_id: '11111111-1111-1111-1111-111111111111',
     partner_name: 'Cabang Uji', partner_type: 'kafe',
@@ -33,7 +46,7 @@ test.skipIf(!existsSync(modelPath) || !Bun.which(python))('memakai daisuki.pkl u
   expect(result.predictions[0].confidence).toBeGreaterThan(0)
 }, 40_000)
 
-test.skipIf(!existsSync(modelPath) || !Bun.which(python))('worker mengambil intent dan dokumen dari indeks biner yang sama', async () => {
+test.skipIf(!canRunModel)('worker mengambil intent dan dokumen dari indeks biner yang sama', async () => {
   const result = await understandMitraMessage('berapa stok di gudang saya')
   expect(result.available).toBe(true)
   expect(result.intent?.label).toBe('own_stock')
@@ -43,7 +56,7 @@ test.skipIf(!existsSync(modelPath) || !Bun.which(python))('worker mengambil inte
   expect(guidance.documents?.every((doc) => doc.source.endsWith('.public.md') && doc.score > 0)).toBe(true)
 }, 40_000)
 
-test.skipIf(!existsSync(modelPath) || !Bun.which(python))('model mengenali intent pesan mitra', async () => {
+test.skipIf(!canRunModel)('model mengenali intent pesan mitra', async () => {
   for (const [message, expected] of [
     ['hai', 'greeting'],
     ['berapa total stok gudang pusat daisuki saat ini', 'central_stock'],

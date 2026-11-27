@@ -75,6 +75,7 @@ describe("historical consumption", () => {
       hour: 9,
       minute: 0,
       wholeHour: true,
+      meridiemSpecified: true,
     });
     const typoMorning = parseExactLogRequest(
       "jika saya ingin tau jumal log - mines pada mitra minimarket akasia balikpapa pada tanggah 17 november it pada jam 9 berapa",
@@ -94,6 +95,7 @@ describe("historical consumption", () => {
       minute: 0,
       wholeHour: true,
       endHour: 15,
+      meridiemSpecified: true,
     });
   });
 

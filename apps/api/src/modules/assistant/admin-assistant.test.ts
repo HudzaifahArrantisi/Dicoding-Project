@@ -1,9 +1,19 @@
 import { describe, expect, it } from "bun:test";
-import { loadAdminContext } from "./admin-context";
-import { searchAdminKnowledge, loadCompanyProfileAndSop } from "./admin-knowledge";
-import { buildAdminRagPrompt } from "./admin-prompt";
-import { composeAdminFallbackReply } from "./admin-compose";
 import type { ModelResult } from "./model";
+
+// Modul admin-* membuat koneksi database saat diimpor, jadi baru dimuat ketika
+// test integrasi diaktifkan (DAISUKI_TEST_DB=1 dan DATABASE_URL asli).
+// Tanpa itu, suite dilewati agar job CI offline tetap hijau.
+const hasDatabase = process.env.DAISUKI_TEST_DB === "1" && Boolean(process.env.DATABASE_URL);
+
+const modules = hasDatabase
+  ? Promise.all([
+      import("./admin-context"),
+      import("./admin-knowledge"),
+      import("./admin-prompt"),
+      import("./admin-compose"),
+    ])
+  : null;
 
 const mockEmptyModel: ModelResult = {
   available: true,
@@ -16,8 +26,9 @@ const mockEmptyModel: ModelResult = {
   },
 };
 
-describe("Admin AI Assistant", () => {
+describe.skipIf(!hasDatabase)("Admin AI Assistant", () => {
   it("loadAdminContext mengambil data gudang pusat dan ringkasan jaringan", async () => {
+    const [{ loadAdminContext }] = await modules!;
     const context = await loadAdminContext();
     expect(context).toBeDefined();
     expect(Array.isArray(context.warehouse)).toBe(true);
@@ -29,6 +40,7 @@ describe("Admin AI Assistant", () => {
   });
 
   it("searchAdminKnowledge menemukan dokumen karya ilmiah dan penelitian", async () => {
+    const [, { searchAdminKnowledge }] = await modules!;
     const excerpts = await searchAdminKnowledge("siapa penulis karya ilmiah sentimen sgd logistic regression", 3);
     expect(excerpts.length).toBeGreaterThan(0);
     const top = excerpts[0];
@@ -36,12 +48,15 @@ describe("Admin AI Assistant", () => {
   });
 
   it("searchAdminKnowledge menemukan aturan inventaris dan SOP", async () => {
+    const [, { searchAdminKnowledge }] = await modules!;
     const excerpts = await searchAdminKnowledge("aturan stok buffer minimal dan restock", 3);
     expect(excerpts.length).toBeGreaterThan(0);
     expect(excerpts.some((e) => /buffer|stok|restock|rules/i.test(e.excerpt))).toBe(true);
   });
 
   it("buildAdminRagPrompt menyusun prompt komprehensif untuk Admin Pusat", async () => {
+    const [{ loadAdminContext }, { searchAdminKnowledge, loadCompanyProfileAndSop }, { buildAdminRagPrompt }] =
+      await modules!;
     const context = await loadAdminContext();
     const excerpts = await searchAdminKnowledge("stok gudang pusat", 2);
     const company = await loadCompanyProfileAndSop();
@@ -59,6 +74,7 @@ describe("Admin AI Assistant", () => {
   });
 
   it("composeAdminFallbackReply menjawab data empiris karya ilmiah jika LLM timeout", async () => {
+    const [{ loadAdminContext }, { searchAdminKnowledge }, , { composeAdminFallbackReply }] = await modules!;
     const context = await loadAdminContext();
     const excerpts = await searchAdminKnowledge("karya ilmiah hudzaifah", 2);
     const reply = composeAdminFallbackReply("siapa penulis karya ilmiah sgd logistic regression", context, mockEmptyModel, excerpts);
@@ -67,6 +83,7 @@ describe("Admin AI Assistant", () => {
   });
 
   it("composeAdminFallbackReply menjawab ketersediaan stok pusat secara real-time", async () => {
+    const [{ loadAdminContext }, , , { composeAdminFallbackReply }] = await modules!;
     const context = await loadAdminContext();
     const reply = composeAdminFallbackReply("berapa stok pusat saat ini?", context, mockEmptyModel, []);
     expect(reply.reply).toContain("Ketersediaan Stok Gudang Pusat Daisuki");
@@ -74,6 +91,7 @@ describe("Admin AI Assistant", () => {
   });
 
   it("composeAdminFallbackReply memakai referensi privat saat model bahasa gagal", async () => {
+    const [{ loadAdminContext }, , , { composeAdminFallbackReply }] = await modules!;
     const context = await loadAdminContext();
     const reply = composeAdminFallbackReply("siapa itu Contoh?", context, mockEmptyModel, [{
       source: "pdf/CV Contoh.pdf", version: "daisuki.pkl", title: "CV Contoh.pdf",

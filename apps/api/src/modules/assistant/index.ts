@@ -15,7 +15,7 @@ import { composeAdminFallbackReply } from "./admin-compose";
 import { understandAdminMessage, understandMitraMessage, predictMitraStocks, type ModelResult } from "./model";
 import { withinModelBudget } from "./model-budget";
 import { exactStockLogReply, historicalComparisonReply, historicalPartnerDayReply, historicalTopReply, loadExactStockLogs,
-  loadHistoricalConsumption, parseExactLogRequest } from "./historical-consumption";
+  loadHistoricalConsumption, parseExactLogRequest, resolveAdminFollowUpMessage } from "./historical-consumption";
 import { loadPartnerDailyFacts, loadPublishedAnalysisArchive } from "./archived-analysis";
 import { approvedModelContextReply, composeKnowledgeReply, knowledgeIntent, loadCompanyKnowledge, selectPublicRagMemory } from "./company-knowledge";
 import { isAssistantIdentityQuestion } from "./identity";
@@ -632,17 +632,18 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     const [memory] = await db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
       .where(and(eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
 
-    // 1. Data Realtime Database
-    const exactLogRequest = parseExactLogRequest(message);
+    // 1. Data Realtime Database (resolusi konteks follow-up dari percakapan sebelumnya)
+    const effectiveMessage = resolveAdminFollowUpMessage(message, turns.map((t) => t.message));
+    const exactLogRequest = parseExactLogRequest(effectiveMessage);
     const [context, historicalDays, exactLogs] = await Promise.all([
-      loadAdminContext(), exactLogRequest ? Promise.resolve([]) : loadHistoricalConsumption(message),
+      loadAdminContext(), exactLogRequest ? Promise.resolve([]) : loadHistoricalConsumption(effectiveMessage),
       exactLogRequest ? loadExactStockLogs(exactLogRequest) : Promise.resolve(null),
     ]);
 
     // 2. Machine Learning model daisuki.pkl
-    const model: ModelResult = { ...await withinModelBudget(understandAdminMessage(message), 5000, emptyModel) };
+    const model: ModelResult = { ...await withinModelBudget(understandAdminMessage(effectiveMessage), 5000, emptyModel) };
     if (!exactLogRequest) {
-      const archived = await loadPublishedAnalysisArchive(message);
+      const archived = await loadPublishedAnalysisArchive(effectiveMessage);
       model.analysis_documents = [...archived, ...(model.analysis_documents ?? [])].slice(0, 8);
     }
     const binaryReady = model.retrieval_ready === true || model.raw_retrieval_ready === true || !!model.analysis_documents?.length;

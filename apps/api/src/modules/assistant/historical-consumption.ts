@@ -42,6 +42,48 @@ export interface ExactLogRequest {
   minute: number;
   wholeHour?: boolean;
   endHour?: number;
+  meridiemSpecified?: boolean;
+}
+
+export function extractPartnerFromMessage(message: string): string | null {
+  const partnerMatch = message.match(
+    new RegExp(
+      `\\b(?:mitra|cabang)\\s+(.+?)\\s+(?:(?:inin|ini|itu)\\s+)?(?:(?:pada|di|dari|ada)\\s+)?(?:t+a+n*g+a+[lh]+|tgl|jam|pukul|\\d{1,2}\\s+(?:${monthPattern}))\\b`,
+      "i",
+    ),
+  ) ?? message.match(/\b(?:mitra|cabang)\s+([a-zA-Z0-9 ._-]{3,60})$/i);
+  return partnerMatch?.[1]?.replace(/\s+(?:inin|ini|itu|ada|pada|di)$/i, "").trim() || null;
+}
+
+export function resolveAdminFollowUpMessage(message: string, recentMessages: string[]): string {
+  const hasDate = requestedHistoricalDays(message).length > 0;
+  const hasPartner = /\b(?:mitra|cabang)\s+\S+/i.test(message);
+  const hasTime = /\b(?:jam|pukul)\s+\d{1,2}/i.test(message);
+  if (hasDate && hasPartner) return message;
+  if (!hasTime && !hasDate && !hasPartner) return message;
+
+  let inheritedPartner: string | null = hasPartner ? extractPartnerFromMessage(message) : null;
+  let inheritedDate: string | null = hasDate ? requestedHistoricalDays(message)[0] : null;
+  let inheritedTime: string | null = hasTime ? (message.match(/\b(?:dari\s+)?(?:jam|pukul)\s+[^?!.,]+/i)?.[0] ?? null) : null;
+
+  for (let i = recentMessages.length - 1; i >= 0; i--) {
+    const prev = recentMessages[i];
+    if (!inheritedPartner) inheritedPartner = extractPartnerFromMessage(prev);
+    if (!inheritedDate) {
+      const prevDays = requestedHistoricalDays(prev);
+      if (prevDays.length === 1) inheritedDate = prevDays[0];
+    }
+    if (!inheritedTime) {
+      inheritedTime = prev.match(/\b(?:dari\s+)?(?:jam|pukul)\s+\d{1,2}(?:[.:]\d{2})?(?:\s*wib)?(?:\s*(?:pagi|siang|sore|malam|malem))?/i)?.[0] ?? null;
+    }
+  }
+
+  if (!inheritedPartner || !inheritedDate) return message;
+  const parts = [message.trim()];
+  if (!hasPartner) parts.push(`pada mitra ${inheritedPartner}`);
+  if (!hasDate) parts.push(`pada tanggal ${inheritedDate}`);
+  if (!hasTime && inheritedTime) parts.push(inheritedTime);
+  return parts.join(" ");
 }
 
 export function parseExactLogRequest(message: string, now = new Date()): ExactLogRequest | null {
@@ -49,13 +91,7 @@ export function parseExactLogRequest(message: string, now = new Date()): ExactLo
   if (days.length !== 1) return null;
   const day = days[0];
 
-  const partnerMatch = message.match(
-    new RegExp(
-      `\\b(?:mitra|cabang)\\s+(.+?)\\s+(?:(?:inin|ini|itu)\\s+)?(?:(?:pada|di|dari)\\s+)?(?:t+a+n*g+a+[lh]+|tgl|jam|pukul|\\d{1,2}\\s+(?:${monthPattern}))\\b`,
-      "i",
-    ),
-  );
-  const partner = partnerMatch?.[1]?.replace(/\s+(?:inin|ini|itu)$/i, "").trim();
+  const partner = extractPartnerFromMessage(message);
   if (!partner) return null;
 
   const rangeMatch = message.match(
@@ -72,6 +108,7 @@ export function parseExactLogRequest(message: string, now = new Date()): ExactLo
       minute: 0,
       wholeHour: true,
       endHour: Math.max(startHour, endHour),
+      meridiemSpecified: Boolean(rangeMatch[3] || rangeMatch[6]),
     };
   }
 
@@ -80,14 +117,27 @@ export function parseExactLogRequest(message: string, now = new Date()): ExactLo
     const hour = normalizeHourWithMeridiem(Number(exactMinute[1]), exactMinute[3]);
     const minute = Number(exactMinute[2]);
     if (hour > 23 || minute > 59) return null;
-    return { partnerName: partner, day, hour, minute };
+    return {
+      partnerName: partner,
+      day,
+      hour,
+      minute,
+       ...(exactMinute[3] ? { meridiemSpecified: true } : {}),
+    };
   }
 
   const wholeHourMatch = message.match(/\b(?:jam|pukul)\s+(\d{1,2})(?:\s*WIB)?(?:\s*(pagi|siang|sore|malam|malem))?\b/i);
   if (wholeHourMatch) {
     const hour = normalizeHourWithMeridiem(Number(wholeHourMatch[1]), wholeHourMatch[2]);
     if (hour > 23) return null;
-    return { partnerName: partner, day, hour, minute: 0, wholeHour: true };
+    return {
+      partnerName: partner,
+      day,
+      hour,
+      minute: 0,
+      wholeHour: true,
+      ...(wholeHourMatch[2] ? { meridiemSpecified: true } : {}),
+    };
   }
 
   return null;
@@ -99,6 +149,7 @@ export interface ExactLogResult extends ExactLogRequest {
   partnerCity?: string;
   partnerProvince?: string;
   logs: Array<{ product_name: string; qty_before: number; qty_after: number; source: string; time_wib: string }>;
+  dayLogs?: Array<{ product_name: string; qty_before: number; qty_after: number; source: string; time_wib: string }>;
 }
 
 export async function loadExactStockLogs(request: ExactLogRequest): Promise<ExactLogResult> {
@@ -120,33 +171,61 @@ export async function loadExactStockLogs(request: ExactLogRequest): Promise<Exac
     }
   }
   if (!partner) return { ...request, partnerFound: false, logs: [] };
-  const hour = String(request.hour).padStart(2, "0");
-  const minute = String(request.minute).padStart(2, "0");
-  const start = new Date(`${request.day}T${hour}:${minute}:00+07:00`);
-  const startIso = start.toISOString();
-  const durationMs = request.endHour !== undefined
-    ? ((request.endHour - request.hour + 1) * 3_600_000)
-    : request.wholeHour
-      ? 3_600_000
-      : 60_000;
-  const endIso = new Date(start.getTime() + durationMs).toISOString();
-  const rows = await sql<ExactLogResult["logs"]>`
+
+  const queryWindow = async (hourNum: number) => {
+    const hour = String(hourNum).padStart(2, "0");
+    const minute = String(request.minute).padStart(2, "0");
+    const start = new Date(`${request.day}T${hour}:${minute}:00+07:00`);
+    const startIso = start.toISOString();
+    const durationMs = request.endHour !== undefined
+      ? ((request.endHour - request.hour + 1) * 3_600_000)
+      : request.wholeHour
+        ? 3_600_000
+        : 60_000;
+    const endIso = new Date(start.getTime() + durationMs).toISOString();
+    return sql<ExactLogResult["logs"]>`
+      SELECT pr.name AS product_name, sl.qty_before::int, sl.qty_after::int, sl.source::text,
+        to_char(sl.created_at AT TIME ZONE 'Asia/Jakarta', 'HH24:MI:SS') AS time_wib
+      FROM stock_logs sl JOIN products pr ON pr.id = sl.product_id
+      WHERE sl.partner_id = ${partner.id}::uuid AND sl.created_at >= ${startIso}::timestamptz
+        AND sl.created_at < ${endIso}::timestamptz AND sl.qty_before > sl.qty_after
+        AND pr.name IN ('Seblak Jadul Instan', 'Basreng Daun Jeruk', 'Makaroni Daun Jeruk', 'Keripik Pisang Rasa Coklat')
+      ORDER BY sl.created_at, pr.name
+    `;
+  };
+
+  let resolvedHour = request.hour;
+  let rows = await queryWindow(resolvedHour);
+  if (!rows.length && !request.meridiemSpecified && request.endHour === undefined && request.hour >= 1 && request.hour <= 6) {
+    const afternoonRows = await queryWindow(request.hour + 12);
+    if (afternoonRows.length) {
+      resolvedHour = request.hour + 12;
+      rows = afternoonRows;
+    }
+  }
+
+  const dayStart = new Date(`${request.day}T00:00:00+07:00`);
+  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+  const allDayRows = !rows.length ? await sql<ExactLogResult["logs"]>`
     SELECT pr.name AS product_name, sl.qty_before::int, sl.qty_after::int, sl.source::text,
       to_char(sl.created_at AT TIME ZONE 'Asia/Jakarta', 'HH24:MI:SS') AS time_wib
     FROM stock_logs sl JOIN products pr ON pr.id = sl.product_id
-    WHERE sl.partner_id = ${partner.id}::uuid AND sl.created_at >= ${startIso}::timestamptz
-      AND sl.created_at < ${endIso}::timestamptz AND sl.qty_before > sl.qty_after
+    WHERE sl.partner_id = ${partner.id}::uuid AND sl.created_at >= ${dayStart.toISOString()}::timestamptz
+      AND sl.created_at < ${dayEnd.toISOString()}::timestamptz AND sl.qty_before > sl.qty_after
       AND pr.name IN ('Seblak Jadul Instan', 'Basreng Daun Jeruk', 'Makaroni Daun Jeruk', 'Keripik Pisang Rasa Coklat')
     ORDER BY sl.created_at, pr.name
-  `;
+  ` : [];
+
   return {
     ...request,
+    hour: resolvedHour,
     partnerName: partner.name,
     partnerFound: true,
     partnerType: partner.partner_type,
     partnerCity: partner.regency_name,
     partnerProvince: partner.province_name,
     logs: [...rows],
+    dayLogs: [...allDayRows],
   };
 }
 
@@ -164,7 +243,12 @@ export function exactStockLogReply(result: ExactLogResult): string {
   const profileText = profileParts.length ? ` (${profileParts.join(", ")})` : "";
   if (!result.logs.length) {
     const scopeWord = result.endHour !== undefined || result.wholeHour ? "rentang jam tersebut" : "menit tersebut";
-    return `Tidak ada log penurunan stok yang tercatat untuk ${result.partnerName}${profileText} pada ${label}. Ini tidak membuktikan bahwa tidak ada penjualan; hanya tidak ada catatan pada ${scopeWord}.`;
+    const base = `Tidak ada log penurunan stok yang tercatat untuk ${result.partnerName}${profileText} pada ${label}. Ini tidak membuktikan bahwa tidak ada penjualan; hanya tidak ada catatan pada ${scopeWord}.`;
+    if (result.dayLogs?.length) {
+      const otherLines = result.dayLogs.map((row) => `- ${row.product_name}: ${row.qty_before} → ${row.qty_after} pcs (keluar ${row.qty_before - row.qty_after} pcs; ${row.time_wib} WIB; ${row.source})`);
+      return `${base}\n\nNamun pada tanggal **${result.day}**, tercatat **${result.dayLogs.length} log minus** untuk **${result.partnerName}** pada jam lain:\n${otherLines.join("\n")}`;
+    }
+    return base;
   }
   const total = result.logs.reduce((sum, row) => sum + row.qty_before - row.qty_after, 0);
   const lines = result.logs.map((row) => `- ${row.product_name}: ${row.qty_before} → ${row.qty_after} pcs (keluar ${row.qty_before - row.qty_after} pcs; ${row.time_wib} WIB; ${row.source})`);

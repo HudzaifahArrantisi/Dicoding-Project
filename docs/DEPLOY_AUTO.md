@@ -18,6 +18,25 @@ Jika `checks` gagal, ketiga deploy tidak dijalankan. Job `tests` sengaja
 `continue-on-error` karena sebagian suite membutuhkan database dan LLM live;
 hasilnya tetap terlihat di tab Actions dan artefak, tetapi tidak menahan rilis.
 
+### Dua lapis pengujian
+
+- `bun run test:ci` (gerbang wajib): 13 berkas offline tanpa database, tanpa LLM, tanpa Python. Ini yang menentukan boleh deploy atau tidak.
+- `bun test` (job `tests`, informasional): seluruh suite. Uji yang butuh lingkungan nyata otomatis **dilewati**, bukan gagal, dengan aturan berikut:
+  - `admin-assistant.test.ts` hanya berjalan bila `DAISUKI_TEST_DB=1` dan `DATABASE_URL` berisi database asli.
+  - `model.test.ts` hanya berjalan bila `daisuki.pkl` ada **dan** `python -c "import numpy, sklearn"` berhasil.
+  - `scripts/test-env.ts` di preload `bunfig.toml` mengisi `DATABASE_URL`/`WEB_ORIGIN` placeholder agar modul yang membaca env tidak melempar error saat diimpor.
+  - Uji markup chat memuat `react-dom/server` secara dinamis; Bun 1.3.x belum bisa memuat build CJS-nya, jadi uji itu dilewati (bukan merah) sampai runtime-nya mendukung.
+
+Untuk menjalankan uji integrasi manual:
+
+```powershell
+$env:DATABASE_URL="postgresql://<user>:<pass>@<host>/<db>?sslmode=require"
+$env:DAISUKI_TEST_DB="1"
+bun test apps/api/src/modules/assistant/admin-assistant.test.ts
+```
+
+Catatan deployment: **Workers Builds Cloudflare untuk `daisuki-inventory` harus dimatikan**, karena build kedua itu masih mencoba membangun web sendiri dan gagal pada commit yang sama, sehingga tampil sebagai check merah meskipun pipeline kita hijau.
+
 Tidak ada filter path: perubahan di mana pun (web, API, graph, dokumentasi,
 Python) tetap menerbitkan ketiga Worker. Ketiga job deploy berjalan paralel,
 jadi gagal di satu Worker tidak membatalkan dua lainnya. Untuk mengulang, buka
