@@ -3,6 +3,31 @@ import { readAssistantSse } from './assistant-sse'
 
 export type MitraTour = 'restock' | 'stock_report' | 'delivery' | 'logs' | 'profile'
 
+export interface AssistantQuotaStatus {
+  used: number
+  limit: number
+  remaining: number
+  window_hours: number
+  reset_at: string | null
+  retry_after_seconds: number
+  burst_cooldown_seconds: number
+  in_flight: boolean
+}
+
+export class AssistantQuotaError extends Error {
+  status: number
+  reason?: string
+  quota?: AssistantQuotaStatus
+
+  constructor(message: string, status: number, reason?: string, quota?: AssistantQuotaStatus) {
+    super(message)
+    this.name = 'AssistantQuotaError'
+    this.status = status
+    this.reason = reason
+    this.quota = quota
+  }
+}
+
 export interface MitraAssistantReply {
   reply: string
   source: 'llm' | 'fallback'
@@ -13,6 +38,7 @@ export interface MitraAssistantReply {
   modelAvailable: boolean
   session_id?: string
   visualization?: MitraStockVisualization | null
+  quota?: AssistantQuotaStatus
 }
 
 export interface MitraStockVisualization {
@@ -47,8 +73,18 @@ export async function getMitraChatSessions(): Promise<MitraChatSession[]> {
   return response.data
 }
 
-export async function getMitraChatSession(sessionId: string): Promise<{ data: MitraChatHistoryItem[]; summary: string | null }> {
-  return apiClient.get<{ data: MitraChatHistoryItem[]; summary: string | null }>('/assistant/mitra/history', { headers: { 'x-session-id': sessionId } })
+export async function getMitraChatSession(
+  sessionId: string,
+): Promise<{ data: MitraChatHistoryItem[]; summary: string | null; quota?: AssistantQuotaStatus }> {
+  return apiClient.get<{ data: MitraChatHistoryItem[]; summary: string | null; quota?: AssistantQuotaStatus }>(
+    '/assistant/mitra/history',
+    { headers: { 'x-session-id': sessionId } },
+  )
+}
+
+export async function getMitraChatQuota(): Promise<AssistantQuotaStatus> {
+  const response = await apiClient.get<{ quota: AssistantQuotaStatus }>('/assistant/mitra/quota')
+  return response.quota
 }
 
 export function deleteMitraChatSession(sessionId: string): Promise<{ status: string }> {
@@ -66,8 +102,17 @@ export async function askMitraAssistant(message: string, sessionId?: string): Pr
     body: JSON.stringify({ message, session_id: sessionId }),
   })
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(body?.error ?? `Permintaan gagal (${response.status})`)
+    const body = (await response.json().catch(() => null)) as {
+      error?: string
+      reason?: string
+      quota?: AssistantQuotaStatus
+    } | null
+    throw new AssistantQuotaError(
+      body?.error ?? `Permintaan gagal (${response.status})`,
+      response.status,
+      body?.reason,
+      body?.quota,
+    )
   }
   if (!response.headers.get('Content-Type')?.includes('text/event-stream')) {
     return response.json() as Promise<MitraAssistantReply>
@@ -76,8 +121,20 @@ export async function askMitraAssistant(message: string, sessionId?: string): Pr
 }
 
 export async function getMitraAssistantHistory(sessionId?: string): Promise<MitraChatHistoryItem[]> {
-  const response = await apiClient.get<{ data: MitraChatHistoryItem[] }>('/assistant/mitra/history', sessionId ? { headers: { 'x-session-id': sessionId } } : undefined)
+  const response = await apiClient.get<{ data: MitraChatHistoryItem[]; quota?: AssistantQuotaStatus }>(
+    '/assistant/mitra/history',
+    sessionId ? { headers: { 'x-session-id': sessionId } } : undefined,
+  )
   return response.data
+}
+
+export async function getMitraAssistantHistoryWithQuota(
+  sessionId?: string,
+): Promise<{ data: MitraChatHistoryItem[]; quota?: AssistantQuotaStatus }> {
+  return apiClient.get<{ data: MitraChatHistoryItem[]; quota?: AssistantQuotaStatus }>(
+    '/assistant/mitra/history',
+    sessionId ? { headers: { 'x-session-id': sessionId } } : undefined,
+  )
 }
 
 export function rateMitraAssistantAnswer(id: string, rating: -1 | 1, sessionId?: string): Promise<{ status: string }> {
@@ -97,8 +154,18 @@ export async function getAdminChatSessions(): Promise<MitraChatSession[]> {
   return response.data
 }
 
-export async function getAdminChatSession(sessionId: string): Promise<{ data: MitraChatHistoryItem[]; summary: string | null }> {
-  return apiClient.get<{ data: MitraChatHistoryItem[]; summary: string | null }>('/assistant/admin/history', { headers: { 'x-session-id': sessionId } })
+export async function getAdminChatSession(
+  sessionId: string,
+): Promise<{ data: MitraChatHistoryItem[]; summary: string | null; quota?: AssistantQuotaStatus }> {
+  return apiClient.get<{ data: MitraChatHistoryItem[]; summary: string | null; quota?: AssistantQuotaStatus }>(
+    '/assistant/admin/history',
+    { headers: { 'x-session-id': sessionId } },
+  )
+}
+
+export async function getAdminChatQuota(): Promise<AssistantQuotaStatus> {
+  const response = await apiClient.get<{ quota: AssistantQuotaStatus }>('/assistant/admin/quota')
+  return response.quota
 }
 
 export function deleteAdminChatSession(sessionId: string): Promise<{ status: string }> {
@@ -116,8 +183,17 @@ export async function askAdminAssistant(message: string, sessionId?: string): Pr
     body: JSON.stringify({ message, session_id: sessionId }),
   })
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(body?.error ?? `Permintaan gagal (${response.status})`)
+    const body = (await response.json().catch(() => null)) as {
+      error?: string
+      reason?: string
+      quota?: AssistantQuotaStatus
+    } | null
+    throw new AssistantQuotaError(
+      body?.error ?? `Permintaan gagal (${response.status})`,
+      response.status,
+      body?.reason,
+      body?.quota,
+    )
   }
   if (!response.headers.get('Content-Type')?.includes('text/event-stream')) {
     return response.json() as Promise<MitraAssistantReply>

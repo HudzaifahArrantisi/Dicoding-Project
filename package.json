@@ -13,7 +13,7 @@
     "qa:api": "bun scripts/qa-api.ts",
     "seed": "bun run --cwd apps/api seed",
     "ai:naive-bayes": "python ai/jobs/regional_stockout_naive_bayes.py",
-    "test:ci": "bun test packages/shared/src/order-transitions.test.ts apps/web/src/components/inventory/mitra-ai-assistant.test.tsx apps/web/src/lib/api/assistant.test.ts apps/api/tests/db-retry.test.ts apps/api/src/modules/assistant/admin-pricing.test.ts apps/api/src/modules/assistant/compose.test.ts apps/api/src/modules/assistant/guardrails.test.ts apps/api/src/modules/assistant/identity.test.ts apps/api/src/modules/assistant/query-rewrite.test.ts apps/api/src/modules/assistant/rag-prompt.test.ts apps/api/src/modules/assistant/retail-price-reply.test.ts apps/api/src/modules/assistant/session-memory.test.ts apps/api/src/modules/assistant/word-loader.test.ts",
+    "test:ci": "bun test packages/shared/src/order-transitions.test.ts apps/web/src/components/inventory/mitra-ai-assistant.test.tsx apps/web/src/lib/api/assistant.test.ts apps/api/tests/db-retry.test.ts apps/api/src/modules/assistant/admin-pricing.test.ts apps/api/src/modules/assistant/compose.test.ts apps/api/src/modules/assistant/guardrails.test.ts apps/api/src/modules/assistant/identity.test.ts apps/api/src/modules/assistant/query-rewrite.test.ts apps/api/src/modules/assistant/quota.test.ts apps/api/src/modules/assistant/rag-prompt.test.ts apps/api/src/modules/assistant/retail-price-reply.test.ts apps/api/src/modules/assistant/session-memory.test.ts apps/api/src/modules/assistant/word-loader.test.ts",
     "typecheck": "bun run --cwd apps/web typecheck && bun run --cwd apps/api typecheck"
   }
 }

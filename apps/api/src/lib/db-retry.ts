@@ -25,11 +25,18 @@ export async function retryTransientRead<T>(read: () => Promise<T>, maxRetries =
     } catch (error) {
       lastError = error;
       if (!isTransientDatabaseError(error) || attempt === maxRetries) {
-        const cause = (error as { cause?: { code?: string; name?: string; message?: string; cause?: { code?: string; name?: string; message?: string } } })?.cause;
-        const root = cause?.cause ?? cause;
+        const direct = error as {
+          code?: string;
+          name?: string;
+          message?: string;
+          cause?: { code?: string; name?: string; message?: string; cause?: { code?: string; name?: string; message?: string } };
+        };
+        const cause = direct?.cause;
+        const root = cause?.cause ?? cause ?? direct;
         console.error("[DB READ] gagal", {
-          code: root?.code, name: root?.name,
-          message: root?.message?.replace(/(?:postgres(?:ql)?:\/\/|password=)\S+/gi, "[redacted]").slice(0, 160),
+          code: root?.code ?? direct?.code,
+          name: root?.name ?? direct?.name,
+          message: (root?.message ?? direct?.message)?.replace(/(?:postgres(?:ql)?:\/\/|password=)\S+/gi, "[redacted]").slice(0, 160),
           attempt,
         });
         throw error;

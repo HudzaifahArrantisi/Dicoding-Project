@@ -22,16 +22,20 @@ import {
 } from 'lucide-react'
 import {
   askMitraAssistant,
+  AssistantQuotaError,
   deleteMitraChatSession,
   endMitraAssistantSession,
+  getMitraChatQuota,
   getMitraChatSession,
   getMitraChatSessions,
   reopenMitraChatSession,
+  type AssistantQuotaStatus,
   type MitraChatHistoryItem,
   type MitraChatSession,
   type MitraStockVisualization,
   type MitraTour,
 } from '@/lib/api/assistant'
+import { ChatQuotaBar } from '@/components/inventory/chat-quota-bar'
 import { AssistantMessageText } from '@/components/inventory/mitra-ai-assistant'
 import { ChatToolChart } from '@/components/inventory/chat-tools'
 
@@ -108,6 +112,7 @@ export function MitraChatRoom({
   const [deleteError, setDeleteError] = useState('')
   const [togglingSessionId, setTogglingSessionId] = useState<string | null>(null)
   const [sessionActionError, setSessionActionError] = useState('')
+  const [quota, setQuota] = useState<AssistantQuotaStatus | null>(null)
   const feedRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const activeSessionIdRef = useRef(sessionId)
@@ -116,6 +121,21 @@ export function MitraChatRoom({
   const active = sessions.find((item) => item.session_id === sessionId)
   const closed = active?.is_closed ?? false
   const busy = pendingSessionIds.has(sessionId)
+  const quotaExhausted = Boolean(
+    quota &&
+      quota.remaining <= 0 &&
+      quota.reset_at &&
+      new Date(quota.reset_at).getTime() > Date.now(),
+  )
+
+  async function refreshQuota() {
+    try {
+      const latest = await getMitraChatQuota()
+      setQuota(latest)
+    } catch {
+      // Abaikan jika gagal memuat ulang kuota sementara.
+    }
+  }
 
   useEffect(() => {
     if (!sidebarOpen) return
@@ -179,6 +199,11 @@ export function MitraChatRoom({
           ]),
         )
         setSummary(history.summary)
+        if (history.quota) {
+          setQuota(history.quota)
+        } else {
+          void refreshQuota()
+        }
       })
       .catch((reason) => {
         if (!cancelled) {
@@ -200,7 +225,7 @@ export function MitraChatRoom({
 
   async function send(textToSend?: string) {
     const message = (textToSend ?? draft).trim()
-    if (!message || busy || closed || togglingSessionId) return
+    if (!message || busy || closed || togglingSessionId || quotaExhausted) return
     const requestSessionId = sessionId
     setDraft('')
     setError('')
@@ -216,6 +241,9 @@ export function MitraChatRoom({
 
     try {
       const result = await askMitraAssistant(message, requestSessionId)
+      if (result.quota) {
+        setQuota(result.quota)
+      }
       if (activeSessionIdRef.current === requestSessionId) {
         setMessages((current) => current.some((item) => item.id === result.interactionId)
           ? current
@@ -234,6 +262,9 @@ export function MitraChatRoom({
       }
       await refreshSessions()
     } catch (reason) {
+      if (reason instanceof AssistantQuotaError && reason.quota) {
+        setQuota(reason.quota)
+      }
       if (activeSessionIdRef.current === requestSessionId) {
         setMessages((current) => current.filter((item) => item.id !== optimisticId))
         setError(reason instanceof Error ? reason.message : 'Pesan belum terkirim. Coba lagi.')
@@ -623,6 +654,13 @@ export function MitraChatRoom({
           </div>
         </header>
 
+        {/* Status Kuota Chat Akun & Cooldown 5 Jam (Di Bawah Tombol Selesaikan Sesi) */}
+        <ChatQuotaBar
+          quota={quota}
+          accountLabel="Akun Mitra"
+          onCooldownExpired={() => void refreshQuota()}
+        />
+
         {tourMenuOpen ? (
           <div id="mitra-chat-tour-menu" className="border-b border-line bg-paper px-4 py-3 sm:px-6">
             <p className="mb-2 text-xs font-semibold text-ink-800">Pilih fitur yang ingin dipelajari</p>
@@ -839,13 +877,17 @@ export function MitraChatRoom({
                     }
                   }}
                   maxLength={600}
-                  placeholder="Tulis pertanyaan stok, restock, atau penerimaan..."
-                  disabled={busy || Boolean(togglingSessionId)}
-                  className="max-h-36 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2.5 py-2 text-base leading-relaxed text-ink-950 placeholder:text-ink-400 focus:outline-hidden sm:px-3 sm:text-sm"
+                  placeholder={
+                    quotaExhausted
+                      ? 'Kuota chat 5 jam akun ini penuh. Tunggu waktu cooldown selesai...'
+                      : 'Tulis pertanyaan stok, restock, atau penerimaan...'
+                  }
+                  disabled={busy || Boolean(togglingSessionId) || quotaExhausted}
+                  className="max-h-36 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2.5 py-2 text-base leading-relaxed text-ink-950 placeholder:text-ink-400 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-60 sm:px-3 sm:text-sm"
                 />
                 <button
                   type="submit"
-                  disabled={busy || Boolean(togglingSessionId) || !draft.trim()}
+                  disabled={busy || Boolean(togglingSessionId) || quotaExhausted || !draft.trim()}
                   aria-label="Kirim pesan"
                   className="grid size-11 shrink-0 place-items-center rounded-md bg-ink-900 text-white transition-colors hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
                 >

@@ -10,13 +10,17 @@ import {
 } from '@/components/inventory/chat-tools'
 import {
   askMitraAssistant,
+  AssistantQuotaError,
   clearMitraAssistantHistory,
   endMitraAssistantSession,
-  getMitraAssistantHistory,
+  getMitraAssistantHistoryWithQuota,
+  getMitraChatQuota,
   rateMitraAssistantAnswer,
+  type AssistantQuotaStatus,
   type MitraAssistantReply,
   type MitraTour,
 } from '@/lib/api/assistant'
+import { ChatQuotaBar } from '@/components/inventory/chat-quota-bar'
 
 type ChatMessage = { id: number; author: 'mitra' | 'assistant'; text: string; source?: 'llm' | 'fallback'; tour?: MitraTour; tourLabel?: string; interactionId?: string; feedback?: -1 | 1 | null }
 
@@ -292,6 +296,7 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
   const [showConfirmClear, setShowConfirmClear] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [ending, setEnding] = useState(false)
+  const [quota, setQuota] = useState<AssistantQuotaStatus | null>(null)
   const nextId = useRef(1)
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -299,6 +304,21 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
   const sessionId = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`)
 
   const hasMessages = messages.length > 1
+  const quotaExhausted = Boolean(
+    quota &&
+      quota.remaining <= 0 &&
+      quota.reset_at &&
+      new Date(quota.reset_at).getTime() > Date.now(),
+  )
+
+  async function refreshQuota() {
+    try {
+      const latest = await getMitraChatQuota()
+      setQuota(latest)
+    } catch {
+      // Abaikan jika gagal memuat ulang kuota sementara.
+    }
+  }
 
   async function handleClearChat() {
     setClearing(true)
@@ -341,14 +361,21 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
 
   useEffect(() => {
     let cancelled = false
-    void getMitraAssistantHistory(sessionId.current).then((history) => {
+    void getMitraAssistantHistoryWithQuota(sessionId.current).then((response) => {
       if (cancelled) return
-      const restored = history.flatMap((item) => [
+      if (response.quota) {
+        setQuota(response.quota)
+      } else {
+        void refreshQuota()
+      }
+      const restored = response.data.flatMap((item) => [
         { id: nextId.current++, author: 'mitra' as const, text: item.message },
         { id: nextId.current++, author: 'assistant' as const, text: item.reply, source: item.source, tour: item.intent ?? undefined, interactionId: item.id, feedback: item.feedback },
       ])
       setMessages((current) => current.length === 1 ? [...current, ...restored] : current)
-    }).catch(() => undefined)
+    }).catch(() => {
+      if (!cancelled) void refreshQuota()
+    })
     return () => { cancelled = true }
   }, [])
 
@@ -363,13 +390,16 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
 
   async function send(raw: string) {
     const text = raw.trim()
-    if (!text || busy) return
+    if (!text || busy || quotaExhausted) return
     setDraft('')
     setError('')
     setMessages((current) => [...current, { id: nextId.current++, author: 'mitra', text }])
     setBusy(true)
     try {
       const result: MitraAssistantReply = await askMitraAssistant(text, sessionId.current)
+      if (result.quota) {
+        setQuota(result.quota)
+      }
       setMessages((current) => [...current, {
         id: nextId.current++, author: 'assistant', text: result.reply, source: result.source,
         tour: result.suggestedTour, tourLabel: result.tourLabel,
@@ -377,6 +407,9 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
       }])
       setReplies(result.quickReplies)
     } catch (reason) {
+      if (reason instanceof AssistantQuotaError && reason.quota) {
+        setQuota(reason.quota)
+      }
       setError(reason instanceof Error ? reason.message : 'Jawaban belum bisa dimuat. Coba lagi.')
     } finally {
       setBusy(false)
@@ -478,6 +511,14 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
               </button>
             </div>
           </header>
+
+          {/* Status Kuota Chat Akun & Cooldown 5 Jam */}
+          <ChatQuotaBar
+            quota={quota}
+            accountLabel="Akun Mitra"
+            compact
+            onCooldownExpired={() => void refreshQuota()}
+          />
 
           {/* Konfirmasi Hapus Riwayat */}
           {showConfirmClear ? (
@@ -668,12 +709,17 @@ export function MitraAiAssistant({ onStartTour }: { onStartTour: (tour: MitraTou
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 maxLength={500}
-                placeholder="Tanya stok, restock, resi..."
-                className="w-full rounded-full border border-line bg-slate-50/70 py-2.5 pl-4 pr-12 text-sm text-ink-900 placeholder:text-muted transition-all focus:bg-surface focus:border-ink-700 focus:outline-none focus:ring-2 focus:ring-ink-700/20"
+                disabled={busy || quotaExhausted}
+                placeholder={
+                  quotaExhausted
+                    ? 'Kuota chat 5 jam penuh. Tunggu cooldown...'
+                    : 'Tanya stok, restock, resi...'
+                }
+                className="w-full rounded-full border border-line bg-slate-50/70 py-2.5 pl-4 pr-12 text-sm text-ink-900 placeholder:text-muted transition-all focus:bg-surface focus:border-ink-700 focus:outline-none focus:ring-2 focus:ring-ink-700/20 disabled:cursor-not-allowed disabled:opacity-60"
               />
               <button
                 type="submit"
-                disabled={busy || !draft.trim()}
+                disabled={busy || quotaExhausted || !draft.trim()}
                 aria-label="Kirim pertanyaan"
                 className="absolute right-1.5 grid size-8 place-items-center rounded-full bg-ink-900 text-white shadow-xs transition-all hover:bg-ink-800 disabled:opacity-30 disabled:hover:bg-ink-900 cursor-pointer"
               >

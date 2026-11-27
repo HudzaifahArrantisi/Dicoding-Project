@@ -3,7 +3,7 @@ import { db } from "../../db/client";
 import { orderItems, orders, partners, products, stockLogs } from "../../db/schema";
 import { loadWeeklyFacts, type WeeklyFacts } from "./facts";
 import { OFFICIAL_PRODUCTS } from "./official-products";
-import { getStockStatus, isStale } from "@daisuki/shared";
+import { getStockStatus, isStale, RETAIL_PRICE_OTHER, RETAIL_PRICE_SEBLAK, retailPriceForProduct } from "@daisuki/shared";
 import { retryTransientRead } from "../../lib/db-retry";
 
 export interface AdminWarehouseStock {
@@ -71,6 +71,34 @@ export interface AdminPartnerSummary {
   }>;
 }
 
+export interface AdminLiveProductSales {
+  product_name: string;
+  unit_price: number;
+  central_stock: number;
+  sold_today: number;
+  revenue_today: number;
+  sold_7d: number;
+  revenue_7d: number;
+  sold_current_week: number;
+  revenue_current_week: number;
+}
+
+export interface AdminLiveSalesSummary {
+  today_date_wib: string;
+  current_week_number: number;
+  current_week_label: string;
+  current_week_start_date: string;
+  current_week_end_date: string;
+  today_units: number;
+  today_revenue: number;
+  rolling_7d_units: number;
+  rolling_7d_revenue: number;
+  current_week_units: number;
+  current_week_revenue: number;
+  current_week_partner_count: number;
+  products: AdminLiveProductSales[];
+}
+
 export interface AdminContext {
   warehouse: AdminWarehouseStock[];
   summary: {
@@ -89,10 +117,30 @@ export interface AdminContext {
   recent_logs: AdminRecentLog[];
   partners_overview: AdminPartnerSummary[];
   weekly_facts: WeeklyFacts | null;
+  live_sales?: AdminLiveSalesSummary;
 }
 
 export async function loadAdminContext(): Promise<AdminContext> {
   return retryTransientRead(async () => {
+    const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const year = nowWib.getUTCFullYear();
+    const monthNumber = nowWib.getUTCMonth() + 1;
+    const monthStr = `${year}-${String(monthNumber).padStart(2, "0")}`;
+    const todayDay = nowWib.getUTCDate();
+    const todayDateWib = `${monthStr}-${String(todayDay).padStart(2, "0")}`;
+    const currentWeekNumber = todayDay <= 7 ? 1 : todayDay <= 14 ? 2 : todayDay <= 21 ? 3 : 4;
+    const weekStartDay = currentWeekNumber === 1 ? 1 : currentWeekNumber === 2 ? 8 : currentWeekNumber === 3 ? 15 : 22;
+    const nextYear = monthNumber === 12 ? year + 1 : year;
+    const nextMonthNumber = monthNumber === 12 ? 1 : monthNumber + 1;
+    const lastDay = new Date(Date.UTC(nextYear, nextMonthNumber - 1, 0)).getUTCDate();
+    const weekEndDay = currentWeekNumber === 1 ? 7 : currentWeekNumber === 2 ? 14 : currentWeekNumber === 3 ? 21 : lastDay;
+    const weekStartDate = `${monthStr}-${String(weekStartDay).padStart(2, "0")}`;
+    const weekEndDate = `${monthStr}-${String(weekEndDay).padStart(2, "0")}`;
+    const weekStartIso = `${weekStartDate}T00:00:00+07:00`;
+    const nextMonthStartIso = `${nextYear}-${String(nextMonthNumber).padStart(2, "0")}-01T00:00:00+07:00`;
+    const monthLabel = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric", timeZone: "UTC" })
+      .format(new Date(Date.UTC(year, monthNumber - 1, 1)));
+
     const [
       warehouseRows,
       partnerRows,
@@ -101,6 +149,8 @@ export async function loadAdminContext(): Promise<AdminContext> {
       shipmentOrderRows,
       logRows,
       weeklyFacts,
+      liveProductSalesRows,
+      liveWeekPartnerRows,
     ] = await Promise.all([
       // 1. Gudang Pusat
       db.select({
@@ -206,8 +256,61 @@ export async function loadAdminContext(): Promise<AdminContext> {
       .orderBy(desc(stockLogs.created_at))
       .limit(20),
 
-      // 7. Fakta Analisis Mingguan
+      // 7. Fakta Analisis Mingguan (snapshot run terbit)
       loadWeeklyFacts(),
+
+      // 8. Penjualan & Omzet Live Per Produk (sinkron dengan /orders/finance/summary & /orders/finance/weekly-history)
+      db.execute<{
+        product_name: string;
+        central_stock: number;
+        sold_today: number;
+        revenue_today: string;
+        sold_7d: number;
+        revenue_7d: string;
+        sold_current_week: number;
+        revenue_current_week: string;
+      }>(sql`
+        SELECT
+          pr.name AS product_name,
+          pr.central_stock::int AS central_stock,
+          COALESCE(SUM(sl.qty_before - sl.qty_after)
+            FILTER (WHERE sl.created_at >= ((now() AT TIME ZONE 'Asia/Jakarta')::date::timestamp AT TIME ZONE 'Asia/Jakarta')), 0)::int AS sold_today,
+          COALESCE(SUM((sl.qty_before - sl.qty_after) *
+            CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END)
+            FILTER (WHERE sl.created_at >= ((now() AT TIME ZONE 'Asia/Jakarta')::date::timestamp AT TIME ZONE 'Asia/Jakarta')), 0)::text AS revenue_today,
+          COALESCE(SUM(sl.qty_before - sl.qty_after)
+            FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::int AS sold_7d,
+          COALESCE(SUM((sl.qty_before - sl.qty_after) *
+            CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END)
+            FILTER (WHERE sl.created_at >= now() - interval '7 days'), 0)::text AS revenue_7d,
+          COALESCE(SUM(sl.qty_before - sl.qty_after)
+            FILTER (WHERE sl.created_at >= ${weekStartIso}::timestamptz AND sl.created_at < ${nextMonthStartIso}::timestamptz), 0)::int AS sold_current_week,
+          COALESCE(SUM((sl.qty_before - sl.qty_after) *
+            CASE WHEN pr.sku = 'DSK-SB-001' THEN ${RETAIL_PRICE_SEBLAK}::bigint ELSE ${RETAIL_PRICE_OTHER}::bigint END)
+            FILTER (WHERE sl.created_at >= ${weekStartIso}::timestamptz AND sl.created_at < ${nextMonthStartIso}::timestamptz), 0)::text AS revenue_current_week
+        FROM products pr
+        LEFT JOIN stock_logs sl
+          ON sl.product_id = pr.id
+          AND sl.source = 'manual_update'
+          AND sl.qty_before > sl.qty_after
+          AND sl.created_at >= LEAST(now() - interval '7 days', ${weekStartIso}::timestamptz)
+        WHERE pr.is_active = true
+          AND pr.sku IN ('DSK-SB-001', 'DSK-BR-002', 'DSK-MK-003', 'DSK-KP-004')
+        GROUP BY pr.id, pr.name, pr.central_stock
+        ORDER BY sold_current_week DESC, sold_7d DESC, pr.name
+      `),
+
+      // 9. Jumlah Mitra Aktif Melapor Pada Pekan Berjalan
+      db.execute<{ partner_count: number }>(sql`
+        SELECT COUNT(DISTINCT sl.partner_id)::int AS partner_count
+        FROM stock_logs sl
+        JOIN products pr ON pr.id = sl.product_id
+        WHERE sl.source = 'manual_update'
+          AND sl.qty_before > sl.qty_after
+          AND sl.created_at >= ${weekStartIso}::timestamptz
+          AND sl.created_at < ${nextMonthStartIso}::timestamptz
+          AND pr.sku IN ('DSK-SB-001', 'DSK-BR-002', 'DSK-MK-003', 'DSK-KP-004')
+      `),
     ]);
 
     // Ambil item pesanan untuk pending dan shipments
@@ -344,6 +447,46 @@ export async function loadAdminContext(): Promise<AdminContext> {
 
     const totalCentralStock = warehouseStocks.reduce((sum, item) => sum + item.central_stock, 0);
 
+    const liveProducts: AdminLiveProductSales[] = (
+      liveProductSalesRows as unknown as Array<{
+        product_name: string;
+        central_stock: number | string;
+        sold_today: number | string;
+        revenue_today: string;
+        sold_7d: number | string;
+        revenue_7d: string;
+        sold_current_week: number | string;
+        revenue_current_week: string;
+      }>
+    ).map((row) => ({
+      product_name: String(row.product_name),
+      unit_price: retailPriceForProduct(String(row.product_name)) ?? RETAIL_PRICE_OTHER,
+      central_stock: Number(row.central_stock),
+      sold_today: Number(row.sold_today),
+      revenue_today: Number(row.revenue_today),
+      sold_7d: Number(row.sold_7d),
+      revenue_7d: Number(row.revenue_7d),
+      sold_current_week: Number(row.sold_current_week),
+      revenue_current_week: Number(row.revenue_current_week),
+    }));
+
+    const livePartnerRow = (liveWeekPartnerRows as unknown as Array<{ partner_count: number | string }>)[0];
+    const liveSales: AdminLiveSalesSummary = {
+      today_date_wib: todayDateWib,
+      current_week_number: currentWeekNumber,
+      current_week_label: `Minggu ${currentWeekNumber} (${weekStartDay}–${weekEndDay} ${monthLabel})`,
+      current_week_start_date: weekStartDate,
+      current_week_end_date: weekEndDate,
+      today_units: liveProducts.reduce((s, p) => s + p.sold_today, 0),
+      today_revenue: liveProducts.reduce((s, p) => s + p.revenue_today, 0),
+      rolling_7d_units: liveProducts.reduce((s, p) => s + p.sold_7d, 0),
+      rolling_7d_revenue: liveProducts.reduce((s, p) => s + p.revenue_7d, 0),
+      current_week_units: liveProducts.reduce((s, p) => s + p.sold_current_week, 0),
+      current_week_revenue: liveProducts.reduce((s, p) => s + p.revenue_current_week, 0),
+      current_week_partner_count: Number(livePartnerRow?.partner_count ?? 0),
+      products: liveProducts,
+    };
+
     return {
       warehouse: warehouseStocks,
       summary: {
@@ -369,6 +512,7 @@ export async function loadAdminContext(): Promise<AdminContext> {
       })),
       partners_overview: Array.from(partnerOverviewMap.values()),
       weekly_facts: weeklyFacts,
+      live_sales: liveSales,
     };
   });
 }

@@ -52,3 +52,13 @@ ai/data/mainbrain/context_embeddings/*.md
 
 # Snapshot rilis lama: punya .git sendiri, jangan pernah jadi submodule/gitlink
 .release-rag/
+
+# Tool AI, IDE, cache OS, dan output run lokal
+.commandcode/
+.claude/
+.vscode/
+.idea/
+Thumbs.db
+*.tmp
+*.bak
+ai/data/runs/

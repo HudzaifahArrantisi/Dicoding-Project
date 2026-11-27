@@ -404,7 +404,7 @@ function renderWorkflow() {
       const x = START_X + item.col * NODE_STEP + (item.branch ? BRANCH_OFFSET_X : 0);
       const y = NODE_Y[item.row];
       const badgeText = item.step ?? item.badge ?? "";
-      return `<button class="flow-node${item.branch ? " branch-node" : ""}" type="button" data-stage="${item.key}" data-x="${x}" data-y="${y}" data-origin-x="${x}" data-origin-y="${y}" style="left:${x}px;top:${y}px" aria-pressed="false" aria-label="${badgeText ? `Tahap ${badgeText}. ` : ""}${info.title}. ${info.summary}."><div class="node-top"><span class="node-kicker">${info.kicker}</span>${badgeText ? `<span class="node-step">${badgeText}</span>` : ""}</div><strong>${info.title}</strong><small>${info.summary}</small><div class="node-foot"><span class="node-state">Menunggu</span></div></button>`;
+      return `<button class="flow-node${item.branch ? " branch-node" : ""}" type="button" data-stage="${item.key}" data-x="${x}" data-y="${y}" data-origin-x="${x}" data-origin-y="${y}" style="left:${x}px;top:${y}px" aria-pressed="false" aria-label="${badgeText ? `Tahap ${badgeText}. ` : ""}${info.title}. ${info.summary}."><div class="node-top"><span class="node-kicker">${info.kicker}</span>${badgeText ? `<span class="node-step">${badgeText}</span>` : ""}</div><strong>${info.title}</strong><small>${info.summary}</small><div class="node-foot"><span class="node-state">Menunggu</span><span class="node-loader" aria-hidden="true"></span></div></button>`;
     })
     .join("");
 
@@ -655,13 +655,28 @@ const stepStage = (label = "") => {
   return null;
 };
 
+let lastPaintedRunId = null;
+const prevNodeStates = new Map();
+
+function getVersionSpine(version) {
+  return [...version.dataStages, "review", ...version.aiStages];
+}
+
 function setNode(name, state, custom) {
   const node = document.querySelector(`[data-stage="${name}"]`);
   if (!node) return;
-  node.classList.remove("done", "active", "failed", "ready");
+  node.classList.remove("done", "active", "failed", "ready", "just-done");
   if (state) node.classList.add(state);
   const labels = { done: "Selesai", active: "Berjalan", ready: "Siap", failed: "Gagal" };
   node.querySelector(".node-state").textContent = custom ?? labels[state] ?? "Menunggu";
+}
+
+function applySequentialSpine(spine, targetIndex, targetState) {
+  const safeIndex = Math.max(0, Math.min(spine.length - 1, targetIndex));
+  for (let i = 0; i < safeIndex; i += 1) {
+    setNode(spine[i], "done");
+  }
+  setNode(spine[safeIndex], targetState);
 }
 
 function updateInspector(run) {
@@ -683,12 +698,18 @@ function updateInspector(run) {
 
 function paintFlow(run, activeRunId = latestActiveRunId) {
   const version = VERSIONS[currentVersion];
+  const spine = getVersionSpine(version);
+  const sameRun = Boolean(run && run.id === lastPaintedRunId);
+  const previousStates = sameRun ? new Map(prevNodeStates) : new Map();
+
   selectedRun = run;
   document.querySelectorAll(".flow-node").forEach((node) => {
-    node.classList.remove("done", "active", "failed", "ready");
+    node.classList.remove("done", "active", "failed", "ready", "just-done");
     node.querySelector(".node-state").textContent = "Menunggu";
   });
   if (!run) {
+    lastPaintedRunId = null;
+    prevNodeStates.clear();
     el("workflow-run-label").textContent = "Belum ada run analisis";
     updateInspector(null);
     return;
@@ -696,51 +717,86 @@ function paintFlow(run, activeRunId = latestActiveRunId) {
 
   const status = run.status;
   const steps = Array.isArray(run.steps) ? run.steps : [];
-  const stage = stepStage(run.current_step);
-  const isTrain = ["processing", "published"].includes(status) || steps.some((item) => version.aiStages.includes(stepStage(item.label)));
+  const currentStage = stepStage(run.current_step);
+  const mappedSteps = steps
+    .map((item) => ({ ...item, stage: stepStage(item.label) }))
+    .filter((item) => item.stage && spine.includes(item.stage));
+
+  const isTrain =
+    ["approved", "processing", "published"].includes(status) ||
+    mappedSteps.some((item) => version.aiStages.includes(item.stage)) ||
+    (currentStage ? version.aiStages.includes(currentStage) : false);
   const isActiveRun = Boolean(activeRunId) && run.id === activeRunId;
   el("workflow-run-label").textContent = `Run ${run.id.slice(0, 8)} · ${run.start_date} s/d ${run.end_date} · ${statusLabel(status)}`;
 
-  for (const key of ["click", "api", "neon"]) setNode(key, "done");
   if (activeRunId && !isActiveRun) setNode("active-result", "ready", "Hasil aktif");
 
   if (status === "creating") {
-    if (run.current_step && stage) {
-      const stageIndex = version.dataStages.indexOf(stage);
-      version.dataStages.slice(0, Math.max(stageIndex, 0)).forEach((key) => setNode(key, "done"));
-      setNode(version.draftRunner, "done");
-      setNode(stage, "active");
-    } else setNode(version.draftRunner, "active");
-  } else if (["draft", "approved"].includes(status)) {
+    const activeStage = currentStage && version.dataStages.includes(currentStage)
+      ? currentStage
+      : version.draftRunner;
+    applySequentialSpine(spine, spine.indexOf(activeStage), "active");
+  } else if (status === "draft") {
     for (const key of version.dataStages) setNode(key, "done");
-    setNode("review", status === "approved" ? "done" : "ready");
+    setNode("review", "ready");
     setNode("training-click", "ready");
+  } else if (status === "approved") {
+    applySequentialSpine(spine, spine.indexOf(version.trainRunner), "active");
   } else if (status === "rejected") {
     for (const key of version.dataStages) setNode(key, "done");
-  } else if (["processing", "published", "failed"].includes(status)) {
-    const failedDataStage = status === "failed" && !isTrain;
-    if (!failedDataStage) {
-      for (const key of version.dataStages) setNode(key, "done");
-      setNode("review", "done");
-      setNode("training-click", "done");
-      setNode(version.trainRunner, status === "failed" ? "failed" : status === "published" || stage ? "done" : "active");
-    } else setNode(version.draftRunner, "done");
-    if (status === "published") for (const key of version.aiStages) setNode(key, "done");
-
-    for (const item of steps) {
-      const mapped = stepStage(item.label);
-      if (mapped && STAGE_INFO[mapped]) {
-        setNode(mapped, item.status === "failed" ? "failed" : item.status === "running" ? "active" : "done");
-      }
+  } else if (status === "published") {
+    for (const key of spine) setNode(key, "done");
+  } else if (status === "processing") {
+    const runningStep = [...mappedSteps].reverse().find((item) => item.status === "running");
+    const lastSucceededIndex = mappedSteps.reduce((maxIdx, item) => {
+      if (item.status !== "succeeded") return maxIdx;
+      return Math.max(maxIdx, spine.indexOf(item.stage));
+    }, -1);
+    const minTrainIndex = spine.indexOf("training-setup");
+    let activeIndex = minTrainIndex;
+    if (currentStage && spine.includes(currentStage)) {
+      activeIndex = Math.max(minTrainIndex, spine.indexOf(currentStage));
+    } else if (runningStep) {
+      activeIndex = Math.max(minTrainIndex, spine.indexOf(runningStep.stage));
+    } else if (lastSucceededIndex >= minTrainIndex) {
+      activeIndex = Math.min(spine.length - 1, lastSucceededIndex + 1);
     }
-    if (stage && STAGE_INFO[stage]) setNode(stage, status === "failed" ? "failed" : "active");
-    if (status === "processing" && !stage) setNode("training-setup", "active");
-    if (status === "failed") {
-      if (!steps.some((item) => item.status === "failed")) setNode(isTrain ? "training-setup" : "analytics", "failed");
-      if (isTrain) setNode("fallback", "ready", "Hasil lama dipakai");
+    applySequentialSpine(spine, activeIndex, "active");
+  } else if (status === "failed") {
+    const failedStep = [...mappedSteps].reverse().find((item) => item.status === "failed");
+    const lastSucceededIndex = mappedSteps.reduce((maxIdx, item) => {
+      if (item.status !== "succeeded") return maxIdx;
+      return Math.max(maxIdx, spine.indexOf(item.stage));
+    }, -1);
+    let failedIndex;
+    if (failedStep) {
+      failedIndex = spine.indexOf(failedStep.stage);
+    } else if (currentStage && spine.includes(currentStage)) {
+      failedIndex = spine.indexOf(currentStage);
+    } else if (isTrain && lastSucceededIndex >= spine.indexOf("training-setup")) {
+      failedIndex = Math.min(spine.length - 1, lastSucceededIndex + 1);
+    } else {
+      failedIndex = spine.indexOf(isTrain ? "training-setup" : "analytics");
     }
+    applySequentialSpine(spine, failedIndex, "failed");
+    if (isTrain) setNode("fallback", "ready", "Hasil lama dipakai");
+  } else {
+    for (const key of ["click", "api", "neon"]) setNode(key, "done");
   }
+
   if (isActiveRun && status === "published") setNode("active-result", "done", "Aktif");
+
+  // Trigger subtle completion pulse only when a node newly transitions to done on the same run.
+  prevNodeStates.clear();
+  document.querySelectorAll(".flow-node").forEach((node) => {
+    const key = node.dataset.stage;
+    const nextState = ["done", "active", "ready", "failed"].find((s) => node.classList.contains(s)) ?? "idle";
+    if (sameRun && nextState === "done" && previousStates.get(key) !== "done") {
+      node.classList.add("just-done");
+    }
+    prevNodeStates.set(key, nextState);
+  });
+  lastPaintedRunId = run.id;
 
   if (!manualNodeSelection) {
     const next =

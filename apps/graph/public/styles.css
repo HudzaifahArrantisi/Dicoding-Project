@@ -24,14 +24,14 @@
   --accent: #e2604a;
   --accent-fill: #c9452b;
   --accent-ink: #f2a897;
-  --ok: #7d8fae;
-  --ok-ink: #d6e1f1;
-  --ok-bg: #1a2335;
-  --ok-line: #3a4763;
-  --warn: #e2604a;
-  --warn-ink: #ffb2a1;
-  --warn-bg: #2b1a17;
-  --warn-line: #8f4a39;
+  --ok: #34d399;
+  --ok-ink: #86efac;
+  --ok-bg: #12291f;
+  --ok-line: #2ea866;
+  --warn: #f59e0b;
+  --warn-ink: #fcd34d;
+  --warn-bg: #2b2111;
+  --warn-line: #d97706;
   --crit: #d3584e;
   --crit-ink: #ffa9a2;
   --crit-bg: #2c1719;
@@ -48,8 +48,8 @@
   --node-shadow: 0 1px 2px rgba(3, 6, 14, 0.35);
 
   --wire: #465670;
-  --wire-done: #5f7393;
-  --wire-active: #e2604a;
+  --wire-done: #2ea866;
+  --wire-active: #f59e0b;
   --wire-failed: #d3584e;
   --backdrop: rgba(5, 9, 17, 0.66);
   --shadow-drawer: -12px 0 36px rgba(3, 7, 14, 0.45);
@@ -71,14 +71,14 @@
   --accent: #c9452b;
   --accent-fill: #c9452b;
   --accent-ink: #a83a22;
-  --ok: #6b7a96;
-  --ok-ink: #33405a;
-  --ok-bg: #eef1f6;
-  --ok-line: #c3ccdb;
-  --warn: #c9452b;
-  --warn-ink: #a2381f;
-  --warn-bg: #fbebe6;
-  --warn-line: #d99583;
+  --ok: #16a34a;
+  --ok-ink: #166534;
+  --ok-bg: #e7f7ee;
+  --ok-line: #1d9a54;
+  --warn: #d97706;
+  --warn-ink: #92400e;
+  --warn-bg: #fef3c7;
+  --warn-line: #d97706;
   --crit: #b3261e;
   --crit-ink: #92211b;
   --crit-bg: #fcebe9;
@@ -95,8 +95,8 @@
   --node-shadow: 0 1px 2px rgba(20, 27, 61, 0.05);
 
   --wire: #b9c3d3;
-  --wire-done: #8b9ab3;
-  --wire-active: #c9452b;
+  --wire-done: #1d9a54;
+  --wire-active: #d97706;
   --wire-failed: #b3261e;
   --backdrop: rgba(20, 27, 61, 0.34);
   --shadow-drawer: -10px 0 30px rgba(23, 32, 58, 0.16);
@@ -117,14 +117,14 @@
     --accent: #c9452b;
     --accent-fill: #c9452b;
     --accent-ink: #a83a22;
-    --ok: #6b7a96;
-    --ok-ink: #33405a;
-    --ok-bg: #eef1f6;
-    --ok-line: #c3ccdb;
-    --warn: #c9452b;
-    --warn-ink: #a2381f;
-    --warn-bg: #fbebe6;
-    --warn-line: #d99583;
+    --ok: #16a34a;
+    --ok-ink: #166534;
+    --ok-bg: #e7f7ee;
+    --ok-line: #1d9a54;
+    --warn: #d97706;
+    --warn-ink: #92400e;
+    --warn-bg: #fef3c7;
+    --warn-line: #d97706;
     --crit: #b3261e;
     --crit-ink: #92211b;
     --crit-bg: #fcebe9;
@@ -141,8 +141,8 @@
     --node-shadow: 0 1px 2px rgba(20, 27, 61, 0.05);
 
     --wire: #b9c3d3;
-    --wire-done: #8b9ab3;
-    --wire-active: #c9452b;
+    --wire-done: #1d9a54;
+    --wire-active: #d97706;
     --wire-failed: #b3261e;
     --backdrop: rgba(20, 27, 61, 0.34);
     --shadow-drawer: -10px 0 30px rgba(23, 32, 58, 0.16);
@@ -813,10 +813,14 @@ select {
   background: var(--line-strong);
 }
 
-/* Status: one quiet signal per state (dot + label), no rings or glows */
+/* Status: green border for completed nodes, bottom-right spinner for active nodes */
 
 .flow-node.done {
-  border-color: var(--node-line);
+  border-color: var(--ok-line);
+}
+
+.flow-node.done.just-done {
+  animation: node-done-pulse 520ms ease-out;
 }
 
 .flow-node.done .node-state {
@@ -828,7 +832,22 @@ select {
 }
 
 .flow-node.done .node-step {
-  color: var(--muted-strong);
+  color: var(--ok-ink);
+}
+
+.node-loader {
+  display: none;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--warn) 26%, transparent);
+  border-top-color: var(--warn);
+  animation: node-spin 0.78s linear infinite;
+}
+
+.flow-node.active .node-loader {
+  display: inline-block;
 }
 
 .flow-node.active,
@@ -865,6 +884,24 @@ select {
 
 .flow-node.failed .node-step {
   color: var(--crit-ink);
+}
+
+@keyframes node-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes node-done-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok-line) 55%, transparent);
+  }
+  55% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--ok-line) 22%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 /* Orthogonal Wires Layer */

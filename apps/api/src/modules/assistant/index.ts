@@ -24,6 +24,7 @@ import { rewriteMitraQuery } from "./query-rewrite";
 import { buildMitraRagPrompt, isGroundedLlmReply } from "./rag-prompt";
 import { isCrossTenantQuestion, shouldRefuseMitraMessage, TENANT_SCOPE_REPLY } from "./guardrails";
 import { addSessionTurn, buildConversationContext, clearUserSessions, endSession, getSession, rateSessionTurn, sessionKey, summarizeSession } from "./session-memory";
+import { acquireInFlightChatLock, checkQuotaGate, getUserChatQuota, releaseInFlightChatLock } from "./quota";
 
 const emptyModel: ModelResult = { available: false, predictions: [] };
 const compactions = new Map<string, Promise<void>>();
@@ -212,9 +213,12 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       .where(and(eq(assistantChatEvents.partner_id, user.partnerId), eq(assistantChatEvents.user_id, user.userId),
         sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`))
       .orderBy(assistantChatEvents.created_at);
-    const [memory] = await db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
-      .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId),
-        eq(assistantConversationMemory.session_id, sessionId))).limit(1);
+    const [memory, quota] = await Promise.all([
+      db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
+        .where(and(eq(assistantConversationMemory.partner_id, user.partnerId), eq(assistantConversationMemory.user_id, user.userId),
+          eq(assistantConversationMemory.session_id, sessionId))).limit(1).then((rows) => rows[0]),
+      getUserChatQuota(user.userId, "mitra"),
+    ]);
     const tours = new Set<MitraTour>(["restock", "stock_report", "delivery", "logs", "profile"]);
     return { data: rows.map((row) => ({
       id: row.id,
@@ -225,7 +229,16 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       source: (row.model_results as { response_source?: string } | null)?.response_source === "llm" ? "llm" : "fallback",
       feedback: row.feedback,
       created_at: row.created_at,
-    })), summary: memory?.summary ?? null };
+    })), summary: memory?.summary ?? null, quota };
+  },
+).get(
+  "/mitra/quota",
+  async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isMitra(user)) { set.status = 403; return { error: "Akses hanya untuk mitra" }; }
+    const quota = await getUserChatQuota(user.userId, "mitra");
+    return { quota };
   },
 ).post(
   "/mitra/chat",
@@ -237,6 +250,26 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       set.status = 422;
       return { error: "Pesan tidak boleh kosong" };
     }
+    const preQuota = await getUserChatQuota(user.userId, "mitra");
+    const quotaGate = checkQuotaGate(preQuota);
+    if (!quotaGate.allowed) {
+      set.status = 429;
+      if (preQuota.retry_after_seconds > 0) {
+        set.headers["Retry-After"] = String(preQuota.retry_after_seconds);
+      }
+      return { error: quotaGate.message ?? "Batas kuota chat tercapai.", reason: quotaGate.reason, quota: preQuota };
+    }
+    if (!acquireInFlightChatLock(user.userId)) {
+      const lockedQuota = await getUserChatQuota(user.userId, "mitra");
+      set.status = 429;
+      set.headers["Retry-After"] = "3";
+      return {
+        error: "Masih ada pertanyaan yang sedang diproses pada akun ini. Tunggu jawaban selesai sebelum mengirim pesan baru.",
+        reason: "in_flight",
+        quota: lockedQuota,
+      };
+    }
+    try {
     const message = body.message.trim();
     const wantsStockChart = isStockChartRequest(message);
     const sessionId = body.session_id;
@@ -388,13 +421,18 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
     }).returning({ id: assistantChatEvents.id });
     const evicted = addSessionTurn(key, { id: saved.id, message, reply: response.reply, intent, source, feedback: null, created_at: new Date() });
     queueCompaction(key, user.partnerId, user.userId, sessionId, evicted);
-    const payload = { ...response, visualization, interactionId: saved.id, session_id: sessionId, modelAvailable: model.available, source };
+    releaseInFlightChatLock(user.userId);
+    const quota = await getUserChatQuota(user.userId, "mitra");
+    const payload = { ...response, visualization, interactionId: saved.id, session_id: sessionId, modelAvailable: model.available, source, quota };
     if (headers.accept?.includes("text/event-stream")) {
       return new Response(`data: ${JSON.stringify(payload)}\n\n`, {
         headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
       });
     }
     return payload;
+    } finally {
+      releaseInFlightChatLock(user.userId);
+    }
   },
   { body: t.Object({ message: t.String({ minLength: 1, maxLength: 500 }), session_id: t.String({ format: "uuid" }) }) },
 ).patch(
@@ -590,8 +628,11 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
         sql`${assistantChatEvents.model_results}->>'session_id' = ${sessionId}`,
       ))
       .orderBy(assistantChatEvents.created_at);
-    const [memory] = await db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
-      .where(and(eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1);
+    const [memory, quota] = await Promise.all([
+      db.select({ summary: assistantConversationMemory.summary }).from(assistantConversationMemory)
+        .where(and(eq(assistantConversationMemory.user_id, user.userId), eq(assistantConversationMemory.session_id, sessionId))).limit(1).then((rows) => rows[0]),
+      getUserChatQuota(user.userId, "admin"),
+    ]);
     return {
       data: rows.map((row) => ({
         id: row.id,
@@ -603,7 +644,17 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
         created_at: row.created_at,
       })),
       summary: memory?.summary ?? null,
+      quota,
     };
+  },
+).get(
+  "/admin/quota",
+  async ({ headers, set }) => {
+    const user = await getAuthUser(headers);
+    if (!user) { set.status = 401; return { error: "Unauthorized" }; }
+    if (!isAdmin(user)) { set.status = 403; return { error: "Akses hanya untuk admin" }; }
+    const quota = await getUserChatQuota(user.userId, "admin");
+    return { quota };
   },
 ).post(
   "/admin/chat",
@@ -615,6 +666,26 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
       set.status = 422;
       return { error: "Pesan tidak boleh kosong" };
     }
+    const preQuota = await getUserChatQuota(user.userId, "admin");
+    const quotaGate = checkQuotaGate(preQuota);
+    if (!quotaGate.allowed) {
+      set.status = 429;
+      if (preQuota.retry_after_seconds > 0) {
+        set.headers["Retry-After"] = String(preQuota.retry_after_seconds);
+      }
+      return { error: quotaGate.message ?? "Batas kuota chat tercapai.", reason: quotaGate.reason, quota: preQuota };
+    }
+    if (!acquireInFlightChatLock(user.userId)) {
+      const lockedQuota = await getUserChatQuota(user.userId, "admin");
+      set.status = 429;
+      set.headers["Retry-After"] = "3";
+      return {
+        error: "Masih ada pertanyaan yang sedang diproses pada akun ini. Tunggu jawaban selesai sebelum mengirim pesan baru.",
+        reason: "in_flight",
+        quota: lockedQuota,
+      };
+    }
+    try {
     const message = body.message.trim();
     const sessionId = body.session_id;
 
@@ -740,14 +811,19 @@ export const assistantModule = new Elysia({ prefix: "/assistant" }).get(
 
     const evicted = addSessionTurn(key, { id: saved.id, message, reply: response.reply, intent: model.intent?.label ?? null, source, feedback: null, created_at: new Date() });
     queueAdminCompaction(key, user.userId, sessionId, evicted);
+    releaseInFlightChatLock(user.userId);
+    const quota = await getUserChatQuota(user.userId, "admin");
 
-    const payload = { ...response, interactionId: saved.id, session_id: sessionId, modelAvailable: model.available, source };
+    const payload = { ...response, interactionId: saved.id, session_id: sessionId, modelAvailable: model.available, source, quota };
     if (headers.accept?.includes("text/event-stream")) {
       return new Response(`data: ${JSON.stringify(payload)}\n\n`, {
         headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
       });
     }
     return payload;
+    } finally {
+      releaseInFlightChatLock(user.userId);
+    }
   },
   { body: t.Object({ message: t.String({ minLength: 1, maxLength: 500 }), session_id: t.String({ format: "uuid" }) }) },
 ).patch(

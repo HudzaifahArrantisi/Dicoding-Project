@@ -58,6 +58,35 @@ bun run --cwd apps/web build
 bun test   # opsional, sebagian butuh DB/LLM
 ```
 
+### Deploy lokal dengan `deploy.sh`
+
+`deploy.sh` di root menjalankan urutan yang sama dengan job `checks`, lalu commit
+dan push ke branch yang sedang aktif. Jika satu pemeriksaan gagal, tidak ada
+commit maupun push.
+
+```powershell
+deploy.cmd                             # dari cmd / PowerShell (memakai Git Bash otomatis)
+bash ./deploy.sh                       # dari Git Bash
+deploy.cmd -m "feat: restock"          # pesan commit sendiri
+deploy.cmd --skip-build                # lewati build web (lebih cepat)
+deploy.cmd --no-push                   # cek + commit saja
+deploy.cmd --dry-run                   # tampilkan perintah tanpa eksekusi
+```
+
+`deploy.cmd` hanya pembungkus: ia mencari `bash.exe` dari Git for Windows atau Git
+bawaan Laragon lalu meneruskan argumen ke `deploy.sh`. Jangan memakai `bash` dari
+`PATH` di cmd, karena di Windows itu biasanya stub WSL yang belum punya distro
+(`Windows Subsystem for Linux has no installed distributions`).
+
+Urutan yang dijalankan: `bun install --frozen-lockfile` → `bun run typecheck` →
+`bun run --cwd apps/web lint` → `node --check apps/graph/public/app.js` →
+`py_compile` (`ai/` + `data-science/`) → `bun run test:ci` →
+`bun run --cwd apps/web build` → `git add -A` → `git commit -m "<pesan>"` →
+`git push` ke branch aktif (upstream diset otomatis bila belum ada).
+
+Script menolak berjalan saat `HEAD` detached atau ketika merge/rebase/cherry-pick
+masih berlangsung.
+
 ## Setup satu kali
 
 1. Buat Cloudflare API token dengan template **Edit Cloudflare Workers**.
