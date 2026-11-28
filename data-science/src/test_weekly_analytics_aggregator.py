@@ -49,6 +49,14 @@ class WeeklyAnalyticsTests(unittest.TestCase):
         self.assertEqual(first_day_breakdown["minus_log_count"], 1)
         self.assertEqual(first_day_breakdown["logs"][0]["time_wib"], "00:00:00")
         self.assertEqual(first_day_breakdown["logs"][0]["consumed_units"], 14)
+        self.assertEqual(len(report["all_data"]), 2)
+        m1_all = next(item for item in report["all_data"] if item["id_mitra"] == "m1")
+        self.assertEqual(m1_all["nama_mitra"], "Mitra Satu")
+        self.assertIn("minggu_1", m1_all["log_mingguan"])
+        self.assertEqual(len(m1_all["log_mingguan"]["minggu_1"]["hari"]), 7)
+        self.assertEqual(m1_all["log_mingguan"]["minggu_1"]["total_log"], 2)
+        self.assertEqual(m1_all["ringkasan"]["total_omzet_rp"], 35 * 27500)
+        self.assertEqual(report["network_sales"]["total_omzet_rp"], 35 * 27500)
         self.assertEqual(report["warehouse"][0]["central_stock"], 30)
         self.assertEqual(len(cleaned), 2)
         self.assertEqual(cleaned[0]["weekly_consumption"], 35)
@@ -56,8 +64,9 @@ class WeeklyAnalyticsTests(unittest.TestCase):
             write_report(report, cleaned, Path(directory))
             self.assertTrue((Path(directory) / "weekly_analytics_summary.json").is_file())
             self.assertTrue((Path(directory) / "cleaned_inventory_summary.csv").is_file())
+            self.assertTrue((Path(directory) / "cleaned_stock_logs.csv").is_file())
             self.assertTrue((Path(directory) / "weekly_analytics_report.md").is_file())
-            for name in ("category_products.json", "category_partners.json", "category_regions.json", "category_reporting.json"):
+            for name in ("category_products.json", "category_partners.json", "category_regions.json", "category_reporting.json", "category_all_data.json"):
                 self.assertTrue((Path(directory) / name).is_file())
 
 

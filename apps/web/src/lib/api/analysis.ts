@@ -18,11 +18,14 @@ export interface AnalysisRun {
 
 export interface AnalysisArtifacts {
   status: AnalysisRun['status']
-  manifest: AnalysisRun['manifest'] & { run_id?: string; start_date?: string; end_date?: string; timezone?: string; generated_at?: string }
+  manifest: AnalysisRun['manifest'] & { run_id?: string; start_date?: string; end_date?: string; timezone?: string; generated_at?: string; log_rows?: number }
   json: Record<string, unknown>
   csv_preview: string
+  logs_csv_preview?: string | null
   markdown: string
-  categories: Record<'products' | 'partners' | 'regions' | 'reporting', { category: string; items: unknown[] }>
+  categories: Record<'products' | 'partners' | 'regions' | 'reporting', { category: string; items: unknown[] }> & {
+    all_data?: { category: string; items: unknown[] }
+  }
 }
 
 export async function getAnalysisRuns() {

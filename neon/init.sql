@@ -437,10 +437,10 @@ create policy ai_manage_stocks on partner_stocks for all to ai_job using (true) 
 -- 6. SEED DATA AWAL (DEMO & DEVELOPMENT)
 
 -- A. Cabang Mitra Demo (Partners)
-insert into partners (id, name, type, address, pic_name, pic_phone, is_active) values
-  ('11111111-1111-1111-1111-111111111111', 'Kafe Sejuk BSD', 'kafe', 'BSD, Tangerang Selatan', 'Rina', '081200000001', true),
-  ('22222222-2222-2222-2222-222222222222', 'Hotel Aruna Jakarta', 'hotel', 'Jakarta Selatan', 'Budi', '081200000002', true),
-  ('33333333-3333-3333-3333-333333333333', 'Resto Bento Serpong', 'restoran', 'Serpong, Tangerang', 'Siti', '081200000003', true)
+insert into partners (id, name, type, address, pic_name, pic_phone, province_name, regency_name, district_name, village_name, is_active) values
+  ('11111111-1111-1111-1111-111111111111', 'Kafe Sejuk BSD', 'kafe', 'Ruko Tol Boulevard Blok B No. 12, BSD City, RT 02/RW 05, Kel. Lengkong Gudang, Kec. Serpong, Kota Tangerang Selatan, Banten 15310', 'Rina', '081200000001', 'Banten', 'Kota Tangerang Selatan', 'Serpong', 'Lengkong Gudang', true),
+  ('22222222-2222-2222-2222-222222222222', 'Hotel Aruna Jakarta', 'hotel', 'Jl. Teuku Cik Ditiro No. 27, RT 01/RW 05, Kel. Gondangdia, Kec. Menteng, Kota Administrasi Jakarta Pusat, DKI Jakarta 10350', 'Budi', '081200000002', 'DKI Jakarta', 'Kota Administrasi Jakarta Pusat', 'Menteng', 'Gondangdia', true),
+  ('33333333-3333-3333-3333-333333333333', 'Resto Bento Serpong', 'restoran', 'Jl. Jalur Sutera Boulevard Kav. 16, Alam Sutera, RT 01/RW 07, Kel. Pakulonan, Kec. Serpong Utara, Kota Tangerang Selatan, Banten 15325', 'Siti', '081200000003', 'Banten', 'Kota Tangerang Selatan', 'Serpong Utara', 'Pakulonan', true)
 on conflict (id) do nothing;
 
 -- B. Akun Pengguna Demo (Users: password default adalah "password123")

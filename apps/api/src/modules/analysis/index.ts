@@ -142,11 +142,28 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
         if (stored) return stored.toString("utf8");
         return readFile(`${directory}/${name}`, "utf8");
       }));
+      let allDataRaw: string | null = null;
+      try {
+        const storedAllData = await loadArtifact(params.id, "category_all_data.json");
+        allDataRaw = storedAllData ? storedAllData.toString("utf8") : await readFile(`${directory}/category_all_data.json`, "utf8");
+      } catch {
+        allDataRaw = null;
+      }
+      let logsCsvRaw: string | null = null;
+      try {
+        const storedLogsCsv = await loadArtifact(params.id, "cleaned_stock_logs.csv");
+        logsCsvRaw = storedLogsCsv ? storedLogsCsv.toString("utf8") : await readFile(`${directory}/cleaned_stock_logs.csv`, "utf8");
+      } catch {
+        logsCsvRaw = null;
+      }
       const [json, csv, markdown, manifest, products, partners, regions, reporting] = contents;
       return { status: run.status, manifest: JSON.parse(manifest), json: JSON.parse(json),
-        csv_preview: csv.split(/\r?\n/).slice(0, 16).join("\n"), markdown,
+        csv_preview: csv.split(/\r?\n/).slice(0, 16).join("\n"),
+        logs_csv_preview: logsCsvRaw ? logsCsvRaw.split(/\r?\n/).slice(0, 16).join("\n") : null,
+        markdown,
         categories: { products: JSON.parse(products), partners: JSON.parse(partners),
-          regions: JSON.parse(regions), reporting: JSON.parse(reporting) } };
+          regions: JSON.parse(regions), reporting: JSON.parse(reporting),
+          ...(allDataRaw ? { all_data: JSON.parse(allDataRaw) } : {}) } };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") { set.status = 404; return { error: "Artefak laporan belum tersedia" }; }
       throw error;

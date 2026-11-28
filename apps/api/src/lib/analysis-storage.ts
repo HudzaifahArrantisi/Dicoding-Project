@@ -9,8 +9,8 @@ import { activeArtifact, activeRunId, aiRunDir, dataScienceRunDir } from "./anal
 
 const allowed = new Set(["pdf", "csv", "json", "md", "txt", "docx"]);
 const dataScienceNames = ["manifest.json", "weekly_analytics_summary.json", "cleaned_inventory_summary.csv",
-  "weekly_analytics_report.md", "category_products.json", "category_partners.json",
-  "category_regions.json", "category_reporting.json"] as const;
+  "cleaned_stock_logs.csv", "weekly_analytics_report.md", "category_products.json", "category_partners.json",
+  "category_regions.json", "category_reporting.json", "category_all_data.json"] as const;
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
 export function validateRawReference(file: Pick<File, "name" | "size">): { category: string; fileName: string } {

@@ -39,12 +39,40 @@ export function AnalysisRunPreviewModal({
               <FileCard icon={<FileText className="size-4" />} label="CSV handoff" value="Preview 15 baris pertama" />
               <FileCard icon={<FileText className="size-4" />} label="Laporan Markdown" value="Ringkasan eksekutif" />
             </div>
-            <section className="rounded-lg border border-line p-4"><h3 className="text-sm font-semibold text-ink-900">Empat file kategori AI Insights</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{(['products', 'partners', 'regions', 'reporting'] as const).map((key) => <div key={key} className="flex items-center justify-between rounded-md bg-ink-50 px-3 py-2 text-xs"><span className="font-mono">category_{key}.json</span><span className="text-muted">{artifacts.categories[key].items.length} baris</span></div>)}</div></section>
+            <section className="rounded-lg border border-line p-4">
+              <h3 className="text-sm font-semibold text-ink-900">Lima file kategori Data Science &amp; AI Insights</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {(['products', 'partners', 'regions', 'reporting'] as const).map((key) => (
+                  <div key={key} className="flex items-center justify-between rounded-md bg-ink-50 px-3 py-2 text-xs">
+                    <span className="font-mono">category_{key}.json</span>
+                    <span className="text-muted">{artifacts.categories[key].items.length} baris</span>
+                  </div>
+                ))}
+                {artifacts.categories.all_data ? (
+                  <div className="flex items-center justify-between rounded-md bg-ink-50 px-3 py-2 text-xs sm:col-span-2">
+                    <span className="font-mono font-semibold text-ink-900">category_all_data.json (profil, alamat, PIC &amp; log per hari/jam)</span>
+                    <span className="text-muted">{artifacts.categories.all_data.items.length} mitra</span>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+            {artifacts.categories.all_data ? (
+              <Preview title="category_all_data.json (contoh mitra &amp; detail log per hari/jam)">
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-ink-700">
+                  {JSON.stringify(artifacts.categories.all_data.items.slice(0, 3), null, 2)}
+                </pre>
+              </Preview>
+            ) : null}
             <div className="grid gap-4 lg:grid-cols-2">
               <Preview title="weekly_analytics_summary.json"><pre className="max-h-72 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-ink-700">{JSON.stringify(artifacts.json, null, 2).slice(0, 12000)}</pre></Preview>
               <Preview title="weekly_analytics_report.md"><pre className="max-h-72 overflow-auto whitespace-pre-wrap text-xs leading-5 text-ink-700">{artifacts.markdown}</pre></Preview>
             </div>
             <Preview title="cleaned_inventory_summary.csv"><pre className="max-h-56 overflow-auto whitespace-pre text-[11px] leading-5 text-ink-700">{artifacts.csv_preview}</pre></Preview>
+            {artifacts.logs_csv_preview ? (
+              <Preview title={`cleaned_stock_logs.csv (${artifacts.manifest.log_rows ?? 'seluruh'} baris log bersih)`}>
+                <pre className="max-h-56 overflow-auto whitespace-pre text-[11px] leading-5 text-ink-700">{artifacts.logs_csv_preview}</pre>
+              </Preview>
+            ) : null}
             <section className="rounded-lg border border-line p-4" aria-labelledby="training-source-title">
               <div>
                 <h3 id="training-source-title" className="text-sm font-semibold text-ink-900">Sumber training model</h3>

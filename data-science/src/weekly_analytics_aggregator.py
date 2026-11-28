@@ -27,16 +27,25 @@ CSV_COLUMNS = ["partner_id", "partner_name", "partner_type", "province_name", "r
                "product_id", "product_name", "product_sku", "current_qty", "par_level",
                "weekly_consumption", "adu", "safety_stock", "rop", "days_of_cover",
                "is_critical", "prev_velocity", "critical_events", "zero_stock_events", "has_active_order"]
+LOG_CSV_COLUMNS = [
+    "id_mitra", "nama_mitra", "tipe_mitra", "alamat", "nama_pic", "no_hp_pic",
+    "provinsi", "kabupaten_kota", "kecamatan", "kelurahan_desa",
+    "minggu_ke", "tanggal", "hari", "jam_wib", "jam", "menit",
+    "product_id", "produk", "stok_awal", "stok_akhir", "perubahan",
+    "keluar_pcs", "is_minus", "harga_satuan_rp", "omzet_rp", "sumber",
+]
 CATEGORY_FILES = {
     "products": "category_products.json",
     "partners": "category_partners.json",
     "regions": "category_regions.json",
     "reporting": "category_reporting.json",
+    "all_data": "category_all_data.json",
 }
 MONTH_NAMES_ID = (
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 )
+DAY_NAMES_ID = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
 
 
 def database_url() -> str:
@@ -60,8 +69,14 @@ def fetch_rows(start: datetime, end: datetime, as_of: datetime | None = None) ->
             cursor.execute("SELECT id::text AS id, name, sku, central_stock FROM products WHERE is_active")
             products = cursor.fetchall()
             cursor.execute("""SELECT p.id::text AS partner_id, p.name AS partner_name,
-                p.type::text AS partner_type, coalesce(nullif(p.province_name, ''), 'Tidak diketahui') AS province_name,
+                p.type::text AS partner_type,
+                coalesce(nullif(p.address, ''), '') AS address,
+                coalesce(nullif(p.pic_name, ''), '') AS pic_name,
+                coalesce(nullif(p.pic_phone, ''), '') AS pic_phone,
+                coalesce(nullif(p.province_name, ''), 'Tidak diketahui') AS province_name,
                 coalesce(nullif(p.regency_name, ''), 'Tidak diketahui') AS regency_name,
+                coalesce(nullif(p.district_name, ''), '') AS district_name,
+                coalesce(nullif(p.village_name, ''), '') AS village_name,
                 pr.id::text AS product_id, pr.name AS product_name, pr.sku AS product_sku,
                 coalesce(next_change.qty_before, ps.current_qty, 0) AS current_qty,
                 coalesce(ps.par_level, 0) AS par_level, ps.updated_at
@@ -94,6 +109,10 @@ def category(name: str) -> str:
     return "Makanan Instan" if "seblak" in name.casefold() else "Camilan"
 
 
+def unit_retail_price(name: str) -> int:
+    return 27500 if "seblak" in name.casefold() else 25000
+
+
 def percent(value: float, total: float) -> float:
     return round(100 * value / total, 1) if total else 0.0
 
@@ -115,8 +134,13 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
         s["partner_id"]: {
             "partner_name": s["partner_name"],
             "partner_type": str(s.get("partner_type") or ""),
+            "address": str(s.get("address") or ""),
+            "pic_name": str(s.get("pic_name") or ""),
+            "pic_phone": str(s.get("pic_phone") or ""),
             "province_name": str(s.get("province_name") or ""),
             "regency_name": str(s.get("regency_name") or ""),
+            "district_name": str(s.get("district_name") or ""),
+            "village_name": str(s.get("village_name") or ""),
         }
         for s in stocks
     }
@@ -131,6 +155,9 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
             qty_before = int(row["qty_before"])
             qty_after = int(row["qty_after"])
             consumed_item = max(0, qty_before - qty_after)
+            prod_name = product_names.get(row["product_id"], "")
+            unit_price = unit_retail_price(prod_name)
+            omzet_item = consumed_item * unit_price
             daily_partner_counts[(day, row["partner_id"])] += 1
             daily_partner_units[(day, row["partner_id"])] += consumed_item
             daily_partner_logs[(day, row["partner_id"])].append({
@@ -138,11 +165,13 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
                 "hour": wib_dt.hour,
                 "minute": wib_dt.minute,
                 "product_id": row["product_id"],
-                "product_name": product_names.get(row["product_id"], ""),
+                "product_name": prod_name,
                 "qty_before": qty_before,
                 "qty_after": qty_after,
                 "delta": qty_after - qty_before,
                 "consumed_units": consumed_item,
+                "unit_price_rp": unit_price,
+                "omzet_rp": omzet_item,
                 "is_minus": qty_before > qty_after,
                 "source": str(row.get("source") or "manual_update"),
             })
@@ -160,11 +189,16 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
             "partner_id": partner_id,
             "partner_name": partner_names[partner_id],
             "partner_type": profile.get("partner_type", ""),
+            "address": profile.get("address", ""),
+            "pic_name": profile.get("pic_name", ""),
             "province_name": profile.get("province_name", ""),
             "regency_name": profile.get("regency_name", ""),
+            "district_name": profile.get("district_name", ""),
+            "village_name": profile.get("village_name", ""),
             "log_count": count,
             "minus_log_count": sum(1 for entry in entries if entry["is_minus"]),
             "consumed_units": daily_partner_units[(day, partner_id)],
+            "omzet_rp": sum(int(entry.get("omzet_rp", 0)) for entry in entries),
             "hours": sorted({entry["hour"] for entry in entries}),
             "logs": entries,
         })
@@ -224,16 +258,22 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
                              "prev_velocity": round(previous_velocity, 3), "critical_events": critical,
                              "zero_stock_events": zero, "has_active_order": int(active_order)})
         product_units[stock["product_id"]] += consumed
+        consumed_omzet = consumed * unit_retail_price(stock["product_name"])
         pid = stock["partner_id"]
         if pid not in partner_totals:
             partner_totals[pid] = {"partner_id": pid, "partner_name": stock["partner_name"],
                                    "partner_type": str(stock.get("partner_type") or ""),
+                                   "address": str(stock.get("address") or ""),
+                                   "pic_name": str(stock.get("pic_name") or ""),
                                    "province_name": stock["province_name"], "regency_name": stock["regency_name"],
-                                   "weekly_units": 0, "log_count": 0, "minus_log_count": 0, "active_days": set(), "critical_frequency": 0,
+                                   "district_name": str(stock.get("district_name") or ""),
+                                   "village_name": str(stock.get("village_name") or ""),
+                                   "weekly_units": 0, "weekly_omzet_rp": 0, "log_count": 0, "minus_log_count": 0, "active_days": set(), "critical_frequency": 0,
                                    "stockout_events": 0, "restock_requests": 0,
                                    "current_stock_total": 0, "buffer_total": 0, "last_report_at": None}
         partner = partner_totals[pid]
         partner["weekly_units"] += consumed
+        partner["weekly_omzet_rp"] += consumed_omzet
         partner["log_count"] += len(current_logs)
         partner["minus_log_count"] += sum(1 for row in current_logs if row["qty_before"] > row["qty_after"])
         partner["critical_frequency"] += critical
@@ -248,8 +288,12 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
     total_units = sum(product_units.values())
     ranked_products = sorted(products, key=lambda p: (-product_units[p["id"]], p["name"]))
     products_report = [{"rank": i, "product_id": p["id"], "product_name": p["name"], "category": category(p["name"]),
-                        "weekly_units": product_units[p["id"]], "share_pct": percent(product_units[p["id"]], total_units)}
+                        "weekly_units": product_units[p["id"]],
+                        "unit_price_rp": unit_retail_price(p["name"]),
+                        "weekly_omzet_rp": product_units[p["id"]] * unit_retail_price(p["name"]),
+                        "share_pct": percent(product_units[p["id"]], total_units)}
                        for i, p in enumerate(ranked_products, 1)]
+    total_omzet_rp = sum(item["weekly_omzet_rp"] for item in products_report)
     partners_report = []
     for partner in partner_totals.values():
         active_days = len(partner.pop("active_days"))
@@ -261,9 +305,10 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
         partners_report.append(partner)
         region_key = (partner["province_name"], partner["regency_name"])
         region = region_totals.setdefault(region_key, {"province_name": region_key[0], "regency_name": region_key[1],
-                                                      "weekly_units": 0, "active_partners": 0, "partner_count": 0,
+                                                      "weekly_units": 0, "weekly_omzet_rp": 0, "active_partners": 0, "partner_count": 0,
                                                       "restock_frequency": 0})
         region["weekly_units"] += partner["weekly_units"]
+        region["weekly_omzet_rp"] += partner["weekly_omzet_rp"]
         region["partner_count"] += 1
         region["active_partners"] += int(partner["active_days"] > 0)
     region_by_partner = {p["partner_id"]: (p["province_name"], p["regency_name"]) for p in partners_report}
@@ -308,24 +353,152 @@ def analyze(start: datetime, end: datetime, products: list[dict], stocks: list[d
     daily_consumption = [{"day": (first_day + timedelta(days=i)).isoformat(),
                           "units": daily_consumption_totals.get((first_day + timedelta(days=i)).isoformat(), 0)}
                          for i in range(days)]
+    all_data_partners = []
+    partner_order = sorted(
+        partner_profiles.keys(),
+        key=lambda pid: (-partner_totals[pid]["log_count"] if pid in partner_totals else 0, partner_profiles[pid]["partner_name"]),
+    )
+    for pid in partner_order:
+        profile = partner_profiles[pid]
+        summary_row = partner_totals.get(pid, {})
+        weeks_map: dict[int, list[dict]] = defaultdict(list)
+        for day_offset in range(days):
+            current_day = first_day + timedelta(days=day_offset)
+            day_iso = current_day.isoformat()
+            week_num = (day_offset // 7) + 1
+            raw_entries = sorted(
+                daily_partner_logs.get((day_iso, pid), []),
+                key=lambda item: (item["time_wib"], item["product_name"]),
+            )
+            formatted_logs = [
+                {
+                    "jam_wib": entry["time_wib"],
+                    "jam": entry["hour"],
+                    "menit": entry["minute"],
+                    "product_id": entry["product_id"],
+                    "produk": entry["product_name"],
+                    "stok_awal": entry["qty_before"],
+                    "stok_akhir": entry["qty_after"],
+                    "perubahan": entry["delta"],
+                    "keluar_pcs": entry["consumed_units"],
+                    "is_minus": entry["is_minus"],
+                    "harga_satuan_rp": entry.get("unit_price_rp", unit_retail_price(entry["product_name"])),
+                    "omzet_rp": entry.get("omzet_rp", entry["consumed_units"] * unit_retail_price(entry["product_name"])),
+                    "sumber": entry["source"],
+                }
+                for entry in raw_entries
+            ]
+            weeks_map[week_num].append({
+                "tanggal": day_iso,
+                "hari": DAY_NAMES_ID[current_day.weekday()],
+                "total_log": len(formatted_logs),
+                "total_log_minus": sum(1 for entry in formatted_logs if entry["is_minus"]),
+                "total_keluar_pcs": sum(entry["keluar_pcs"] for entry in formatted_logs),
+                "total_omzet_rp": sum(entry["omzet_rp"] for entry in formatted_logs),
+                "log_per_jam": formatted_logs,
+            })
+        log_mingguan = {}
+        for week_num in sorted(weeks_map.keys()):
+            day_items = weeks_map[week_num]
+            log_mingguan[f"minggu_{week_num}"] = {
+                "minggu_ke": week_num,
+                "rentang_tanggal": f"{day_items[0]['tanggal']} s/d {day_items[-1]['tanggal']}",
+                "total_log": sum(d["total_log"] for d in day_items),
+                "total_log_minus": sum(d["total_log_minus"] for d in day_items),
+                "total_keluar_pcs": sum(d["total_keluar_pcs"] for d in day_items),
+                "total_omzet_rp": sum(d["total_omzet_rp"] for d in day_items),
+                "hari": day_items,
+            }
+        region_parts = [p for p in (profile.get("regency_name"), profile.get("province_name")) if p and p != "Tidak diketahui"]
+        all_data_partners.append({
+            "id_mitra": pid,
+            "nama_mitra": profile.get("partner_name", ""),
+            "tipe_mitra": profile.get("partner_type", ""),
+            "alamat": profile.get("address", ""),
+            "nama_pic": profile.get("pic_name", ""),
+            "no_hp_pic": profile.get("pic_phone", ""),
+            "daerah": {
+                "provinsi": profile.get("province_name", ""),
+                "kabupaten_kota": profile.get("regency_name", ""),
+                "kecamatan": profile.get("district_name", ""),
+                "kelurahan_desa": profile.get("village_name", ""),
+                "ringkasan": ", ".join(region_parts) if region_parts else "Tidak diketahui",
+            },
+            "periode": {
+                "start_date": first_day.isoformat(),
+                "end_date": (first_day + timedelta(days=days - 1)).isoformat(),
+                "total_hari": days,
+            },
+            "ringkasan": {
+                "total_log": summary_row.get("log_count", 0),
+                "total_log_minus": summary_row.get("minus_log_count", 0),
+                "total_keluar_pcs": summary_row.get("weekly_units", 0),
+                "total_omzet_rp": summary_row.get("weekly_omzet_rp", 0),
+                "hari_aktif": summary_row.get("active_days", 0),
+                "stok_saat_ini_total": summary_row.get("current_stock_total", 0),
+            },
+            "log_mingguan": log_mingguan,
+        })
     report = {"metadata": {"schema_version": 1, "generated_at": datetime.now(timezone.utc).isoformat(),
                             "start_date": start.astimezone(JAKARTA).date().isoformat(),
                             "end_date": (end - timedelta(days=1)).astimezone(JAKARTA).date().isoformat(),
                             "period_days": days},
               "products": products_report, "partners": partners_report, "regions": regions_report,
-              "reporting": reporting_report, "daily_reporting": daily_reporting,
+              "reporting": reporting_report, "all_data": all_data_partners,
+              "daily_reporting": daily_reporting,
               "daily_consumption": daily_consumption,
               "partner_daily_log_breakdown": partner_daily,
               "warehouse": warehouse, "risk_records": risk_records,
               "network_sales": {"total_sold_7d": total_units, "total_sold_prev_7d": previous_units,
+                                "total_omzet_rp": total_omzet_rp,
                                 "requested_restock_units": requested, "approved_restock_units": approved}}
     return report, cleaned
+
+
+def flatten_all_data_to_log_rows(report: dict) -> list[dict]:
+    rows: list[dict] = []
+    for partner in report.get("all_data", []):
+        daerah = partner.get("daerah") or {}
+        for week in (partner.get("log_mingguan") or {}).values():
+            week_num = week.get("minggu_ke", 1)
+            for day_item in week.get("hari") or []:
+                for entry in day_item.get("log_per_jam") or []:
+                    rows.append({
+                        "id_mitra": partner.get("id_mitra", ""),
+                        "nama_mitra": partner.get("nama_mitra", ""),
+                        "tipe_mitra": partner.get("tipe_mitra", ""),
+                        "alamat": partner.get("alamat", ""),
+                        "nama_pic": partner.get("nama_pic", ""),
+                        "no_hp_pic": partner.get("no_hp_pic", ""),
+                        "provinsi": daerah.get("provinsi", ""),
+                        "kabupaten_kota": daerah.get("kabupaten_kota", ""),
+                        "kecamatan": daerah.get("kecamatan", ""),
+                        "kelurahan_desa": daerah.get("kelurahan_desa", ""),
+                        "minggu_ke": week_num,
+                        "tanggal": day_item.get("tanggal", ""),
+                        "hari": day_item.get("hari", ""),
+                        "jam_wib": entry.get("jam_wib", ""),
+                        "jam": entry.get("jam", 0),
+                        "menit": entry.get("menit", 0),
+                        "product_id": entry.get("product_id", ""),
+                        "produk": entry.get("produk", ""),
+                        "stok_awal": entry.get("stok_awal", 0),
+                        "stok_akhir": entry.get("stok_akhir", 0),
+                        "perubahan": entry.get("perubahan", 0),
+                        "keluar_pcs": entry.get("keluar_pcs", 0),
+                        "is_minus": int(bool(entry.get("is_minus"))),
+                        "harga_satuan_rp": entry.get("harga_satuan_rp", 0),
+                        "omzet_rp": entry.get("omzet_rp", 0),
+                        "sumber": entry.get("sumber", "manual_update"),
+                    })
+    return rows
 
 
 def write_report(report: dict, cleaned: list[dict], destination: Path = REPORTS) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     json_path = destination / "weekly_analytics_summary.json"
     csv_path = destination / "cleaned_inventory_summary.csv"
+    log_csv_path = destination / "cleaned_stock_logs.csv"
     md_path = destination / "weekly_analytics_report.md"
     category_payloads = {
         key: {"category": key, "generated_at": report["metadata"]["generated_at"],
@@ -347,6 +520,12 @@ def write_report(report: dict, cleaned: list[dict], destination: Path = REPORTS)
         writer.writeheader()
         writer.writerows(cleaned)
     os.replace(temp_csv, csv_path)
+    temp_log_csv = log_csv_path.with_suffix(".csv.tmp")
+    with temp_log_csv.open("w", newline="", encoding="utf-8") as target:
+        writer = csv.DictWriter(target, fieldnames=LOG_CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows(flatten_all_data_to_log_rows(report))
+    os.replace(temp_log_csv, log_csv_path)
 
 
 def validate_handoff(report: dict, cleaned: list[dict]) -> None:
@@ -386,12 +565,13 @@ def write_immutable_run(report: dict, cleaned: list[dict], run_id: str, base: Pa
         raise FileExistsError(f"Run {canonical_id} masih diproses")
     try:
         write_report(report, cleaned, temporary)
-        names = ("weekly_analytics_summary.json", "cleaned_inventory_summary.csv", "weekly_analytics_report.md", *CATEGORY_FILES.values())
+        names = ("weekly_analytics_summary.json", "cleaned_inventory_summary.csv", "cleaned_stock_logs.csv", "weekly_analytics_report.md", *CATEGORY_FILES.values())
         hashes = {name: hashlib.sha256((temporary / name).read_bytes()).hexdigest() for name in names}
         manifest = {"schema_version": 1, "run_id": canonical_id, "status": "draft",
                     "start_date": report["metadata"]["start_date"], "end_date": report["metadata"]["end_date"],
                     "timezone": "Asia/Jakarta", "generated_at": report["metadata"]["generated_at"],
-                    "partner_product_rows": len(cleaned), "product_count": len(report["products"]), "sha256": hashes}
+                    "partner_product_rows": len(cleaned), "log_rows": len(flatten_all_data_to_log_rows(report)),
+                    "product_count": len(report["products"]), "sha256": hashes}
         (temporary / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         os.replace(temporary, target)
     except BaseException:

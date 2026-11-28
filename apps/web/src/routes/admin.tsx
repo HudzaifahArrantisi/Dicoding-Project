@@ -427,6 +427,17 @@ function DataSciencePanel({
 }) {
   const queryClient = useQueryClient()
   const [startingAi, setStartingAi] = useState(false)
+  const [periodModalOpen, setPeriodModalOpen] = useState(false)
+  const todayWib = useMemo(() => new Date(Date.now() + 7 * 60 * 60_000).toISOString().slice(0, 10), [])
+  const defaultWeekRange = useMemo(() => {
+    const todayDate = new Date(`${todayWib}T00:00:00Z`)
+    const daysSinceMonday = (todayDate.getUTCDay() + 6) % 7
+    const monday = new Date(todayDate.getTime() - daysSinceMonday * 86_400_000).toISOString().slice(0, 10)
+    return { start: monday, end: todayWib }
+  }, [todayWib])
+  const [periodStart, setPeriodStart] = useState(defaultWeekRange.start)
+  const [periodEnd, setPeriodEnd] = useState(defaultWeekRange.end)
+  const [lastCreatedRange, setLastCreatedRange] = useState<{ start: string; end: string } | null>(null)
   const [analysisRun, setAnalysisRun] = useState<string | null>(null)
   const [selectedPartner, setSelectedPartner] = useState<StockLogPartner | null>(null)
   const [selectedReference, setSelectedReference] = useState<File | null>(null)
@@ -454,17 +465,63 @@ function DataSciencePanel({
     refetchInterval: 30_000,
   })
 
+  const currentWeekDays = useMemo(() => {
+    const labels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
+    const mondayMs = Date.parse(`${defaultWeekRange.start}T00:00:00Z`)
+    return labels.map((label, idx) => {
+      const date = new Date(mondayMs + idx * 86_400_000).toISOString().slice(0, 10)
+      return {
+        label,
+        date,
+        dayNum: date.slice(8, 10),
+        isFuture: date > todayWib,
+      }
+    })
+  }, [defaultWeekRange.start, todayWib])
+
+  const lastWeekRange = useMemo(() => {
+    const mondayMs = Date.parse(`${defaultWeekRange.start}T00:00:00Z`)
+    return {
+      start: new Date(mondayMs - 7 * 86_400_000).toISOString().slice(0, 10),
+      end: new Date(mondayMs - 1 * 86_400_000).toISOString().slice(0, 10),
+    }
+  }, [defaultWeekRange.start])
+
+  const rolling7DaysRange = useMemo(() => {
+    const todayMs = Date.parse(`${todayWib}T00:00:00Z`)
+    return {
+      start: new Date(todayMs - 6 * 86_400_000).toISOString().slice(0, 10),
+      end: todayWib,
+    }
+  }, [todayWib])
+
+  const periodValidationError = useMemo(() => {
+    if (!periodStart || !periodEnd) return 'Pilih tanggal mulai dan tanggal selesai.'
+    if (periodStart > periodEnd) return 'Tanggal mulai tidak boleh setelah tanggal selesai.'
+    if (periodEnd > todayWib) return 'Tanggal selesai tidak boleh di masa depan.'
+    const days = Math.round((Date.parse(`${periodEnd}T00:00:00Z`) - Date.parse(`${periodStart}T00:00:00Z`)) / 86_400_000) + 1
+    if (days > 31) return 'Maksimal rentang analisis adalah 31 hari.'
+    return null
+  }, [periodStart, periodEnd, todayWib])
+
+  const selectedPeriodDays = useMemo(() => {
+    if (periodValidationError) return 0
+    return Math.round((Date.parse(`${periodEnd}T00:00:00Z`) - Date.parse(`${periodStart}T00:00:00Z`)) / 86_400_000) + 1
+  }, [periodStart, periodEnd, periodValidationError])
+
   const handleRunAnalysis = async () => {
+    if (periodValidationError) {
+      toast.error(periodValidationError)
+      return
+    }
     setStartingAi(true)
     try {
-      const todayJakarta = new Date(Date.now() + 7 * 60 * 60_000)
-      const end = todayJakarta.toISOString().slice(0, 10)
-      const daysSinceMonday = (todayJakarta.getUTCDay() + 6) % 7
-      const start = new Date(todayJakarta.getTime() - daysSinceMonday * 86_400_000).toISOString().slice(0, 10)
-      const created = await createAnalysisRun(start, end)
+      const created = await createAnalysisRun(periodStart, periodEnd)
       setAnalysisRun(created.id)
+      setLastCreatedRange({ start: periodStart, end: periodEnd })
+      setPeriodModalOpen(false)
       await queryClient.invalidateQueries({ queryKey: ['analysis-runs'] })
-      toast.success('Run analisis dibuat. Run ini dipilih di AI Insights; hasil aktif tetap sama sampai Anda memproses dan menerbitkannya.')
+      toast.success(`Run analisis (${periodStart} s/d ${periodEnd}) dibuat. Lanjutkan Training model di AI Insights.`)
       onAnalysisCreated(created.id)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -512,15 +569,19 @@ function DataSciencePanel({
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <h1 id="data-science-title" className="font-display text-2xl font-semibold text-ink-900 sm:text-3xl">Log & Data</h1>
-          <p className="mt-1 text-sm text-muted">Membuat laporan empat kategori dari Senin minggu ini sampai hari ini (WIB).</p>
+          <p className="mt-1 text-sm text-muted">Membuat laporan empat kategori sesuai rentang tanggal yang dipilih (default Senin minggu ini sampai hari ini WIB).</p>
         </div>
-        <button type="button" onClick={() => void handleRunAnalysis()} disabled={startingAi}
+        <button type="button" onClick={() => setPeriodModalOpen(true)} disabled={startingAi}
           className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:cursor-not-allowed disabled:opacity-50">
           {startingAi ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="size-4" aria-hidden="true" />}
           {startingAi ? 'Memproses...' : 'Perbarui analisis'}
         </button>
       </header>
-      {analysisRun ? <output className="block text-xs text-ok-fg">Laporan minggu terakhir tersimpan. Tinjau hasilnya di AI Insights.</output> : null}
+      {analysisRun ? (
+        <output className="block text-xs text-ok-fg">
+          Laporan periode {lastCreatedRange ? `${lastCreatedRange.start} s/d ${lastCreatedRange.end}` : 'terpilih'} tersimpan. Tinjau dan jalankan Training model di AI Insights.
+        </output>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Kategori Log & Data">
         {([
@@ -684,6 +745,170 @@ function DataSciencePanel({
         }}
         query={partnerLogs}
       />
+      <Dialog.Root open={periodModalOpen} onOpenChange={(open) => {
+        if (!open && !startingAi) setPeriodModalOpen(false)
+      }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/60" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-line bg-surface p-5 shadow-2xl focus:outline-none sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Dialog.Title className="font-display text-lg font-semibold text-ink-900">
+                  Pilih Periode Analisis Data
+                </Dialog.Title>
+              </div>
+              <button
+                type="button"
+                disabled={startingAi}
+                onClick={() => setPeriodModalOpen(false)}
+                aria-label="Tutup dialog periode analisis"
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-ink-500 hover:bg-paper hover:text-ink-900 disabled:opacity-50"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              {/* Pilihan cepat periode */}
+              <div>
+                <p className="text-xs font-semibold text-ink-800">Pilihan Cepat</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Minggu ini (Default)', start: defaultWeekRange.start, end: defaultWeekRange.end },
+                    { label: 'Minggu kemarin', start: lastWeekRange.start, end: lastWeekRange.end },
+                    { label: 'Hari ini saja', start: todayWib, end: todayWib },
+                    { label: '7 hari terakhir', start: rolling7DaysRange.start, end: rolling7DaysRange.end },
+                  ].map((preset) => {
+                    const active = periodStart === preset.start && periodEnd === preset.end
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        disabled={startingAi}
+                        onClick={() => {
+                          setPeriodStart(preset.start)
+                          setPeriodEnd(preset.end)
+                        }}
+                        className={`min-h-11 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
+                          active
+                            ? 'border-ink-900 bg-ink-900 text-white'
+                            : 'border-line bg-paper text-ink-800 hover:border-ink-400 hover:bg-surface'
+                        }`}
+                      >
+                        <span className="block">{preset.label}</span>
+                        <span className={`mt-0.5 block text-[11px] font-normal tabular-nums ${active ? 'text-white/80' : 'text-muted'}`}>
+                          {preset.start === preset.end ? preset.start : `${preset.start} s/d ${preset.end}`}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Pilih satu hari di minggu ini */}
+              <div>
+                <p className="text-xs font-semibold text-ink-800">Pilih Hari di Minggu Ini (1 Hari)</p>
+                <div className="mt-2 grid grid-cols-7 gap-1.5">
+                  {currentWeekDays.map((day) => {
+                    const selectedSingle = periodStart === day.date && periodEnd === day.date
+                    return (
+                      <button
+                        key={day.date}
+                        type="button"
+                        disabled={startingAi || day.isFuture}
+                        onClick={() => {
+                          setPeriodStart(day.date)
+                          setPeriodEnd(day.date)
+                        }}
+                        className={`flex min-h-11 flex-col items-center justify-center rounded-lg border px-1 py-1.5 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 disabled:cursor-not-allowed disabled:opacity-35 ${
+                          selectedSingle
+                            ? 'border-ink-900 bg-ink-900 text-white'
+                            : 'border-line bg-surface text-ink-800 hover:border-ink-400 hover:bg-paper'
+                        }`}
+                      >
+                        <span className={`text-[10px] font-medium ${selectedSingle ? 'text-white/80' : 'text-muted'}`}>
+                          {day.label}
+                        </span>
+                        <span className="font-display text-xs font-bold tabular-nums">{day.dayNum}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Rentang tanggal kustom */}
+              <div>
+                <p className="text-xs font-semibold text-ink-800">Rentang Tanggal Kustom (Maksimal 31 Hari)</p>
+                <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">Dari tanggal</span>
+                    <input
+                      type="date"
+                      max={todayWib}
+                      value={periodStart}
+                      disabled={startingAi}
+                      onChange={(e) => setPeriodStart(e.target.value)}
+                      className="min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm tabular-nums text-ink-900 focus:border-ink-700 focus:outline-none"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted">Sampai tanggal</span>
+                    <input
+                      type="date"
+                      max={todayWib}
+                      value={periodEnd}
+                      disabled={startingAi}
+                      onChange={(e) => setPeriodEnd(e.target.value)}
+                      className="min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm tabular-nums text-ink-900 focus:border-ink-700 focus:outline-none"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Ringkasan & Validasi */}
+              {periodValidationError ? (
+                <p role="alert" className="rounded-lg border border-crit/30 bg-crit-bg px-3 py-2 text-xs font-medium text-crit-fg">
+                  {periodValidationError}
+                </p>
+              ) : (
+                <div className="rounded-lg border border-line bg-paper px-3 py-2.5 text-xs text-ink-800">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-ink-950">Periode yang akan diambil</span>
+                    <span className="rounded-md bg-ink-900/8 px-2 py-0.5 font-display font-bold tabular-nums text-ink-900">
+                      {selectedPeriodDays} hari
+                    </span>
+                  </div>
+                  <p className="mt-1 tabular-nums text-ink-700">
+                    {periodStart} s/d {periodEnd} WIB
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                    Mengambil seluruh profil mitra, alamat/domisili, perubahan stok, log jam &amp; menit WIB, serta pesanan hanya pada rentang ini.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={startingAi}
+                onClick={() => setPeriodModalOpen(false)}
+                className="min-h-11 rounded-md border border-line px-4 text-sm font-semibold text-ink-900 hover:bg-paper disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={startingAi || Boolean(periodValidationError)}
+                onClick={() => void handleRunAnalysis()}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-ink-900 px-4 text-sm font-semibold text-white hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+              >
+                <span>{startingAi ? 'Mengambil & Menganalisis...' : 'Mulai Analisis'}</span>
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <Dialog.Root open={deleteReferenceTarget !== null} onOpenChange={(open) => {
         if (!open && !deletingReference) setDeleteReferenceTarget(null)
       }}>
@@ -3683,27 +3908,48 @@ function AdminSidebar({
     <aside
       id="admin-sidebar"
       className={`admin-sidebar sticky top-0 z-20 hidden h-screen shrink-0 overflow-hidden border-r border-white/80 bg-surface/75 shadow-[inset_-1px_0_1px_rgba(255,255,255,0.8),4px_0_24px_rgba(15,23,42,0.03)] backdrop-blur-2xl backdrop-saturate-150 lg:flex ${
-        collapsed ? 'lg:w-16' : 'lg:w-64'
+        collapsed ? 'lg:w-[72px]' : 'lg:w-64'
       }`}
       data-collapsed={collapsed}
       aria-label="Navigasi admin pusat"
     >
       <div
-        className="admin-sidebar-content flex h-full w-full shrink-0 flex-col overflow-y-auto px-3 py-5"
-        inert={collapsed ? true : undefined}
+        className={`admin-sidebar-content flex h-full w-full shrink-0 flex-col overflow-y-auto py-5 ${
+          collapsed ? 'px-2.5' : 'px-3'
+        }`}
       >
-        <div className="flex items-center gap-2 lg:pr-11">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-ink-900 to-ink-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.2),inset_0_1px_1px_rgba(255,255,255,0.3)]">
-            <Boxes className="size-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-base font-semibold leading-tight text-ink-900">Daisuki</p>
-            <p className="text-xs text-muted">Admin Pusat</p>
-          </div>
+        <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
+          {!collapsed ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-ink-900 to-ink-950 text-white shadow-[0_4px_12px_rgba(15,23,42,0.2),inset_0_1px_1px_rgba(255,255,255,0.3)]">
+                <Boxes className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-display text-base font-semibold leading-tight text-ink-900">Daisuki</p>
+                <p className="truncate text-xs text-muted">Admin Pusat</p>
+              </div>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setCollapsed((current) => !current)}
+            className="grid size-11 shrink-0 place-items-center rounded-xl border border-white/70 bg-surface/65 text-ink-700 shadow-[0_2px_10px_rgba(15,23,42,0.05),inset_0_1px_1px_rgba(255,255,255,0.9)] backdrop-blur-md transition-all duration-200 hover:border-white hover:bg-surface/90 hover:shadow-xs active:scale-95 cursor-pointer"
+            aria-label={collapsed ? 'Buka sidebar' : 'Tutup sidebar'}
+            aria-controls="admin-sidebar"
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Buka sidebar' : 'Tutup sidebar'}
+          >
+            <PanelLeftClose className={`size-5 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </button>
         </div>
-        <nav className="mt-8 flex-1 space-y-6" aria-label="Menu admin">
+
+        <nav className="mt-6 flex-1 space-y-5" aria-label="Menu admin">
           <div>
-            <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-muted/70">Operasional</p>
+            {collapsed ? (
+              <div className="mx-auto mb-2.5 h-px w-6 bg-line/80" aria-hidden="true" />
+            ) : (
+              <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-muted/70">Operasional</p>
+            )}
             <div
               onMouseLeave={() => setHoveredOpIndex(null)}
               style={
@@ -3717,7 +3963,7 @@ function AdminSidebar({
               {/* Liquid Glass Gliding Hover Pill */}
               <div
                 aria-hidden="true"
-                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-surface/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-gradient-to-b from-white/85 via-white/60 to-white/45 shadow-[0_6px_20px_rgba(15,23,42,0.08),inset_0_1px_1.5px_rgba(255,255,255,0.98)] backdrop-blur-xl backdrop-saturate-150 ${
                   hoveredOpIndex !== null && hoveredOpIndex !== activeOpIndex
                     ? 'opacity-100 scale-100'
                     : 'pointer-events-none opacity-0 scale-95'
@@ -3745,9 +3991,9 @@ function AdminSidebar({
                     aria-current={isActive ? 'page' : undefined}
                     aria-label={label}
                     title={label}
-                    className={`group relative z-10 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors duration-200 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
-                      isActive ? 'text-white' : 'text-slate-600 hover:text-ink-950'
-                    }`}
+                    className={`group relative z-10 flex h-11 w-full items-center rounded-xl text-sm font-semibold transition-colors duration-200 ease-out active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 cursor-pointer ${
+                      collapsed ? 'justify-center px-0' : 'gap-3 px-3 text-left'
+                    } ${isActive ? 'text-white' : 'text-slate-600 hover:text-ink-950'}`}
                   >
                     <Icon
                       className={`size-4.5 shrink-0 transition-transform duration-200 ease-out ${
@@ -3755,8 +4001,8 @@ function AdminSidebar({
                       }`}
                       aria-hidden="true"
                     />
-                    <span className="min-w-0 flex-1 truncate">{label}</span>
-                    {count ? (
+                    {!collapsed ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
+                    {!collapsed && count ? (
                       <span
                         className={`grid min-w-5 h-5 place-items-center rounded-full px-1.5 text-xs font-bold tabular-nums shadow-xs transition-colors ${
                           isActive
@@ -3766,6 +4012,11 @@ function AdminSidebar({
                       >
                         {count > 99 ? '99+' : count}
                       </span>
+                    ) : collapsed && count ? (
+                      <span
+                        className="absolute right-2.5 top-2 size-2 rounded-full bg-crit ring-2 ring-surface"
+                        aria-hidden="true"
+                      />
                     ) : null}
                   </button>
                 )
@@ -3774,7 +4025,11 @@ function AdminSidebar({
           </div>
 
           <div>
-            <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-muted/70">Analisis</p>
+            {collapsed ? (
+              <div className="mx-auto mb-2.5 h-px w-6 bg-line/80" aria-hidden="true" />
+            ) : (
+              <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-muted/70">Analisis</p>
+            )}
             <div
               onMouseLeave={() => setHoveredAnalysisIndex(null)}
               style={
@@ -3788,7 +4043,7 @@ function AdminSidebar({
               {/* Liquid Glass Gliding Hover Pill */}
               <div
                 aria-hidden="true"
-                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-surface/80 shadow-[0_4px_16px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] backdrop-blur-md ${
+                className={`liquid-pill-hover-y-48 pointer-events-none absolute inset-x-0 top-0 h-11 rounded-xl border border-white/90 bg-gradient-to-b from-white/85 via-white/60 to-white/45 shadow-[0_6px_20px_rgba(15,23,42,0.08),inset_0_1px_1.5px_rgba(255,255,255,0.98)] backdrop-blur-xl backdrop-saturate-150 ${
                   hoveredAnalysisIndex !== null && hoveredAnalysisIndex !== activeAnalysisIndex
                     ? 'opacity-100 scale-100'
                     : 'pointer-events-none opacity-0 scale-95'
@@ -3816,9 +4071,9 @@ function AdminSidebar({
                     aria-current={isActive ? 'page' : undefined}
                     aria-label={label}
                     title={label}
-                    className={`group relative z-10 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors duration-200 ease-out active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 ${
-                      isActive ? 'text-white' : 'text-slate-600 hover:text-ink-950'
-                    }`}
+                    className={`group relative z-10 flex h-11 w-full items-center rounded-xl text-sm font-semibold transition-colors duration-200 ease-out active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 cursor-pointer ${
+                      collapsed ? 'justify-center px-0' : 'gap-3 px-3 text-left'
+                    } ${isActive ? 'text-white' : 'text-slate-600 hover:text-ink-950'}`}
                   >
                     <Icon
                       className={`size-4.5 shrink-0 transition-transform duration-200 ease-out ${
@@ -3826,38 +4081,35 @@ function AdminSidebar({
                       }`}
                       aria-hidden="true"
                     />
-                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {!collapsed ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
                   </button>
                 )
               })}
             </div>
           </div>
         </nav>
+
         <div className="border-t border-line/60 pt-4">
-          <p className="truncate px-3 text-sm font-semibold text-ink-900">{userName}</p>
-          <p className="px-3 text-xs text-muted">Admin Pusat</p>
+          {!collapsed ? (
+            <>
+              <p className="truncate px-3 text-sm font-semibold text-ink-900">{userName}</p>
+              <p className="px-3 text-xs text-muted">Admin Pusat</p>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={onLogout}
-            className="mt-3 flex min-h-11 w-full items-center gap-2 rounded-xl border border-transparent px-3 text-sm font-medium text-slate-600 transition-all duration-200 hover:border-white/80 hover:bg-surface/80 hover:text-crit-fg hover:shadow-xs active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer"
+            className={`flex min-h-11 w-full items-center rounded-xl border border-transparent text-sm font-medium text-slate-600 transition-all duration-200 hover:border-white/90 hover:bg-gradient-to-b hover:from-white/85 hover:to-white/50 hover:text-crit-fg hover:shadow-[0_6px_18px_rgba(15,23,42,0.07),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:backdrop-blur-lg active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crit cursor-pointer ${
+              collapsed ? 'justify-center px-0' : 'mt-3 gap-2 px-3'
+            }`}
             aria-label="Keluar"
             title="Keluar"
           >
-            <LogOut className="size-4 shrink-0" aria-hidden="true" /> <span>Keluar</span>
+            <LogOut className="size-4.5 shrink-0" aria-hidden="true" />
+            {!collapsed ? <span>Keluar</span> : null}
           </button>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={() => setCollapsed((current) => !current)}
-        className="absolute right-3 top-5 hidden size-10 place-items-center rounded-xl border border-white/60 bg-surface/60 text-ink-700 shadow-2xs backdrop-blur-sm transition-all duration-200 hover:border-white/90 hover:bg-surface hover:shadow-xs active:scale-95 lg:grid"
-        aria-label={collapsed ? 'Buka sidebar' : 'Tutup sidebar'}
-        aria-controls="admin-sidebar"
-        aria-expanded={!collapsed}
-        title={collapsed ? 'Buka sidebar' : 'Tutup sidebar'}
-      >
-        <PanelLeftClose className={`size-5 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} aria-hidden="true" />
-      </button>
     </aside>
   )
 }

@@ -84,30 +84,63 @@ def partner_name_similarity(query: str, partner_name: str) -> float:
     return sum(token_scores) / len(token_scores)
 
 
+def _fmt_rp(value: int | float | None) -> str:
+    amount = int(round(float(value or 0)))
+    return f"Rp{amount:,}".replace(",", ".")
+
+
 def build_analysis_index(folder: Path, previous_index: dict | None = None, ai_folder: Path | None = None) -> dict:
     categories = {name: json.loads((folder / f"category_{name}.json").read_text(encoding="utf-8"))
                   for name in ("products", "partners", "regions", "reporting")}
+    all_data_path = folder / "category_all_data.json"
+    all_data_by_partner: dict[str, dict] = {}
+    if all_data_path.exists():
+        all_data_payload = json.loads(all_data_path.read_text(encoding="utf-8"))
+        for entry in all_data_payload.get("items", []):
+            pid = entry.get("id_mitra")
+            if pid:
+                all_data_by_partner[pid] = entry
     period = f"{categories['partners']['start_date']} sampai {categories['partners']['end_date']}"
     docs = []
+    total_products_units = sum(int(item.get("weekly_units", 0)) for item in categories["products"]["items"])
+    total_products_omzet = sum(int(item.get("weekly_omzet_rp", 0)) for item in categories["products"]["items"])
+    if total_products_units > 0 or total_products_omzet > 0:
+        docs.append({
+            "partner_id": None,
+            "source": "category_all_data.json",
+            "period": period,
+            "omzet_rp": total_products_omzet,
+            "excerpt": (
+                f"Rekap penjualan dan total omzet seluruh jaringan Daisuki periode {period}: "
+                f"total terjual {total_products_units} pcs dengan estimasi total omzet {_fmt_rp(total_products_omzet)} "
+                f"dari {len(categories['partners']['items'])} mitra aktif."
+            ),
+        })
     for item in categories["products"]["items"]:
+        omzet_text = f", estimasi omzet {_fmt_rp(item.get('weekly_omzet_rp'))}" if item.get("weekly_omzet_rp") else ""
         docs.append({
             "partner_id": None,
             "source": "category_products.json",
             "period": period,
+            "omzet_rp": int(item.get("weekly_omzet_rp") or 0),
             "excerpt": (
                 f"Analisis produk periode {period}: peringkat #{item.get('rank', '-')} {item.get('product_name', '')} "
-                f"({item.get('category', '')}) terjual {item.get('weekly_units', 0)} pcs "
+                f"({item.get('category', '')}) terjual {item.get('weekly_units', 0)} pcs{omzet_text} "
                 f"dengan pangsa {item.get('share_pct', 0)}%."
             ),
         })
     for item in categories["regions"]["items"]:
+        omzet_text = f", estimasi omzet {_fmt_rp(item.get('weekly_omzet_rp'))}" if item.get("weekly_omzet_rp") else ""
         docs.append({
             "partner_id": None,
             "source": "category_regions.json",
             "period": period,
+            "province_name": item.get("province_name"),
+            "regency_name": item.get("regency_name"),
+            "omzet_rp": int(item.get("weekly_omzet_rp") or 0),
             "excerpt": (
                 f"Analisis aktivitas wilayah periode {period}: peringkat #{item.get('rank', '-')} "
-                f"{item.get('regency_name', '')}, {item.get('province_name', '')} — konsumsi {item.get('weekly_units', 0)} pcs, "
+                f"{item.get('regency_name', '')}, {item.get('province_name', '')} — konsumsi {item.get('weekly_units', 0)} pcs{omzet_text}, "
                 f"{item.get('active_partners', 0)} mitra aktif melapor dari {item.get('partner_count', 0)} mitra, "
                 f"frekuensi restock {item.get('restock_frequency', 0)} kali."
             ),
@@ -117,23 +150,37 @@ def build_analysis_index(folder: Path, previous_index: dict | None = None, ai_fo
             partner_id = item.get("partner_id")
             if not partner_id:
                 continue
+            full_profile = all_data_by_partner.get(partner_id, {})
+            daerah = full_profile.get("daerah") or {}
+            district_name = item.get("district_name") or daerah.get("kecamatan") or ""
+            village_name = item.get("village_name") or daerah.get("kelurahan_desa") or ""
+            address = item.get("address") or full_profile.get("alamat") or ""
+            pic_name = item.get("pic_name") or full_profile.get("nama_pic") or ""
+            omzet_rp = int(item.get("weekly_omzet_rp") or (full_profile.get("ringkasan") or {}).get("total_omzet_rp") or 0)
+            loc_parts = [p for p in (village_name, district_name, item.get("regency_name"), item.get("province_name")) if p and p != "Tidak diketahui"]
+            loc_str = ", ".join(loc_parts)
+            pic_str = f", PIC {pic_name}" if pic_name else ""
+            addr_str = f", alamat: {address}" if address else ""
+            omzet_str = f", estimasi omzet {_fmt_rp(omzet_rp)}" if omzet_rp > 0 else ""
             docs.append({
                 "partner_id": partner_id,
                 "partner_name": item.get("partner_name"),
                 "partner_type": item.get("partner_type"),
                 "province_name": item.get("province_name"),
                 "regency_name": item.get("regency_name"),
+                "district_name": district_name,
+                "village_name": village_name,
+                "omzet_rp": omzet_rp,
                 "source": f"category_{name}.json",
                 "period": period,
                 "excerpt": (
                     f"Analisis mingguan mitra {item.get('partner_name', '')} ({item.get('partner_type', '')}, "
-                    f"{item.get('regency_name', '')}, {item.get('province_name', '')}) periode {period}: "
-                    f"konsumsi {item.get('weekly_units', 0)} pcs, {item.get('log_count', 0)} log laporan "
+                    f"{loc_str}{pic_str}{addr_str}) periode {period}: "
+                    f"konsumsi {item.get('weekly_units', 0)} pcs{omzet_str}, {item.get('log_count', 0)} log laporan "
                     f"(log minus: {item.get('minus_log_count', item.get('log_count', 0))}), "
                     f"{item.get('active_days', 0)} hari aktif melapor, laju harian {item.get('daily_velocity', 0)} pcs/hari, "
                     f"status pelaporan {item.get('reporting_status', '-')}, pengajuan restock {item.get('restock_requests', 0)} kali, "
-                    f"kejadian kritis {item.get('critical_frequency', 0)} kali, stok habis {item.get('stockout_events', 0)} kali. "
-                    f"{json.dumps({k: item[k] for k in ('weekly_units', 'log_count', 'restock_requests', 'stockout_events') if k in item}, ensure_ascii=False)}"
+                    f"kejadian kritis {item.get('critical_frequency', 0)} kali, stok habis {item.get('stockout_events', 0)} kali."
                 ),
             })
     with (folder / "cleaned_inventory_summary.csv").open(newline="", encoding="utf-8-sig") as source:
@@ -160,12 +207,23 @@ def build_analysis_index(folder: Path, previous_index: dict | None = None, ai_fo
             f"pukul {entry.get('time_wib', '')} WIB {entry.get('product_name', '')} {entry.get('qty_before', 0)}->{entry.get('qty_after', 0)} pcs (minus {entry.get('consumed_units', 0)} pcs, {entry.get('source', 'manual_update')})"
             for entry in logs
         )
-        profile_parts = [p for p in (item.get("partner_type"), item.get("regency_name"), item.get("province_name")) if p and p != "Tidak diketahui"]
+        profile_parts = [
+            p for p in (
+                item.get("partner_type"),
+                item.get("village_name"),
+                item.get("district_name"),
+                item.get("regency_name"),
+                item.get("province_name"),
+            )
+            if p and p != "Tidak diketahui"
+        ]
         profile_str = f" ({', '.join(profile_parts)})" if profile_parts else (f" ({item.get('partner_type')})" if item.get("partner_type") else "")
         month_str = f" ({item.get('month_name')})" if item.get("month_name") else ""
+        omzet_day = int(item.get("omzet_rp") or 0)
+        omzet_day_str = f", estimasi omzet {_fmt_rp(omzet_day)}" if omzet_day > 0 else ""
         excerpt = (
             f"Konsumsi stok harian mitra {item.get('partner_name', '')}{profile_str} pada {item['day']}{month_str}: "
-            f"total keluar {item['consumed_units']} pcs dari {item.get('log_count', 0)} log "
+            f"total keluar {item['consumed_units']} pcs{omzet_day_str} dari {item.get('log_count', 0)} log "
             f"(log minus: {item.get('minus_log_count', item.get('log_count', 0))})."
             f"{f' Rincian jam log: {log_summary}.' if log_summary else ''}"
         )
@@ -175,11 +233,14 @@ def build_analysis_index(folder: Path, previous_index: dict | None = None, ai_fo
             "partner_type": item.get("partner_type"),
             "province_name": item.get("province_name"),
             "regency_name": item.get("regency_name"),
+            "district_name": item.get("district_name", ""),
+            "village_name": item.get("village_name", ""),
             "source": "partner_daily_consumption",
             "period": period,
             "day": item["day"],
             "month_name": item.get("month_name"),
             "consumed_units": item["consumed_units"],
+            "omzet_rp": omzet_day,
             "log_count": item.get("log_count", 0),
             "minus_log_count": item.get("minus_log_count", item.get("log_count", 0)),
             "hours": item.get("hours", []),
