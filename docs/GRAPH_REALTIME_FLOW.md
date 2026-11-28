@@ -8,9 +8,9 @@ dan apa yang diubah agar tidak ada jeda yang terasa.
 
 ```mermaid
 flowchart LR
-    subgraph Browser["Browser internal (Admin / Data Science / AI Engineer)"]
+    subgraph Browser["Browser pemantau (lintas perangkat / browser)"]
         G["graph.daisuki.my.id<br/>static dashboard"]
-        C["Cookie sesi daisuki.my.id"]
+        C["Cookie sesi daisuki.my.id (opsional)"]
     end
 
     subgraph CF["Cloudflare (zone daisuki.my.id)"]
@@ -24,8 +24,8 @@ flowchart LR
 
     G -->|"1. muat HTML/JS/CSS"| EDGE --> GW
     G -->|"2. GET /v1/analysis/graph/status<br/>credentials: include, cache: no-store"| EDGE --> AW
-    C -.->|"dikirim otomatis ke api.daisuki.my.id"| AW
-    AW -->|"3. auth + role check"| AW
+    C -.->|"opsional: mendeteksi viewer_role"| AW
+    AW -->|"3. baca sesi opsional (tanpa blokir 401)"| AW
     AW -->|"4. SELECT runs + active_run_id (paralel)"| DB
     DB -->|"5. baris run + steps"| AW
     AW -->|"6. JSON + Cache-Control: no-store"| G
@@ -48,10 +48,10 @@ sequenceDiagram
 
     R->>N: UPDATE analysis_runs (status, current_step, steps)
     B->>B: scheduleRefresh() → timer 2 dtk (ada run aktif) / 8 dtk (idle)
-    B->>A: GET /v1/analysis/graph/status (cookie sesi, no-store)
+    B->>A: GET /v1/analysis/graph/status (no-store, tanpa wajib login)
     activate A
-    A->>A: getAuthUser() → role admin/data_science/ai_engineer
     par query paralel
+        A->>A: getAuthUser() opsional → viewer_role
         A->>N: SELECT 30 run terbaru (id, status, steps, current_step)
         A->>N: SELECT active_run_id (is_active = true)
     end

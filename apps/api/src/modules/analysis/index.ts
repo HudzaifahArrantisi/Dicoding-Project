@@ -103,12 +103,8 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
     return { runs: await listAnalysisRuns(), active_run_id: await getActiveRunId() };
   })
   .get("/graph/status", async ({ headers, set }) => {
-    const user = await getAuthUser(headers);
-    if (!user) { set.status = 401; return { error: "Sesi login diperlukan" }; }
-    if (!["admin", "data_science", "ai_engineer"].includes(user.role)) {
-      set.status = 403; return { error: "Dashboard Graph hanya untuk tim internal" };
-    }
-    const [runs, activeRunId] = await Promise.all([
+    const [user, runs, activeRunId] = await Promise.all([
+      getAuthUser(headers),
       db.select({
         id: analysisRuns.id,
         start_date: analysisRuns.start_date,
@@ -127,7 +123,7 @@ export const analysisModule = new Elysia({ prefix: "/analysis" })
       server_time: new Date().toISOString(),
       active_run_id: activeRunId,
       runs,
-      viewer_role: user.role,
+      viewer_role: user && ["admin", "data_science", "ai_engineer"].includes(user.role) ? user.role : null,
     };
   })
   .get("/runs/:id/artifacts", async ({ headers, params, set }) => {

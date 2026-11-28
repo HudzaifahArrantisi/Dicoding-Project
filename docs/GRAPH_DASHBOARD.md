@@ -1,6 +1,6 @@
 # Daisuki System Graph
 
-`apps/graph` is a static dashboard served by the `daisuki-graph` Cloudflare Worker at `graph.daisuki.my.id`. It polls `GET https://api.daisuki.my.id/v1/analysis/graph/status` every five seconds while the page is visible. That API endpoint requires a valid Daisuki session and permits only `admin`, `data_science`, and `ai_engineer` roles.
+`apps/graph` is a static dashboard served by the `daisuki-graph` Cloudflare Worker at `graph.daisuki.my.id`. It polls `GET https://api.daisuki.my.id/v1/analysis/graph/status` while the page is visible (every 2 seconds when a run is active, 8 seconds when idle). That read-only telemetry endpoint does not require a browser session, so any browser or device can monitor runs triggered by Admin from another device.
 
 ## What the dashboard reports
 
@@ -33,8 +33,8 @@ Reasons behind the current look:
 2. Deploy `apps/graph/wrangler.jsonc`; it attaches `graph.daisuki.my.id/*` to Worker `daisuki-graph` and serves static files from `apps/graph/public`.
 3. Deployment is handled by the `graph` job in `.github/workflows/deploy.yml`, which runs on every push to `main` (no path filter) alongside the API and web jobs, using GitHub environment `model-LLM` with its `CLOUDFLARE_API_TOKEN` secret and `CLOUDFLARE_ACCOUNT_ID` variable.
 4. The API Worker needs `GRAPH_ORIGIN=https://graph.daisuki.my.id` in its Wrangler variables for credentialed CORS. This repository's `apps/api/wrangler.jsonc` includes it; deploy the API Worker after this change.
-5. Open the dashboard while signed in to `daisuki.my.id` with an Admin, Data Science, or AI Engineer account. The API session cookie is sent to `api.daisuki.my.id` by the browser; no token is stored in the graph page.
+5. Open the dashboard on any browser or device to monitor live pipeline runs. No login cookie is required on the monitoring device; runs triggered by an Admin, Data Science, or AI Engineer account on any device appear automatically.
 
 ## Local preview
 
-From repository root, run `bun run dev` to start the local web (port 3000), API + Python `daisuki.pkl` worker (port 3001), and Graph dashboard (port 8787) together. For a graph-only preview, run `bun run dev:graph` (or `bun run --cwd apps/graph dev`), though run data requires the API to be available locally. On `localhost` or `127.0.0.1`, the dashboard calls the local API directly on port 3001. The local Graph Worker adds those two origins to its response CSP only in dev mode; production keeps the restrictive CSP. Sign in to the local web app first with an internal account so the browser can send that session cookie to the local API.
+From repository root, run `bun run dev` to start the local web (port 3000), API + Python `daisuki.pkl` worker (port 3001), and Graph dashboard (port 8787) together. For a graph-only preview, run `bun run dev:graph` (or `bun run --cwd apps/graph dev`), though run data requires the API to be available locally. On `localhost` or `127.0.0.1`, the dashboard calls the local API directly on port 3001. The local Graph Worker adds those two origins to its response CSP only in dev mode; production keeps the restrictive CSP.

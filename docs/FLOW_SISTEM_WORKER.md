@@ -81,7 +81,9 @@ Catatan: web tidak pernah menyentuh database. Semua mutasi lewat API (`apps/api`
 ```mermaid
 flowchart TD
     IN["Request ke api.daisuki.my.id/v1"] --> CORS["CORS check<br/>WEB_ORIGIN, GRAPH_ORIGIN, localhost"]
-    CORS --> AUTH{"getAuthUser dari cookie"}
+    CORS --> PUB{"Endpoint publik?<br/>/health, /analysis/graph/status"}
+    PUB -->|"ya"| READ["Query baca analysis_runs"]
+    PUB -->|"tidak"| AUTH{"getAuthUser dari cookie"}
 
     AUTH -->|"tidak ada"| R401["401 Unauthorized"]
     AUTH -->|"ada"| ROLE{"Role"}
@@ -92,7 +94,7 @@ flowchart TD
 
     MODA --> TX["Transaksi Drizzle<br/>FOR UPDATE pada produk"]
     MODM --> TX
-    MODI --> READ["Query baca analysis_runs"]
+    MODI --> READ
 
     TX --> DB[("Neon PostgreSQL")]
     READ --> DB
